@@ -45,14 +45,6 @@ export function listLoginShellCandidates(
   return candidates;
 }
 
-export function resolveLoginShell(
-  platform: NodeJS.Platform,
-  shell: string | undefined,
-  userShell = readUserLoginShell(),
-): string | undefined {
-  return listLoginShellCandidates(platform, shell, userShell)[0];
-}
-
 export function extractPathFromShellOutput(output: string): string | null {
   const startIndex = output.indexOf(PATH_CAPTURE_START);
   if (startIndex === -1) return null;

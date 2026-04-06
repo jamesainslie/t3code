@@ -7,7 +7,6 @@ import {
   readEnvironmentFromLoginShell,
   readPathFromLaunchctl,
   readPathFromLoginShell,
-  resolveLoginShell,
 } from "./shell";
 
 describe("extractPathFromShellOutput", () => {
@@ -173,14 +172,6 @@ describe("listLoginShellCandidates", () => {
 
   it("falls back to the platform default when no shells are available", () => {
     expect(listLoginShellCandidates("linux", undefined, "")).toEqual(["/bin/bash"]);
-  });
-});
-
-describe("resolveLoginShell", () => {
-  it("returns the first available login shell candidate", () => {
-    expect(resolveLoginShell("darwin", undefined, "/opt/homebrew/bin/fish")).toBe(
-      "/opt/homebrew/bin/fish",
-    );
   });
 });
 

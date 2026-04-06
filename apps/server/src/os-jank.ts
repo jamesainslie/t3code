@@ -43,7 +43,9 @@ export function fixPath(
     }
 
     const launchctlPath =
-      platform === "darwin" ? (options.readLaunchctlPath ?? readPathFromLaunchctl)() : undefined;
+      platform === "darwin" && !shellPath
+        ? (options.readLaunchctlPath ?? readPathFromLaunchctl)()
+        : undefined;
     const mergedPath = mergePathEntries(shellPath ?? launchctlPath, env.PATH, platform);
     if (mergedPath) {
       env.PATH = mergedPath;

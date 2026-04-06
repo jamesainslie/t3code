@@ -50,7 +50,9 @@ export function syncShellEnvironment(
     }
 
     const launchctlPath =
-      platform === "darwin" ? (options.readLaunchctlPath ?? readPathFromLaunchctl)() : undefined;
+      platform === "darwin" && !shellEnvironment.PATH
+        ? (options.readLaunchctlPath ?? readPathFromLaunchctl)()
+        : undefined;
     const mergedPath = mergePathEntries(shellEnvironment.PATH ?? launchctlPath, env.PATH, platform);
     if (mergedPath) {
       env.PATH = mergedPath;
@@ -71,7 +73,7 @@ export function syncShellEnvironment(
         env[name] = shellEnvironment[name];
       }
     }
-  } catch {
-    logWarning("Failed to synchronize the desktop shell environment.");
+  } catch (error) {
+    logWarning("Failed to synchronize the desktop shell environment.", error);
   }
 }
