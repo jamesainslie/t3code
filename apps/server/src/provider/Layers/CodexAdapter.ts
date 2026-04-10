@@ -41,6 +41,7 @@ import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import { RemoteEnv } from "../../remote/Services/RemoteEnv.ts";
 
 const PROVIDER = "codex" as const;
 
@@ -1379,6 +1380,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       }
     }),
   );
+  const remoteEnv = yield* RemoteEnv;
   const serverSettingsService = yield* ServerSettingsService;
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
@@ -1405,6 +1407,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       );
       const binaryPath = codexSettings.binaryPath;
       const homePath = codexSettings.homePath;
+      const sshAuthSock = yield* remoteEnv.getSshAuthSock();
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
@@ -1419,6 +1422,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(input.modelSelection?.provider === "codex" && input.modelSelection.options?.fastMode
           ? { serviceTier: "fast" }
           : {}),
+        ...(sshAuthSock ? { extraEnv: { SSH_AUTH_SOCK: sshAuthSock } } : {}),
       };
 
       return yield* Effect.tryPromise({

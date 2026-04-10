@@ -11,6 +11,7 @@ import {
   Deferred,
   Effect,
   Exit,
+  FileSystem,
   Layer,
   Option,
   Path,
@@ -369,6 +370,29 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       yield* commandGate.signalCommandReady;
       yield* Effect.logDebug("startup phase: waiting for http listener");
       yield* runStartupPhase("http.wait", Deferred.await(httpListening));
+      yield* Effect.logDebug("startup phase: writing state file");
+      yield* runStartupPhase(
+        "state-file.write",
+        Effect.gen(function* () {
+          if (serverConfig.stateFile === undefined) {
+            return;
+          }
+          const fs = yield* FileSystem.FileSystem;
+          const stateJson = JSON.stringify({
+            port: serverConfig.port,
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+          });
+          yield* fs.writeFileString(serverConfig.stateFile, stateJson).pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning("failed to write state file", {
+                path: serverConfig.stateFile,
+                cause,
+              }),
+            ),
+          );
+        }),
+      );
       yield* Effect.logDebug("startup phase: publishing ready event");
       yield* runStartupPhase(
         "ready.publish",

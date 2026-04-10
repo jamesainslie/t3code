@@ -78,6 +78,7 @@ import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./server
 import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
+import { WsClientTrackerLive } from "./wsClientTracker.ts";
 import {
   BrowserTraceCollector,
   type BrowserTraceCollectorShape,
@@ -335,6 +336,11 @@ const buildAppUnderTest = (options?: {
       desktopBootstrapToken: defaultDesktopBootstrapToken,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
+      authTokenFile: undefined,
+      stateFile: undefined,
+      logDir: undefined,
+      headless: false,
+      envFile: undefined,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -472,6 +478,7 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provideMerge(authTestLayer),
       Layer.provide(workspaceAndProjectServicesLayer),
+      Layer.provide(WsClientTrackerLive),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(layerConfig),
     );

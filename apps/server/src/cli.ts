@@ -125,6 +125,32 @@ const logWebSocketEventsFlag = Flag.boolean("log-websocket-events").pipe(
   Flag.withAlias("log-ws-events"),
   Flag.optional,
 );
+const authTokenFileFlag = Flag.string("auth-token-file").pipe(
+  Flag.withDescription(
+    "Path to a file containing the WebSocket auth token. Server re-reads this file on each connection. Used in headless/remote mode.",
+  ),
+  Flag.optional,
+);
+const envFileFlag = Flag.string("env-file").pipe(
+  Flag.withDescription(
+    "Path to a file containing environment variables (KEY=value lines). Used to propagate SSH_AUTH_SOCK and similar runtime vars in headless/remote mode.",
+  ),
+  Flag.optional,
+);
+const stateFileFlag = Flag.string("state-file").pipe(
+  Flag.withDescription(
+    "Path to a JSON file where the server writes its port and PID on startup. Used in headless/remote mode.",
+  ),
+  Flag.optional,
+);
+const logDirFlag = Flag.string("log-dir").pipe(
+  Flag.withDescription("Directory for rotating server log files. Overrides the default log path."),
+  Flag.optional,
+);
+const headlessFlag = Flag.boolean("headless").pipe(
+  Flag.withDescription("Do not serve static UI files. Used for remote operation."),
+  Flag.withDefault(false),
+);
 
 const EnvServerConfig = Config.all({
   logLevel: Config.logLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
@@ -186,6 +212,11 @@ interface CliServerFlags {
   readonly bootstrapFd: Option.Option<number>;
   readonly autoBootstrapProjectFromCwd: Option.Option<boolean>;
   readonly logWebSocketEvents: Option.Option<boolean>;
+  readonly authTokenFile: Option.Option<string>;
+  readonly stateFile: Option.Option<string>;
+  readonly logDir: Option.Option<string>;
+  readonly headless: boolean;
+  readonly envFile: Option.Option<string>;
 }
 
 interface CliAuthLocationFlags {
@@ -356,6 +387,20 @@ export const resolveServerConfig = (
       baseDir,
       ...derivedPaths,
       serverTracePath,
+      ...(flags.logDir._tag === "Some"
+        ? (() => {
+            const overrideLogsDir = flags.logDir.value;
+            const overrideProviderLogsDir = path.join(overrideLogsDir, "provider");
+            return {
+              logsDir: overrideLogsDir,
+              serverLogPath: path.join(overrideLogsDir, "server.log"),
+              serverTracePath: path.join(overrideLogsDir, "server.trace.ndjson"),
+              providerLogsDir: overrideProviderLogsDir,
+              providerEventLogPath: path.join(overrideProviderLogsDir, "events.log"),
+              terminalLogsDir: path.join(overrideLogsDir, "terminals"),
+            };
+          })()
+        : {}),
       host,
       staticDir,
       devUrl,
@@ -364,6 +409,11 @@ export const resolveServerConfig = (
       desktopBootstrapToken,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
+      authTokenFile: Option.getOrUndefined(flags.authTokenFile),
+      stateFile: Option.getOrUndefined(flags.stateFile),
+      logDir: Option.getOrUndefined(flags.logDir),
+      headless: flags.headless,
+      envFile: Option.getOrUndefined(flags.envFile),
     };
 
     return config;
@@ -765,6 +815,11 @@ const sharedServerCommandFlags = {
   bootstrapFd: bootstrapFdFlag,
   autoBootstrapProjectFromCwd: autoBootstrapProjectFromCwdFlag,
   logWebSocketEvents: logWebSocketEventsFlag,
+  authTokenFile: authTokenFileFlag,
+  stateFile: stateFileFlag,
+  logDir: logDirFlag,
+  headless: headlessFlag,
+  envFile: envFileFlag,
 } as const;
 
 const authLocationFlags = sharedServerLocationFlags;
@@ -1108,6 +1163,33 @@ const runServerCommand = (
     return yield* runServer.pipe(Effect.provideService(ServerConfig, config));
   });
 
+const brokerPortFlag = Flag.integer("port").pipe(
+  Flag.withDescription("Port for the broker WebSocket server (default: 3774)."),
+  Flag.optional,
+);
+
+const brokerHostFlag = Flag.string("host").pipe(
+  Flag.withDescription("Host for the broker to listen on (default: 127.0.0.1)."),
+  Flag.optional,
+);
+
+const brokerCommand = Command.make("broker", {
+  port: brokerPortFlag,
+  host: brokerHostFlag,
+}).pipe(
+  Command.withDescription("Run the local SSH connection broker for web browser clients."),
+  Command.withHandler(({ port, host }) =>
+    Effect.promise(() =>
+      import("./broker/BrokerServer.ts").then((m) =>
+        m.runBroker({
+          port: Option.getOrUndefined(port),
+          host: Option.getOrUndefined(host),
+        }),
+      ),
+    ),
+  ),
+);
+
 const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
   Command.withDescription("Run the T3 Code server."),
   Command.withHandler((flags) => runServerCommand(flags)),
@@ -1123,6 +1205,7 @@ const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe
       forceAutoBootstrapProjectFromCwd: false,
     }),
   ),
+  Command.withSubcommands([brokerCommand]),
 );
 
 export const cli = Command.make("t3", { ...sharedServerCommandFlags }).pipe(

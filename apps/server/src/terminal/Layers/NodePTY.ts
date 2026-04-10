@@ -103,11 +103,15 @@ export const layer = Layer.effect(
     return {
       spawn: Effect.fn(function* (input) {
         yield* ensureNodePtySpawnHelperExecutableCached;
+        const ptyEnv = {
+          ...input.env,
+          TERM: "xterm-256color", // always override - xterm.js is the terminal
+        };
         const ptyProcess = nodePty.spawn(input.shell, input.args ?? [], {
           cwd: input.cwd,
           cols: input.cols,
           rows: input.rows,
-          env: input.env,
+          env: ptyEnv,
           name: globalThis.process.platform === "win32" ? "xterm-color" : "xterm-256color",
         });
         return new NodePtyProcess(ptyProcess);

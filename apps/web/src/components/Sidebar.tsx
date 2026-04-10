@@ -6,6 +6,7 @@ import {
   FolderIcon,
   GitPullRequestIcon,
   PlusIcon,
+  ServerIcon,
   SettingsIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -80,6 +81,9 @@ import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useRemoteProjectConnection } from "../hooks/useRemoteProjectConnection";
+import { useRemoteConnectionStore } from "../remoteConnectionStore";
+import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -2015,6 +2019,7 @@ interface SidebarProjectsContentProps {
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   shouldShowProjectPathEntry: boolean;
   handleStartAddProject: () => void;
+  onOpenRemoteDialog: () => void;
   isElectron: boolean;
   isPickingFolder: boolean;
   isAddingProject: boolean;
@@ -2066,6 +2071,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     updateSettings,
     shouldShowProjectPathEntry,
     handleStartAddProject,
+    onOpenRemoteDialog,
     isElectron,
     isPickingFolder,
     isAddingProject,
@@ -2173,6 +2179,21 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               onProjectSortOrderChange={handleProjectSortOrderChange}
               onThreadSortOrderChange={handleThreadSortOrderChange}
             />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Add remote project"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={onOpenRemoteDialog}
+                  />
+                }
+              >
+                <ServerIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">Add remote project</TooltipPopup>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -2361,6 +2382,10 @@ export default function Sidebar() {
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const selectedThreadCount = useThreadSelectionStore((s) => s.selectedThreadKeys.size);
+  const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
+  const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
+  const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
+  const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const isLinuxDesktop = isElectron && isLinuxPlatform(navigator.platform);
@@ -2370,6 +2395,35 @@ export default function Sidebar() {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
+
+  const remoteConnectionStatuses = useRemoteConnectionStore((s) => s.connections);
+
+  // Derive the active project for the remote connection hook. The hook is a no-op for local projects.
+  const activeRouteProjectId = useMemo(() => {
+    if (!routeThreadId) return null;
+    const thread = sidebarThreadsById[routeThreadId];
+    return thread?.projectId ?? null;
+  }, [routeThreadId, sidebarThreadsById]);
+  const activeRouteProject = useMemo(
+    () => projects.find((p) => p.id === activeRouteProjectId) ?? null,
+    [activeRouteProjectId, projects],
+  );
+  // Build an OrchestrationProject-compatible shape for the hook (uses workspaceRoot, not cwd).
+  const activeRouteProjectForHook = useMemo(() => {
+    if (!activeRouteProject) return null;
+    return {
+      id: activeRouteProject.id,
+      title: activeRouteProject.name,
+      workspaceRoot: activeRouteProject.cwd,
+      remoteHost: activeRouteProject.remoteHost,
+      defaultModelSelection: activeRouteProject.defaultModelSelection,
+      scripts: activeRouteProject.scripts,
+      createdAt: activeRouteProject.createdAt ?? new Date(0).toISOString(),
+      updatedAt: activeRouteProject.updatedAt ?? new Date(0).toISOString(),
+      deletedAt: null,
+    };
+  }, [activeRouteProject]);
+  useRemoteProjectConnection(activeRouteProjectForHook);
   const orderedProjects = useMemo(() => {
     return orderItemsByPreferredIds({
       items: projects,
@@ -2983,6 +3037,271 @@ export default function Sidebar() {
     updateThreadJumpHintsVisibility,
   ]);
 
+  function renderProjectItem(
+    renderedProject: (typeof renderedProjects)[number],
+    dragHandleProps: SortableProjectHandleProps | null,
+  ) {
+    const {
+      hasHiddenThreads,
+      hiddenThreadStatus,
+      orderedProjectThreadIds,
+      project,
+      projectStatus,
+      renderedThreadIds,
+      showEmptyThreadState,
+      shouldShowThreadPanel,
+      isThreadListExpanded,
+    } = renderedProject;
+    return (
+      <>
+        <div className="group/project-header relative">
+          <SidebarMenuButton
+            ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
+            size="sm"
+            className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
+              isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+            }`}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
+            onPointerDownCapture={handleProjectTitlePointerDownCapture}
+            onClick={(event) => handleProjectTitleClick(event, project.id)}
+            onKeyDown={(event) => handleProjectTitleKeyDown(event, project.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              suppressProjectClickForContextMenuRef.current = true;
+              void handleProjectContextMenu(project.id, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
+          >
+            {!project.expanded && projectStatus ? (
+              <span
+                aria-hidden="true"
+                title={projectStatus.label}
+                className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+              >
+                <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
+                  <span
+                    className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
+                      projectStatus.pulse ? "animate-pulse" : ""
+                    }`}
+                  />
+                </span>
+                <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
+              </span>
+            ) : (
+              <ChevronRightIcon
+                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  project.expanded ? "rotate-90" : ""
+                }`}
+              />
+            )}
+            <ProjectFavicon cwd={project.cwd} />
+            <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+              {project.name}
+            </span>
+            {project.remoteHost &&
+              (() => {
+                const remoteStatus = remoteConnectionStatuses[project.id]?.status ?? "disconnected";
+                const remoteStatusColors: Record<string, string> = {
+                  connected: "bg-green-500",
+                  provisioning: "bg-yellow-500 animate-pulse",
+                  starting: "bg-yellow-500 animate-pulse",
+                  reconnecting: "bg-yellow-400 animate-pulse",
+                  error: "bg-red-500",
+                  disconnected: "bg-muted-foreground/40",
+                };
+                return (
+                  <span
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${remoteStatusColors[remoteStatus] ?? "bg-muted-foreground/40"}`}
+                    title={`Remote: ${remoteStatus}`}
+                  />
+                );
+              })()}
+          </SidebarMenuButton>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <SidebarMenuAction
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Create new thread in ${project.name}`}
+                      data-testid="new-thread-button"
+                    />
+                  }
+                  showOnHover
+                  className="top-1 right-1.5 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const seedContext = resolveSidebarNewThreadSeedContext({
+                      projectId: project.id,
+                      defaultEnvMode: resolveSidebarNewThreadEnvMode({
+                        defaultEnvMode: appSettings.defaultThreadEnvMode,
+                      }),
+                      activeThread:
+                        activeThread && activeThread.projectId === project.id
+                          ? {
+                              projectId: activeThread.projectId,
+                              branch: activeThread.branch,
+                              worktreePath: activeThread.worktreePath,
+                            }
+                          : null,
+                      activeDraftThread:
+                        activeDraftThread && activeDraftThread.projectId === project.id
+                          ? {
+                              projectId: activeDraftThread.projectId,
+                              branch: activeDraftThread.branch,
+                              worktreePath: activeDraftThread.worktreePath,
+                              envMode: activeDraftThread.envMode,
+                            }
+                          : null,
+                    });
+                    void handleNewThread(project.id, {
+                      ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
+                      ...(seedContext.worktreePath !== undefined
+                        ? { worktreePath: seedContext.worktreePath }
+                        : {}),
+                      envMode: seedContext.envMode,
+                    });
+                  }}
+                >
+                  <SquarePenIcon className="size-3.5" />
+                </SidebarMenuAction>
+              }
+            />
+            <TooltipPopup side="top">
+              {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
+            </TooltipPopup>
+          </Tooltip>
+        </div>
+
+        <SidebarMenuSub
+          ref={attachThreadListAutoAnimateRef}
+          className="mx-1 my-0 w-full translate-x-0 gap-0.5 overflow-hidden px-1.5 py-0"
+        >
+          {shouldShowThreadPanel && showEmptyThreadState ? (
+            <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
+              <div
+                data-thread-selection-safe
+                className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60"
+              >
+                <span>No threads yet</span>
+              </div>
+            </SidebarMenuSubItem>
+          ) : null}
+          {shouldShowThreadPanel &&
+            renderedThreadIds.map((threadId) => (
+              <SidebarThreadRow
+                key={threadId}
+                threadId={threadId}
+                projectCwd={project.cwd}
+                orderedProjectThreadIds={orderedProjectThreadIds}
+                routeThreadId={routeThreadId}
+                selectedThreadIds={selectedThreadIds}
+                showThreadJumpHints={showThreadJumpHints}
+                jumpLabel={threadJumpLabelById.get(threadId) ?? null}
+                appSettingsConfirmThreadArchive={appSettings.confirmThreadArchive}
+                renamingThreadId={renamingThreadId}
+                renamingTitle={renamingTitle}
+                setRenamingTitle={setRenamingTitle}
+                renamingInputRef={renamingInputRef}
+                renamingCommittedRef={renamingCommittedRef}
+                confirmingArchiveThreadId={confirmingArchiveThreadId}
+                setConfirmingArchiveThreadId={setConfirmingArchiveThreadId}
+                confirmArchiveButtonRefs={confirmArchiveButtonRefs}
+                handleThreadClick={handleThreadClick}
+                navigateToThread={navigateToThread}
+                handleMultiSelectContextMenu={handleMultiSelectContextMenu}
+                handleThreadContextMenu={handleThreadContextMenu}
+                clearSelection={clearSelection}
+                commitRename={commitRename}
+                cancelRename={cancelRename}
+                attemptArchiveThread={attemptArchiveThread}
+                openPrLink={openPrLink}
+              />
+            ))}
+
+          {project.expanded && hasHiddenThreads && !isThreadListExpanded && (
+            <SidebarMenuSubItem className="w-full">
+              <SidebarMenuSubButton
+                render={<button type="button" />}
+                data-thread-selection-safe
+                size="sm"
+                className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                onClick={() => {
+                  expandThreadListForProject(project.id);
+                }}
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  {hiddenThreadStatus && <ThreadStatusLabel status={hiddenThreadStatus} compact />}
+                  <span>Show more</span>
+                </span>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          )}
+          {project.expanded && hasHiddenThreads && isThreadListExpanded && (
+            <SidebarMenuSubItem className="w-full">
+              <SidebarMenuSubButton
+                render={<button type="button" />}
+                data-thread-selection-safe
+                size="sm"
+                className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                onClick={() => {
+                  collapseThreadListForProject(project.id);
+                }}
+              >
+                <span>Show less</span>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          )}
+        </SidebarMenuSub>
+      </>
+    );
+  }
+
+  const handleProjectTitleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {
+      if (suppressProjectClickForContextMenuRef.current) {
+        suppressProjectClickForContextMenuRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (dragInProgressRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (suppressProjectClickAfterDragRef.current) {
+        // Consume the synthetic click emitted after a drag release.
+        suppressProjectClickAfterDragRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (selectedThreadIds.size > 0) {
+        clearSelection();
+      }
+      toggleProject(projectId);
+    },
+    [clearSelection, selectedThreadIds.size, toggleProject],
+  );
+
+  const handleProjectTitleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, projectId: ProjectId) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      if (dragInProgressRef.current) {
+        return;
+      }
+      toggleProject(projectId);
+    },
+    [toggleProject],
+  );
+
   useEffect(() => {
     const onMouseDown = (event: globalThis.MouseEvent) => {
       if (selectedThreadCount === 0) return;
@@ -3122,6 +3441,7 @@ export default function Sidebar() {
 
   return (
     <>
+      <AddRemoteProjectDialog open={remoteDialogOpen} onClose={() => setRemoteDialogOpen(false)} />
       <SidebarChromeHeader isElectron={isElectron} />
 
       {isOnSettings ? (
@@ -3139,6 +3459,7 @@ export default function Sidebar() {
             updateSettings={updateSettings}
             shouldShowProjectPathEntry={shouldShowProjectPathEntry}
             handleStartAddProject={handleStartAddProject}
+            onOpenRemoteDialog={() => setRemoteDialogOpen(true)}
             isElectron={isElectron}
             isPickingFolder={isPickingFolder}
             isAddingProject={isAddingProject}

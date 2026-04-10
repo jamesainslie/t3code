@@ -17,6 +17,7 @@
   "scripts": {
     "dev": "bun run src/bin.ts",
     "build": "node scripts/cli.ts build",
+    "build:ssh-binaries": "bash ../../scripts/build-ssh-binaries.sh dist/ssh-binaries",
     "start": "node dist/bin.mjs",
     "prepare": "effect-language-service patch",
     "typecheck": "tsc --noEmit",

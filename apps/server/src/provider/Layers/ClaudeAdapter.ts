@@ -75,6 +75,7 @@ import {
 } from "../Errors.ts";
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import { RemoteEnv } from "../../remote/Services/RemoteEnv.ts";
 
 const PROVIDER = "claudeAgent" as const;
 type ClaudeTextStreamKind = Extract<RuntimeContentStreamKind, "assistant_text" | "reasoning_text">;
@@ -929,6 +930,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       readonly options: ClaudeQueryOptions;
     }) => query({ prompt: input.prompt, options: input.options }) as ClaudeQueryRuntime);
 
+  const remoteEnv = yield* RemoteEnv;
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const serverSettingsService = yield* ServerSettingsService;
@@ -2718,7 +2720,12 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(newSessionId ? { sessionId: newSessionId } : {}),
         includePartialMessages: true,
         canUseTool,
-        env: process.env,
+        env: yield* remoteEnv.getSshAuthSock().pipe(
+          Effect.map((sshAuthSock) => ({
+            ...process.env,
+            ...(sshAuthSock ? { SSH_AUTH_SOCK: sshAuthSock } : {}),
+          })),
+        ),
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
       };
 

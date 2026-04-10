@@ -7,6 +7,7 @@ import {
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
   ProjectScript,
+  RemoteHost,
   TurnId,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
@@ -50,6 +51,7 @@ import {
 const decodeReadModel = Schema.decodeUnknownEffect(OrchestrationReadModel);
 const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
+    remoteHost: Schema.NullOr(Schema.fromJsonString(RemoteHost)),
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
@@ -176,6 +178,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           title,
           workspace_root AS "workspaceRoot",
+          remote_host_json AS "remoteHost",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           created_at AS "createdAt",
@@ -368,6 +371,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           title,
           workspace_root AS "workspaceRoot",
+          remote_host_json AS "remoteHost",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           created_at AS "createdAt",
@@ -674,6 +678,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 title: row.title,
                 workspaceRoot: row.workspaceRoot,
                 repositoryIdentity: repositoryIdentities.get(row.projectId) ?? null,
+                ...(row.remoteHost !== null ? { remoteHost: row.remoteHost } : {}),
                 defaultModelSelection: row.defaultModelSelection,
                 scripts: row.scripts,
                 createdAt: row.createdAt,
@@ -759,6 +764,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     title: option.value.title,
                     workspaceRoot: option.value.workspaceRoot,
                     repositoryIdentity,
+                    ...(option.value.remoteHost !== null
+                      ? { remoteHost: option.value.remoteHost }
+                      : {}),
                     defaultModelSelection: option.value.defaultModelSelection,
                     scripts: option.value.scripts,
                     createdAt: option.value.createdAt,

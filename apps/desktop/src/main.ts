@@ -52,6 +52,13 @@ import {
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import { resolveDesktopServerExposure } from "./serverExposure";
+import {
+  globalSshManager,
+  sshConnect,
+  sshDisconnect,
+  sshGetStatus,
+  sshCloseAll,
+} from "./sshManager";
 import { syncShellEnvironment } from "./syncShellEnvironment";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
 import {
@@ -91,6 +98,13 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
+const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
+const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
+const SSH_STATUS_CHANNEL = "desktop:ssh-status";
+const SSH_STATUS_UPDATE_CHANNEL = "desktop:ssh-status-update";
+const SSH_RECORD_HOST_CHANNEL = "desktop:ssh-record-host";
+const RECENT_REMOTE_HOSTS_MAX = 10;
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
@@ -1366,6 +1380,53 @@ async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
   });
 }
 
+interface RecentRemoteHost {
+  host: string;
+  user: string;
+  port: number;
+}
+
+function recentRemoteHostsPath(): string {
+  return Path.join(app.getPath("userData"), "recent-remote-hosts.json");
+}
+
+function readRecentRemoteHosts(): RecentRemoteHost[] {
+  try {
+    const filePath = recentRemoteHostsPath();
+    if (!FS.existsSync(filePath)) return [];
+    const raw = FS.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is RecentRemoteHost =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as Record<string, unknown>).host === "string" &&
+        typeof (entry as Record<string, unknown>).user === "string" &&
+        typeof (entry as Record<string, unknown>).port === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentRemoteHosts(hosts: RecentRemoteHost[]): void {
+  try {
+    FS.writeFileSync(recentRemoteHostsPath(), JSON.stringify(hosts, null, 2), "utf8");
+  } catch (error) {
+    console.warn("[desktop] failed to write recent remote hosts", error);
+  }
+}
+
+function recordRecentRemoteHost(entry: RecentRemoteHost): void {
+  const existing = readRecentRemoteHosts();
+  const deduped = existing.filter(
+    (h) => !(h.host === entry.host && h.user === entry.user && h.port === entry.port),
+  );
+  const updated = [entry, ...deduped].slice(0, RECENT_REMOTE_HOSTS_MAX);
+  writeRecentRemoteHosts(updated);
+}
+
 function registerIpcHandlers(): void {
   ipcMain.removeAllListeners(GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL);
   ipcMain.on(GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL, (event) => {
@@ -1635,6 +1696,51 @@ function registerIpcHandlers(): void {
       state: updateState,
     } satisfies DesktopUpdateCheckResult;
   });
+
+  ipcMain.removeHandler(SSH_CONNECT_CHANNEL);
+  ipcMain.handle(
+    SSH_CONNECT_CHANNEL,
+    async (
+      _event,
+      opts: { projectId: string; host: string; user: string; port: number; workspaceRoot: string },
+    ) => {
+      return sshConnect({
+        ...opts,
+        localVersion: app.getVersion(),
+        onStatus: (phase) => {
+          mainWindow?.webContents.send(SSH_STATUS_UPDATE_CHANNEL, {
+            projectId: opts.projectId,
+            phase,
+          });
+        },
+      });
+    },
+  );
+
+  ipcMain.removeHandler(SSH_DISCONNECT_CHANNEL);
+  ipcMain.handle(SSH_DISCONNECT_CHANNEL, async (_event, { projectId }: { projectId: string }) => {
+    sshDisconnect(projectId);
+    return { ok: true };
+  });
+
+  ipcMain.removeHandler(SSH_STATUS_CHANNEL);
+  ipcMain.handle(SSH_STATUS_CHANNEL, async () => {
+    return sshGetStatus();
+  });
+
+  ipcMain.removeHandler(SSH_RECORD_HOST_CHANNEL);
+  ipcMain.handle(
+    SSH_RECORD_HOST_CHANNEL,
+    async (_event, opts: { host: string; user: string; port: number }) => {
+      if (
+        typeof opts?.host === "string" &&
+        typeof opts.user === "string" &&
+        typeof opts.port === "number"
+      ) {
+        recordRecentRemoteHost(opts);
+      }
+    },
+  );
 }
 
 function getIconOption(): { icon: string } | Record<string, never> {
@@ -1830,6 +1936,26 @@ async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap backend ready");
   mainWindow = createWindow();
   writeDesktopLogHeader("bootstrap main window created");
+  void warmUpRecentRemoteHosts().catch(() => {});
+}
+
+async function warmUpRecentRemoteHosts(): Promise<void> {
+  const hosts = readRecentRemoteHosts();
+  if (hosts.length === 0) return;
+  writeDesktopLogHeader(
+    `warm-up: attempting SSH warm-up for ${hosts.length} recent remote host(s)`,
+  );
+  for (const host of hosts) {
+    try {
+      await globalSshManager.getOrCreate(host);
+      writeDesktopLogHeader(`warm-up: connected to ${host.user}@${host.host}:${host.port}`);
+    } catch (error) {
+      // Best-effort: warm-up failures must never crash the app.
+      writeDesktopLogHeader(
+        `warm-up: failed for ${host.user}@${host.host}:${host.port} — ${formatErrorMessage(error)}`,
+      );
+    }
+  }
 }
 
 app.on("before-quit", () => {
@@ -1838,6 +1964,7 @@ app.on("before-quit", () => {
   writeDesktopLogHeader("before-quit received");
   clearUpdatePollTimer();
   cancelBackendReadinessWait();
+  sshCloseAll();
   stopBackend();
   restoreStdIoCapture?.();
 });

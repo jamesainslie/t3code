@@ -99,9 +99,13 @@ export const layer = Layer.effect(
         Effect.sync(() => {
           let processHandle: BunPtyProcess | null = null;
           const command = [input.shell, ...(input.args ?? [])];
+          const ptyEnv = {
+            ...input.env,
+            TERM: "xterm-256color", // always override - xterm.js is the terminal
+          };
           const subprocess = Bun.spawn(command, {
             cwd: input.cwd,
-            env: input.env,
+            env: ptyEnv,
             terminal: {
               cols: input.cols,
               rows: input.rows,

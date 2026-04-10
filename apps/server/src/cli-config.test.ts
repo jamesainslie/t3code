@@ -46,6 +46,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -87,6 +92,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
+        authTokenFile: undefined,
+        stateFile: undefined,
+        logDir: undefined,
+        headless: false,
       });
     }),
   );
@@ -108,6 +117,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.some(true),
           logWebSocketEvents: Option.some(true),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.some("Debug"),
       ).pipe(
@@ -149,6 +163,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+        authTokenFile: undefined,
+        stateFile: undefined,
+        logDir: undefined,
+        headless: false,
       });
     }),
   );
@@ -246,6 +264,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -281,6 +304,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
+        authTokenFile: undefined,
+        stateFile: undefined,
+        logDir: undefined,
+        headless: false,
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -305,6 +332,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -361,6 +393,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.some("Debug"),
       ).pipe(
@@ -399,6 +436,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+        authTokenFile: undefined,
+        stateFile: undefined,
+        logDir: undefined,
+        headless: false,
       });
     }),
   );
@@ -432,6 +473,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
+          authTokenFile: Option.none(),
+          stateFile: Option.none(),
+          logDir: Option.none(),
+          headless: false,
+          envFile: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -522,6 +568,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
+        authTokenFile: undefined,
+        stateFile: undefined,
+        logDir: undefined,
+        headless: false,
       });
     }),
   );
