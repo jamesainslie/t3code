@@ -11,6 +11,7 @@ export {
   useSavedEnvironmentRuntimeStore,
   waitForSavedEnvironmentRegistryHydration,
   type SavedEnvironmentRecord,
+  type SavedEnvironmentConnectionState,
   type SavedEnvironmentRuntimeState,
 } from "./catalog";
 
