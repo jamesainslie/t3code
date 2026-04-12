@@ -33,6 +33,7 @@ function makeEntry(
   return {
     record: makeMockRecord(recordOverrides),
     connectionState,
+    runtimeState: null,
   };
 }
 

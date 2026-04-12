@@ -15,6 +15,8 @@ export {
   type SavedEnvironmentRuntimeState,
 } from "./catalog";
 
+export { connectionLog, useConnectionLogStore, type ConnectionLogEntry } from "./connectionLog";
+
 export {
   addOrReconnectSavedEnvironment,
   addSavedEnvironment,

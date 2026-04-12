@@ -9,6 +9,8 @@ import {
   disconnectSavedEnvironment,
   reconnectSavedEnvironment,
   removeSavedEnvironment,
+  useConnectionLogStore,
+  type ConnectionLogEntry,
 } from "~/environments/runtime";
 import { RemoteConnectionIcon } from "../RemoteConnectionIcon";
 import { Button } from "../ui/button";
@@ -50,10 +52,49 @@ interface RemoteEnvironmentRowProps {
   readonly lastConnectedAt: string | null;
   readonly identityKey: RemoteIdentityKey;
   readonly connectionState: SavedEnvironmentConnectionState;
+  readonly runtimeState: SavedEnvironmentRuntimeState | null;
+  readonly record: SavedRemoteEnvironment;
   readonly onReconnect: (environmentId: EnvironmentId) => void;
   readonly onDisconnect: (environmentId: EnvironmentId) => void;
   readonly onRemove: (environmentId: EnvironmentId) => void;
   readonly isActing: boolean;
+}
+
+function DebugStateInspector({
+  record,
+  runtimeState,
+}: {
+  readonly record: SavedRemoteEnvironment;
+  readonly runtimeState: SavedEnvironmentRuntimeState | null;
+}) {
+  const handleDumpToConsole = useCallback(() => {
+    console.group(`[debug] Remote Environment: ${record.label}`);
+    console.log("Record:", record);
+    console.log("Runtime:", runtimeState);
+    console.groupEnd();
+  }, [record, runtimeState]);
+
+  return (
+    <div className="mt-2 space-y-1 rounded border border-border/40 bg-muted/30 p-2 font-mono text-[11px] text-muted-foreground">
+      <div><span className="text-muted-foreground/70">identityKey:</span> {record.identityKey}</div>
+      <div><span className="text-muted-foreground/70">environmentId:</span> {record.environmentId ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">httpBaseUrl:</span> {record.httpBaseUrl ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">wsBaseUrl:</span> {record.wsBaseUrl ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">connectionState:</span> {runtimeState?.connectionState ?? "unknown"}</div>
+      <div><span className="text-muted-foreground/70">authState:</span> {runtimeState?.authState ?? "unknown"}</div>
+      <div><span className="text-muted-foreground/70">role:</span> {runtimeState?.role ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">connectedAt:</span> {runtimeState?.connectedAt ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">disconnectedAt:</span> {runtimeState?.disconnectedAt ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">lastError:</span> {runtimeState?.lastError ?? "null"}</div>
+      <div><span className="text-muted-foreground/70">sshConfig:</span> {record.user}@{record.host}:{record.port} {record.workspaceRoot}</div>
+      <div><span className="text-muted-foreground/70">bearer:</span> {runtimeState?.authState === "authenticated" ? "present" : "missing"}</div>
+      <div className="pt-1">
+        <Button size="xs" variant="outline" onClick={handleDumpToConsole}>
+          Dump to console
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function RemoteEnvironmentRow({
@@ -65,6 +106,8 @@ function RemoteEnvironmentRow({
   workspaceRoot,
   lastConnectedAt,
   connectionState,
+  runtimeState,
+  record,
   onReconnect,
   onDisconnect,
   onRemove,
@@ -72,6 +115,7 @@ function RemoteEnvironmentRow({
 }: RemoteEnvironmentRowProps) {
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
+  const [showDebug, setShowDebug] = useState(false);
 
   return (
     <div className={ROW_CLASSNAME}>
@@ -92,6 +136,13 @@ function RemoteEnvironmentRow({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => setShowDebug((prev) => !prev)}
+          >
+            {showDebug ? "Hide Debug" : "Debug"}
+          </Button>
           {isConnected ? (
             <Button
               size="xs"
@@ -121,6 +172,9 @@ function RemoteEnvironmentRow({
           </Button>
         </div>
       </div>
+      {showDebug ? (
+        <DebugStateInspector record={record} runtimeState={runtimeState} />
+      ) : null}
     </div>
   );
 }
@@ -130,6 +184,7 @@ function RemoteEnvironmentRow({
 export interface RemoteEnvironmentEntry {
   readonly record: SavedRemoteEnvironment;
   readonly connectionState: SavedEnvironmentConnectionState;
+  readonly runtimeState: SavedEnvironmentRuntimeState | null;
 }
 
 export interface RemoteEnvironmentsSectionViewProps {
@@ -165,7 +220,7 @@ export function RemoteEnvironmentsSectionView({
 
   return (
     <SettingsSection title="Remote Environments">
-      {entries.map(({ record, connectionState }) => (
+      {entries.map(({ record, connectionState, runtimeState }) => (
         <RemoteEnvironmentRow
           key={record.identityKey}
           environmentId={record.environmentId!}
@@ -177,6 +232,8 @@ export function RemoteEnvironmentsSectionView({
           lastConnectedAt={record.lastConnectedAt}
           identityKey={record.identityKey}
           connectionState={connectionState}
+          runtimeState={runtimeState}
+          record={record}
           onReconnect={onReconnect}
           onDisconnect={onDisconnect}
           onRemove={onRemove}
@@ -213,6 +270,7 @@ export function RemoteEnvironmentsSection() {
           connectionState:
             (runtimeById[record.environmentId]?.connectionState as SavedEnvironmentConnectionState) ??
             "disconnected",
+          runtimeState: runtimeById[record.environmentId] ?? null,
         })),
     [byIdentityKey, runtimeById],
   );
@@ -284,5 +342,92 @@ export function RemoteEnvironmentsSection() {
       onRemove={(id) => void handleRemove(id)}
       onRemoveAllDisconnected={() => void handleRemoveAllDisconnected()}
     />
+  );
+}
+
+// ---------- Connection Log Viewer ----------
+
+const LOG_LEVEL_COLORS: Record<ConnectionLogEntry["level"], string> = {
+  info: "text-muted-foreground",
+  warn: "text-yellow-500",
+  error: "text-red-500",
+};
+
+function formatLogTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return [
+      d.getHours().toString().padStart(2, "0"),
+      d.getMinutes().toString().padStart(2, "0"),
+      d.getSeconds().toString().padStart(2, "0"),
+    ].join(":");
+  } catch {
+    return "??:??:??";
+  }
+}
+
+export function ConnectionLogViewer() {
+  const entries = useConnectionLogStore((state) => state.entries);
+  const clearLog = useConnectionLogStore((state) => state.clear);
+  const [filter, setFilter] = useState<"all" | "errors">("all");
+
+  const filteredEntries = useMemo(
+    () => (filter === "errors" ? entries.filter((e) => e.level === "error") : entries),
+    [entries, filter],
+  );
+
+  const handleCopy = useCallback(() => {
+    const text = filteredEntries
+      .map(
+        (e) =>
+          `[${formatLogTimestamp(e.timestamp)}] [${e.level}] [${e.source}] ${e.message}`,
+      )
+      .join("\n");
+    void navigator.clipboard.writeText(text);
+    toastManager.add({ type: "info", title: "Copied connection log to clipboard" });
+  }, [filteredEntries]);
+
+  return (
+    <SettingsSection title="Connection Log">
+      <div className="px-4 py-3 sm:px-5">
+        <div className="mb-2 flex items-center gap-2">
+          <Button
+            size="xs"
+            variant={filter === "all" ? "default" : "outline"}
+            onClick={() => setFilter("all")}
+          >
+            All
+          </Button>
+          <Button
+            size="xs"
+            variant={filter === "errors" ? "default" : "outline"}
+            onClick={() => setFilter("errors")}
+          >
+            Errors only
+          </Button>
+          <div className="flex-1" />
+          <Button size="xs" variant="outline" onClick={handleCopy}>
+            Copy
+          </Button>
+          <Button size="xs" variant="outline" onClick={clearLog}>
+            Clear
+          </Button>
+        </div>
+        <div className="max-h-[300px] overflow-y-auto rounded border border-border/40 bg-muted/20 p-2 font-mono text-[11px]">
+          {filteredEntries.length === 0 ? (
+            <p className="text-muted-foreground/60">No log entries.</p>
+          ) : (
+            filteredEntries.map((entry) => (
+              <div key={entry.id} className={`${LOG_LEVEL_COLORS[entry.level]} leading-relaxed`}>
+                <span className="text-muted-foreground/60">[{formatLogTimestamp(entry.timestamp)}]</span>{" "}
+                <span className="font-semibold">[{entry.level}]</span>{" "}
+                <span className="text-muted-foreground/80">[{entry.source}]</span>{" "}
+                {entry.message}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </SettingsSection>
   );
 }
