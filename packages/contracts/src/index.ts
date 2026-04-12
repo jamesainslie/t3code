@@ -13,5 +13,6 @@ export * from "./git";
 export * from "./orchestration";
 export * from "./editor";
 export * from "./project";
+export * from "./hostResource";
 export * from "./rpc";
 export * from "./remoteConnection";

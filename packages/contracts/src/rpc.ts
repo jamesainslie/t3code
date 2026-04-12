@@ -5,6 +5,11 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { OpenError, OpenInEditorInput } from "./editor";
 import { AuthAccessStreamEvent } from "./auth";
 import {
+  HostResourceMonitorError,
+  HostResourceStreamEvent,
+  HostResourceSubscribeInput,
+} from "./hostResource";
+import {
   GitActionProgressEvent,
   GitCheckoutInput,
   GitCheckoutResult,
@@ -121,6 +126,7 @@ export const WS_METHODS = {
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
   serverSubscribeLogStream: "server.subscribeLogStream",
+  subscribeHostResources: "subscribeHostResources",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -354,6 +360,13 @@ export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribe
   stream: true,
 });
 
+export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostResources, {
+  payload: HostResourceSubscribeInput,
+  success: HostResourceStreamEvent,
+  error: HostResourceMonitorError,
+  stream: true,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -386,6 +399,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
+  WsSubscribeHostResourcesRpc,
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
