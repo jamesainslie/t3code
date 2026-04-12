@@ -1,5 +1,6 @@
 import { memo, useState, useRef, useCallback } from "react";
 import type { HostResourceSnapshot } from "@t3tools/contracts";
+import { ResourceCollapsedDot } from "./ResourceCollapsedDot";
 import { ResourceIndicatorStrip } from "./ResourceIndicatorStrip";
 import { ResourceDetailPopover } from "./ResourceDetailPopover";
 
@@ -28,9 +29,22 @@ export const ResourceIndicatorPill = memo(function ResourceIndicatorPill({
   if (!snapshot) return null;
 
   return (
-    <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+    <div
+      className="@container/resource-pill"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <ResourceDetailPopover snapshot={snapshot} open={open} onOpenChange={setOpen}>
-        <ResourceIndicatorStrip snapshot={snapshot} />
+        <div>
+          {/* Full strip visible at @[200px] and above */}
+          <div className="hidden @[200px]/resource-pill:block">
+            <ResourceIndicatorStrip snapshot={snapshot} />
+          </div>
+          {/* Collapsed dot visible below @[200px] */}
+          <div className="block @[200px]/resource-pill:hidden">
+            <ResourceCollapsedDot snapshot={snapshot} />
+          </div>
+        </div>
       </ResourceDetailPopover>
     </div>
   );
