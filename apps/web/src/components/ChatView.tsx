@@ -168,6 +168,8 @@ import {
   useServerKeybindings,
 } from "~/rpc/serverState";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
+import { useHostResource, startHostResourceSync } from "~/rpc/hostResourceState";
+import { readEnvironmentConnection } from "~/environments/runtime";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -842,6 +844,16 @@ export default function ChatView(props: ChatViewProps) {
   const activeProject = useStore(
     useMemo(() => createProjectSelectorByRef(activeProjectRef), [activeProjectRef]),
   );
+
+  // Host resource monitoring — subscribe to the server-side resource stream
+  // for the active project's environment so the header pill stays up to date.
+  const hostResourceSnapshot = useHostResource();
+  useEffect(() => {
+    if (!activeProject?.id || !environmentId) return;
+    const connection = readEnvironmentConnection(environmentId);
+    if (!connection) return;
+    return startHostResourceSync(connection.client.hostResource, activeProject.id);
+  }, [activeProject?.id, environmentId]);
 
   // Compute the list of environments this logical project spans, used to
   // drive the environment picker in BranchToolbar.
@@ -3317,6 +3329,7 @@ export default function ChatView(props: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          hostResourceSnapshot={hostResourceSnapshot}
           onRunProjectScript={runProjectScript}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
