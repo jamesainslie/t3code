@@ -50,6 +50,7 @@ import type {
   OrchestrationReadModel,
 } from "./orchestration";
 import type { EnvironmentId } from "./baseSchemas";
+import type { RemoteIdentityKey } from "./remoteIdentity.js";
 import { EditorId } from "./editor";
 import { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings";
 
@@ -129,6 +130,21 @@ export interface PersistedSavedEnvironmentRecord {
   createdAt: string;
   lastConnectedAt: string | null;
   sshConfig?: SshEnvironmentConfig | undefined;
+}
+
+export interface SavedRemoteEnvironment {
+  identityKey: RemoteIdentityKey;
+  host: string;
+  user: string;
+  port: number;
+  workspaceRoot: string;
+  label: string;
+  createdAt: string;
+  environmentId: EnvironmentId | null;
+  wsBaseUrl: string | null;
+  httpBaseUrl: string | null;
+  lastConnectedAt: string | null;
+  projectId: string;
 }
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";
@@ -214,6 +230,13 @@ export interface DesktopBridge {
   getSavedSshHosts: () => Promise<SavedSshHost[]>;
   saveSshHost: (host: SavedSshHost) => Promise<void>;
   removeSavedSshHost: (id: string) => Promise<void>;
+  sshProbe: (opts: { host: string; user: string; port: number }) => Promise<{ reachable: boolean }>;
+  sshKillRemoteSession: (opts: {
+    host: string;
+    user: string;
+    port: number;
+    projectId: string;
+  }) => Promise<void>;
 }
 
 /**
