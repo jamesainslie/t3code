@@ -38,10 +38,13 @@ vi.mock("./catalog", () => ({
   removeSavedEnvironmentBearerToken: vi.fn(),
   useSavedEnvironmentRegistryStore: {
     getState: () => ({
+      byIdentityKey: {},
+      identityKeyByEnvironmentId: {},
       upsert: mockUpsert,
       remove: vi.fn(),
       markConnected: vi.fn(),
     }),
+    subscribe: vi.fn(() => () => {}),
   },
   useSavedEnvironmentRuntimeStore: {
     getState: () => ({

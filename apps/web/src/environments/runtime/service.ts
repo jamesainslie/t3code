@@ -4,7 +4,9 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type RemoteIdentityKey,
+  type SavedRemoteEnvironment,
   type ServerConfig,
+  type SshEnvironmentConfig,
   type TerminalEvent,
   makeRemoteIdentityKey,
   ThreadId,
@@ -662,62 +664,69 @@ export async function removeSavedEnvironment(environmentId: EnvironmentId): Prom
   await disconnectSavedEnvironment(environmentId);
 }
 
-export async function addSavedEnvironment(input: {
-  readonly label: string;
+export async function addOrReconnectSavedEnvironment(input: {
   readonly pairingUrl?: string;
   readonly host?: string;
   readonly pairingCode?: string;
-  readonly sshConfig?: {
-    readonly host: string;
-    readonly user: string;
-    readonly port: number;
-    readonly projectId: string;
-    readonly workspaceRoot: string;
-  };
-}): Promise<SavedEnvironmentRecord> {
+  readonly sshConfig?: SshEnvironmentConfig;
+  readonly label?: string;
+  readonly projectId: string;
+}): Promise<{ record: SavedRemoteEnvironment; isReconnect: boolean }> {
+  // 1. Resolve pairing target
   const resolvedTarget = resolveRemotePairingTarget({
     ...(input.pairingUrl !== undefined ? { pairingUrl: input.pairingUrl } : {}),
     ...(input.host !== undefined ? { host: input.host } : {}),
     ...(input.pairingCode !== undefined ? { pairingCode: input.pairingCode } : {}),
   });
+
+  // 2. Fetch environment descriptor
   const descriptor = await fetchRemoteEnvironmentDescriptor({
     httpBaseUrl: resolvedTarget.httpBaseUrl,
   });
   const environmentId = descriptor.environmentId;
 
-  if (environmentConnections.has(environmentId)) {
-    throw new Error("This environment is already connected.");
-  }
-
-  const bearerSession = await bootstrapRemoteBearerSession({
-    httpBaseUrl: resolvedTarget.httpBaseUrl,
-    credential: resolvedTarget.credential,
-  });
-
+  // 3. Compute identity key
   const sshFields = input.sshConfig ?? {
     host: new URL(resolvedTarget.httpBaseUrl).hostname,
     user: "unknown",
     port: 22,
     workspaceRoot: "/",
-    projectId: environmentId,
+    projectId: input.projectId,
   };
   const identityKey = makeRemoteIdentityKey(sshFields);
 
-  const record: SavedEnvironmentRecord = {
+  // 4. Check if this identity already exists
+  const existingRecord =
+    useSavedEnvironmentRegistryStore.getState().byIdentityKey[identityKey] ?? null;
+
+  // 5. If existing and environmentId changed, disconnect old connection
+  if (existingRecord?.environmentId && existingRecord.environmentId !== environmentId) {
+    await disconnectSavedEnvironment(existingRecord.environmentId).catch(() => {});
+  }
+
+  // 6. Bootstrap bearer session
+  const bearerSession = await bootstrapRemoteBearerSession({
+    httpBaseUrl: resolvedTarget.httpBaseUrl,
+    credential: resolvedTarget.credential,
+  });
+
+  // 7. Build record (new or updated), reusing createdAt and projectId from existing
+  const record: SavedRemoteEnvironment = {
     identityKey,
     host: sshFields.host,
     user: sshFields.user,
     port: sshFields.port,
     workspaceRoot: sshFields.workspaceRoot,
-    projectId: sshFields.projectId ?? environmentId,
+    projectId: existingRecord?.projectId ?? sshFields.projectId ?? input.projectId,
     environmentId,
-    label: input.label.trim() || descriptor.label,
+    label: (input.label ?? "").trim() || descriptor.label,
     wsBaseUrl: resolvedTarget.wsBaseUrl,
     httpBaseUrl: resolvedTarget.httpBaseUrl,
-    createdAt: isoNow(),
+    createdAt: existingRecord?.createdAt ?? isoNow(),
     lastConnectedAt: isoNow(),
   };
 
+  // 8. Persist
   await persistSavedEnvironmentRecord(record);
   const didPersistBearerToken = await writeSavedEnvironmentBearerToken(
     environmentId,
@@ -745,12 +754,41 @@ export async function addSavedEnvironment(input: {
     );
     throw new Error("Unable to persist saved environment credentials.");
   }
+
+  // 9. Connect
   await ensureSavedEnvironmentConnection(record, {
     bearerToken: bearerSession.sessionToken,
     role: bearerSession.role,
   });
+
+  // 10. Update store
   useSavedEnvironmentRegistryStore.getState().upsert(record);
-  return record;
+
+  return { record, isReconnect: existingRecord != null };
+}
+
+/**
+ * @deprecated Use `addOrReconnectSavedEnvironment` instead.
+ */
+export async function addSavedEnvironment(input: {
+  readonly label: string;
+  readonly pairingUrl?: string;
+  readonly host?: string;
+  readonly pairingCode?: string;
+  readonly sshConfig?: {
+    readonly host: string;
+    readonly user: string;
+    readonly port: number;
+    readonly projectId: string;
+    readonly workspaceRoot: string;
+  };
+}): Promise<SavedEnvironmentRecord> {
+  const projectId = input.sshConfig?.projectId ?? crypto.randomUUID();
+  const result = await addOrReconnectSavedEnvironment({
+    ...input,
+    projectId,
+  });
+  return result.record;
 }
 
 export async function ensureEnvironmentConnectionBootstrapped(

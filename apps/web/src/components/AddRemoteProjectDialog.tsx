@@ -5,7 +5,7 @@ import type { DesktopSshProvisioningEvent, SavedSshHost } from "@t3tools/contrac
 import { Loader2Icon, CheckCircle2Icon, XCircleIcon, CircleIcon } from "lucide-react";
 import { newCommandId, newProjectId } from "../lib/utils";
 import { readEnvironmentApi } from "../environmentApi";
-import { addSavedEnvironment } from "../environments/runtime/service";
+import { addOrReconnectSavedEnvironment } from "../environments/runtime/service";
 import { isElectron } from "../env";
 
 type Status = "idle" | "provisioning" | "registering" | "creating-project" | "connected" | "error";
@@ -319,9 +319,10 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
 
       // Phase 2: Register as a saved environment (with SSH config for reconnection)
       setStatus("registering");
-      const record = await addSavedEnvironment({
+      const { record, isReconnect } = await addOrReconnectSavedEnvironment({
         label: displayLabel,
         pairingUrl: sshResult.pairingUrl,
+        projectId,
         sshConfig: {
           host: host.trim(),
           user: user.trim(),
@@ -331,25 +332,27 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
         },
       });
 
-      // Phase 3: Create project on the remote server
-      setStatus("creating-project");
-      const remoteApi = record.environmentId ? readEnvironmentApi(record.environmentId) : null;
-      if (!remoteApi) {
-        throw new Error("Failed to connect to the remote environment after registration.");
-      }
+      // Phase 3: Create project on the remote server (skip if reconnecting — project already exists)
+      if (!isReconnect) {
+        setStatus("creating-project");
+        const remoteApi = record.environmentId ? readEnvironmentApi(record.environmentId) : null;
+        if (!remoteApi) {
+          throw new Error("Failed to connect to the remote environment after registration.");
+        }
 
-      await remoteApi.orchestration.dispatchCommand({
-        type: "project.create",
-        commandId: newCommandId(),
-        projectId,
-        title: displayLabel,
-        workspaceRoot: workspaceRoot.trim(),
-        defaultModelSelection: {
-          provider: "codex",
-          model: DEFAULT_MODEL_BY_PROVIDER.codex,
-        },
-        createdAt: new Date().toISOString(),
-      });
+        await remoteApi.orchestration.dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId,
+          title: displayLabel,
+          workspaceRoot: workspaceRoot.trim(),
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       // Save host if checkbox is checked and this is a new host
       if (saveHost && selectedHostId === NEW_HOST_VALUE && window.desktopBridge) {
