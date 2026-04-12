@@ -48,6 +48,9 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
+import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor";
+import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler";
+import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator";
 import {
   authBearerBootstrapRouteLayer,
   authBootstrapRouteLayer,
@@ -210,6 +213,12 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
+  Layer.provideMerge(
+    HostResourceMonitorLive.pipe(
+      Layer.provide(ResourceSamplerLive),
+      Layer.provide(ThresholdEvaluatorLive),
+    ),
+  ),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
