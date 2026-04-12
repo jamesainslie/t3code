@@ -4,6 +4,29 @@ import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
 
+// ── Corporate proxy CA cert auto-detection ──────────────────────────
+// GUI apps launched from Finder don't inherit shell env vars like
+// NODE_EXTRA_CA_CERTS. Detect common CA bundle locations that include
+// corporate MITM proxy certs (e.g. Zscaler) and set the env var early
+// so both the main process and backend child process trust them.
+if (!process.env.NODE_EXTRA_CA_CERTS) {
+  const candidates = [
+    Path.join(OS.homedir(), ".config/certs/ca-bundle.pem"),
+    "/opt/homebrew/etc/ca-certificates/cert.pem",
+    "/usr/local/etc/ca-certificates/cert.pem",
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (FS.existsSync(candidate) && FS.statSync(candidate).size > 0) {
+        process.env.NODE_EXTRA_CA_CERTS = candidate;
+        break;
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 import {
   app,
   BrowserWindow,
