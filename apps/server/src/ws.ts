@@ -42,6 +42,7 @@ import {
 } from "./observability/RpcInstrumentation";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
+import { WsClientTracker } from "./wsClientTracker";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "./terminal/Services/Manager";
@@ -905,6 +906,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             }),
             { "rpc.aggregate": "auth" },
           ),
+        [WS_METHODS.serverSubscribeLogStream]: (_input) =>
+          observeRpcStream(
+            WS_METHODS.serverSubscribeLogStream,
+            Stream.empty,
+            { "rpc.aggregate": "server" },
+          ),
       });
     }),
   );
@@ -918,6 +925,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         const request = yield* HttpServerRequest.HttpServerRequest;
         const serverAuth = yield* ServerAuth;
         const sessions = yield* SessionCredentialService;
+        const tracker = yield* WsClientTracker;
         const session = yield* serverAuth.authenticateWebSocketUpgrade(request);
         const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
           spanPrefix: "ws.rpc",
@@ -931,9 +939,9 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           ),
         );
         return yield* Effect.acquireUseRelease(
-          sessions.markConnected(session.sessionId),
+          sessions.markConnected(session.sessionId).pipe(Effect.andThen(tracker.onConnect)),
           () => rpcWebSocketHttpEffect,
-          () => sessions.markDisconnected(session.sessionId),
+          () => sessions.markDisconnected(session.sessionId).pipe(Effect.andThen(tracker.onDisconnect)),
         );
       }).pipe(Effect.catchTag("AuthError", respondToAuthError)),
     ),

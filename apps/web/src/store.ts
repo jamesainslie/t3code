@@ -184,6 +184,7 @@ function mapProject(
     name: project.title,
     cwd: project.workspaceRoot,
     repositoryIdentity: project.repositoryIdentity ?? null,
+    ...(project.remoteHost !== undefined ? { remoteHost: project.remoteHost } : {}),
     defaultModelSelection: project.defaultModelSelection
       ? normalizeModelSelection(project.defaultModelSelection)
       : null,
@@ -989,6 +990,9 @@ function applyEnvironmentOrchestrationEvent(
           title: event.payload.title,
           workspaceRoot: event.payload.workspaceRoot,
           repositoryIdentity: event.payload.repositoryIdentity ?? null,
+          ...(event.payload.remoteHost !== undefined
+            ? { remoteHost: event.payload.remoteHost }
+            : {}),
           defaultModelSelection: event.payload.defaultModelSelection,
           scripts: event.payload.scripts,
           createdAt: event.payload.createdAt,

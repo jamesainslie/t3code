@@ -76,6 +76,11 @@ const makeCliTestServerConfig = (baseDir: string) =>
       desktopBootstrapToken: undefined,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
+      authTokenFile: undefined,
+      stateFile: undefined,
+      logDir: undefined,
+      headless: false,
+      envFile: undefined,
     } satisfies ServerConfigShape;
   });
 

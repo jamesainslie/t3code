@@ -59,6 +59,19 @@
     "./qrCode": {
       "types": "./src/qrCode.ts",
       "import": "./src/qrCode.ts"
+    },
+    "./ssh": {
+      "types": "./src/ssh.ts",
+      "import": "./src/ssh.ts"
+    },
+    "./sshManager": {
+      "types": "./src/sshManager.ts",
+      "import": "./src/sshManager.ts",
+      "require": "./src/sshManager.ts"
+    },
+    "./provision": {
+      "types": "./src/provision.ts",
+      "import": "./src/provision.ts"
     }
   },
   "scripts": {

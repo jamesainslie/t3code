@@ -318,6 +318,11 @@ const createDesktopBridgeStub = (overrides?: {
       .fn()
       .mockResolvedValue({ accepted: false, completed: false, state: idleUpdateState }),
     onUpdateState: () => () => {},
+    sshConnect: vi.fn().mockResolvedValue({ wsUrl: "", httpBaseUrl: "", pairingUrl: undefined }),
+    sshDisconnect: vi.fn().mockResolvedValue({ ok: true }),
+    sshStatus: vi.fn().mockResolvedValue({ connections: [] }),
+    onSshStatusUpdate: vi.fn(),
+    recordRemoteHost: vi.fn().mockResolvedValue(undefined),
   };
 };
 

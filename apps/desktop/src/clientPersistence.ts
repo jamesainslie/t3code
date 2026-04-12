@@ -115,12 +115,7 @@ export function writeSavedEnvironmentRegistry(
       const encryptedBearerToken = encryptedBearerTokenById.get(record.environmentId);
       return encryptedBearerToken
         ? {
-            environmentId: record.environmentId,
-            label: record.label,
-            httpBaseUrl: record.httpBaseUrl,
-            wsBaseUrl: record.wsBaseUrl,
-            createdAt: record.createdAt,
-            lastConnectedAt: record.lastConnectedAt,
+            ...record,
             encryptedBearerToken,
           }
         : record;

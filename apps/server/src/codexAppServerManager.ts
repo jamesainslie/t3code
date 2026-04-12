@@ -125,6 +125,8 @@ export interface CodexAppServerStartSessionInput {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly runtimeMode: RuntimeMode;
+  /** Additional environment variables to merge into the subprocess environment. */
+  readonly extraEnv?: NodeJS.ProcessEnv;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -475,6 +477,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         env: {
           ...process.env,
           ...(codexHomePath ? { CODEX_HOME: codexHomePath } : {}),
+          ...input.extraEnv,
         },
         stdio: ["pipe", "pipe", "pipe"],
         shell: process.platform === "win32",

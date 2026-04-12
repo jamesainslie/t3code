@@ -7,6 +7,7 @@ import {
   GitPullRequestIcon,
   PlusIcon,
   SearchIcon,
+  ServerIcon,
   SettingsIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -81,6 +82,7 @@ import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -2018,6 +2020,7 @@ interface SidebarProjectsContentProps {
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   shouldShowProjectPathEntry: boolean;
   handleStartAddProject: () => void;
+  onOpenRemoteDialog: () => void;
   isElectron: boolean;
   isPickingFolder: boolean;
   isAddingProject: boolean;
@@ -2070,6 +2073,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     updateSettings,
     shouldShowProjectPathEntry,
     handleStartAddProject,
+    onOpenRemoteDialog,
     isElectron,
     isPickingFolder,
     isAddingProject,
@@ -2201,6 +2205,21 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               onProjectSortOrderChange={handleProjectSortOrderChange}
               onThreadSortOrderChange={handleThreadSortOrderChange}
             />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Add remote project"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={onOpenRemoteDialog}
+                  />
+                }
+              >
+                <ServerIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">Add remote project</TooltipPopup>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -2389,6 +2408,7 @@ export default function Sidebar() {
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const selectedThreadCount = useThreadSelectionStore((s) => s.selectedThreadKeys.size);
+  const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const isLinuxDesktop = isElectron && isLinuxPlatform(navigator.platform);
@@ -3156,6 +3176,7 @@ export default function Sidebar() {
 
   return (
     <>
+      <AddRemoteProjectDialog open={remoteDialogOpen} onClose={() => setRemoteDialogOpen(false)} />
       <SidebarChromeHeader isElectron={isElectron} />
 
       {isOnSettings ? (
@@ -3173,6 +3194,7 @@ export default function Sidebar() {
             updateSettings={updateSettings}
             shouldShowProjectPathEntry={shouldShowProjectPathEntry}
             handleStartAddProject={handleStartAddProject}
+            onOpenRemoteDialog={() => setRemoteDialogOpen(true)}
             isElectron={isElectron}
             isPickingFolder={isPickingFolder}
             isAddingProject={isAddingProject}

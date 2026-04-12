@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopBridge } from "@t3tools/contracts";
+import type {
+  DesktopBridge,
+  DesktopSshConnectOptions,
+  DesktopSshStatusUpdate,
+} from "@t3tools/contracts";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -22,6 +26,12 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
+const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
+const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
+const SSH_STATUS_CHANNEL = "desktop:ssh-status";
+const SSH_STATUS_UPDATE_CHANNEL = "desktop:ssh-status-update";
+const SSH_RECORD_HOST_CHANNEL = "desktop:ssh-record-host";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getLocalEnvironmentBootstrap: () => {
@@ -75,4 +85,16 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrappedListener);
     };
   },
+  sshConnect: (opts: DesktopSshConnectOptions) => ipcRenderer.invoke(SSH_CONNECT_CHANNEL, opts),
+  sshDisconnect: (projectId: string) => ipcRenderer.invoke(SSH_DISCONNECT_CHANNEL, { projectId }),
+  sshStatus: () => ipcRenderer.invoke(SSH_STATUS_CHANNEL),
+  onSshStatusUpdate: (listener: (update: DesktopSshStatusUpdate) => void) => {
+    ipcRenderer.on(SSH_STATUS_UPDATE_CHANNEL, (_event, update: unknown) => {
+      if (typeof update === "object" && update !== null) {
+        listener(update as DesktopSshStatusUpdate);
+      }
+    });
+  },
+  recordRemoteHost: (opts: { host: string; user: string; port: number }) =>
+    ipcRenderer.invoke(SSH_RECORD_HOST_CHANNEL, opts),
 } satisfies DesktopBridge);
