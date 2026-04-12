@@ -70,6 +70,8 @@ import {
   useRelativeTimeTick,
 } from "./settingsLayout";
 import { ProjectFavicon } from "../ProjectFavicon";
+import { RemoteEnvironmentsSection } from "./RemoteEnvironmentsSettings";
+import { useSavedEnvironmentRegistryStore } from "~/environments/runtime";
 import {
   useServerAvailableEditors,
   useServerKeybindingsConfigPath,
@@ -91,6 +93,15 @@ const THEME_OPTIONS = [
     label: "Dark",
   },
 ] as const;
+
+/** Only renders the Remote Environments section when there are saved remotes. */
+function RemoteEnvironmentsSettingsGate() {
+  const hasSavedRemotes = useSavedEnvironmentRegistryStore(
+    (state) => Object.keys(state.byIdentityKey).length > 0,
+  );
+  if (!hasSavedRemotes) return null;
+  return <RemoteEnvironmentsSection />;
+}
 
 const TIMESTAMP_FORMAT_LABELS = {
   locale: "System default",
@@ -1345,6 +1356,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      <RemoteEnvironmentsSettingsGate />
 
       <SettingsSection title="About">
         {isElectron ? (
