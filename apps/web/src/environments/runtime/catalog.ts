@@ -42,7 +42,8 @@ interface SavedEnvironmentRegistryStore extends SavedEnvironmentRegistryState {
 let savedEnvironmentRegistryHydrated = false;
 let savedEnvironmentRegistryHydrationPromise: Promise<void> | null = null;
 
-function toPersistedSavedEnvironmentRecord(
+/** @internal Exported for testing only. */
+export function toPersistedSavedEnvironmentRecord(
   record: SavedRemoteEnvironment,
 ): PersistedSavedEnvironmentRecord {
   return {
@@ -62,7 +63,8 @@ function toPersistedSavedEnvironmentRecord(
   };
 }
 
-function migratePersistedRecord(record: PersistedSavedEnvironmentRecord): SavedRemoteEnvironment {
+/** @internal Exported for testing only. */
+export function migratePersistedRecord(record: PersistedSavedEnvironmentRecord): SavedRemoteEnvironment {
   const sshConfig = record.sshConfig;
   const identityKey = sshConfig
     ? makeRemoteIdentityKey(sshConfig)
