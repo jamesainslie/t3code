@@ -4,6 +4,7 @@ import {
   type GitRunStackedActionResult,
   type GitStatusResult,
   type GitStatusStreamEvent,
+  type HostResourceStreamEvent,
   type LocalApi,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
@@ -107,6 +108,13 @@ export interface WsRpcClient {
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
+  };
+  readonly hostResource: {
+    readonly onResourceEvent: (
+      input: RpcInput<typeof WS_METHODS.subscribeHostResources>,
+      listener: (event: HostResourceStreamEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
   };
 }
 
@@ -234,6 +242,14 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       onDomainEvent: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
+          listener,
+          options,
+        ),
+    },
+    hostResource: {
+      onResourceEvent: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeHostResources](input),
           listener,
           options,
         ),
