@@ -1323,7 +1323,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         }
         if (clicked !== "delete") return;
 
-        const activeThreads = projectThreads.filter((t) => t.archivedAt === null);
+        const activeThreads = projectThreads.filter((t) => !t.archivedAt);
         if (activeThreads.length > 0) {
           toastManager.add({
             type: "warning",
@@ -1374,7 +1374,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       project.environmentId,
       project.id,
       project.name,
-      projectThreads.length,
+      projectThreads,
       suppressProjectClickForContextMenuRef,
     ],
   );
