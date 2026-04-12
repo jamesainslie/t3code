@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   type EditorId,
+  type HostResourceSnapshot,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
   type ThreadId,
@@ -16,6 +17,7 @@ import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScr
 import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
+import { ResourceIndicatorPill } from "./ResourceIndicatorPill";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -35,6 +37,7 @@ interface ChatHeaderProps {
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
+  hostResourceSnapshot: HostResourceSnapshot | null;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -61,6 +64,7 @@ export const ChatHeader = memo(function ChatHeader({
   diffToggleShortcutLabel,
   gitCwd,
   diffOpen,
+  hostResourceSnapshot,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -89,6 +93,7 @@ export const ChatHeader = memo(function ChatHeader({
           </Badge>
         )}
       </div>
+      <ResourceIndicatorPill snapshot={hostResourceSnapshot} />
       <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
         {activeProjectScripts && (
           <ProjectScriptsControl
