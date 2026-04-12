@@ -30,18 +30,17 @@ export const ResourceIndicatorPill = memo(function ResourceIndicatorPill({
 
   return (
     <div
-      className="@container/resource-pill"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       <ResourceDetailPopover snapshot={snapshot} open={open} onOpenChange={setOpen}>
         <div>
-          {/* Full strip visible at @[200px] and above */}
-          <div className="hidden @[200px]/resource-pill:block">
+          {/* Full strip visible at @3xl of the header-actions container */}
+          <div className="hidden @3xl/header-actions:block">
             <ResourceIndicatorStrip snapshot={snapshot} />
           </div>
-          {/* Collapsed dot visible below @[200px] */}
-          <div className="block @[200px]/resource-pill:hidden">
+          {/* Collapsed dot visible below @3xl */}
+          <div className="block @3xl/header-actions:hidden">
             <ResourceCollapsedDot snapshot={snapshot} />
           </div>
         </div>
