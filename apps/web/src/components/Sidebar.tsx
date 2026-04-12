@@ -417,6 +417,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const remoteEnvSavedLabel = useSavedEnvironmentRegistryStore(
     (s) => s.byId[thread.environmentId]?.label ?? null,
   );
+  const remoteConnectionState = useSavedEnvironmentRuntimeStore(
+    (s) => s.byId[thread.environmentId]?.connectionState ?? null,
+  );
+  const isRemoteDisconnected =
+    isRemoteThread &&
+    (remoteConnectionState === "disconnected" || remoteConnectionState === "error");
   const threadEnvironmentLabel = isRemoteThread
     ? (remoteEnvLabel ?? remoteEnvSavedLabel ?? "Remote")
     : null;
@@ -608,7 +614,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
   return (
     <SidebarMenuSubItem
-      className="w-full"
+      className={`w-full${isRemoteDisconnected ? " opacity-50" : ""}`}
       data-thread-item
       onMouseLeave={handleMouseLeave}
       onBlurCapture={handleBlurCapture}
@@ -1455,18 +1461,46 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     ],
   );
 
+  const ensureRemoteConnected = useCallback(
+    async (environmentId: EnvironmentId): Promise<boolean> => {
+      const runtimeState =
+        useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
+      if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
+      const identityKey = useSavedEnvironmentRegistryStore.getState()
+        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      if (!identityKey) return true;
+      try {
+        await connectSavedEnvironment(identityKey);
+        return true;
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to reconnect",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        return false;
+      }
+    },
+    [],
+  );
+
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
-      if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
-        clearSelection();
-      }
-      setSelectionAnchor(scopedThreadKey(threadRef));
-      void router.navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+      const doNavigate = () => {
+        if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
+          clearSelection();
+        }
+        setSelectionAnchor(scopedThreadKey(threadRef));
+        void router.navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(threadRef),
+        });
+      };
+      void ensureRemoteConnected(threadRef.environmentId).then((ok) => {
+        if (ok) doNavigate();
       });
     },
-    [clearSelection, router, setSelectionAnchor],
+    [clearSelection, ensureRemoteConnected, router, setSelectionAnchor],
   );
 
   const handleThreadClick = useCallback(
@@ -1493,16 +1527,28 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return;
       }
 
-      if (currentSelectionCount > 0) {
-        clearSelection();
-      }
-      setSelectionAnchor(threadKey);
-      void router.navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+      const doNavigate = () => {
+        if (currentSelectionCount > 0) {
+          clearSelection();
+        }
+        setSelectionAnchor(threadKey);
+        void router.navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(threadRef),
+        });
+      };
+      void ensureRemoteConnected(threadRef.environmentId).then((ok) => {
+        if (ok) doNavigate();
       });
     },
-    [clearSelection, rangeSelectTo, router, setSelectionAnchor, toggleThreadSelection],
+    [
+      clearSelection,
+      ensureRemoteConnected,
+      rangeSelectTo,
+      router,
+      setSelectionAnchor,
+      toggleThreadSelection,
+    ],
   );
 
   const handleMultiSelectContextMenu = useCallback(
@@ -2797,18 +2843,46 @@ export default function Sidebar() {
     setAddingProject((prev) => !prev);
   };
 
+  const ensureRemoteConnected = useCallback(
+    async (environmentId: EnvironmentId): Promise<boolean> => {
+      const runtimeState =
+        useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
+      if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
+      const identityKey = useSavedEnvironmentRegistryStore.getState()
+        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      if (!identityKey) return true;
+      try {
+        await connectSavedEnvironment(identityKey);
+        return true;
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to reconnect",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        return false;
+      }
+    },
+    [],
+  );
+
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
-      if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
-        clearSelection();
-      }
-      setSelectionAnchor(scopedThreadKey(threadRef));
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+      const doNavigate = () => {
+        if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
+          clearSelection();
+        }
+        setSelectionAnchor(scopedThreadKey(threadRef));
+        void navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(threadRef),
+        });
+      };
+      void ensureRemoteConnected(threadRef.environmentId).then((ok) => {
+        if (ok) doNavigate();
       });
     },
-    [clearSelection, navigate, setSelectionAnchor],
+    [clearSelection, ensureRemoteConnected, navigate, setSelectionAnchor],
   );
 
   const projectDnDSensors = useSensors(
