@@ -30,3 +30,10 @@ export {
   startEnvironmentConnectionService,
   subscribeEnvironmentConnections,
 } from "./service";
+
+export {
+  connectionLog,
+  resetConnectionLogForTests,
+  useConnectionLogStore,
+  type ConnectionLogEntry,
+} from "./connectionLog";
