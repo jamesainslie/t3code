@@ -38,6 +38,8 @@ const SSH_PROVISION_EVENT_CHANNEL = "desktop:ssh-provision-event";
 const SSH_GET_SAVED_HOSTS_CHANNEL = "desktop:get-saved-ssh-hosts";
 const SSH_SAVE_HOST_CHANNEL = "desktop:save-ssh-host";
 const SSH_REMOVE_SAVED_HOST_CHANNEL = "desktop:remove-saved-ssh-host";
+const SSH_PROBE_CHANNEL = "desktop:ssh-probe";
+const SSH_KILL_REMOTE_SESSION_CHANNEL = "desktop:ssh-kill-remote-session";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getLocalEnvironmentBootstrap: () => {
@@ -117,4 +119,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getSavedSshHosts: () => ipcRenderer.invoke(SSH_GET_SAVED_HOSTS_CHANNEL),
   saveSshHost: (host: SavedSshHost) => ipcRenderer.invoke(SSH_SAVE_HOST_CHANNEL, host),
   removeSavedSshHost: (id: string) => ipcRenderer.invoke(SSH_REMOVE_SAVED_HOST_CHANNEL, id),
+  sshProbe: (opts: { host: string; user: string; port: number }) =>
+    ipcRenderer.invoke(SSH_PROBE_CHANNEL, opts),
+  sshKillRemoteSession: (opts: { host: string; user: string; port: number; projectId: string }) =>
+    ipcRenderer.invoke(SSH_KILL_REMOTE_SESSION_CHANNEL, opts),
 } satisfies DesktopBridge);

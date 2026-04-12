@@ -1,8 +1,10 @@
+import * as ChildProcess from "node:child_process";
 import * as Path from "node:path";
 
 import { app } from "electron";
 import { provision, type ProvisionEvent, type ProvisionResult } from "@t3tools/shared/provision";
 import { SshConnectionManager } from "@t3tools/shared/sshManager";
+import { buildCheckSocketArgs, buildSshArgs, buildTmuxKillCommand } from "@t3tools/shared/ssh";
 
 export const globalSshManager = new SshConnectionManager();
 const activeConnections = new Map<string, ProvisionResult & { wsUrl: string }>();
@@ -89,6 +91,35 @@ export function sshGetStatus(): { connections: Array<{ projectId: string; wsUrl:
       wsUrl: c.wsUrl,
     })),
   };
+}
+
+export function sshProbe(opts: {
+  host: string;
+  user: string;
+  port: number;
+}): { reachable: boolean } {
+  try {
+    const args = buildCheckSocketArgs(opts);
+    ChildProcess.execFileSync("ssh", args, { timeout: 3_000, stdio: "ignore" });
+    return { reachable: true };
+  } catch {
+    return { reachable: false };
+  }
+}
+
+export async function sshKillRemoteSession(opts: {
+  host: string;
+  user: string;
+  port: number;
+  projectId: string;
+}): Promise<void> {
+  try {
+    const command = buildTmuxKillCommand(opts.projectId);
+    const args = buildSshArgs(opts, [command]);
+    ChildProcess.execFileSync("ssh", args, { timeout: 10_000, stdio: "ignore" });
+  } catch {
+    // Fail silently — session may already be gone
+  }
 }
 
 export function sshCloseAll(): void {

@@ -209,6 +209,8 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     getSavedSshHosts: async () => [],
     saveSshHost: async () => undefined,
     removeSavedSshHost: async () => undefined,
+    sshProbe: async () => ({ reachable: false }),
+    sshKillRemoteSession: async () => undefined,
     ...overrides,
   };
 }

@@ -82,6 +82,8 @@ import {
   sshDisconnect,
   sshGetStatus,
   sshCloseAll,
+  sshProbe,
+  sshKillRemoteSession,
 } from "./sshManager";
 // Resolved at bundle time by tsdown — always matches `t3 --version` on remote
 import { version as T3_SERVER_VERSION } from "../../server/package.json";
@@ -134,6 +136,8 @@ const SSH_RECORD_HOST_CHANNEL = "desktop:ssh-record-host";
 const SSH_GET_SAVED_HOSTS_CHANNEL = "desktop:get-saved-ssh-hosts";
 const SSH_SAVE_HOST_CHANNEL = "desktop:save-ssh-host";
 const SSH_REMOVE_SAVED_HOST_CHANNEL = "desktop:remove-saved-ssh-host";
+const SSH_PROBE_CHANNEL = "desktop:ssh-probe";
+const SSH_KILL_REMOTE_SESSION_CHANNEL = "desktop:ssh-kill-remote-session";
 const RECENT_REMOTE_HOSTS_MAX = 10;
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
@@ -1876,6 +1880,25 @@ function registerIpcHandlers(): void {
     }
     removeSavedSshHost(id);
   });
+
+  ipcMain.removeHandler(SSH_PROBE_CHANNEL);
+  ipcMain.handle(
+    SSH_PROBE_CHANNEL,
+    async (_event, opts: { host: string; user: string; port: number }) => {
+      return sshProbe(opts);
+    },
+  );
+
+  ipcMain.removeHandler(SSH_KILL_REMOTE_SESSION_CHANNEL);
+  ipcMain.handle(
+    SSH_KILL_REMOTE_SESSION_CHANNEL,
+    async (
+      _event,
+      opts: { host: string; user: string; port: number; projectId: string },
+    ) => {
+      await sshKillRemoteSession(opts);
+    },
+  );
 }
 
 function getIconOption(): { icon: string } | Record<string, never> {
