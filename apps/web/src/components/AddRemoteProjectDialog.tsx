@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/contracts";
+import { DEFAULT_MODEL_BY_PROVIDER, makeRemoteIdentityKey } from "@t3tools/contracts";
 import type { DesktopSshProvisioningEvent, SavedSshHost } from "@t3tools/contracts";
 import { Loader2Icon, CheckCircle2Icon, XCircleIcon, CircleIcon } from "lucide-react";
 import { newCommandId, newProjectId } from "../lib/utils";
 import { readEnvironmentApi } from "../environmentApi";
 import { addOrReconnectSavedEnvironment } from "../environments/runtime/service";
+import { useSavedEnvironmentRegistryStore } from "../environments/runtime/catalog";
 import { isElectron } from "../env";
 
 type Status = "idle" | "provisioning" | "registering" | "creating-project" | "connected" | "error";
@@ -171,6 +172,20 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
   const [phases, setPhases] = useState<ProvisionPhase[]>(INITIAL_PHASES);
   const cleanupRef = useRef<(() => void) | null>(null);
   const currentProjectIdRef = useRef<string | null>(null);
+
+  const candidateIdentityKey = useMemo(() => {
+    const h = host.trim();
+    const u = user.trim();
+    const p = Number(port) || 22;
+    const w = workspaceRoot.trim();
+    if (!h || !u || !w) return null;
+    return makeRemoteIdentityKey({ host: h, user: u, port: p, workspaceRoot: w });
+  }, [host, user, port, workspaceRoot]);
+
+  const existingRemote = useSavedEnvironmentRegistryStore(
+    (s) => candidateIdentityKey ? s.byIdentityKey[candidateIdentityKey] ?? null : null,
+  );
+  const isReconnectMode = existingRemote !== null;
 
   const resetForm = useCallback(() => {
     setSelectedHostId(NEW_HOST_VALUE);
@@ -425,7 +440,7 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
     >
       <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-2xl">
         <h2 className="mb-4 text-sm font-semibold text-foreground">
-          {showTimeline ? "Connecting to Remote" : "Add Remote Project"}
+          {showTimeline ? "Connecting to Remote" : isReconnectMode ? "Reconnect Remote" : "Add Remote Project"}
         </h2>
 
         {showTimeline ? (
@@ -571,6 +586,11 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
                 </span>
               </label>
             )}
+            {isReconnectMode && existingRemote && (
+              <div className="rounded-md bg-primary/10 px-3 py-2 text-[11px] text-foreground">
+                This remote is already saved as <strong>{existingRemote.label}</strong>. Reconnecting will re-establish the tunnel.
+              </div>
+            )}
             {error && (
               <p className="rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
                 {error}
@@ -595,7 +615,7 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
                 disabled={isSubmitting}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
-                Connect
+                {isReconnectMode ? "Reconnect" : "Connect"}
               </button>
             </div>
           </form>
