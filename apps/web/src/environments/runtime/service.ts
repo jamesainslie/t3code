@@ -584,8 +584,26 @@ async function syncSavedEnvironmentConnections(
   await Promise.all(
     staleEnvironmentIds.map((environmentId) => disconnectSavedEnvironment(environmentId)),
   );
+
+  // Partition into SSH remotes (lazy) and non-SSH (connect immediately).
+  const isSshRemote = (record: SavedEnvironmentRecord) =>
+    record.user !== "unknown" && record.host !== "";
+  const sshRecords = connectableRecords.filter(isSshRemote);
+  const nonSshRecords = connectableRecords.filter((r) => !isSshRemote(r));
+
+  // SSH remotes: populate registry but start disconnected — connect on demand.
+  for (const record of sshRecords) {
+    useSavedEnvironmentRuntimeStore.getState().ensure(record.environmentId);
+    const current = useSavedEnvironmentRuntimeStore.getState().byId[record.environmentId];
+    // Only set disconnected if there is no active connection and no existing runtime state
+    if (!environmentConnections.has(record.environmentId) && (!current || current.connectionState === "disconnected")) {
+      setRuntimeDisconnected(record.environmentId);
+    }
+  }
+
+  // Non-SSH remotes: connect eagerly as before.
   await Promise.all(
-    connectableRecords.map((record) => ensureSavedEnvironmentConnection(record).catch(() => undefined)),
+    nonSshRecords.map((record) => ensureSavedEnvironmentConnection(record).catch(() => undefined)),
   );
 }
 
@@ -648,6 +666,25 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
   setRuntimeConnecting(environmentId);
   try {
     await connection.reconnect();
+  } catch (error) {
+    setRuntimeError(environmentId, error);
+    throw error;
+  }
+}
+
+export async function connectSavedEnvironment(identityKey: RemoteIdentityKey): Promise<void> {
+  const record = useSavedEnvironmentRegistryStore.getState().byIdentityKey[identityKey];
+  if (!record) {
+    throw new Error(`No saved environment found for identity key: ${identityKey}`);
+  }
+  if (!record.environmentId) {
+    throw new Error("Cannot connect a saved environment without an environmentId.");
+  }
+  const environmentId: EnvironmentId = record.environmentId;
+
+  setRuntimeConnecting(environmentId);
+  try {
+    await ensureSavedEnvironmentConnection(record);
   } catch (error) {
     setRuntimeError(environmentId, error);
     throw error;

@@ -17,6 +17,7 @@ export {
 export {
   addOrReconnectSavedEnvironment,
   addSavedEnvironment,
+  connectSavedEnvironment,
   disconnectSavedEnvironment,
   ensureEnvironmentConnectionBootstrapped,
   getPrimaryEnvironmentConnection,
