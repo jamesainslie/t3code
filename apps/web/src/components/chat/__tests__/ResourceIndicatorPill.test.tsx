@@ -69,11 +69,11 @@ describe("ResourceIndicatorPill", () => {
     expect(markup).toBe("");
   });
 
-  it("renders the wrapper div with a nested ResourceIndicatorStrip when snapshot is provided", () => {
+  it("renders the trigger with a nested ResourceIndicatorStrip when snapshot is provided", () => {
     const markup = renderToStaticMarkup(<ResourceIndicatorPill snapshot={makeSnapshot()} />);
     expect(markup).not.toBe("");
-    // The wrapper div should exist
-    expect(markup).toMatch(/^<div/);
+    // The TooltipTrigger renders a <button> wrapper
+    expect(markup).toMatch(/^<button/);
     // The ResourceIndicatorStrip should be rendered inside (indicated by the group role)
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-label="System resources"');

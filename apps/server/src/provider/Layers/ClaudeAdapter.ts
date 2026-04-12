@@ -2105,7 +2105,22 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           },
         });
         return;
+      case "api_retry":
+        // Claude SDK is retrying an API call — emit as a telemetry event, not a warning
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "runtime.warning",
+          payload: {
+            message: `API retry attempt ${message.attempt ?? "?"}/${message.max_retries ?? "?"}${message.error ? ` — ${message.error}` : ""}`,
+          },
+        });
+        return;
       default:
+        yield* Effect.logWarning(`Unhandled Claude system message subtype`, {
+          subtype: message.subtype,
+          messageKeys: Object.keys(message),
+          message,
+        });
         yield* emitRuntimeWarning(
           context,
           `Unhandled Claude system message subtype '${message.subtype}'.`,
@@ -2218,6 +2233,11 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         yield* handleSdkTelemetryMessage(context, message);
         return;
       default:
+        yield* Effect.logWarning(`Unhandled Claude SDK message type`, {
+          messageType: message.type,
+          messageKeys: Object.keys(message),
+          message,
+        });
         yield* emitRuntimeWarning(
           context,
           `Unhandled Claude SDK message type '${message.type}'.`,
