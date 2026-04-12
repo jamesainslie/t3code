@@ -987,7 +987,13 @@ export function deriveTimelineEntries(
   proposedPlans: ProposedPlan[],
   workEntries: WorkLogEntry[],
 ): TimelineEntry[] {
-  const messageRows: TimelineEntry[] = messages.map((message) => ({
+  const seenIds = new Set<string>();
+  const uniqueMessages = messages.filter((message) => {
+    if (seenIds.has(message.id)) return false;
+    seenIds.add(message.id);
+    return true;
+  });
+  const messageRows: TimelineEntry[] = uniqueMessages.map((message) => ({
     id: message.id,
     kind: "message",
     createdAt: message.createdAt,

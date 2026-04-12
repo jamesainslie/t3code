@@ -1214,11 +1214,15 @@ function applyEnvironmentOrchestrationEvent(
                 : {
                     ...entry,
                     text: message.streaming
-                      ? `${entry.text}${message.text}`
+                      ? entry.streaming
+                        ? entry.text.endsWith(message.text)
+                          ? entry.text
+                          : `${entry.text}${message.text}`
+                        : entry.text
                       : message.text.length > 0
                         ? message.text
                         : entry.text,
-                    streaming: message.streaming,
+                    streaming: entry.streaming ? message.streaming : false,
                     ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
                     ...(message.streaming
                       ? entry.completedAt !== undefined
