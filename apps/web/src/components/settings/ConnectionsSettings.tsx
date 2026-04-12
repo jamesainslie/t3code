@@ -764,7 +764,8 @@ export function ConnectionsSettings() {
     () =>
       Object.values(savedEnvironmentsById)
         .toSorted((left, right) => left.label.localeCompare(right.label))
-        .map((record) => record.environmentId),
+        .filter((record) => record.environmentId !== null)
+        .map((record) => record.environmentId!),
     [savedEnvironmentsById],
   );
 

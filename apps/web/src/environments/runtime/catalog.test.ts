@@ -2,7 +2,9 @@ import {
   EnvironmentId,
   type LocalApi,
   type PersistedSavedEnvironmentRecord,
+  type RemoteIdentityKey,
 } from "@t3tools/contracts";
+import { makeRemoteIdentityKey } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,6 +14,37 @@ import {
   useSavedEnvironmentRuntimeStore,
   waitForSavedEnvironmentRegistryHydration,
 } from "./catalog";
+
+function makeTestRecord(overrides: {
+  environmentId?: EnvironmentId;
+  label?: string;
+  host?: string;
+  user?: string;
+  port?: number;
+  workspaceRoot?: string;
+  httpBaseUrl?: string;
+  wsBaseUrl?: string;
+}) {
+  const host = overrides.host ?? "remote.example.com";
+  const user = overrides.user ?? "james";
+  const port = overrides.port ?? 22;
+  const workspaceRoot = overrides.workspaceRoot ?? "/home/james/app";
+  const environmentId = overrides.environmentId ?? EnvironmentId.make("environment-1");
+  return {
+    identityKey: makeRemoteIdentityKey({ host, user, port, workspaceRoot }),
+    host,
+    user,
+    port,
+    workspaceRoot,
+    label: overrides.label ?? "Remote environment",
+    createdAt: "2026-04-09T00:00:00.000Z",
+    environmentId,
+    wsBaseUrl: overrides.wsBaseUrl ?? "wss://remote.example.com/",
+    httpBaseUrl: overrides.httpBaseUrl ?? "https://remote.example.com/",
+    lastConnectedAt: null,
+    projectId: environmentId as string,
+  } as const;
+}
 
 describe("environment runtime catalog stores", () => {
   beforeEach(async () => {
@@ -42,20 +75,16 @@ describe("environment runtime catalog stores", () => {
 
   it("resets the saved environment registry store state", () => {
     const environmentId = EnvironmentId.make("environment-1");
+    const record = makeTestRecord({ environmentId });
 
-    useSavedEnvironmentRegistryStore.getState().upsert({
-      environmentId,
-      label: "Remote environment",
-      httpBaseUrl: "https://remote.example.com/",
-      wsBaseUrl: "wss://remote.example.com/",
-      createdAt: "2026-04-09T00:00:00.000Z",
-      lastConnectedAt: null,
-    });
+    useSavedEnvironmentRegistryStore.getState().upsert(record);
 
+    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey]).toBeDefined();
     expect(useSavedEnvironmentRegistryStore.getState().byId[environmentId]).toBeDefined();
 
     resetSavedEnvironmentRegistryStoreForTests();
 
+    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey).toEqual({});
     expect(useSavedEnvironmentRegistryStore.getState().byId).toEqual({});
   });
 
@@ -81,14 +110,7 @@ describe("environment runtime catalog stores", () => {
     await __resetLocalApiForTests();
 
     expect(() =>
-      useSavedEnvironmentRegistryStore.getState().upsert({
-        environmentId: EnvironmentId.make("environment-1"),
-        label: "Remote environment",
-        httpBaseUrl: "https://remote.example.com/",
-        wsBaseUrl: "wss://remote.example.com/",
-        createdAt: "2026-04-09T00:00:00.000Z",
-        lastConnectedAt: null,
-      }),
+      useSavedEnvironmentRegistryStore.getState().upsert(makeTestRecord({})),
     ).not.toThrow();
 
     expect(errorSpy).toHaveBeenCalledWith("[SAVED_ENVIRONMENTS] persist failed", expect.any(Error));
@@ -122,20 +144,48 @@ describe("environment runtime catalog stores", () => {
     const hydrationPromise = waitForSavedEnvironmentRegistryHydration();
 
     const environmentId = EnvironmentId.make("environment-1");
-    const record = {
-      environmentId,
-      label: "Remote environment",
-      httpBaseUrl: "https://remote.example.com/",
-      wsBaseUrl: "wss://remote.example.com/",
-      createdAt: "2026-04-09T00:00:00.000Z",
-      lastConnectedAt: null,
-    } as const;
+    const record = makeTestRecord({ environmentId });
 
     useSavedEnvironmentRegistryStore.getState().upsert(record);
 
     resolveRegistryRead();
     await hydrationPromise;
 
+    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey]).toEqual(record);
     expect(useSavedEnvironmentRegistryStore.getState().byId[environmentId]).toEqual(record);
+  });
+
+  it("maintains the identityKeyByEnvironmentId reverse index", () => {
+    const environmentId = EnvironmentId.make("environment-1");
+    const record = makeTestRecord({ environmentId });
+
+    useSavedEnvironmentRegistryStore.getState().upsert(record);
+
+    expect(
+      useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId],
+    ).toBe(record.identityKey);
+  });
+
+  it("findByEnvironmentId looks up via reverse index", () => {
+    const environmentId = EnvironmentId.make("environment-1");
+    const record = makeTestRecord({ environmentId });
+
+    useSavedEnvironmentRegistryStore.getState().upsert(record);
+
+    expect(
+      useSavedEnvironmentRegistryStore.getState().findByEnvironmentId(environmentId),
+    ).toEqual(record);
+  });
+
+  it("remove by identityKey clears both maps", () => {
+    const environmentId = EnvironmentId.make("environment-1");
+    const record = makeTestRecord({ environmentId });
+
+    useSavedEnvironmentRegistryStore.getState().upsert(record);
+    useSavedEnvironmentRegistryStore.getState().remove(record.identityKey);
+
+    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey).toEqual({});
+    expect(useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId).toEqual({});
+    expect(useSavedEnvironmentRegistryStore.getState().byId).toEqual({});
   });
 });

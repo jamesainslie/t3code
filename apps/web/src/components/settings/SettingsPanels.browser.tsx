@@ -160,8 +160,12 @@ vi.mock("../../environments/runtime", () => {
     startEnvironmentConnectionService: () => undefined,
     subscribeEnvironmentConnections: () => () => {},
     useSavedEnvironmentRegistryStore: (
-      selector: (state: { byId: Record<string, never> }) => unknown,
-    ) => selector({ byId: {} }),
+      selector: (state: {
+        byIdentityKey: Record<string, never>;
+        identityKeyByEnvironmentId: Record<string, never>;
+        byId: Record<string, never>;
+      }) => unknown,
+    ) => selector({ byIdentityKey: {}, identityKeyByEnvironmentId: {}, byId: {} }),
     useSavedEnvironmentRuntimeStore: (
       selector: (state: { byId: Record<string, never> }) => unknown,
     ) => selector({ byId: {} }),

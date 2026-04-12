@@ -4,37 +4,38 @@ import type {
   EnvironmentId,
   ExecutionEnvironmentDescriptor,
   PersistedSavedEnvironmentRecord,
+  SavedRemoteEnvironment,
   ServerConfig,
 } from "@t3tools/contracts";
+import { type RemoteIdentityKey, makeRemoteIdentityKey } from "@t3tools/contracts";
 import { create } from "zustand";
 
 import { ensureLocalApi } from "../../localApi";
 import { getPrimaryKnownEnvironment } from "../primary";
 
-export interface SavedEnvironmentRecord {
-  readonly environmentId: EnvironmentId;
-  readonly label: string;
-  readonly wsBaseUrl: string;
-  readonly httpBaseUrl: string;
-  readonly createdAt: string;
-  readonly lastConnectedAt: string | null;
-  readonly sshConfig?: {
-    readonly host: string;
-    readonly user: string;
-    readonly port: number;
-    readonly projectId: string;
-    readonly workspaceRoot: string;
-  } | undefined;
-}
+/**
+ * @deprecated Use `SavedRemoteEnvironment` from `@t3tools/contracts` instead.
+ * This alias is kept temporarily to minimize breakage in callers that will be
+ * migrated in subsequent tasks.
+ */
+export type SavedEnvironmentRecord = SavedRemoteEnvironment;
 
 interface SavedEnvironmentRegistryState {
-  readonly byId: Record<EnvironmentId, SavedEnvironmentRecord>;
+  readonly byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>;
+  readonly identityKeyByEnvironmentId: Record<EnvironmentId, RemoteIdentityKey>;
+  /**
+   * @deprecated Use `byIdentityKey` with `identityKeyByEnvironmentId` for lookups.
+   * This derived view is kept temporarily for UI callers that still reference
+   * `state.byId[environmentId]`. It will be removed in a future task.
+   */
+  readonly byId: Record<EnvironmentId, SavedRemoteEnvironment>;
 }
 
 interface SavedEnvironmentRegistryStore extends SavedEnvironmentRegistryState {
-  readonly upsert: (record: SavedEnvironmentRecord) => void;
-  readonly remove: (environmentId: EnvironmentId) => void;
-  readonly markConnected: (environmentId: EnvironmentId, connectedAt: string) => void;
+  readonly upsert: (record: SavedRemoteEnvironment) => void;
+  readonly remove: (identityKey: RemoteIdentityKey) => void;
+  readonly markConnected: (identityKey: RemoteIdentityKey, connectedAt: string) => void;
+  readonly findByEnvironmentId: (environmentId: EnvironmentId) => SavedRemoteEnvironment | null;
   readonly reset: () => void;
 }
 
@@ -42,34 +43,92 @@ let savedEnvironmentRegistryHydrated = false;
 let savedEnvironmentRegistryHydrationPromise: Promise<void> | null = null;
 
 function toPersistedSavedEnvironmentRecord(
-  record: SavedEnvironmentRecord,
+  record: SavedRemoteEnvironment,
 ): PersistedSavedEnvironmentRecord {
   return {
-    environmentId: record.environmentId,
+    environmentId: record.environmentId!,
     label: record.label,
-    httpBaseUrl: record.httpBaseUrl,
-    wsBaseUrl: record.wsBaseUrl,
+    httpBaseUrl: record.httpBaseUrl ?? "",
+    wsBaseUrl: record.wsBaseUrl ?? "",
     createdAt: record.createdAt,
     lastConnectedAt: record.lastConnectedAt,
-    ...(record.sshConfig ? { sshConfig: record.sshConfig } : {}),
+    sshConfig: {
+      host: record.host,
+      user: record.user,
+      port: record.port,
+      projectId: record.projectId,
+      workspaceRoot: record.workspaceRoot,
+    },
   };
 }
 
+function migratePersistedRecord(record: PersistedSavedEnvironmentRecord): SavedRemoteEnvironment {
+  const sshConfig = record.sshConfig;
+  const identityKey = sshConfig
+    ? makeRemoteIdentityKey(sshConfig)
+    : makeRemoteIdentityKey({
+        host: new URL(record.httpBaseUrl).hostname,
+        user: "unknown",
+        port: 22,
+        workspaceRoot: "/",
+      });
+
+  return {
+    identityKey,
+    host: sshConfig?.host ?? new URL(record.httpBaseUrl).hostname,
+    user: sshConfig?.user ?? "unknown",
+    port: sshConfig?.port ?? 22,
+    workspaceRoot: sshConfig?.workspaceRoot ?? "/",
+    label: record.label,
+    createdAt: record.createdAt,
+    environmentId: record.environmentId,
+    wsBaseUrl: record.wsBaseUrl,
+    httpBaseUrl: record.httpBaseUrl,
+    lastConnectedAt: record.lastConnectedAt,
+    projectId: sshConfig?.projectId ?? record.environmentId,
+  };
+}
+
+function deriveByIdIndex(
+  byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>,
+): Record<EnvironmentId, SavedRemoteEnvironment> {
+  const byId: Record<EnvironmentId, SavedRemoteEnvironment> = {};
+  for (const record of Object.values(byIdentityKey)) {
+    if (record.environmentId) {
+      byId[record.environmentId] = record;
+    }
+  }
+  return byId;
+}
+
+function deriveReverseIndex(
+  byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>,
+): Record<EnvironmentId, RemoteIdentityKey> {
+  const index: Record<EnvironmentId, RemoteIdentityKey> = {};
+  for (const record of Object.values(byIdentityKey)) {
+    if (record.environmentId) {
+      index[record.environmentId] = record.identityKey;
+    }
+  }
+  return index;
+}
+
 function valuesOfSavedEnvironmentRegistry(
-  byId: Record<EnvironmentId, SavedEnvironmentRecord>,
-): ReadonlyArray<SavedEnvironmentRecord> {
-  return Object.values(byId) as ReadonlyArray<SavedEnvironmentRecord>;
+  byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>,
+): ReadonlyArray<SavedRemoteEnvironment> {
+  return Object.values(byIdentityKey) as ReadonlyArray<SavedRemoteEnvironment>;
 }
 
 function persistSavedEnvironmentRegistryState(
-  byId: Record<EnvironmentId, SavedEnvironmentRecord>,
+  byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>,
 ): void {
   try {
+    const records = valuesOfSavedEnvironmentRegistry(byIdentityKey).filter(
+      (record) => record.environmentId !== null,
+    );
     void ensureLocalApi()
       .persistence.setSavedEnvironmentRegistry(
-        valuesOfSavedEnvironmentRegistry(byId).map((record) =>
-          toPersistedSavedEnvironmentRecord(record),
-        ),
+        records.map((record) => toPersistedSavedEnvironmentRecord(record)),
       )
       .catch((error) => {
         console.error("[SAVED_ENVIRONMENTS] persist failed", error);
@@ -80,15 +139,20 @@ function persistSavedEnvironmentRegistryState(
 }
 
 function replaceSavedEnvironmentRegistryState(
-  records: ReadonlyArray<SavedEnvironmentRecord>,
+  records: ReadonlyArray<SavedRemoteEnvironment>,
 ): void {
-  const currentById = useSavedEnvironmentRegistryStore.getState().byId;
-  const hydratedById = Object.fromEntries(records.map((record) => [record.environmentId, record]));
+  const currentByIdentityKey = useSavedEnvironmentRegistryStore.getState().byIdentityKey;
+  const hydratedByIdentityKey = Object.fromEntries(
+    records.map((record) => [record.identityKey, record]),
+  ) as Record<RemoteIdentityKey, SavedRemoteEnvironment>;
+  const merged = {
+    ...hydratedByIdentityKey,
+    ...currentByIdentityKey,
+  };
   useSavedEnvironmentRegistryStore.setState({
-    byId: {
-      ...hydratedById,
-      ...currentById,
-    },
+    byIdentityKey: merged,
+    identityKeyByEnvironmentId: deriveReverseIndex(merged),
+    byId: deriveByIdIndex(merged),
   });
 }
 
@@ -103,7 +167,8 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
   const nextHydration = (async () => {
     try {
       const persistedRecords = await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
-      replaceSavedEnvironmentRegistryState(persistedRecords);
+      const migratedRecords = persistedRecords.map(migratePersistedRecord);
+      replaceSavedEnvironmentRegistryState(migratedRecords);
     } catch (error) {
       console.error("[SAVED_ENVIRONMENTS] hydrate failed", error);
     } finally {
@@ -121,44 +186,63 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
   return savedEnvironmentRegistryHydrationPromise;
 }
 
-export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryStore>()((set) => ({
+export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryStore>()((set, get) => ({
+  byIdentityKey: {},
+  identityKeyByEnvironmentId: {},
   byId: {},
   upsert: (record) =>
     set((state) => {
-      const byId = {
-        ...state.byId,
-        [record.environmentId]: record,
+      const byIdentityKey = {
+        ...state.byIdentityKey,
+        [record.identityKey]: record,
       };
-      persistSavedEnvironmentRegistryState(byId);
-      return { byId };
+      persistSavedEnvironmentRegistryState(byIdentityKey);
+      return {
+        byIdentityKey,
+        identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
+        byId: deriveByIdIndex(byIdentityKey),
+      };
     }),
-  remove: (environmentId) =>
+  remove: (identityKey) =>
     set((state) => {
-      const { [environmentId]: _removed, ...remaining } = state.byId;
+      const { [identityKey]: _removed, ...remaining } = state.byIdentityKey;
       persistSavedEnvironmentRegistryState(remaining);
       return {
-        byId: remaining,
+        byIdentityKey: remaining,
+        identityKeyByEnvironmentId: deriveReverseIndex(remaining),
+        byId: deriveByIdIndex(remaining),
       };
     }),
-  markConnected: (environmentId, connectedAt) =>
+  markConnected: (identityKey, connectedAt) =>
     set((state) => {
-      const existing = state.byId[environmentId];
+      const existing = state.byIdentityKey[identityKey];
       if (!existing) {
         return state;
       }
-      const byId = {
-        ...state.byId,
-        [environmentId]: {
+      const byIdentityKey = {
+        ...state.byIdentityKey,
+        [identityKey]: {
           ...existing,
           lastConnectedAt: connectedAt,
         },
       };
-      persistSavedEnvironmentRegistryState(byId);
-      return { byId };
+      persistSavedEnvironmentRegistryState(byIdentityKey);
+      return {
+        byIdentityKey,
+        identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
+        byId: deriveByIdIndex(byIdentityKey),
+      };
     }),
+  findByEnvironmentId: (environmentId) => {
+    const identityKey = get().identityKeyByEnvironmentId[environmentId];
+    if (!identityKey) return null;
+    return get().byIdentityKey[identityKey] ?? null;
+  },
   reset: () => {
     persistSavedEnvironmentRegistryState({});
     set({
+      byIdentityKey: {},
+      identityKeyByEnvironmentId: {},
       byId: {},
     });
   },
@@ -176,16 +260,16 @@ export function waitForSavedEnvironmentRegistryHydration(): Promise<void> {
   return hydrateSavedEnvironmentRegistry();
 }
 
-export function listSavedEnvironmentRecords(): ReadonlyArray<SavedEnvironmentRecord> {
-  return Object.values(useSavedEnvironmentRegistryStore.getState().byId).toSorted((left, right) =>
-    left.label.localeCompare(right.label),
+export function listSavedEnvironmentRecords(): ReadonlyArray<SavedRemoteEnvironment> {
+  return Object.values(useSavedEnvironmentRegistryStore.getState().byIdentityKey).toSorted(
+    (left, right) => left.label.localeCompare(right.label),
   );
 }
 
 export function getSavedEnvironmentRecord(
   environmentId: EnvironmentId,
-): SavedEnvironmentRecord | null {
-  return useSavedEnvironmentRegistryStore.getState().byId[environmentId] ?? null;
+): SavedRemoteEnvironment | null {
+  return useSavedEnvironmentRegistryStore.getState().findByEnvironmentId(environmentId);
 }
 
 export function getEnvironmentHttpBaseUrl(environmentId: EnvironmentId): string | null {
@@ -218,17 +302,26 @@ export function resolveEnvironmentHttpUrl(input: {
 export function resetSavedEnvironmentRegistryStoreForTests() {
   savedEnvironmentRegistryHydrated = false;
   savedEnvironmentRegistryHydrationPromise = null;
-  useSavedEnvironmentRegistryStore.setState({ byId: {} });
+  useSavedEnvironmentRegistryStore.setState({
+    byIdentityKey: {},
+    identityKeyByEnvironmentId: {},
+    byId: {},
+  });
 }
 
-export async function persistSavedEnvironmentRecord(record: SavedEnvironmentRecord): Promise<void> {
-  const byId = {
-    ...useSavedEnvironmentRegistryStore.getState().byId,
-    [record.environmentId]: record,
+export async function persistSavedEnvironmentRecord(
+  record: SavedRemoteEnvironment,
+): Promise<void> {
+  const byIdentityKey = {
+    ...useSavedEnvironmentRegistryStore.getState().byIdentityKey,
+    [record.identityKey]: record,
   };
 
+  const records = valuesOfSavedEnvironmentRegistry(byIdentityKey).filter(
+    (entry) => entry.environmentId !== null,
+  );
   await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-    valuesOfSavedEnvironmentRegistry(byId).map((entry) => toPersistedSavedEnvironmentRecord(entry)),
+    records.map((entry) => toPersistedSavedEnvironmentRecord(entry)),
   );
 }
 

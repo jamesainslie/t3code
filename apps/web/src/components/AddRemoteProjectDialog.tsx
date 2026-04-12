@@ -333,7 +333,7 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
 
       // Phase 3: Create project on the remote server
       setStatus("creating-project");
-      const remoteApi = readEnvironmentApi(record.environmentId);
+      const remoteApi = record.environmentId ? readEnvironmentApi(record.environmentId) : null;
       if (!remoteApi) {
         throw new Error("Failed to connect to the remote environment after registration.");
       }

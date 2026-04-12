@@ -3,8 +3,10 @@ import {
   type EnvironmentId,
   type OrchestrationEvent,
   type OrchestrationReadModel,
+  type RemoteIdentityKey,
   type ServerConfig,
   type TerminalEvent,
+  makeRemoteIdentityKey,
   ThreadId,
 } from "@t3tools/contracts";
 import { type QueryClient } from "@tanstack/react-query";
@@ -109,7 +111,11 @@ function setRuntimeConnected(environmentId: EnvironmentId) {
     lastError: null,
     lastErrorAt: null,
   });
-  useSavedEnvironmentRegistryStore.getState().markConnected(environmentId, connectedAt);
+  const identityKey =
+    useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
+  if (identityKey) {
+    useSavedEnvironmentRegistryStore.getState().markConnected(identityKey, connectedAt);
+  }
 }
 
 function setRuntimeDisconnected(environmentId: EnvironmentId, reason?: string | null) {
@@ -312,7 +318,7 @@ function createPrimaryEnvironmentClient(
 }
 
 function createSavedEnvironmentClient(
-  record: SavedEnvironmentRecord,
+  record: SavedEnvironmentRecord & { environmentId: EnvironmentId },
   bearerToken: string,
 ): WsRpcClient {
   useSavedEnvironmentRuntimeStore.getState().ensure(record.environmentId);
@@ -321,8 +327,8 @@ function createSavedEnvironmentClient(
     new WsTransport(
       () =>
         resolveRemoteWebSocketConnectionUrl({
-          wsBaseUrl: record.wsBaseUrl,
-          httpBaseUrl: record.httpBaseUrl,
+          wsBaseUrl: record.wsBaseUrl!,
+          httpBaseUrl: record.httpBaseUrl!,
           bearerToken,
         }),
       {
@@ -348,7 +354,7 @@ function createSavedEnvironmentClient(
 }
 
 async function refreshSavedEnvironmentMetadata(
-  record: SavedEnvironmentRecord,
+  record: SavedEnvironmentRecord & { environmentId: EnvironmentId },
   bearerToken: string,
   client: WsRpcClient,
   roleHint?: AuthSessionRole | null,
@@ -357,7 +363,7 @@ async function refreshSavedEnvironmentMetadata(
   const [serverConfig, sessionState] = await Promise.all([
     configHint ? Promise.resolve(configHint) : client.server.getConfig(),
     fetchRemoteSessionState({
-      httpBaseUrl: record.httpBaseUrl,
+      httpBaseUrl: record.httpBaseUrl!,
       bearerToken,
     }),
   ]);
@@ -414,7 +420,7 @@ function createPrimaryEnvironmentConnection(): EnvironmentConnection {
 }
 
 async function ensureSavedEnvironmentConnection(
-  record: SavedEnvironmentRecord,
+  inputRecord: SavedEnvironmentRecord,
   options?: {
     readonly client?: WsRpcClient;
     readonly bearerToken?: string;
@@ -422,17 +428,30 @@ async function ensureSavedEnvironmentConnection(
     readonly serverConfig?: ServerConfig | null;
   },
 ): Promise<EnvironmentConnection> {
-  const existing = environmentConnections.get(record.environmentId);
+  if (!inputRecord.environmentId) {
+    throw new Error("Cannot connect a saved environment without an environmentId.");
+  }
+  const environmentId: EnvironmentId = inputRecord.environmentId;
+  let record = inputRecord as SavedEnvironmentRecord & { environmentId: EnvironmentId };
+  const existing = environmentConnections.get(environmentId);
   if (existing) {
     return existing;
   }
 
   // For SSH-tunneled environments, re-provision the tunnel before connecting.
   // The local port may have changed since the last session.
-  if (record.sshConfig && typeof window !== "undefined" && window.desktopBridge) {
+  const hasSshConfig = record.user !== "unknown" && typeof window !== "undefined" && window.desktopBridge;
+  if (hasSshConfig) {
+    const sshConfig = {
+      host: record.host,
+      user: record.user,
+      port: record.port,
+      projectId: record.projectId,
+      workspaceRoot: record.workspaceRoot,
+    };
     try {
       console.log(`[ssh-reconnect] Re-provisioning tunnel for ${record.label}...`);
-      const result = await window.desktopBridge.sshConnect(record.sshConfig);
+      const result = await window.desktopBridge!.sshConnect(sshConfig);
       const newWsBaseUrl = result.wsUrl.replace(/^ws/, "ws");
       const newHttpBaseUrl = result.httpBaseUrl;
       if (newWsBaseUrl !== record.wsBaseUrl || newHttpBaseUrl !== record.httpBaseUrl) {
@@ -458,7 +477,7 @@ async function ensureSavedEnvironmentConnection(
             httpBaseUrl: resolvedTarget.httpBaseUrl,
             credential: resolvedTarget.credential,
           });
-          await writeSavedEnvironmentBearerToken(record.environmentId, bearerSession.sessionToken);
+          await writeSavedEnvironmentBearerToken(environmentId, bearerSession.sessionToken);
           console.log(`[ssh-reconnect] Bearer token refreshed for ${record.label}`);
           // Pass the fresh token to the connection
           options = { ...options, bearerToken: bearerSession.sessionToken, role: bearerSession.role };
@@ -470,7 +489,7 @@ async function ensureSavedEnvironmentConnection(
       console.log(`[ssh-reconnect] Tunnel ready for ${record.label}`);
     } catch (e) {
       console.error(`[ssh-reconnect] Failed to re-provision tunnel for ${record.label}:`, e);
-      useSavedEnvironmentRuntimeStore.getState().patch(record.environmentId, {
+      useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
         connectionState: "error",
         lastError: `SSH tunnel failed: ${e instanceof Error ? e.message : String(e)}`,
         lastErrorAt: isoNow(),
@@ -483,9 +502,9 @@ async function ensureSavedEnvironmentConnection(
   }
 
   const bearerToken =
-    options?.bearerToken ?? (await readSavedEnvironmentBearerToken(record.environmentId));
+    options?.bearerToken ?? (await readSavedEnvironmentBearerToken(environmentId));
   if (!bearerToken) {
-    useSavedEnvironmentRuntimeStore.getState().patch(record.environmentId, {
+    useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
       authState: "requires-auth",
       role: null,
       connectionState: "disconnected",
@@ -497,32 +516,32 @@ async function ensureSavedEnvironmentConnection(
 
   const client = options?.client ?? createSavedEnvironmentClient(record, bearerToken);
   const knownEnvironment = createKnownEnvironment({
-    id: record.environmentId,
+    id: environmentId,
     label: record.label,
     source: "manual",
     target: {
-      httpBaseUrl: record.httpBaseUrl,
-      wsBaseUrl: record.wsBaseUrl,
+      httpBaseUrl: record.httpBaseUrl!,
+      wsBaseUrl: record.wsBaseUrl!,
     },
   });
   const connection = createEnvironmentConnection({
     kind: "saved",
     knownEnvironment: {
       ...knownEnvironment,
-      environmentId: record.environmentId,
+      environmentId,
     },
     client,
     refreshMetadata: async () => {
       await refreshSavedEnvironmentMetadata(record, bearerToken, client);
     },
     onConfigSnapshot: (config) => {
-      useSavedEnvironmentRuntimeStore.getState().patch(record.environmentId, {
+      useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
         descriptor: config.environment,
         serverConfig: config,
       });
     },
     onWelcome: (payload) => {
-      useSavedEnvironmentRuntimeStore.getState().patch(record.environmentId, {
+      useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
         descriptor: payload.environment,
       });
     },
@@ -541,8 +560,8 @@ async function ensureSavedEnvironmentConnection(
     );
     return connection;
   } catch (error) {
-    setRuntimeError(record.environmentId, error);
-    await removeConnection(record.environmentId).catch(() => false);
+    setRuntimeError(environmentId, error);
+    await removeConnection(environmentId).catch(() => false);
     throw error;
   }
 }
@@ -550,7 +569,11 @@ async function ensureSavedEnvironmentConnection(
 async function syncSavedEnvironmentConnections(
   records: ReadonlyArray<SavedEnvironmentRecord>,
 ): Promise<void> {
-  const expectedEnvironmentIds = new Set(records.map((record) => record.environmentId));
+  const connectableRecords = records.filter(
+    (record): record is SavedEnvironmentRecord & { environmentId: EnvironmentId } =>
+      record.environmentId !== null,
+  );
+  const expectedEnvironmentIds = new Set(connectableRecords.map((record) => record.environmentId));
   const staleEnvironmentIds = [...environmentConnections.values()]
     .filter((connection) => connection.kind === "saved")
     .map((connection) => connection.environmentId)
@@ -560,7 +583,7 @@ async function syncSavedEnvironmentConnections(
     staleEnvironmentIds.map((environmentId) => disconnectSavedEnvironment(environmentId)),
   );
   await Promise.all(
-    records.map((record) => ensureSavedEnvironmentConnection(record).catch(() => undefined)),
+    connectableRecords.map((record) => ensureSavedEnvironmentConnection(record).catch(() => undefined)),
   );
 }
 
@@ -630,7 +653,11 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
 }
 
 export async function removeSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
-  useSavedEnvironmentRegistryStore.getState().remove(environmentId);
+  const identityKey =
+    useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
+  if (identityKey) {
+    useSavedEnvironmentRegistryStore.getState().remove(identityKey);
+  }
   await removeSavedEnvironmentBearerToken(environmentId);
   await disconnectSavedEnvironment(environmentId);
 }
@@ -640,7 +667,13 @@ export async function addSavedEnvironment(input: {
   readonly pairingUrl?: string;
   readonly host?: string;
   readonly pairingCode?: string;
-  readonly sshConfig?: SavedEnvironmentRecord["sshConfig"];
+  readonly sshConfig?: {
+    readonly host: string;
+    readonly user: string;
+    readonly port: number;
+    readonly projectId: string;
+    readonly workspaceRoot: string;
+  };
 }): Promise<SavedEnvironmentRecord> {
   const resolvedTarget = resolveRemotePairingTarget({
     ...(input.pairingUrl !== undefined ? { pairingUrl: input.pairingUrl } : {}),
@@ -661,14 +694,28 @@ export async function addSavedEnvironment(input: {
     credential: resolvedTarget.credential,
   });
 
+  const sshFields = input.sshConfig ?? {
+    host: new URL(resolvedTarget.httpBaseUrl).hostname,
+    user: "unknown",
+    port: 22,
+    workspaceRoot: "/",
+    projectId: environmentId,
+  };
+  const identityKey = makeRemoteIdentityKey(sshFields);
+
   const record: SavedEnvironmentRecord = {
+    identityKey,
+    host: sshFields.host,
+    user: sshFields.user,
+    port: sshFields.port,
+    workspaceRoot: sshFields.workspaceRoot,
+    projectId: sshFields.projectId ?? environmentId,
     environmentId,
     label: input.label.trim() || descriptor.label,
     wsBaseUrl: resolvedTarget.wsBaseUrl,
     httpBaseUrl: resolvedTarget.httpBaseUrl,
     createdAt: isoNow(),
     lastConnectedAt: isoNow(),
-    ...(input.sshConfig ? { sshConfig: input.sshConfig } : {}),
   };
 
   await persistSavedEnvironmentRecord(record);
@@ -678,14 +725,23 @@ export async function addSavedEnvironment(input: {
   );
   if (!didPersistBearerToken) {
     await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-      listSavedEnvironmentRecords().map((entry) => ({
-        environmentId: entry.environmentId,
-        label: entry.label,
-        httpBaseUrl: entry.httpBaseUrl,
-        wsBaseUrl: entry.wsBaseUrl,
-        createdAt: entry.createdAt,
-        lastConnectedAt: entry.lastConnectedAt,
-      })),
+      listSavedEnvironmentRecords()
+        .filter((entry) => entry.environmentId !== null)
+        .map((entry) => ({
+          environmentId: entry.environmentId!,
+          label: entry.label,
+          httpBaseUrl: entry.httpBaseUrl ?? "",
+          wsBaseUrl: entry.wsBaseUrl ?? "",
+          createdAt: entry.createdAt,
+          lastConnectedAt: entry.lastConnectedAt,
+          sshConfig: {
+            host: entry.host,
+            user: entry.user,
+            port: entry.port,
+            projectId: entry.projectId,
+            workspaceRoot: entry.workspaceRoot,
+          },
+        })),
     );
     throw new Error("Unable to persist saved environment credentials.");
   }
