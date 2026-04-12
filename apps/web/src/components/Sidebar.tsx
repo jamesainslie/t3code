@@ -42,6 +42,7 @@ import {
   type ThreadEnvMode,
   ThreadId,
   type GitStatusResult,
+  type RemoteIdentityKey,
 } from "@t3tools/contracts";
 import {
   scopedProjectKey,
@@ -83,6 +84,7 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
+import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -148,6 +150,11 @@ import { deriveLogicalProjectKey } from "../logicalProject";
 import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
+} from "../environments/runtime";
+import {
+  connectSavedEnvironment,
+  disconnectSavedEnvironment,
+  removeSavedEnvironment,
 } from "../environments/runtime";
 import type { Project, SidebarThreadSummary } from "../types";
 const THREAD_PREVIEW_LIMIT = 6;
@@ -1055,6 +1062,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     });
   }, []);
+
+  // Remote connection state for the project's environment
+  const isRemoteProject = project.environmentPresence === "remote-only";
+  const remoteIdentityKey = useSavedEnvironmentRegistryStore(
+    (s) => s.identityKeyByEnvironmentId[project.environmentId] as RemoteIdentityKey | undefined,
+  );
+  const remoteConnectionState = useSavedEnvironmentRuntimeStore(
+    (s) => s.byId[project.environmentId]?.connectionState ?? null,
+  );
+
   const sidebarThreads = useStore(
     useShallow(
       useMemo(
@@ -1307,20 +1324,76 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         const api = readLocalApi();
         if (!api) return;
 
-        const clicked = await api.contextMenu.show(
-          [
-            { id: "copy-path", label: "Copy Project Path" },
-            { id: "delete", label: "Remove project", destructive: true },
-          ],
-          {
-            x: event.clientX,
-            y: event.clientY,
-          },
-        );
+        // Build menu items, prepending remote-specific items when applicable
+        type MenuItemId =
+          | "copy-path"
+          | "delete"
+          | "reconnect"
+          | "disconnect"
+          | "remove-remote";
+        const menuItems: Array<{ id: MenuItemId; label: string; destructive?: boolean }> = [];
+
+        if (isRemoteProject && remoteIdentityKey) {
+          const connState = remoteConnectionState;
+          if (connState === "disconnected" || connState === "error") {
+            menuItems.push({ id: "reconnect", label: "Reconnect" });
+          }
+          if (connState === "connected" || connState === "connecting") {
+            menuItems.push({ id: "disconnect", label: "Disconnect" });
+          }
+          menuItems.push({ id: "remove-remote", label: "Remove remote", destructive: true });
+        }
+
+        menuItems.push({ id: "copy-path", label: "Copy Project Path" });
+        menuItems.push({ id: "delete", label: "Remove project", destructive: true });
+
+        const clicked = await api.contextMenu.show(menuItems, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+
         if (clicked === "copy-path") {
           copyPathToClipboard(project.cwd, { path: project.cwd });
           return;
         }
+
+        if (clicked === "reconnect" && remoteIdentityKey) {
+          void connectSavedEnvironment(remoteIdentityKey).catch((error) => {
+            toastManager.add({
+              type: "error",
+              title: "Failed to reconnect",
+              description: error instanceof Error ? error.message : "Unknown error.",
+            });
+          });
+          return;
+        }
+
+        if (clicked === "disconnect") {
+          void disconnectSavedEnvironment(project.environmentId).catch((error) => {
+            toastManager.add({
+              type: "error",
+              title: "Failed to disconnect",
+              description: error instanceof Error ? error.message : "Unknown error.",
+            });
+          });
+          return;
+        }
+
+        if (clicked === "remove-remote") {
+          const confirmed = await api.dialogs.confirm(
+            `Remove remote connection for "${project.name}"? This will not delete the project data on the remote host.`,
+          );
+          if (!confirmed) return;
+          void removeSavedEnvironment(project.environmentId).catch((error) => {
+            toastManager.add({
+              type: "error",
+              title: "Failed to remove remote",
+              description: error instanceof Error ? error.message : "Unknown error.",
+            });
+          });
+          return;
+        }
+
         if (clicked !== "delete") return;
 
         const activeThreads = projectThreads.filter((t) => !t.archivedAt);
@@ -1370,11 +1443,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       clearProjectDraftThreadId,
       copyPathToClipboard,
       getDraftThreadByProjectRef,
+      isRemoteProject,
       project.cwd,
       project.environmentId,
       project.id,
       project.name,
       projectThreads,
+      remoteConnectionState,
+      remoteIdentityKey,
       suppressProjectClickForContextMenuRef,
     ],
   );
@@ -1721,6 +1797,23 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             />
           )}
           <ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />
+          {isRemoteProject && remoteConnectionState && (
+            <RemoteConnectionIcon
+              state={remoteConnectionState}
+              tooltip={
+                remoteConnectionState === "connected"
+                  ? "Remote: connected"
+                  : remoteConnectionState === "connecting"
+                    ? "Remote: connecting…"
+                    : remoteConnectionState === "error"
+                      ? "Remote: error — click to reconnect"
+                      : "Remote: disconnected — click to reconnect"
+              }
+              {...(remoteIdentityKey
+                ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
+                : {})}
+            />
+          )}
           <span className="flex-1 truncate text-xs font-medium text-foreground/90">
             {project.name}
           </span>
