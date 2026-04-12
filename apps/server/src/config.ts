@@ -64,6 +64,11 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly desktopBootstrapToken: string | undefined;
   readonly autoBootstrapProjectFromCwd: boolean;
   readonly logWebSocketEvents: boolean;
+  readonly authTokenFile: string | undefined;
+  readonly stateFile: string | undefined;
+  readonly logDir: string | undefined;
+  readonly headless: boolean;
+  readonly envFile: string | undefined;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -161,6 +166,11 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           devUrl,
           noBrowser: false,
           startupPresentation: "browser",
+          authTokenFile: undefined,
+          stateFile: undefined,
+          logDir: undefined,
+          headless: false,
+          envFile: undefined,
         } satisfies ServerConfigShape;
       }),
     );

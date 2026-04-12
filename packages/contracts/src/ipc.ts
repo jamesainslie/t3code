@@ -113,6 +113,14 @@ export interface DesktopEnvironmentBootstrap {
   bootstrapToken?: string;
 }
 
+export interface SshEnvironmentConfig {
+  host: string;
+  user: string;
+  port: number;
+  projectId: string;
+  workspaceRoot: string;
+}
+
 export interface PersistedSavedEnvironmentRecord {
   environmentId: EnvironmentId;
   label: string;
@@ -120,6 +128,7 @@ export interface PersistedSavedEnvironmentRecord {
   httpBaseUrl: string;
   createdAt: string;
   lastConnectedAt: string | null;
+  sshConfig?: SshEnvironmentConfig | undefined;
 }
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";
@@ -128,6 +137,19 @@ export interface DesktopServerExposureState {
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
   advertisedHost: string | null;
+}
+
+export interface DesktopSshConnectOptions {
+  projectId: string;
+  host: string;
+  user: string;
+  port: number;
+  workspaceRoot: string;
+}
+
+export interface DesktopSshStatusUpdate {
+  projectId: string;
+  phase: string;
 }
 
 export interface DesktopBridge {
@@ -157,6 +179,15 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  sshConnect: (opts: DesktopSshConnectOptions) => Promise<{
+    wsUrl: string;
+    httpBaseUrl: string;
+    pairingUrl: string | undefined;
+  }>;
+  sshDisconnect: (projectId: string) => Promise<{ ok: boolean }>;
+  sshStatus: () => Promise<{ connections: Array<{ projectId: string; wsUrl: string }> }>;
+  onSshStatusUpdate: (listener: (update: DesktopSshStatusUpdate) => void) => void;
+  recordRemoteHost: (opts: { host: string; user: string; port: number }) => Promise<void>;
 }
 
 /**

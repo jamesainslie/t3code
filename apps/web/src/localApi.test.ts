@@ -196,6 +196,15 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       throw new Error("installUpdate not implemented in test");
     },
     onUpdateState: () => () => undefined,
+    sshConnect: async () => {
+      throw new Error("sshConnect not implemented in test");
+    },
+    sshDisconnect: async () => {
+      throw new Error("sshDisconnect not implemented in test");
+    },
+    sshStatus: async () => ({ connections: [] }),
+    onSshStatusUpdate: () => undefined,
+    recordRemoteHost: async () => undefined,
     ...overrides,
   };
 }

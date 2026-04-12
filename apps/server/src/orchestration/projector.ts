@@ -183,6 +183,7 @@ export function projectEvent(
             id: payload.projectId,
             title: payload.title,
             workspaceRoot: payload.workspaceRoot,
+            ...(payload.remoteHost !== undefined ? { remoteHost: payload.remoteHost } : {}),
             defaultModelSelection: payload.defaultModelSelection,
             scripts: payload.scripts,
             createdAt: payload.createdAt,

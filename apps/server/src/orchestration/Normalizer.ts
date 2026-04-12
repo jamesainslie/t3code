@@ -31,7 +31,10 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
     if (command.type === "project.create") {
       return {
         ...command,
-        workspaceRoot: yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
+        // Skip local filesystem validation for remote projects — the path exists on the remote host, not locally.
+        workspaceRoot: command.remoteHost
+          ? command.workspaceRoot.trim()
+          : yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
       } satisfies OrchestrationCommand;
     }
 

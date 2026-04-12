@@ -47,6 +47,7 @@ import { ProviderService } from "../src/provider/Services/ProviderService.ts";
 import { AnalyticsService } from "../src/telemetry/Services/AnalyticsService.ts";
 import { CheckpointReactorLive } from "../src/orchestration/Layers/CheckpointReactor.ts";
 import { RepositoryIdentityResolverLive } from "../src/project/Layers/RepositoryIdentityResolver.ts";
+import { DisconnectReactorLive } from "../src/orchestration/Layers/DisconnectReactor.ts";
 import { OrchestrationEngineLive } from "../src/orchestration/Layers/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "../src/orchestration/Layers/ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "../src/orchestration/Layers/ProjectionSnapshotQuery.ts";
@@ -54,6 +55,7 @@ import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceip
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionLive } from "../src/orchestration/Layers/ProviderRuntimeIngestion.ts";
+import { WsClientTrackerLive } from "../src/wsClientTracker.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -70,6 +72,7 @@ import {
   type TestProviderAdapterHarness,
 } from "./TestProviderAdapter.integration.ts";
 import { deriveServerPaths, ServerConfig } from "../src/config.ts";
+import { RemoteEnvLive } from "../src/remote/Layers/RemoteEnv.ts";
 import { WorkspaceEntriesLive } from "../src/workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../src/workspace/Layers/WorkspacePaths.ts";
 
@@ -347,10 +350,15 @@ export const makeOrchestrationIntegrationHarness = (
       ),
       Layer.provideMerge(WorkspacePathsLive),
     );
+    const disconnectReactorLayer = DisconnectReactorLive.pipe(
+      Layer.provideMerge(WsClientTrackerLive),
+      Layer.provideMerge(runtimeServicesLayer),
+    );
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
       Layer.provideMerge(checkpointReactorLayer),
+      Layer.provideMerge(disconnectReactorLayer),
     );
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),
@@ -358,6 +366,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provide(persistenceLayer),
       Layer.provideMerge(RepositoryIdentityResolverLive),
       Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(RemoteEnvLive),
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),
       Layer.provideMerge(NodeServices.layer),
     );

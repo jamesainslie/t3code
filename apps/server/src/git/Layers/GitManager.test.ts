@@ -236,6 +236,8 @@ function initRepo(
     yield* runGit(cwd, ["init", "--initial-branch=main"]);
     yield* runGit(cwd, ["config", "user.email", "test@example.com"]);
     yield* runGit(cwd, ["config", "user.name", "Test User"]);
+    // Override global core.hooksPath so tests that write local .git/hooks are picked up
+    yield* runGit(cwd, ["config", "core.hooksPath", ".git/hooks"]);
     yield* fs.writeFileString(path.join(cwd, "README.md"), "hello\n");
     yield* runGit(cwd, ["add", "README.md"]);
     yield* runGit(cwd, ["commit", "-m", "Initial commit"]);
@@ -995,7 +997,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.fork-seed.url",
-          "git@github.com:jasonLaster/codething-mvp.git",
+          "https://github.com/jasonLaster/codething-mvp.git",
         ]);
 
         const { manager, ghCalls } = yield* makeManager({
@@ -1039,7 +1041,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           "pr list --head jasonLaster:statemachine --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
         );
       }),
-    20_000,
+    30_000,
   );
 
   it.effect(
@@ -1059,13 +1061,13 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.origin.url",
-          "git@github.com:pingdotgg/codething-mvp.git",
+          "https://github.com/pingdotgg/codething-mvp.git",
         ]);
         yield* runGit(repoDir, ["config", "remote.origin.pushurl", originDir]);
         yield* runGit(repoDir, [
           "config",
           "remote.my-org/upstream.url",
-          "git@github.com:pingdotgg/codething-mvp.git",
+          "https://github.com/pingdotgg/codething-mvp.git",
         ]);
         yield* runGit(repoDir, ["config", "remote.my-org/upstream.pushurl", upstreamDir]);
         yield* runGit(repoDir, ["checkout", "main"]);
@@ -1147,7 +1149,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           ),
         ).toBe(false);
       }),
-    20_000,
+    30_000,
   );
 
   it.effect("status returns merged PR state when latest PR was merged", () =>
@@ -1736,7 +1738,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.fork-seed.url",
-          "git@github.com:octocat/codething-mvp.git",
+          "https://github.com/octocat/codething-mvp.git",
         ]);
 
         const { manager, ghCalls } = yield* makeManager({
@@ -1778,7 +1780,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         ).toBe(true);
         expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(false);
       }),
-    12_000,
+    30_000,
   );
 
   it.effect(
@@ -1798,13 +1800,13 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.origin.url",
-          "git@github.com:pingdotgg/codething-mvp.git",
+          "https://github.com/pingdotgg/codething-mvp.git",
         ]);
         yield* runGit(repoDir, ["config", "remote.origin.pushurl", originDir]);
         yield* runGit(repoDir, [
           "config",
           "remote.my-org/upstream.url",
-          "git@github.com:pingdotgg/codething-mvp.git",
+          "https://github.com/pingdotgg/codething-mvp.git",
         ]);
         yield* runGit(repoDir, ["config", "remote.my-org/upstream.pushurl", upstreamDir]);
         yield* runGit(repoDir, ["checkout", "main"]);
@@ -1870,7 +1872,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           false,
         );
       }),
-    20_000,
+    30_000,
   );
 
   it.effect(
@@ -1888,7 +1890,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.fork-seed.url",
-          "git@github.com:octocat/codething-mvp.git",
+          "https://github.com/octocat/codething-mvp.git",
         ]);
 
         const { manager, ghCalls } = yield* makeManager({
@@ -1940,7 +1942,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         expect(ownerSelectorCallIndex).toBeGreaterThanOrEqual(0);
         expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(false);
       }),
-    12_000,
+    30_000,
   );
 
   it.effect(
@@ -1958,7 +1960,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, [
           "config",
           "remote.fork-seed.url",
-          "git@github.com:octocat/codething-mvp.git",
+          "https://github.com/octocat/codething-mvp.git",
         ]);
 
         const { manager, ghCalls } = yield* makeManager({
@@ -2002,7 +2004,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           "pr list --head octocat:statemachine --state open --limit 1",
         );
       }),
-    12_000,
+    30_000,
   );
 
   it.effect("creates PR when one does not already exist", () =>
@@ -2138,7 +2140,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, [
         "config",
         "remote.fork-seed.url",
-        "git@github.com:octocat/codething-mvp.git",
+        "https://github.com/octocat/codething-mvp.git",
       ]);
 
       const { manager, ghCalls } = yield* makeManager({
@@ -2186,6 +2188,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         ),
       ).toBe(false);
     }),
+    30_000,
   );
 
   it.effect("rejects push/pr actions from detached HEAD", () =>

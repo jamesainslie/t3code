@@ -18,6 +18,13 @@ export interface SavedEnvironmentRecord {
   readonly httpBaseUrl: string;
   readonly createdAt: string;
   readonly lastConnectedAt: string | null;
+  readonly sshConfig?: {
+    readonly host: string;
+    readonly user: string;
+    readonly port: number;
+    readonly projectId: string;
+    readonly workspaceRoot: string;
+  } | undefined;
 }
 
 interface SavedEnvironmentRegistryState {
@@ -44,6 +51,7 @@ function toPersistedSavedEnvironmentRecord(
     wsBaseUrl: record.wsBaseUrl,
     createdAt: record.createdAt,
     lastConnectedAt: record.lastConnectedAt,
+    ...(record.sshConfig ? { sshConfig: record.sshConfig } : {}),
   };
 }
 

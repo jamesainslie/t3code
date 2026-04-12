@@ -120,6 +120,7 @@ export const WS_METHODS = {
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
+  serverSubscribeLogStream: "server.subscribeLogStream",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -342,6 +343,17 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribeLogStream, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({
+    level: Schema.String,
+    message: Schema.String,
+    timestamp: Schema.String,
+  }),
+  error: Schema.Never,
+  stream: true,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -379,4 +391,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsServerSubscribeLogStreamRpc,
 );

@@ -38,6 +38,8 @@ import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus"
 import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
+import { DisconnectReactorLive } from "./orchestration/Layers/DisconnectReactor";
+import { WsClientTrackerLive } from "./wsClientTracker";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { ServerSettingsLive } from "./serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
@@ -72,6 +74,7 @@ import {
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http";
+import { RemoteEnvLive } from "./remote/Layers/RemoteEnv";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -126,7 +129,9 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
+  Layer.provideMerge(DisconnectReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
+  Layer.provideMerge(WsClientTrackerLive),
 );
 
 const CheckpointingLayerLive = Layer.empty.pipe(
@@ -215,6 +220,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
+  Layer.provideMerge(RemoteEnvLive),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(

@@ -7,6 +7,7 @@ import type {
   OrchestrationSessionStatus,
   OrchestrationThreadActivity,
   ProjectScript as ContractProjectScript,
+  RemoteHost,
   ThreadId,
   ProjectId,
   TurnId,
@@ -86,6 +87,7 @@ export interface Project {
   name: string;
   cwd: string;
   repositoryIdentity?: RepositoryIdentity | null;
+  remoteHost?: RemoteHost | undefined;
   defaultModelSelection: ModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;

@@ -231,6 +231,10 @@ export const staticAndDevRouteLayer = HttpRouter.add(
     }
 
     const config = yield* ServerConfig;
+    if (config.headless) {
+      return HttpServerResponse.text("UI not available in headless mode.", { status: 404 });
+    }
+
     if (config.devUrl && isLoopbackHostname(url.value.hostname)) {
       return HttpServerResponse.redirect(resolveDevRedirectUrl(config.devUrl, url.value), {
         status: 302,

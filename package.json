@@ -37,6 +37,7 @@
     "build": "turbo run build",
     "build:marketing": "turbo run build --filter=@t3tools/marketing",
     "build:desktop": "turbo run build --filter=@t3tools/desktop --filter=t3",
+    "build:ssh-binaries": "bash scripts/build-ssh-binaries.sh dist/ssh-binaries",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",
