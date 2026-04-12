@@ -70,7 +70,7 @@ import {
   useRelativeTimeTick,
 } from "./settingsLayout";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { RemoteEnvironmentsSection } from "./RemoteEnvironmentsSettings";
+import { ConnectionLogViewer, RemoteEnvironmentsSection } from "./RemoteEnvironmentsSettings";
 import { useSavedEnvironmentRegistryStore } from "~/environments/runtime";
 import {
   useServerAvailableEditors,
@@ -1358,6 +1358,7 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <RemoteEnvironmentsSettingsGate />
+      <ConnectionLogViewer />
 
       <SettingsSection title="About">
         {isElectron ? (
