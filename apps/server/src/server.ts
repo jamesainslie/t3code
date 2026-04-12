@@ -75,6 +75,9 @@ import {
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http";
 import { RemoteEnvLive } from "./remote/Layers/RemoteEnv";
+import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor";
+import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler";
+import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -221,6 +224,9 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(RemoteEnvLive),
+  Layer.provideMerge(HostResourceMonitorLive),
+  Layer.provideMerge(ResourceSamplerLive),
+  Layer.provideMerge(ThresholdEvaluatorLive),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(

@@ -27,6 +27,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
+import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor.ts";
 import { GitCore } from "./git/Services/GitCore";
 import { GitManager } from "./git/Services/GitManager";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
@@ -911,6 +912,15 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             WS_METHODS.serverSubscribeLogStream,
             Stream.empty,
             { "rpc.aggregate": "server" },
+          ),
+        [WS_METHODS.subscribeHostResources]: (input) =>
+          observeRpcStreamEffect(
+            WS_METHODS.subscribeHostResources,
+            Effect.gen(function* () {
+              const monitor = yield* HostResourceMonitor;
+              return monitor.subscribe(input.workspacePath);
+            }),
+            { "rpc.aggregate": "hostResource" },
           ),
       });
     }),
