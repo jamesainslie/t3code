@@ -1,0 +1,220 @@
+- generic [ref=e1]:
+  - generic [ref=e16]:
+    - generic [ref=e19]:
+      - link "Go to threads" [ref=e22] [cursor=pointer]:
+        - /url: /
+        - img "T3" [ref=e23]
+        - generic [ref=e25]: Code
+        - generic [ref=e26]: Dev
+      - generic [ref=e28]:
+        - list [ref=e30]:
+          - listitem [ref=e31]:
+            - button "Search ⌘K" [ref=e32] [cursor=pointer]:
+              - img [ref=e33]
+              - generic [ref=e36]: Search
+              - generic: ⌘K
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - generic [ref=e39]: Projects
+            - generic [ref=e40]:
+              - button [ref=e41] [cursor=pointer]:
+                - img [ref=e42]
+              - button "Add remote project" [ref=e45] [cursor=pointer]:
+                - img [ref=e46]
+              - button "Add project" [ref=e49] [cursor=pointer]:
+                - img [ref=e50]
+          - list [ref=e51]:
+            - listitem [ref=e52]:
+              - generic [ref=e53]:
+                - button "scratch" [ref=e54] [cursor=pointer]:
+                  - img [ref=e55]
+                  - generic [ref=e57]: scratch
+                - generic:
+                  - button "Create new thread in scratch":
+                    - img
+              - list [ref=e58]:
+                - listitem [ref=e59]:
+                  - button "test Archive test 2m ago" [ref=e60] [cursor=pointer]:
+                    - generic [ref=e62]: test
+                    - generic [ref=e64]:
+                      - generic:
+                        - button "Archive test":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 2m ago
+            - listitem [ref=e65]:
+              - generic [ref=e66]:
+                - button "t3code" [ref=e67] [cursor=pointer]:
+                  - img [ref=e68]
+                  - generic [ref=e70]: t3code
+                - generic:
+                  - button "Create new thread in t3code":
+                    - img
+              - list [ref=e71]:
+                - listitem [ref=e72]:
+                  - button "New thread Archive New thread 12m ago" [ref=e73] [cursor=pointer]:
+                    - generic [ref=e75]: New thread
+                    - generic [ref=e77]:
+                      - generic:
+                        - button "Archive New thread":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 12m ago
+                - listitem [ref=e78]:
+                  - button "Working test 14m ago" [ref=e79] [cursor=pointer]:
+                    - generic [ref=e80]:
+                      - generic "Working" [ref=e81]:
+                        - generic [ref=e83]: Working
+                      - generic [ref=e84]: test
+                    - generic [ref=e86]:
+                      - generic:
+                        - generic:
+                          - generic: 14m ago
+                - listitem [ref=e87]:
+                  - button "resources Archive resources 1h ago" [ref=e88] [cursor=pointer]:
+                    - generic [ref=e90]: resources
+                    - generic [ref=e92]:
+                      - generic:
+                        - button "Archive resources":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 1h ago
+                - listitem [ref=e93]:
+                  - button "remote ssh Archive remote ssh 1h ago" [ref=e94] [cursor=pointer]:
+                    - generic [ref=e96]: remote ssh
+                    - generic [ref=e98]:
+                      - generic:
+                        - button "Archive remote ssh":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 1h ago
+                - listitem [ref=e99]:
+                  - button "t3code / claude use the ✅ and ⏳emojis to indicate ... Archive t3code / claude use the ✅ and ⏳emojis to indicate ... 1h ago" [ref=e100] [cursor=pointer]:
+                    - generic [ref=e102]: t3code / claude use the ✅ and ⏳emojis to indicate ...
+                    - generic [ref=e104]:
+                      - generic:
+                        - button "Archive t3code / claude use the ✅ and ⏳emojis to indicate ...":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 1h ago
+                - listitem [ref=e105]:
+                  - button "In t3 code does each new thread operate in a workt... Archive In t3 code does each new thread operate in a workt... 1h ago" [ref=e106] [cursor=pointer]:
+                    - generic [ref=e108]: In t3 code does each new thread operate in a workt...
+                    - generic [ref=e110]:
+                      - generic:
+                        - button "Archive In t3 code does each new thread operate in a workt...":
+                          - img
+                      - generic:
+                        - generic:
+                          - generic: 1h ago
+                - listitem [ref=e111]:
+                  - button "Show more" [ref=e112] [cursor=pointer]:
+                    - generic [ref=e114]: Show more
+            - listitem [ref=e115]:
+              - generic [ref=e116]:
+                - button "thalamos" [ref=e117] [cursor=pointer]:
+                  - img [ref=e118]
+                  - generic [ref=e120]: thalamos
+                - generic:
+                  - button "Create new thread in thalamos":
+                    - img
+              - list [ref=e121]:
+                - listitem [ref=e122]:
+                  - generic [ref=e124]: No threads yet
+      - separator [ref=e125]
+      - list [ref=e127]:
+        - listitem [ref=e128]:
+          - button "Settings" [ref=e129] [cursor=pointer]:
+            - img [ref=e130]
+            - generic [ref=e133]: Settings
+      - button "Resize Sidebar" [ref=e134]
+    - main [ref=e135]:
+      - generic [ref=e136]:
+        - generic [ref=e138]:
+          - generic [ref=e139]:
+            - heading "New thread" [level=2] [ref=e140]
+            - generic [ref=e142]: server
+          - generic "System resources" [ref=e143]:
+            - img [ref=e144]
+          - generic [ref=e146]:
+            - button "Add action" [ref=e147] [cursor=pointer]:
+              - img
+              - generic [ref=e148]: Add action
+            - group "Subscription actions" [ref=e149]:
+              - button "Open" [ref=e150] [cursor=pointer]:
+                - img
+                - generic [ref=e151]: Open
+              - separator
+              - button "Copy options" [ref=e152] [cursor=pointer]:
+                - img
+            - group "Git actions" [ref=e153]:
+              - button "Commit, push & PR" [ref=e154] [cursor=pointer]:
+                - img
+                - generic [ref=e155]: Commit, push & PR
+              - separator
+              - button "Git action options" [ref=e156] [cursor=pointer]:
+                - img
+            - button "Toggle terminal drawer" [ref=e157] [cursor=pointer]:
+              - img
+            - button "Toggle diff panel" [ref=e158] [cursor=pointer]:
+              - img
+        - alert [ref=e160]:
+          - img [ref=e161]
+          - generic [ref=e163]: Codex provider status
+          - 'generic "Codex CLI is not authenticated. Run `codex login` and try again." [ref=e164]'
+        - generic [ref=e166]:
+          - paragraph [ref=e170]: Send a message to start the conversation.
+          - generic [ref=e174]:
+            - generic [ref=e176]:
+              - textbox [active] [ref=e177]:
+                - paragraph [ref=e178]
+              - generic: Ask for follow-up changes or attach images
+            - generic [ref=e179]:
+              - generic [ref=e180]:
+                - button "GPT-5.4" [ref=e181] [cursor=pointer]:
+                  - generic [ref=e182]:
+                    - img
+                    - generic [ref=e183]: GPT-5.4
+                    - img
+                - separator [ref=e184]
+                - button "High" [ref=e185] [cursor=pointer]:
+                  - generic [ref=e186]:
+                    - text: High
+                    - img
+                - separator [ref=e187]
+                - button "Build" [ref=e188] [cursor=pointer]:
+                  - img
+                  - generic [ref=e189]: Build
+                - separator [ref=e190]
+                - combobox "Runtime mode" [ref=e191]:
+                  - img
+                  - generic [ref=e192]: Full access
+                  - generic [ref=e193]:
+                    - img
+                - textbox [ref=e194]: full-access
+              - generic [ref=e195]:
+                - button "Send message" [disabled]:
+                  - img
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - combobox "Workspace" [ref=e198]:
+                - img
+                - generic [ref=e199]: Current checkout
+                - generic [ref=e200]:
+                  - img
+              - textbox [ref=e201]: local
+            - combobox [ref=e202] [cursor=pointer]:
+              - generic [ref=e203]: add-host-resource-monitor
+              - img
+            - textbox [ref=e204]: add-host-resource-monitor
+    - generic [ref=e206]:
+      - button "Toggle Sidebar"
+  - generic:
+    - region "Notifications"
+  - generic:
+    - region "Notifications"

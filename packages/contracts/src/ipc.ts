@@ -152,6 +152,28 @@ export interface DesktopSshStatusUpdate {
   phase: string;
 }
 
+export type SshProvisioningEventType = "phase-start" | "phase-complete" | "log" | "error";
+
+export interface DesktopSshProvisioningEvent {
+  projectId: string;
+  type: SshProvisioningEventType;
+  /** Phase number (1-5) */
+  phase?: number;
+  /** Human-readable label for the phase */
+  label?: string;
+  /** Detail message (log line, error message) */
+  message?: string;
+  timestamp: number;
+}
+
+export interface SavedSshHost {
+  id: string;
+  label: string;
+  host: string;
+  user: string;
+  port: number;
+}
+
 export interface DesktopBridge {
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getClientSettings: () => Promise<ClientSettings | null>;
@@ -187,7 +209,11 @@ export interface DesktopBridge {
   sshDisconnect: (projectId: string) => Promise<{ ok: boolean }>;
   sshStatus: () => Promise<{ connections: Array<{ projectId: string; wsUrl: string }> }>;
   onSshStatusUpdate: (listener: (update: DesktopSshStatusUpdate) => void) => void;
+  onSshProvisionEvent: (listener: (event: DesktopSshProvisioningEvent) => void) => () => void;
   recordRemoteHost: (opts: { host: string; user: string; port: number }) => Promise<void>;
+  getSavedSshHosts: () => Promise<SavedSshHost[]>;
+  saveSshHost: (host: SavedSshHost) => Promise<void>;
+  removeSavedSshHost: (id: string) => Promise<void>;
 }
 
 /**

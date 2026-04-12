@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopBridge,
   DesktopSshConnectOptions,
+  DesktopSshProvisioningEvent,
   DesktopSshStatusUpdate,
+  SavedSshHost,
 } from "@t3tools/contracts";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
@@ -32,6 +34,10 @@ const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
 const SSH_STATUS_CHANNEL = "desktop:ssh-status";
 const SSH_STATUS_UPDATE_CHANNEL = "desktop:ssh-status-update";
 const SSH_RECORD_HOST_CHANNEL = "desktop:ssh-record-host";
+const SSH_PROVISION_EVENT_CHANNEL = "desktop:ssh-provision-event";
+const SSH_GET_SAVED_HOSTS_CHANNEL = "desktop:get-saved-ssh-hosts";
+const SSH_SAVE_HOST_CHANNEL = "desktop:save-ssh-host";
+const SSH_REMOVE_SAVED_HOST_CHANNEL = "desktop:remove-saved-ssh-host";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getLocalEnvironmentBootstrap: () => {
@@ -95,6 +101,20 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       }
     });
   },
+  onSshProvisionEvent: (listener: (event: DesktopSshProvisioningEvent) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      if (typeof payload === "object" && payload !== null) {
+        listener(payload as DesktopSshProvisioningEvent);
+      }
+    };
+    ipcRenderer.on(SSH_PROVISION_EVENT_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(SSH_PROVISION_EVENT_CHANNEL, wrappedListener);
+    };
+  },
   recordRemoteHost: (opts: { host: string; user: string; port: number }) =>
     ipcRenderer.invoke(SSH_RECORD_HOST_CHANNEL, opts),
+  getSavedSshHosts: () => ipcRenderer.invoke(SSH_GET_SAVED_HOSTS_CHANNEL),
+  saveSshHost: (host: SavedSshHost) => ipcRenderer.invoke(SSH_SAVE_HOST_CHANNEL, host),
+  removeSavedSshHost: (id: string) => ipcRenderer.invoke(SSH_REMOVE_SAVED_HOST_CHANNEL, id),
 } satisfies DesktopBridge);

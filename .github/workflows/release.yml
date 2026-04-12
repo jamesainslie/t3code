@@ -277,11 +277,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build t3 server binaries
+      - name: Build SSH binaries (t3-server + vendored tmux)
         run: bash scripts/build-ssh-binaries.sh dist/ssh-binaries
-
-      - name: Download tmux static binaries
-        run: bash scripts/download-tmux-binaries.sh dist/ssh-binaries
 
       - name: Upload SSH binaries
         uses: actions/upload-artifact@v7

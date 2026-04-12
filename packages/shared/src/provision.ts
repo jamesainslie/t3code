@@ -23,6 +23,7 @@ import {
   buildTmuxKillCommand,
   buildTmuxStartCommand,
   controlSocketPath,
+  normalizeVersion,
   parseProbeOutput,
   remoteAuthTokenFile,
   remoteEnvFile,
@@ -43,6 +44,19 @@ export interface ServerState {
   pairingUrl?: string;
 }
 
+export type ProvisionEventType = "phase-start" | "phase-complete" | "log" | "error";
+
+export interface ProvisionEvent {
+  type: ProvisionEventType;
+  /** Phase number (1-5) */
+  phase?: number;
+  /** Human-readable label for the phase */
+  label?: string;
+  /** Detail message (log line, error message) */
+  message?: string;
+  timestamp: number;
+}
+
 export interface ProvisionOptions {
   target: SshTarget;
   projectId: string;
@@ -58,6 +72,8 @@ export interface ProvisionOptions {
   onStatus?: (phase: "provisioning" | "starting" | "connected") => void;
   /** Optional callback for real-time remote server log lines */
   onLog?: (line: string) => void;
+  /** Optional granular provisioning event callback */
+  onProvisionEvent?: (event: ProvisionEvent) => void;
 }
 
 export interface ProvisionResult {
@@ -117,35 +133,64 @@ export function buildStartServerCommand(projectId: string, workspaceRoot: string
 // ── Provisioner ───────────────────────────────────────────────────────
 
 export async function provision(opts: ProvisionOptions): Promise<ProvisionResult> {
-  const { target, projectId, workspaceRoot, localVersion, onStatus } = opts;
+  const { target, projectId, workspaceRoot, localVersion, onStatus, onProvisionEvent } = opts;
   const log = (msg: string) => console.log(`[ssh-provision] ${target.user}@${target.host}: ${msg}`);
+
+  const emit = (event: Omit<ProvisionEvent, "timestamp">) => {
+    onProvisionEvent?.({ ...event, timestamp: Date.now() });
+  };
 
   onStatus?.("provisioning");
 
   // Phase 1: Ensure master SSH connection
   log("phase 1: checking SSH control socket...");
-  await opts.sshManager.getOrCreate(target);
+  emit({ type: "phase-start", phase: 1, label: "Establishing SSH connection" });
+  try {
+    await opts.sshManager.getOrCreate(target);
+  } catch (err) {
+    emit({ type: "error", phase: 1, message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
   log("phase 1: SSH master connection ready");
+  emit({ type: "log", phase: 1, message: "SSH master connection ready" });
+  emit({ type: "phase-complete", phase: 1, label: "Establishing SSH connection" });
 
   // Phase 2: Probe remote environment and resolve the remote home directory.
   log("phase 2: probing remote environment...");
-  const [probeOutput, remoteHome] = await Promise.all([
-    runSshCommand(target, PROBE_SCRIPT),
-    runSshCommand(target, "echo $HOME").then((s) => s.trim()),
-  ]);
-  const probe = parseProbeOutput(probeOutput);
+  emit({ type: "phase-start", phase: 2, label: "Probing remote environment" });
+  let probe: ReturnType<typeof parseProbeOutput>;
+  let remoteHome: string;
+  try {
+    const [probeOutput, home] = await Promise.all([
+      runSshCommand(target, PROBE_SCRIPT),
+      runSshCommand(target, "echo $HOME").then((s) => s.trim()),
+    ]);
+    probe = parseProbeOutput(probeOutput);
+    remoteHome = home;
+  } catch (err) {
+    emit({ type: "error", phase: 2, message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
   if (!probe) {
-    throw new Error(`Failed to parse remote probe output: ${JSON.stringify(probeOutput)}`);
+    const msg = "Failed to parse remote probe output";
+    emit({ type: "error", phase: 2, message: msg });
+    throw new Error(msg);
   }
   if (!remoteHome || remoteHome.startsWith("$")) {
-    throw new Error(`Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`);
+    const msg = `Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`;
+    emit({ type: "error", phase: 2, message: msg });
+    throw new Error(msg);
   }
   log(`phase 2: ${probe.os}/${probe.arch}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`);
+  emit({ type: "log", phase: 2, message: `${probe.os}/${probe.arch}, version ${probe.currentVersion || "(none)"}` });
+  emit({ type: "phase-complete", phase: 2, label: "Probing remote environment" });
 
   const t3Home = `${remoteHome}/.t3`;
 
   const platform = resolveRemotePlatform(probe.os, probe.arch);
   if (!platform) {
+    const msg = `Unsupported remote platform: ${probe.os}/${probe.arch}`;
+    emit({ type: "error", phase: 3, message: msg });
     throw new Error(
       `Unsupported remote platform: ${probe.os}/${probe.arch}. Supported: linux-x64, linux-arm64, darwin-x64, darwin-arm64`,
     );
@@ -160,8 +205,12 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   log(`phase 3: tmux check raw output: ${JSON.stringify(tmuxCheckOutput.trim())}`);
   const sessionExists = tmuxCheckOutput.trim() === "exists";
 
-  if (!sessionExists && probe.currentVersion !== localVersion) {
-    log(`phase 3: version mismatch (remote=${probe.currentVersion || "none"}, local=${localVersion}), transferring binaries...`);
+  const remoteNormalized = normalizeVersion(probe.currentVersion);
+  const localNormalized = normalizeVersion(localVersion);
+  if (!sessionExists && remoteNormalized !== localNormalized) {
+    emit({ type: "phase-start", phase: 3, label: "Transferring binaries" });
+    log(`phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring binaries...`);
+    emit({ type: "log", phase: 3, message: `Version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized})` });
     onStatus?.("provisioning");
     // Kill any orphaned t3 processes that may be holding the binary open
     await runSshCommand(target, `pkill -9 -f 't3 serve' 2>/dev/null || true`).catch(() => {});
@@ -170,21 +219,37 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     const serverBin = opts.serverBinaryPath(platform.platform, platform.arch);
     const tmuxBin = opts.tmuxBinaryPath(platform.platform, platform.arch);
     log(`phase 3: uploading server binary: ${serverBin}`);
-    await scpFile(target, serverBin, `${t3Home}/bin/t3`);
-    log(`phase 3: uploading tmux binary: ${tmuxBin}`);
-    await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
-    await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
+    emit({ type: "log", phase: 3, message: "Uploading server binary..." });
+    try {
+      await scpFile(target, serverBin, `${t3Home}/bin/t3`);
+      log(`phase 3: uploading tmux binary: ${tmuxBin}`);
+      emit({ type: "log", phase: 3, message: "Uploading tmux binary..." });
+      await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
+      await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
+    } catch (err) {
+      emit({ type: "error", phase: 3, message: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
     log("phase 3: binaries installed and marked executable");
+    emit({ type: "log", phase: 3, message: "Binaries installed" });
+    emit({ type: "phase-complete", phase: 3, label: "Transferring binaries" });
   } else if (sessionExists) {
+    emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
     log("phase 3: tmux session exists, skipping binary transfer (server is running)");
+    emit({ type: "log", phase: 3, message: "Server already running, skipping transfer" });
+    emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
   } else {
-    log(`phase 3: version match (${localVersion}), skipping binary transfer`);
+    emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
+    log(`phase 3: version match (${localNormalized}), skipping binary transfer`);
+    emit({ type: "log", phase: 3, message: `Version match (${localNormalized})` });
+    emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
   }
 
   let remotePort: number;
   let pairingUrl: string | undefined;
 
   if (sessionExists) {
+    emit({ type: "phase-start", phase: 4, label: "Reconnecting to server" });
     log("phase 4: tmux session exists, reading state file...");
     const stateJson = await runSshCommand(
       target,
@@ -193,17 +258,33 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     const state = parseServerStateFile(stateJson.trim());
     if (!state) {
       log("phase 4: state file missing/corrupt, killing stale session and cold-starting...");
+      emit({ type: "log", phase: 4, message: "State file corrupt, restarting server..." });
       await runSshCommand(target, buildTmuxKillCommand(projectId));
-      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
+      try {
+        remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
+      } catch (err) {
+        emit({ type: "error", phase: 4, message: err instanceof Error ? err.message : String(err) });
+        throw err;
+      }
     } else {
       remotePort = state.port;
       pairingUrl = state.pairingUrl;
       log(`phase 4: reconnected to existing server on remote port ${remotePort}`);
+      emit({ type: "log", phase: 4, message: `Reconnected on port ${remotePort}` });
     }
+    emit({ type: "phase-complete", phase: 4, label: "Reconnecting to server" });
   } else {
+    emit({ type: "phase-start", phase: 4, label: "Starting remote server" });
     log("phase 4: no tmux session, cold-starting server...");
-    remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
+    try {
+      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
+    } catch (err) {
+      emit({ type: "error", phase: 4, message: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
     log(`phase 4: server started on remote port ${remotePort}`);
+    emit({ type: "log", phase: 4, message: `Server started on port ${remotePort}` });
+    emit({ type: "phase-complete", phase: 4, label: "Starting remote server" });
   }
 
   // Extract the pairing URL from the server's stdout log. The state file may
@@ -245,9 +326,18 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
 
   // Phase 5: Set up SSH port forward
   log("phase 5: setting up port forward...");
-  const localPort = await findFreeLocalPort();
-  await setupPortForward(target, localPort, remotePort);
-  log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
+  emit({ type: "phase-start", phase: 5, label: "Setting up secure tunnel" });
+  let localPort: number;
+  try {
+    localPort = await findFreeLocalPort();
+    await setupPortForward(target, localPort, remotePort);
+    log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
+    emit({ type: "log", phase: 5, message: `Tunnel: localhost:${localPort} → remote:${remotePort}` });
+    emit({ type: "phase-complete", phase: 5, label: "Setting up secure tunnel" });
+  } catch (err) {
+    emit({ type: "error", phase: 5, message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
 
   if (pairingUrl) {
     log(`provisioning complete — pairing URL available`);

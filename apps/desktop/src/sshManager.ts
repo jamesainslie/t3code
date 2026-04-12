@@ -1,7 +1,7 @@
 import * as Path from "node:path";
 
 import { app } from "electron";
-import { provision, type ProvisionResult } from "@t3tools/shared/provision";
+import { provision, type ProvisionEvent, type ProvisionResult } from "@t3tools/shared/provision";
 import { SshConnectionManager } from "@t3tools/shared/sshManager";
 
 export const globalSshManager = new SshConnectionManager();
@@ -33,6 +33,7 @@ export interface SshConnectOptions {
   localVersion: string;
   onStatus: (phase: "provisioning" | "starting" | "connected") => void;
   onLog?: ((line: string) => void) | undefined;
+  onProvisionEvent?: ((event: ProvisionEvent) => void) | undefined;
 }
 
 export interface SshConnectResult {
@@ -55,6 +56,7 @@ export async function sshConnect(opts: SshConnectOptions): Promise<SshConnectRes
     sshManager: globalSshManager,
     onStatus: opts.onStatus,
     ...(opts.onLog != null ? { onLog: opts.onLog } : {}),
+    ...(opts.onProvisionEvent != null ? { onProvisionEvent: opts.onProvisionEvent } : {}),
   });
   const wsUrl = `ws://127.0.0.1:${result.localPort}`;
   const httpBaseUrl = `http://127.0.0.1:${result.localPort}`;

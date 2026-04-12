@@ -84,6 +84,21 @@ export function buildCancelForwardArgs(spec: PortForwardSpec): string[] {
   ]);
 }
 
+// ── Version normalization ─────────────────────────────────────────────
+
+/**
+ * Normalize a version string for comparison.
+ * Remote `t3 --version` outputs "t3 v0.0.17", while the local version
+ * from package.json is "0.0.17". Strip the "t3 " prefix and leading "v"
+ * so both sides compare cleanly.
+ */
+export function normalizeVersion(version: string): string {
+  return version
+    .replace(/^t3\s+/i, "")
+    .replace(/^v/, "")
+    .trim();
+}
+
 // ── Remote probe script ───────────────────────────────────────────────
 
 export const PROBE_SCRIPT = `#!/bin/sh

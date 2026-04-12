@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build standalone t3 server binaries for remote SSH provisioning.
-# These are Bun-compiled binaries deployed to remote machines via SCP.
+# Build standalone t3 server binaries and bundle vendored tmux for remote SSH
+# provisioning. These are deployed to remote machines via SCP.
 #
 # The compiled binary always uses Bun's SQLite driver (@effect/sql-sqlite-bun).
 # NodeSqliteClient.ts imports node:sqlite which doesn't exist in Bun, so we
@@ -42,5 +42,23 @@ for TARGET in "linux-x64" "linux-arm64" "darwin-x64" "darwin-arm64"; do
   chmod +x "$OUT_FILE"
 done
 
-echo "Done. Binaries in $OUTPUT_DIR:"
-ls -lh "$OUTPUT_DIR"/t3-server-*
+# Copy vendored tmux binaries (paths relative to repo root, where this script is invoked)
+TMUX_VENDOR_DIR="vendor/tmux-binaries"
+echo ""
+echo "Bundling vendored tmux binaries..."
+for TARGET in "linux-x64" "linux-arm64"; do
+  SRC="$TMUX_VENDOR_DIR/tmux-$TARGET"
+  DEST="$OUTPUT_DIR/tmux-$TARGET"
+  if [ ! -f "$SRC" ]; then
+    echo "  WARNING: vendored tmux binary not found: $SRC" >&2
+    echo "           Run: bash scripts/download-tmux-binaries.sh vendor/tmux-binaries" >&2
+    continue
+  fi
+  cp "$SRC" "$DEST"
+  chmod +x "$DEST"
+  echo "  Copied $SRC -> $DEST"
+done
+
+echo ""
+echo "Done. All binaries in $OUTPUT_DIR:"
+ls -lh "$OUTPUT_DIR"/*

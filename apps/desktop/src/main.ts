@@ -27,6 +27,7 @@ import type {
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
+  SavedSshHost,
 } from "@t3tools/contracts";
 import { autoUpdater } from "electron-updater";
 
@@ -59,6 +60,8 @@ import {
   sshGetStatus,
   sshCloseAll,
 } from "./sshManager";
+// Resolved at bundle time by tsdown — always matches `t3 --version` on remote
+import { version as T3_SERVER_VERSION } from "../../server/package.json";
 import { syncShellEnvironment } from "./syncShellEnvironment";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
 import {
@@ -103,7 +106,11 @@ const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
 const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
 const SSH_STATUS_CHANNEL = "desktop:ssh-status";
 const SSH_STATUS_UPDATE_CHANNEL = "desktop:ssh-status-update";
+const SSH_PROVISION_EVENT_CHANNEL = "desktop:ssh-provision-event";
 const SSH_RECORD_HOST_CHANNEL = "desktop:ssh-record-host";
+const SSH_GET_SAVED_HOSTS_CHANNEL = "desktop:get-saved-ssh-hosts";
+const SSH_SAVE_HOST_CHANNEL = "desktop:save-ssh-host";
+const SSH_REMOVE_SAVED_HOST_CHANNEL = "desktop:remove-saved-ssh-host";
 const RECENT_REMOTE_HOSTS_MAX = 10;
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
@@ -1387,45 +1394,119 @@ interface RecentRemoteHost {
   port: number;
 }
 
-function recentRemoteHostsPath(): string {
+function legacyRecentRemoteHostsPath(): string {
   return Path.join(app.getPath("userData"), "recent-remote-hosts.json");
 }
 
-function readRecentRemoteHosts(): RecentRemoteHost[] {
+function savedSshHostsPath(): string {
+  return Path.join(STATE_DIR, "saved-ssh-hosts.json");
+}
+
+function isSavedSshHost(entry: unknown): entry is SavedSshHost {
+  if (typeof entry !== "object" || entry === null) return false;
+  const rec = entry as Record<string, unknown>;
+  return (
+    typeof rec.id === "string" &&
+    typeof rec.label === "string" &&
+    typeof rec.host === "string" &&
+    typeof rec.user === "string" &&
+    typeof rec.port === "number"
+  );
+}
+
+let savedSshHostsMigrated = false;
+
+function migrateLegacyHostsIfNeeded(): void {
+  if (savedSshHostsMigrated) return;
+  savedSshHostsMigrated = true;
+
+  const legacyPath = legacyRecentRemoteHostsPath();
+  if (!FS.existsSync(legacyPath)) return;
+  if (FS.existsSync(savedSshHostsPath())) return; // already migrated
+
   try {
-    const filePath = recentRemoteHostsPath();
+    const raw = FS.readFileSync(legacyPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return;
+
+    const migrated: SavedSshHost[] = parsed
+      .filter(
+        (entry): entry is RecentRemoteHost =>
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>).host === "string" &&
+          typeof (entry as Record<string, unknown>).user === "string" &&
+          typeof (entry as Record<string, unknown>).port === "number",
+      )
+      .map((entry) => ({
+        id: Crypto.randomUUID(),
+        label: `${entry.user}@${entry.host}${entry.port !== 22 ? `:${entry.port}` : ""}`,
+        host: entry.host,
+        user: entry.user,
+        port: entry.port,
+      }));
+
+    if (migrated.length > 0) {
+      FS.writeFileSync(savedSshHostsPath(), JSON.stringify(migrated, null, 2), "utf8");
+    }
+  } catch {
+    // Best-effort migration; if it fails, start fresh.
+  }
+}
+
+function readSavedSshHosts(): SavedSshHost[] {
+  migrateLegacyHostsIfNeeded();
+  try {
+    const filePath = savedSshHostsPath();
     if (!FS.existsSync(filePath)) return [];
     const raw = FS.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is RecentRemoteHost =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof (entry as Record<string, unknown>).host === "string" &&
-        typeof (entry as Record<string, unknown>).user === "string" &&
-        typeof (entry as Record<string, unknown>).port === "number",
-    );
+    return parsed.filter(isSavedSshHost);
   } catch {
     return [];
   }
 }
 
-function writeRecentRemoteHosts(hosts: RecentRemoteHost[]): void {
+function writeSavedSshHosts(hosts: SavedSshHost[]): void {
   try {
-    FS.writeFileSync(recentRemoteHostsPath(), JSON.stringify(hosts, null, 2), "utf8");
+    FS.writeFileSync(savedSshHostsPath(), JSON.stringify(hosts, null, 2), "utf8");
   } catch (error) {
-    console.warn("[desktop] failed to write recent remote hosts", error);
+    console.warn("[desktop] failed to write saved SSH hosts", error);
   }
 }
 
+function saveSshHost(entry: SavedSshHost): void {
+  const existing = readSavedSshHosts();
+  const idx = existing.findIndex((h) => h.id === entry.id);
+  if (idx >= 0) {
+    existing[idx] = entry;
+  } else {
+    existing.unshift(entry);
+  }
+  writeSavedSshHosts(existing.slice(0, RECENT_REMOTE_HOSTS_MAX));
+}
+
+function removeSavedSshHost(id: string): void {
+  const existing = readSavedSshHosts();
+  writeSavedSshHosts(existing.filter((h) => h.id !== id));
+}
+
+/** Backward-compat: record a host by host/user/port, auto-saving if not already present. */
 function recordRecentRemoteHost(entry: RecentRemoteHost): void {
-  const existing = readRecentRemoteHosts();
-  const deduped = existing.filter(
-    (h) => !(h.host === entry.host && h.user === entry.user && h.port === entry.port),
+  const existing = readSavedSshHosts();
+  const alreadySaved = existing.some(
+    (h) => h.host === entry.host && h.user === entry.user && h.port === entry.port,
   );
-  const updated = [entry, ...deduped].slice(0, RECENT_REMOTE_HOSTS_MAX);
-  writeRecentRemoteHosts(updated);
+  if (!alreadySaved) {
+    saveSshHost({
+      id: Crypto.randomUUID(),
+      label: `${entry.user}@${entry.host}${entry.port !== 22 ? `:${entry.port}` : ""}`,
+      host: entry.host,
+      user: entry.user,
+      port: entry.port,
+    });
+  }
 }
 
 function registerIpcHandlers(): void {
@@ -1707,7 +1788,7 @@ function registerIpcHandlers(): void {
     ) => {
       return sshConnect({
         ...opts,
-        localVersion: app.getVersion(),
+        localVersion: T3_SERVER_VERSION,
         onStatus: (phase) => {
           mainWindow?.webContents.send(SSH_STATUS_UPDATE_CHANNEL, {
             projectId: opts.projectId,
@@ -1716,6 +1797,12 @@ function registerIpcHandlers(): void {
         },
         onLog: (line) => {
           console.log(`[ssh-remote-log] ${opts.host}: ${line}`);
+        },
+        onProvisionEvent: (event) => {
+          mainWindow?.webContents.send(SSH_PROVISION_EVENT_CHANNEL, {
+            ...event,
+            projectId: opts.projectId,
+          });
         },
       });
     },
@@ -1745,6 +1832,27 @@ function registerIpcHandlers(): void {
       }
     },
   );
+
+  ipcMain.removeHandler(SSH_GET_SAVED_HOSTS_CHANNEL);
+  ipcMain.handle(SSH_GET_SAVED_HOSTS_CHANNEL, async () => {
+    return readSavedSshHosts();
+  });
+
+  ipcMain.removeHandler(SSH_SAVE_HOST_CHANNEL);
+  ipcMain.handle(SSH_SAVE_HOST_CHANNEL, async (_event, host: unknown) => {
+    if (!isSavedSshHost(host)) {
+      throw new Error("Invalid SavedSshHost payload.");
+    }
+    saveSshHost(host);
+  });
+
+  ipcMain.removeHandler(SSH_REMOVE_SAVED_HOST_CHANNEL);
+  ipcMain.handle(SSH_REMOVE_SAVED_HOST_CHANNEL, async (_event, id: unknown) => {
+    if (typeof id !== "string") {
+      throw new Error("Invalid host id.");
+    }
+    removeSavedSshHost(id);
+  });
 }
 
 function getIconOption(): { icon: string } | Record<string, never> {
@@ -1953,7 +2061,7 @@ async function bootstrap(): Promise<void> {
 }
 
 async function warmUpRecentRemoteHosts(): Promise<void> {
-  const hosts = readRecentRemoteHosts();
+  const hosts = readSavedSshHosts();
   if (hosts.length === 0) return;
   writeDesktopLogHeader(
     `warm-up: attempting SSH warm-up for ${hosts.length} recent remote host(s)`,

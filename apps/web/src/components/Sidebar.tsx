@@ -1323,11 +1323,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         }
         if (clicked !== "delete") return;
 
-        if (projectThreads.length > 0) {
+        const activeThreads = projectThreads.filter((t) => t.archivedAt === null);
+        if (activeThreads.length > 0) {
           toastManager.add({
             type: "warning",
             title: "Project is not empty",
-            description: "Delete all threads in this project before removing it.",
+            description: "Archive or delete all threads in this project before removing it.",
           });
           return;
         }
