@@ -701,9 +701,19 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
 
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
+  // Bun 1.x hangs during dependency resolution when routed through an
+  // HTTPS-over-HTTP CONNECT proxy (e.g. Zscaler on localhost:9000).
+  // Strip proxy env vars for this step — bun can reach the npm registry
+  // directly and the TLS CA trust is handled by NODE_EXTRA_CA_CERTS.
+  const bunInstallEnv = { ...process.env };
+  delete bunInstallEnv.HTTP_PROXY;
+  delete bunInstallEnv.HTTPS_PROXY;
+  delete bunInstallEnv.http_proxy;
+  delete bunInstallEnv.https_proxy;
   yield* runCommand(
     ChildProcess.make({
       cwd: stageAppDir,
+      env: bunInstallEnv,
       ...commandOutputOptions(options.verbose),
       // Windows needs shell mode to resolve .cmd shims (e.g. bun.cmd).
       shell: process.platform === "win32",

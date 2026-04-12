@@ -1,0 +1,4 @@
+[install]
+# Trust corporate proxy CA certificates (e.g. Zscaler MITM) for registry HTTPS.
+# Safe to commit — bun silently ignores missing cafile paths.
+cafile = "/opt/homebrew/etc/ca-certificates/cert.pem"
