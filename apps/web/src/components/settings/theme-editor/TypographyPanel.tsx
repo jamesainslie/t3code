@@ -1,37 +1,27 @@
 import { useTheme } from "../../../hooks/useTheme";
 import { themeStore } from "../../../theme";
-import { Input } from "../../ui/input";
 import { TypographyTokenRow } from "./TypographyTokenRow";
 import { FontSizeControl } from "./FontSizeControl";
 import { LineHeightControl } from "./LineHeightControl";
+import { CODE_FONT_PRESETS, FontFamilySelect, UI_FONT_PRESETS } from "./FontFamilySelect";
 import type { TypographyTokens } from "@t3tools/contracts";
-
-function FontFamilyInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Input
-      nativeInput
-      size="sm"
-      value={value}
-      onChange={(e) => onChange((e.target as HTMLInputElement).value)}
-      className="w-48"
-      placeholder="Font family..."
-    />
-  );
-}
 
 export function TypographyPanel() {
   const { themeSnapshot } = useTheme();
   const typography = themeSnapshot.resolved.typography;
 
   const handleChange = (tokenKey: keyof TypographyTokens, value: string) => {
+    // Empty string from the preset list is the "System default" sentinel —
+    // translate it into a reset so the token returns to theme defaults.
+    if (value === "") {
+      themeStore.resetTypographyToken(tokenKey);
+      return;
+    }
     themeStore.setTypographyToken(tokenKey, value);
   };
+
+  const uiFontOverridden = themeStore.isTypographyTokenOverridden("uiFontFamily");
+  const codeFontOverridden = themeStore.isTypographyTokenOverridden("codeFontFamily");
 
   return (
     <div className="flex flex-col gap-3">
@@ -40,14 +30,18 @@ export function TypographyPanel() {
         <div className="px-3 py-2 text-sm font-medium text-foreground">Font Families</div>
         <div className="border-t border-border px-3 pb-2">
           <TypographyTokenRow tokenKey="uiFontFamily" label="UI Font Family">
-            <FontFamilyInput
+            <FontFamilySelect
+              presets={UI_FONT_PRESETS}
               value={typography.uiFontFamily ?? ""}
+              isOverridden={uiFontOverridden}
               onChange={(v) => handleChange("uiFontFamily", v)}
             />
           </TypographyTokenRow>
           <TypographyTokenRow tokenKey="codeFontFamily" label="Code Font Family">
-            <FontFamilyInput
+            <FontFamilySelect
+              presets={CODE_FONT_PRESETS}
               value={typography.codeFontFamily ?? ""}
+              isOverridden={codeFontOverridden}
               onChange={(v) => handleChange("codeFontFamily", v)}
             />
           </TypographyTokenRow>
