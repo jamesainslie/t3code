@@ -1338,11 +1338,21 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         if (isRemoteProject && remoteIdentityKey) {
           const connState = remoteConnectionState;
+          // Use the environment label to make the scope of disconnect /
+          // reconnect obvious: these actions target the shared SSH
+          // environment, so every project on the same host is affected.
+          const envLabel = project.remoteEnvironmentLabels[0] ?? null;
           if (connState === "disconnected" || connState === "error") {
-            menuItems.push({ id: "reconnect", label: "Reconnect" });
+            menuItems.push({
+              id: "reconnect",
+              label: envLabel ? `Reconnect to ${envLabel}` : "Reconnect",
+            });
           }
           if (connState === "connected" || connState === "connecting") {
-            menuItems.push({ id: "disconnect", label: "Disconnect" });
+            menuItems.push({
+              id: "disconnect",
+              label: envLabel ? `Disconnect from ${envLabel}` : "Disconnect",
+            });
           }
           menuItems.push({ id: "remove-remote", label: "Remove remote", destructive: true });
         }
