@@ -1,5 +1,5 @@
 // apps/web/src/theme/store.ts
-import type { Theme, ResolvedTheme, ThemeBase, ColorTokens, TypographyTokens } from "@t3tools/contracts";
+import type { Theme, ResolvedTheme, ThemeBase, ColorTokens, TypographyTokens, TransparencyTokens } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { ThemeSchema } from "@t3tools/contracts";
 import { resolveTheme } from "./engine";
@@ -261,6 +261,40 @@ export class ThemeStore {
     const typography = this.snapshot.theme.overrides.typography;
     if (!typography) return false;
     return (typography as Record<string, unknown>)[tokenName] !== undefined;
+  }
+
+  setTransparencyToken(tokenName: keyof TransparencyTokens, value: number | string): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (!theme.overrides.transparency) {
+      theme.overrides.transparency = {};
+    }
+    if (tokenName === "windowOpacity") {
+      (theme.overrides.transparency as Record<string, number>)[tokenName] =
+        Math.max(0.5, Math.min(1.0, Number(value)));
+    } else if (tokenName === "vibrancy") {
+      if (value === "auto" || value === "none") {
+        (theme.overrides.transparency as Record<string, string>)[tokenName] = value;
+      }
+    }
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  resetTransparencyToken(tokenName: keyof TransparencyTokens): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (theme.overrides.transparency) {
+      delete (theme.overrides.transparency as Record<string, unknown>)[tokenName];
+    }
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  isTransparencyTokenOverridden(tokenName: keyof TransparencyTokens): boolean {
+    const transparency = this.snapshot.theme.overrides.transparency;
+    if (!transparency) return false;
+    return (transparency as Record<string, unknown>)[tokenName] !== undefined;
   }
 
   createTheme(name: string, base: ThemeBase): void {
