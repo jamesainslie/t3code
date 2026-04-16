@@ -1,5 +1,12 @@
 // apps/web/src/theme/store.ts
-import type { Theme, ResolvedTheme, ThemeBase, ColorTokens, TypographyTokens, TransparencyTokens } from "@t3tools/contracts";
+import type {
+  Theme,
+  ResolvedTheme,
+  ThemeBase,
+  ColorTokens,
+  TypographyTokens,
+  TransparencyTokens,
+} from "@t3tools/contracts";
 import { Schema } from "effect";
 import { ThemeSchema } from "@t3tools/contracts";
 import { resolveTheme } from "./engine";
@@ -122,9 +129,7 @@ export class ThemeStore {
     this.savedThemes = loadSavedThemes();
 
     const activeId = loadActiveThemeId();
-    const activeCustom = activeId
-      ? this.savedThemes.find((t) => t.id === activeId)
-      : undefined;
+    const activeCustom = activeId ? this.savedThemes.find((t) => t.id === activeId) : undefined;
 
     const base = resolveBaseFromPreference(this.preference);
     const theme = activeCustom ?? makeDefaultTheme(base);
@@ -269,8 +274,10 @@ export class ThemeStore {
       theme.overrides.transparency = {};
     }
     if (tokenName === "windowOpacity") {
-      (theme.overrides.transparency as Record<string, number>)[tokenName] =
-        Math.max(0.5, Math.min(1.0, Number(value)));
+      (theme.overrides.transparency as Record<string, number>)[tokenName] = Math.max(
+        0.5,
+        Math.min(1.0, Number(value)),
+      );
     } else if (tokenName === "vibrancy") {
       if (value === "auto" || value === "none") {
         (theme.overrides.transparency as Record<string, string>)[tokenName] = value;

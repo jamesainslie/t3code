@@ -69,7 +69,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
   setWindowOpacity: (opacity: number) => ipcRenderer.invoke(SET_WINDOW_OPACITY_CHANNEL, opacity),
-  setVibrancy: (vibrancy: "under-window" | null) => ipcRenderer.invoke(SET_VIBRANCY_CHANNEL, vibrancy),
+  setVibrancy: (vibrancy: "under-window" | null) =>
+    ipcRenderer.invoke(SET_VIBRANCY_CHANNEL, vibrancy),
   getPlatform: () => ipcRenderer.invoke(GET_PLATFORM_CHANNEL),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),

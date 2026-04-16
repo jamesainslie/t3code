@@ -226,9 +226,7 @@ describe("ThemeStore", () => {
     it("other transparency tokens unchanged after setting windowOpacity", () => {
       store.setTransparencyToken("windowOpacity", 0.85);
       const snapshot = store.getSnapshot();
-      expect(snapshot.resolved.transparency.vibrancy).toBe(
-        DEFAULT_TRANSPARENCY_TOKENS.vibrancy,
-      );
+      expect(snapshot.resolved.transparency.vibrancy).toBe(DEFAULT_TRANSPARENCY_TOKENS.vibrancy);
     });
 
     it("setTransparencyToken vibrancy applies correctly", () => {

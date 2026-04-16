@@ -1922,10 +1922,7 @@ function registerIpcHandlers(): void {
   ipcMain.removeHandler(SSH_KILL_REMOTE_SESSION_CHANNEL);
   ipcMain.handle(
     SSH_KILL_REMOTE_SESSION_CHANNEL,
-    async (
-      _event,
-      opts: { host: string; user: string; port: number; projectId: string },
-    ) => {
+    async (_event, opts: { host: string; user: string; port: number; projectId: string }) => {
       await sshKillRemoteSession(opts);
     },
   );

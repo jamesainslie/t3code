@@ -2,7 +2,16 @@
 export { ThemeStore } from "./store";
 export type { ThemeStoreSnapshot } from "./store";
 export { resolveTheme } from "./engine";
-export { applyCssTokens, clearCssTokens, colorTokenToCssProperty, buildCssPropertyMap, applyTypographyCssTokens, clearTypographyCssTokens, typographyTokenToCssProperty, buildTypographyCssMap } from "./applicator";
+export {
+  applyCssTokens,
+  clearCssTokens,
+  colorTokenToCssProperty,
+  buildCssPropertyMap,
+  applyTypographyCssTokens,
+  clearTypographyCssTokens,
+  typographyTokenToCssProperty,
+  buildTypographyCssMap,
+} from "./applicator";
 export { buildTerminalTheme } from "./terminal-mapper";
 export type { TerminalTheme } from "./terminal-mapper";
 export { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
@@ -39,13 +48,15 @@ function applyThemeToDom(): void {
   }
 
   // Sync to Electron desktop bridge if available
-  const bridge = (window as Window & {
-    desktopBridge?: {
-      setTheme?: (t: string) => Promise<void>;
-      setWindowOpacity?: (opacity: number) => Promise<void>;
-      setVibrancy?: (vibrancy: "under-window" | null) => Promise<void>;
-    };
-  }).desktopBridge;
+  const bridge = (
+    window as Window & {
+      desktopBridge?: {
+        setTheme?: (t: string) => Promise<void>;
+        setWindowOpacity?: (opacity: number) => Promise<void>;
+        setVibrancy?: (vibrancy: "under-window" | null) => Promise<void>;
+      };
+    }
+  ).desktopBridge;
 
   if (typeof window !== "undefined" && bridge?.setTheme) {
     bridge.setTheme(resolvedTheme).catch(() => {

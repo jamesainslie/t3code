@@ -65,9 +65,7 @@ export function TransparencyPanel() {
     <div className="flex flex-col gap-3">
       {/* Window Opacity */}
       <div className="rounded-lg border border-border">
-        <div className="px-3 py-2 text-sm font-medium text-foreground">
-          Window Opacity
-        </div>
+        <div className="px-3 py-2 text-sm font-medium text-foreground">Window Opacity</div>
         <div className="border-t border-border px-3 py-2">
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
@@ -105,9 +103,7 @@ export function TransparencyPanel() {
 
       {/* Window Vibrancy */}
       <div className="rounded-lg border border-border">
-        <div className="px-3 py-2 text-sm font-medium text-foreground">
-          Window Vibrancy
-        </div>
+        <div className="px-3 py-2 text-sm font-medium text-foreground">Window Vibrancy</div>
         <div className="border-t border-border px-3 py-2">
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
