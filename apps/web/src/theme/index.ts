@@ -15,6 +15,7 @@ export {
 export { buildTerminalTheme } from "./terminal-mapper";
 export type { TerminalTheme } from "./terminal-mapper";
 export { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
+export { IconSetRegistry, BUILTIN_FILE_ICON_SETS, BUILTIN_UI_ICON_SETS } from "./icon-registry";
 
 import { ThemeStore } from "./store";
 import { applyCssTokens, applyTypographyCssTokens } from "./applicator";
