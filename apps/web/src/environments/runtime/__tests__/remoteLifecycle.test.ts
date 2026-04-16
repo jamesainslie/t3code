@@ -287,3 +287,84 @@ describe("remote environment lifecycle integration", () => {
     });
   });
 });
+
+describe("removeSavedEnvironment cascades to saved project registry", () => {
+  beforeEach(async () => {
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: {
+          getClientSettings: async () => null,
+          setClientSettings: async () => undefined,
+          getSavedEnvironmentRegistry: async () => [],
+          setSavedEnvironmentRegistry: async () => undefined,
+          getSavedEnvironmentSecret: async () => null,
+          setSavedEnvironmentSecret: async () => true,
+          removeSavedEnvironmentSecret: async () => undefined,
+          getSavedProjectRegistry: async () => [],
+          setSavedProjectRegistry: async () => undefined,
+        },
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+  });
+
+  afterEach(async () => {
+    resetSavedEnvironmentRegistryStoreForTests();
+    resetSavedEnvironmentRuntimeStoreForTests();
+    const { resetSavedProjectRegistryStoreForTests } = await import("../projectsCatalog");
+    resetSavedProjectRegistryStoreForTests();
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it("removes all saved projects under the environment's identity key", async () => {
+    const { ProjectId, makeSavedProjectKey } = await import("@t3tools/contracts");
+    const { useSavedProjectRegistryStore } = await import("../projectsCatalog");
+    const { removeSavedEnvironment } = await import("../service");
+
+    const envId = EnvironmentId.make("env-cascade");
+    const record = makeTestRecord({ environmentId: envId });
+    useSavedEnvironmentRegistryStore.getState().upsert(record);
+
+    // Seed two saved projects under this environment
+    const projectA = {
+      savedProjectKey: makeSavedProjectKey({
+        environmentIdentityKey: record.identityKey,
+        projectId: ProjectId.make("proj-A"),
+      }),
+      environmentIdentityKey: record.identityKey,
+      projectId: ProjectId.make("proj-A"),
+      name: "A",
+      workspaceRoot: "/srv/A",
+      repositoryCanonicalKey: null,
+      firstSeenAt: "2026-04-01T00:00:00.000Z",
+      lastSeenAt: "2026-04-01T00:00:00.000Z",
+      lastSyncedEnvironmentId: envId,
+    };
+    const projectB = {
+      savedProjectKey: makeSavedProjectKey({
+        environmentIdentityKey: record.identityKey,
+        projectId: ProjectId.make("proj-B"),
+      }),
+      environmentIdentityKey: record.identityKey,
+      projectId: ProjectId.make("proj-B"),
+      name: "B",
+      workspaceRoot: "/srv/B",
+      repositoryCanonicalKey: null,
+      firstSeenAt: "2026-04-01T00:00:00.000Z",
+      lastSeenAt: "2026-04-01T00:00:00.000Z",
+      lastSyncedEnvironmentId: envId,
+    };
+    useSavedProjectRegistryStore.getState().upsertMany([projectA, projectB]);
+    expect(Object.keys(useSavedProjectRegistryStore.getState().byKey)).toHaveLength(2);
+
+    await removeSavedEnvironment(envId);
+
+    expect(useSavedProjectRegistryStore.getState().byKey).toEqual({});
+    expect(
+      useSavedProjectRegistryStore.getState().keysByEnvironmentIdentityKey[record.identityKey],
+    ).toBeUndefined();
+  });
+});

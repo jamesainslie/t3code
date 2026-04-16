@@ -58,6 +58,7 @@ import { connectionLog } from "./connectionLog";
 import {
   syncSavedProjectsFromReadModel,
   syncSavedProjectsFromWebProjects,
+  useSavedProjectRegistryStore,
 } from "./projectsCatalog";
 import {
   useStore,
@@ -835,6 +836,7 @@ export async function removeSavedEnvironment(environmentId: EnvironmentId): Prom
     useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
   if (identityKey) {
     useSavedEnvironmentRegistryStore.getState().remove(identityKey);
+    useSavedProjectRegistryStore.getState().removeByEnvironment(identityKey);
     await removeSavedEnvironmentBearerToken({ identityKey, environmentId });
   } else {
     // No registry entry — best-effort cleanup keyed by environmentId only.
