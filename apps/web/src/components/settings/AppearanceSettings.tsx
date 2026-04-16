@@ -2,6 +2,7 @@ import { useState } from "react";
 import { SettingsPageContainer } from "./settingsLayout";
 import { ThemeEditorHeader } from "./ThemeEditorHeader";
 import { ThemeEditorTabs, type ThemeEditorTab } from "./ThemeEditorTabs";
+import { ColorsPanel } from "./theme-editor/ColorsPanel";
 
 export function AppearanceSettings() {
   const [activeTab, setActiveTab] = useState<ThemeEditorTab>("colors");
@@ -12,11 +13,7 @@ export function AppearanceSettings() {
         <ThemeEditorHeader />
         <ThemeEditorTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {activeTab === "colors" && (
-          <div className="px-4 py-4 sm:px-5">
-            <p className="text-sm text-muted-foreground">Colors panel coming next.</p>
-          </div>
-        )}
+        {activeTab === "colors" && <ColorsPanel />}
         {activeTab === "typography" && (
           <p className="text-sm text-muted-foreground">Typography settings coming in Phase 2.</p>
         )}
