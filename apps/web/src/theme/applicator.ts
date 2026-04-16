@@ -31,9 +31,7 @@ const TYPOGRAPHY_NON_CSS_KEYS = new Set(["customFontUrl"]);
  * Builds a flat map of CSS custom property names to values
  * from a resolved typography tokens object, excluding non-CSS metadata keys.
  */
-export function buildTypographyCssMap(
-  tokens: Required<TypographyTokens>,
-): Record<string, string> {
+export function buildTypographyCssMap(tokens: Required<TypographyTokens>): Record<string, string> {
   const map: Record<string, string> = {};
   for (const [key, value] of Object.entries(tokens)) {
     if (TYPOGRAPHY_NON_CSS_KEYS.has(key)) continue;

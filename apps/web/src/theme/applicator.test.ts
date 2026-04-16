@@ -54,15 +54,11 @@ describe("buildCssPropertyMap", () => {
 
 describe("typographyTokenToCssProperty", () => {
   it('converts "uiFontFamily" to "--ui-font-family"', () => {
-    expect(typographyTokenToCssProperty("uiFontFamily")).toBe(
-      "--ui-font-family",
-    );
+    expect(typographyTokenToCssProperty("uiFontFamily")).toBe("--ui-font-family");
   });
 
   it('converts "codeFontFamily" to "--code-font-family"', () => {
-    expect(typographyTokenToCssProperty("codeFontFamily")).toBe(
-      "--code-font-family",
-    );
+    expect(typographyTokenToCssProperty("codeFontFamily")).toBe("--code-font-family");
   });
 
   it('converts "uiFontSize" to "--ui-font-size"', () => {
@@ -70,9 +66,7 @@ describe("typographyTokenToCssProperty", () => {
   });
 
   it('converts "codeFontSize" to "--code-font-size"', () => {
-    expect(typographyTokenToCssProperty("codeFontSize")).toBe(
-      "--code-font-size",
-    );
+    expect(typographyTokenToCssProperty("codeFontSize")).toBe("--code-font-size");
   });
 
   it('converts "lineHeight" to "--line-height"', () => {
@@ -83,16 +77,12 @@ describe("typographyTokenToCssProperty", () => {
 describe("buildTypographyCssMap", () => {
   it("maps --ui-font-family to DEFAULT_TYPOGRAPHY_TOKENS.uiFontFamily", () => {
     const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
-    expect(map["--ui-font-family"]).toBe(
-      DEFAULT_TYPOGRAPHY_TOKENS.uiFontFamily,
-    );
+    expect(map["--ui-font-family"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.uiFontFamily);
   });
 
   it("maps --code-font-family to DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily", () => {
     const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
-    expect(map["--code-font-family"]).toBe(
-      DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily,
-    );
+    expect(map["--code-font-family"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily);
   });
 
   it("does not contain --custom-font-url key", () => {

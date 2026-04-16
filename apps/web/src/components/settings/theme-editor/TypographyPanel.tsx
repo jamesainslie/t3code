@@ -37,9 +37,7 @@ export function TypographyPanel() {
     <div className="flex flex-col gap-3">
       {/* Font Families */}
       <div className="rounded-lg border border-border">
-        <div className="px-3 py-2 text-sm font-medium text-foreground">
-          Font Families
-        </div>
+        <div className="px-3 py-2 text-sm font-medium text-foreground">Font Families</div>
         <div className="border-t border-border px-3 pb-2">
           <TypographyTokenRow tokenKey="uiFontFamily" label="UI Font Family">
             <FontFamilyInput
@@ -58,9 +56,7 @@ export function TypographyPanel() {
 
       {/* Font Sizes */}
       <div className="rounded-lg border border-border">
-        <div className="px-3 py-2 text-sm font-medium text-foreground">
-          Font Sizes
-        </div>
+        <div className="px-3 py-2 text-sm font-medium text-foreground">Font Sizes</div>
         <div className="border-t border-border px-3 pb-2">
           <TypographyTokenRow tokenKey="uiFontSize" label="UI Font Size">
             <FontSizeControl
@@ -83,9 +79,7 @@ export function TypographyPanel() {
 
       {/* Spacing */}
       <div className="rounded-lg border border-border">
-        <div className="px-3 py-2 text-sm font-medium text-foreground">
-          Spacing
-        </div>
+        <div className="px-3 py-2 text-sm font-medium text-foreground">Spacing</div>
         <div className="border-t border-border px-3 pb-2">
           <TypographyTokenRow tokenKey="lineHeight" label="Line Height">
             <LineHeightControl

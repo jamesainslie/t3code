@@ -1,5 +1,11 @@
 // apps/web/src/theme/store.ts
-import type { Theme, ResolvedTheme, ThemeBase, ColorTokens, TypographyTokens } from "@t3tools/contracts";
+import type {
+  Theme,
+  ResolvedTheme,
+  ThemeBase,
+  ColorTokens,
+  TypographyTokens,
+} from "@t3tools/contracts";
 import { Schema } from "effect";
 import { ThemeSchema } from "@t3tools/contracts";
 import { resolveTheme } from "./engine";

@@ -9,13 +9,7 @@ interface FontSizeControlProps {
   step?: number;
 }
 
-export function FontSizeControl({
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-}: FontSizeControlProps) {
+export function FontSizeControl({ value, onChange, min, max, step = 1 }: FontSizeControlProps) {
   const numericValue = Math.min(max, Math.max(min, Number.parseFloat(value) || min));
 
   const handleSliderChange = (v: number) => {

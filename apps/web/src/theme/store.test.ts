@@ -156,9 +156,7 @@ describe("ThemeStore", () => {
       expect(snapshot.resolved.typography.codeFontFamily).toBe(
         DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily,
       );
-      expect(snapshot.resolved.typography.uiFontSize).toBe(
-        DEFAULT_TYPOGRAPHY_TOKENS.uiFontSize,
-      );
+      expect(snapshot.resolved.typography.uiFontSize).toBe(DEFAULT_TYPOGRAPHY_TOKENS.uiFontSize);
     });
 
     it("setTypographyToken codeFontFamily applies correctly", () => {
