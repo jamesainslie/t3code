@@ -1,8 +1,4 @@
-import type {
-  IconSetManifest,
-  IconSetConfig,
-  ResolvedIconSetConfig,
-} from "@t3tools/contracts";
+import type { IconSetManifest, IconSetConfig, ResolvedIconSetConfig } from "@t3tools/contracts";
 
 export const BUILTIN_FILE_ICON_SETS: IconSetManifest[] = [
   {
@@ -93,10 +89,7 @@ export class IconSetRegistry {
     this.sets.delete(`${type}:${id}`);
   }
 
-  get(
-    id: string,
-    type: "file-icons" | "ui-icons",
-  ): IconSetManifest | undefined {
+  get(id: string, type: "file-icons" | "ui-icons"): IconSetManifest | undefined {
     return this.sets.get(`${type}:${id}`);
   }
 
@@ -107,10 +100,8 @@ export class IconSetRegistry {
   resolve(config: Partial<IconSetConfig>): ResolvedIconSetConfig {
     const fileId = config.fileIcons ?? "default";
     const uiId = config.uiIcons ?? "default";
-    const fileIcons =
-      this.get(fileId, "file-icons") ?? this.get("default", "file-icons")!;
-    const uiIcons =
-      this.get(uiId, "ui-icons") ?? this.get("default", "ui-icons")!;
+    const fileIcons = this.get(fileId, "file-icons") ?? this.get("default", "file-icons")!;
+    const uiIcons = this.get(uiId, "ui-icons") ?? this.get("default", "ui-icons")!;
     return { fileIcons, uiIcons };
   }
 }

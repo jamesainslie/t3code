@@ -256,9 +256,7 @@ export interface ResolvedColorTokens {
 
 // --- Icon Set Manifest ---
 
-export const IconSetType = Schema.Literals(
-  ["file-icons", "ui-icons"] as const,
-);
+export const IconSetType = Schema.Literals(["file-icons", "ui-icons"] as const);
 export type IconSetType = typeof IconSetType.Type;
 
 export const IconSetManifestSchema = Schema.Struct({

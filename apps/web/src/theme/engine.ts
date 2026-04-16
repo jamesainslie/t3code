@@ -8,7 +8,11 @@ import type {
   TransparencyTokens,
   ThemeBase,
 } from "@t3tools/contracts";
-import { DEFAULT_TYPOGRAPHY_TOKENS, DEFAULT_TRANSPARENCY_TOKENS, DEFAULT_ICON_SET_CONFIG } from "@t3tools/contracts";
+import {
+  DEFAULT_TYPOGRAPHY_TOKENS,
+  DEFAULT_TRANSPARENCY_TOKENS,
+  DEFAULT_ICON_SET_CONFIG,
+} from "@t3tools/contracts";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
 
 function getBaseColors(base: ThemeBase): ResolvedColorTokens {
@@ -54,7 +58,9 @@ function makeDefaultManifest(id: string, type: "file-icons" | "ui-icons"): IconS
 }
 
 function resolveIcons(
-  overrides: { readonly fileIcons?: string | undefined; readonly uiIcons?: string | undefined } | undefined,
+  overrides:
+    | { readonly fileIcons?: string | undefined; readonly uiIcons?: string | undefined }
+    | undefined,
 ): ResolvedIconSetConfig {
   const fileIconsId = overrides?.fileIcons ?? DEFAULT_ICON_SET_CONFIG.fileIcons;
   const uiIconsId = overrides?.uiIcons ?? DEFAULT_ICON_SET_CONFIG.uiIcons;

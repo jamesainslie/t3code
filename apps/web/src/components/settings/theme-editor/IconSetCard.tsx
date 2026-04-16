@@ -38,9 +38,7 @@ export function IconSetCard({
 
       {/* Name + badge */}
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">
-          {manifest.name}
-        </span>
+        <span className="text-sm font-medium text-foreground">{manifest.name}</span>
         {disabled && (
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
             Coming soon
@@ -56,9 +54,7 @@ export function IconSetCard({
       {/* Preview icons */}
       <div className="flex flex-wrap gap-1">
         {disabled ? (
-          <span className="text-xs text-muted-foreground/50">
-            No preview available
-          </span>
+          <span className="text-xs text-muted-foreground/50">No preview available</span>
         ) : (
           previewIcons.slice(0, 8).map((name) => (
             <span
