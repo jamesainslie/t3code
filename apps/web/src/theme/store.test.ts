@@ -218,6 +218,54 @@ describe("ThemeStore", () => {
     });
   });
 
+  describe("icon set methods", () => {
+    it("getFileIconSetId returns 'default' on fresh store", () => {
+      expect(store.getFileIconSetId()).toBe("default");
+    });
+
+    it("getUiIconSetId returns 'default' on fresh store", () => {
+      expect(store.getUiIconSetId()).toBe("default");
+    });
+
+    it("setFileIconSet updates getFileIconSetId", () => {
+      store.setFileIconSet("material");
+      expect(store.getFileIconSetId()).toBe("material");
+    });
+
+    it("setFileIconSet updates resolved.icons.fileIcons.id", () => {
+      store.setFileIconSet("material");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.icons.fileIcons.id).toBe("material");
+    });
+
+    it("setUiIconSet updates getUiIconSetId", () => {
+      store.setUiIconSet("phosphor");
+      expect(store.getUiIconSetId()).toBe("phosphor");
+    });
+
+    it("setFileIconSet notifies subscriber", () => {
+      const listener = vi.fn();
+      store.subscribe(listener);
+      store.setFileIconSet("material");
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it("exportTheme includes overrides.icons.fileIcons after set", () => {
+      store.createTheme("Icon Test", "dark");
+      store.setFileIconSet("material");
+      const json = store.exportTheme();
+      const parsed = JSON.parse(json);
+      expect(parsed.overrides.icons.fileIcons).toBe("material");
+    });
+
+    it("discardChanges after set reverts icon set", () => {
+      store.createTheme("Icon Discard", "dark");
+      store.setFileIconSet("material");
+      store.discardChanges();
+      expect(store.getFileIconSetId()).toBe("default");
+    });
+  });
+
   describe("transparency token methods", () => {
     it("setTransparencyToken windowOpacity applies correctly", () => {
       store.setTransparencyToken("windowOpacity", 0.85);
