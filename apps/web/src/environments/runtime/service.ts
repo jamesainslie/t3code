@@ -55,7 +55,10 @@ import {
 } from "./catalog";
 import { createEnvironmentConnection, type EnvironmentConnection } from "./connection";
 import { connectionLog } from "./connectionLog";
-import { syncSavedProjectsFromReadModel } from "./projectsCatalog";
+import {
+  syncSavedProjectsFromReadModel,
+  syncSavedProjectsFromWebProjects,
+} from "./projectsCatalog";
 import {
   useStore,
   selectProjectsAcrossEnvironments,
@@ -253,6 +256,10 @@ function applyRecoveredEventBatch(
         cwd: project.cwd,
       })),
     );
+    const projectsForEnvironment = projects.filter(
+      (project) => project.environmentId === environmentId,
+    );
+    syncSavedProjectsFromWebProjects(projectsForEnvironment, environmentId);
   }
 
   const needsThreadUiSync = events.some(

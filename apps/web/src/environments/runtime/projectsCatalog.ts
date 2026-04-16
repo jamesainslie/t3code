@@ -255,6 +255,45 @@ export function listAllSavedProjectRecords(): ReadonlyArray<SavedRemoteProject> 
   );
 }
 
+interface ProjectSyncInput {
+  readonly id: ProjectId;
+  readonly name: string;
+  readonly workspaceRoot: string;
+  readonly repositoryCanonicalKey: string | null;
+}
+
+function syncSavedProjectsCore(
+  environmentId: EnvironmentId,
+  inputs: ReadonlyArray<ProjectSyncInput>,
+): void {
+  const identityKey =
+    useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
+  if (!identityKey) {
+    return;
+  }
+
+  const now = new Date(Date.now()).toISOString();
+  const records: SavedRemoteProject[] = inputs.map((input) => ({
+    savedProjectKey: makeSavedProjectKey({
+      environmentIdentityKey: identityKey,
+      projectId: input.id,
+    }),
+    environmentIdentityKey: identityKey,
+    projectId: input.id,
+    name: input.name,
+    workspaceRoot: input.workspaceRoot,
+    repositoryCanonicalKey: input.repositoryCanonicalKey,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    lastSyncedEnvironmentId: environmentId,
+  }));
+
+  useSavedProjectRegistryStore.getState().upsertMany(records);
+
+  const seenProjectIds = new Set(inputs.map((input) => input.id));
+  useSavedProjectRegistryStore.getState().pruneMissing(identityKey, seenProjectIds);
+}
+
 /**
  * Projects a server-side read model's projects into the saved project registry.
  *
@@ -270,34 +309,42 @@ export function syncSavedProjectsFromReadModel(
   projects: ReadonlyArray<OrchestrationProject>,
   environmentId: EnvironmentId,
 ): void {
-  const identityKey =
-    useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
-  if (!identityKey) {
-    return;
-  }
-
-  const now = new Date(Date.now()).toISOString();
   const activeProjects = projects.filter((project) => project.deletedAt === null);
+  syncSavedProjectsCore(
+    environmentId,
+    activeProjects.map((project) => ({
+      id: project.id,
+      name: project.title,
+      workspaceRoot: project.workspaceRoot,
+      repositoryCanonicalKey: project.repositoryIdentity?.canonicalKey ?? null,
+    })),
+  );
+}
 
-  const records: SavedRemoteProject[] = activeProjects.map((project) => ({
-    savedProjectKey: makeSavedProjectKey({
-      environmentIdentityKey: identityKey,
-      projectId: project.id,
-    }),
-    environmentIdentityKey: identityKey,
-    projectId: project.id,
-    name: project.title,
-    workspaceRoot: project.workspaceRoot,
-    repositoryCanonicalKey: project.repositoryIdentity?.canonicalKey ?? null,
-    firstSeenAt: now,
-    lastSeenAt: now,
-    lastSyncedEnvironmentId: environmentId,
-  }));
-
-  useSavedProjectRegistryStore.getState().upsertMany(records);
-
-  const seenProjectIds = new Set(activeProjects.map((project) => project.id));
-  useSavedProjectRegistryStore.getState().pruneMissing(identityKey, seenProjectIds);
+/**
+ * Web-store variant of {@link syncSavedProjectsFromReadModel}. Called from the
+ * event-batch handler after `applyOrchestrationEvents` has updated the web
+ * store — we re-derive the canonical set of projects for the environment and
+ * project them into the saved registry using the same upsert + prune logic.
+ */
+export function syncSavedProjectsFromWebProjects(
+  projects: ReadonlyArray<{
+    readonly id: ProjectId;
+    readonly name: string;
+    readonly cwd: string;
+    readonly repositoryIdentity?: { readonly canonicalKey: string } | null;
+  }>,
+  environmentId: EnvironmentId,
+): void {
+  syncSavedProjectsCore(
+    environmentId,
+    projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      workspaceRoot: project.cwd,
+      repositoryCanonicalKey: project.repositoryIdentity?.canonicalKey ?? null,
+    })),
+  );
 }
 
 export function resetSavedProjectRegistryStoreForTests() {

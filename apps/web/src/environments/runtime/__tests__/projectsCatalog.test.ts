@@ -16,6 +16,7 @@ import {
   listSavedProjectRecordsForEnvironment,
   resetSavedProjectRegistryStoreForTests,
   syncSavedProjectsFromReadModel,
+  syncSavedProjectsFromWebProjects,
   useSavedProjectRegistryStore,
   waitForSavedProjectRegistryHydration,
 } from "../projectsCatalog";
@@ -445,5 +446,105 @@ describe("syncSavedProjectsFromReadModel", () => {
     expect(secondSnapshot.lastSeenAt).not.toBe(firstSnapshot.lastSeenAt);
 
     clock.mockRestore();
+  });
+});
+
+describe("syncSavedProjectsFromWebProjects", () => {
+  const envId = EnvironmentId.make("env-live-a");
+
+  function seedEnvironmentRegistry() {
+    useSavedEnvironmentRegistryStore.getState().upsert({
+      identityKey: ENV_A,
+      host: "a.example.com",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/srv/a",
+      label: "Env A",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      environmentId: envId,
+      wsBaseUrl: "wss://a.example.com/",
+      httpBaseUrl: "https://a.example.com/",
+      lastConnectedAt: null,
+      projectId: envId as string,
+    });
+  }
+
+  beforeEach(async () => {
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: makePersistedStub(),
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+  });
+
+  afterEach(async () => {
+    resetSavedProjectRegistryStoreForTests();
+    useSavedEnvironmentRegistryStore.getState().reset();
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it("no-ops when the environment has no identityKey in the registry", () => {
+    syncSavedProjectsFromWebProjects(
+      [
+        {
+          id: ProjectId.make("proj-1"),
+          name: "Alpha",
+          cwd: "/srv/a/proj-1",
+        },
+      ],
+      EnvironmentId.make("env-unknown"),
+    );
+    expect(useSavedProjectRegistryStore.getState().byKey).toEqual({});
+  });
+
+  it("upserts web-store projects using name/cwd field mapping", () => {
+    seedEnvironmentRegistry();
+    syncSavedProjectsFromWebProjects(
+      [
+        {
+          id: ProjectId.make("proj-a1"),
+          name: "Alpha",
+          cwd: "/srv/a/proj-a1",
+          repositoryIdentity: { canonicalKey: "git:repo-alpha" },
+        },
+        {
+          id: ProjectId.make("proj-a2"),
+          name: "Beta",
+          cwd: "/srv/a/proj-a2",
+          repositoryIdentity: null,
+        },
+      ],
+      envId,
+    );
+
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list.map((entry) => entry.name)).toEqual(["Alpha", "Beta"]);
+    expect(list[0]!.workspaceRoot).toBe("/srv/a/proj-a1");
+    expect(list[0]!.repositoryCanonicalKey).toBe("git:repo-alpha");
+    expect(list[1]!.repositoryCanonicalKey).toBeNull();
+  });
+
+  it("prunes projects removed between batches", () => {
+    seedEnvironmentRegistry();
+    syncSavedProjectsFromWebProjects(
+      [
+        { id: ProjectId.make("proj-a1"), name: "Alpha", cwd: "/srv/a/proj-a1" },
+        { id: ProjectId.make("proj-a2"), name: "Beta", cwd: "/srv/a/proj-a2" },
+      ],
+      envId,
+    );
+    expect(listSavedProjectRecordsForEnvironment(ENV_A)).toHaveLength(2);
+
+    syncSavedProjectsFromWebProjects(
+      [{ id: ProjectId.make("proj-a1"), name: "Alpha", cwd: "/srv/a/proj-a1" }],
+      envId,
+    );
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.projectId).toBe(ProjectId.make("proj-a1"));
   });
 });
