@@ -304,6 +304,36 @@ export class ThemeStore {
     return (transparency as Record<string, unknown>)[tokenName] !== undefined;
   }
 
+  setFileIconSet(id: string): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (!theme.overrides.icons) {
+      theme.overrides.icons = {};
+    }
+    (theme.overrides.icons as Record<string, string>).fileIcons = id;
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  setUiIconSet(id: string): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (!theme.overrides.icons) {
+      theme.overrides.icons = {};
+    }
+    (theme.overrides.icons as Record<string, string>).uiIcons = id;
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  getFileIconSetId(): string {
+    return (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)?.fileIcons ?? "default";
+  }
+
+  getUiIconSetId(): string {
+    return (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)?.uiIcons ?? "default";
+  }
+
   createTheme(name: string, base: ThemeBase): void {
     const theme: Theme = {
       id: generateId(),
