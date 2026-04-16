@@ -64,7 +64,9 @@ export function toPersistedSavedEnvironmentRecord(
 }
 
 /** @internal Exported for testing only. */
-export function migratePersistedRecord(record: PersistedSavedEnvironmentRecord): SavedRemoteEnvironment {
+export function migratePersistedRecord(
+  record: PersistedSavedEnvironmentRecord,
+): SavedRemoteEnvironment {
   const sshConfig = record.sshConfig;
   const identityKey = sshConfig
     ? makeRemoteIdentityKey(sshConfig)
@@ -188,67 +190,69 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
   return savedEnvironmentRegistryHydrationPromise;
 }
 
-export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryStore>()((set, get) => ({
-  byIdentityKey: {},
-  identityKeyByEnvironmentId: {},
-  byId: {},
-  upsert: (record) =>
-    set((state) => {
-      const byIdentityKey = {
-        ...state.byIdentityKey,
-        [record.identityKey]: record,
-      };
-      persistSavedEnvironmentRegistryState(byIdentityKey);
-      return {
-        byIdentityKey,
-        identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
-        byId: deriveByIdIndex(byIdentityKey),
-      };
-    }),
-  remove: (identityKey) =>
-    set((state) => {
-      const { [identityKey]: _removed, ...remaining } = state.byIdentityKey;
-      persistSavedEnvironmentRegistryState(remaining);
-      return {
-        byIdentityKey: remaining,
-        identityKeyByEnvironmentId: deriveReverseIndex(remaining),
-        byId: deriveByIdIndex(remaining),
-      };
-    }),
-  markConnected: (identityKey, connectedAt) =>
-    set((state) => {
-      const existing = state.byIdentityKey[identityKey];
-      if (!existing) {
-        return state;
-      }
-      const byIdentityKey = {
-        ...state.byIdentityKey,
-        [identityKey]: {
-          ...existing,
-          lastConnectedAt: connectedAt,
-        },
-      };
-      persistSavedEnvironmentRegistryState(byIdentityKey);
-      return {
-        byIdentityKey,
-        identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
-        byId: deriveByIdIndex(byIdentityKey),
-      };
-    }),
-  findByEnvironmentId: (environmentId) => {
-    const identityKey = get().identityKeyByEnvironmentId[environmentId];
-    if (!identityKey) return null;
-    return get().byIdentityKey[identityKey] ?? null;
-  },
-  reset: () => {
-    persistSavedEnvironmentRegistryState({});
-    set({
-      byIdentityKey: {},
-      identityKeyByEnvironmentId: {},
-      byId: {},
-    });
-  },
-}));
+export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryStore>()(
+  (set, get) => ({
+    byIdentityKey: {},
+    identityKeyByEnvironmentId: {},
+    byId: {},
+    upsert: (record) =>
+      set((state) => {
+        const byIdentityKey = {
+          ...state.byIdentityKey,
+          [record.identityKey]: record,
+        };
+        persistSavedEnvironmentRegistryState(byIdentityKey);
+        return {
+          byIdentityKey,
+          identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
+          byId: deriveByIdIndex(byIdentityKey),
+        };
+      }),
+    remove: (identityKey) =>
+      set((state) => {
+        const { [identityKey]: _removed, ...remaining } = state.byIdentityKey;
+        persistSavedEnvironmentRegistryState(remaining);
+        return {
+          byIdentityKey: remaining,
+          identityKeyByEnvironmentId: deriveReverseIndex(remaining),
+          byId: deriveByIdIndex(remaining),
+        };
+      }),
+    markConnected: (identityKey, connectedAt) =>
+      set((state) => {
+        const existing = state.byIdentityKey[identityKey];
+        if (!existing) {
+          return state;
+        }
+        const byIdentityKey = {
+          ...state.byIdentityKey,
+          [identityKey]: {
+            ...existing,
+            lastConnectedAt: connectedAt,
+          },
+        };
+        persistSavedEnvironmentRegistryState(byIdentityKey);
+        return {
+          byIdentityKey,
+          identityKeyByEnvironmentId: deriveReverseIndex(byIdentityKey),
+          byId: deriveByIdIndex(byIdentityKey),
+        };
+      }),
+    findByEnvironmentId: (environmentId) => {
+      const identityKey = get().identityKeyByEnvironmentId[environmentId];
+      if (!identityKey) return null;
+      return get().byIdentityKey[identityKey] ?? null;
+    },
+    reset: () => {
+      persistSavedEnvironmentRegistryState({});
+      set({
+        byIdentityKey: {},
+        identityKeyByEnvironmentId: {},
+        byId: {},
+      });
+    },
+  }),
+);
 
 export function hasSavedEnvironmentRegistryHydrated(): boolean {
   return savedEnvironmentRegistryHydrated;
@@ -311,9 +315,7 @@ export function resetSavedEnvironmentRegistryStoreForTests() {
   });
 }
 
-export async function persistSavedEnvironmentRecord(
-  record: SavedRemoteEnvironment,
-): Promise<void> {
+export async function persistSavedEnvironmentRecord(record: SavedRemoteEnvironment): Promise<void> {
   const byIdentityKey = {
     ...useSavedEnvironmentRegistryStore.getState().byIdentityKey,
     [record.identityKey]: record,
@@ -327,23 +329,70 @@ export async function persistSavedEnvironmentRecord(
   );
 }
 
+/**
+ * Minimal shape required to locate a saved environment's bearer token.
+ *
+ * Credentials are keyed by `identityKey` (stable across server-side
+ * environmentId rotations). `environmentId` is used only as a legacy fallback
+ * for records persisted before identity-based keying existed.
+ */
+type BearerTokenLocator = Pick<SavedRemoteEnvironment, "identityKey" | "environmentId">;
+
+/**
+ * Reads the bearer token for a saved environment.
+ *
+ * Lookup order:
+ *   1. `identityKey` (the stable primary key)
+ *   2. `environmentId` (legacy fallback, for tokens saved before the
+ *      identity-key migration)
+ *
+ * On fallback hit, the token is self-healed: rewritten under `identityKey`
+ * and the stale `environmentId` entry is removed, so subsequent reconnects
+ * go through the fast path.
+ */
 export async function readSavedEnvironmentBearerToken(
-  environmentId: EnvironmentId,
+  record: BearerTokenLocator,
 ): Promise<string | null> {
-  return ensureLocalApi().persistence.getSavedEnvironmentSecret(environmentId);
+  const persistence = ensureLocalApi().persistence;
+
+  const byIdentity = await persistence.getSavedEnvironmentSecret(record.identityKey);
+  if (byIdentity) {
+    return byIdentity;
+  }
+
+  if (record.environmentId) {
+    const byEnvironmentId = await persistence.getSavedEnvironmentSecret(record.environmentId);
+    if (byEnvironmentId) {
+      // Self-heal: move the legacy entry under the stable identityKey.
+      try {
+        await persistence.setSavedEnvironmentSecret(record.identityKey, byEnvironmentId);
+        await persistence.removeSavedEnvironmentSecret(record.environmentId);
+      } catch (error) {
+        console.error("[SAVED_ENVIRONMENTS] credential self-heal failed", error);
+      }
+      return byEnvironmentId;
+    }
+  }
+
+  return null;
 }
 
 export async function writeSavedEnvironmentBearerToken(
-  environmentId: EnvironmentId,
+  record: Pick<SavedRemoteEnvironment, "identityKey">,
   bearerToken: string,
 ): Promise<boolean> {
-  return ensureLocalApi().persistence.setSavedEnvironmentSecret(environmentId, bearerToken);
+  return ensureLocalApi().persistence.setSavedEnvironmentSecret(record.identityKey, bearerToken);
 }
 
 export async function removeSavedEnvironmentBearerToken(
-  environmentId: EnvironmentId,
+  record: BearerTokenLocator,
 ): Promise<void> {
-  await ensureLocalApi().persistence.removeSavedEnvironmentSecret(environmentId);
+  const persistence = ensureLocalApi().persistence;
+  await persistence.removeSavedEnvironmentSecret(record.identityKey);
+  if (record.environmentId) {
+    // Clean up any pre-migration entry that may still be keyed by environmentId.
+    await persistence.removeSavedEnvironmentSecret(record.environmentId);
+  }
 }
 
 export type SavedEnvironmentConnectionState = "connecting" | "connected" | "disconnected" | "error";

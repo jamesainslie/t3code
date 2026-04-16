@@ -199,9 +199,14 @@ export interface DesktopBridge {
   setSavedEnvironmentRegistry: (
     records: readonly PersistedSavedEnvironmentRecord[],
   ) => Promise<void>;
-  getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
-  setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
-  removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getSavedEnvironmentSecret: (
+    key: EnvironmentId | RemoteIdentityKey,
+  ) => Promise<string | null>;
+  setSavedEnvironmentSecret: (
+    key: EnvironmentId | RemoteIdentityKey,
+    secret: string,
+  ) => Promise<boolean>;
+  removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: () => Promise<string | null>;
@@ -275,9 +280,14 @@ export interface LocalApi {
     setSavedEnvironmentRegistry: (
       records: readonly PersistedSavedEnvironmentRecord[],
     ) => Promise<void>;
-    getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
-    setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
-    removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+    getSavedEnvironmentSecret: (
+      key: EnvironmentId | RemoteIdentityKey,
+    ) => Promise<string | null>;
+    setSavedEnvironmentSecret: (
+      key: EnvironmentId | RemoteIdentityKey,
+      secret: string,
+    ) => Promise<boolean>;
+    removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

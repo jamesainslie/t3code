@@ -9,12 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   migratePersistedRecord,
+  readSavedEnvironmentBearerToken,
+  removeSavedEnvironmentBearerToken,
   resetSavedEnvironmentRegistryStoreForTests,
   resetSavedEnvironmentRuntimeStoreForTests,
   toPersistedSavedEnvironmentRecord,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
   waitForSavedEnvironmentRegistryHydration,
+  writeSavedEnvironmentBearerToken,
 } from "./catalog";
 
 function makeTestRecord(overrides: {
@@ -81,7 +84,9 @@ describe("environment runtime catalog stores", () => {
 
     useSavedEnvironmentRegistryStore.getState().upsert(record);
 
-    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey]).toBeDefined();
+    expect(
+      useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey],
+    ).toBeDefined();
     expect(useSavedEnvironmentRegistryStore.getState().byId[environmentId]).toBeDefined();
 
     resetSavedEnvironmentRegistryStoreForTests();
@@ -153,7 +158,9 @@ describe("environment runtime catalog stores", () => {
     resolveRegistryRead();
     await hydrationPromise;
 
-    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey]).toEqual(record);
+    expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey[record.identityKey]).toEqual(
+      record,
+    );
     expect(useSavedEnvironmentRegistryStore.getState().byId[environmentId]).toEqual(record);
   });
 
@@ -174,9 +181,9 @@ describe("environment runtime catalog stores", () => {
 
     useSavedEnvironmentRegistryStore.getState().upsert(record);
 
-    expect(
-      useSavedEnvironmentRegistryStore.getState().findByEnvironmentId(environmentId),
-    ).toEqual(record);
+    expect(useSavedEnvironmentRegistryStore.getState().findByEnvironmentId(environmentId)).toEqual(
+      record,
+    );
   });
 
   it("remove by identityKey clears both maps", () => {
@@ -189,6 +196,129 @@ describe("environment runtime catalog stores", () => {
     expect(useSavedEnvironmentRegistryStore.getState().byIdentityKey).toEqual({});
     expect(useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId).toEqual({});
     expect(useSavedEnvironmentRegistryStore.getState().byId).toEqual({});
+  });
+});
+
+describe("saved environment bearer token: identity-keyed storage with environmentId fallback", () => {
+  function stubPersistence(overrides: {
+    get?: (key: string) => Promise<string | null>;
+    set?: (key: string, secret: string) => Promise<boolean>;
+    remove?: (key: string) => Promise<void>;
+  }) {
+    const getSpy = vi.fn(overrides.get ?? (async () => null));
+    const setSpy = vi.fn(overrides.set ?? (async () => true));
+    const removeSpy = vi.fn(overrides.remove ?? (async () => undefined));
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: {
+          getClientSettings: async () => null,
+          setClientSettings: async () => undefined,
+          getSavedEnvironmentRegistry: async () => [],
+          setSavedEnvironmentRegistry: async () => undefined,
+          getSavedEnvironmentSecret: getSpy,
+          setSavedEnvironmentSecret: setSpy,
+          removeSavedEnvironmentSecret: removeSpy,
+        },
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    return { getSpy, setSpy, removeSpy };
+  }
+
+  beforeEach(async () => {
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+  });
+
+  afterEach(async () => {
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the token under identityKey when present", async () => {
+    const { getSpy } = stubPersistence({
+      get: async (key) => (key === "james@host:22:/w" ? "identity-token" : null),
+    });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({
+      host: "host",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/w",
+    });
+
+    const result = await readSavedEnvironmentBearerToken(record);
+
+    expect(result).toBe("identity-token");
+    expect(getSpy).toHaveBeenCalledWith(record.identityKey);
+  });
+
+  it("falls back to environmentId when identityKey lookup misses", async () => {
+    const { getSpy } = stubPersistence({
+      get: async (key) => (key === "legacy-env" ? "legacy-token" : null),
+    });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({ environmentId: EnvironmentId.make("legacy-env") });
+
+    const result = await readSavedEnvironmentBearerToken(record);
+
+    expect(result).toBe("legacy-token");
+    expect(getSpy).toHaveBeenNthCalledWith(1, record.identityKey);
+    expect(getSpy).toHaveBeenNthCalledWith(2, record.environmentId);
+  });
+
+  it("rewrites under identityKey and removes the environmentId entry on fallback hit", async () => {
+    const { setSpy, removeSpy } = stubPersistence({
+      get: async (key) => (key === "legacy-env" ? "legacy-token" : null),
+    });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({ environmentId: EnvironmentId.make("legacy-env") });
+
+    await readSavedEnvironmentBearerToken(record);
+
+    expect(setSpy).toHaveBeenCalledWith(record.identityKey, "legacy-token");
+    expect(removeSpy).toHaveBeenCalledWith(record.environmentId);
+  });
+
+  it("returns null when both identityKey and environmentId miss", async () => {
+    stubPersistence({ get: async () => null });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({});
+    expect(await readSavedEnvironmentBearerToken(record)).toBeNull();
+  });
+
+  it("writes the token under identityKey", async () => {
+    const { setSpy } = stubPersistence({});
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({});
+
+    const ok = await writeSavedEnvironmentBearerToken(record, "fresh-token");
+
+    expect(ok).toBe(true);
+    expect(setSpy).toHaveBeenCalledWith(record.identityKey, "fresh-token");
+  });
+
+  it("removes the token under both identityKey and environmentId", async () => {
+    const { removeSpy } = stubPersistence({});
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    const record = makeTestRecord({});
+
+    await removeSavedEnvironmentBearerToken(record);
+
+    expect(removeSpy).toHaveBeenCalledWith(record.identityKey);
+    expect(removeSpy).toHaveBeenCalledWith(record.environmentId);
   });
 });
 
