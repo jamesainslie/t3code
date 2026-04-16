@@ -59,6 +59,7 @@ import {
   syncSavedProjectsFromReadModel,
   syncSavedProjectsFromWebProjects,
   useSavedProjectRegistryStore,
+  waitForSavedProjectRegistryHydration,
 } from "./projectsCatalog";
 import {
   useStore,
@@ -1046,6 +1047,8 @@ export function startEnvironmentConnectionService(queryClient: QueryClient): () 
   void waitForSavedEnvironmentRegistryHydration()
     .then(() => syncSavedEnvironmentConnections(listSavedEnvironmentRecords()))
     .catch(() => undefined);
+
+  void waitForSavedProjectRegistryHydration().catch(() => undefined);
 
   activeService = {
     queryClient,
