@@ -17,3 +17,4 @@ export * from "./hostResource";
 export * from "./rpc";
 export * from "./remoteConnection";
 export { type RemoteIdentityKey, type RemoteIdentityFields, makeRemoteIdentityKey, parseRemoteIdentityKey } from "./remoteIdentity.js";
+export * from "./theme";
