@@ -1,5 +1,5 @@
 // apps/web/src/theme/store.ts
-import type { Theme, ResolvedTheme, ThemeBase, ColorTokens } from "@t3tools/contracts";
+import type { Theme, ResolvedTheme, ThemeBase, ColorTokens, TypographyTokens } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { ThemeSchema } from "@t3tools/contracts";
 import { resolveTheme } from "./engine";
@@ -234,6 +234,33 @@ export class ThemeStore {
     const colors = this.snapshot.theme.overrides.colors;
     if (!colors) return false;
     return (colors as Record<string, unknown>)[tokenName] !== undefined;
+  }
+
+  setTypographyToken(tokenName: keyof TypographyTokens, value: string): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (!theme.overrides.typography) {
+      theme.overrides.typography = {};
+    }
+    (theme.overrides.typography as Record<string, string>)[tokenName] = value;
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  resetTypographyToken(tokenName: keyof TypographyTokens): void {
+    const theme = structuredClone(this.snapshot.theme);
+    if (theme.overrides.typography) {
+      delete (theme.overrides.typography as Record<string, string | undefined>)[tokenName];
+    }
+    theme.metadata.updatedAt = new Date().toISOString();
+    this.update(theme, true);
+    this.schedulePersist();
+  }
+
+  isTypographyTokenOverridden(tokenName: keyof TypographyTokens): boolean {
+    const typography = this.snapshot.theme.overrides.typography;
+    if (!typography) return false;
+    return (typography as Record<string, unknown>)[tokenName] !== undefined;
   }
 
   createTheme(name: string, base: ThemeBase): void {

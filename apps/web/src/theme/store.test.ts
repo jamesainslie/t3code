@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeStore } from "./store";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
+import { DEFAULT_TYPOGRAPHY_TOKENS } from "@t3tools/contracts";
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -145,5 +146,75 @@ describe("ThemeStore", () => {
     expect(snapshot.resolvedTheme).toBe("dark");
     store.setBase("light");
     expect(store.getSnapshot().resolvedTheme).toBe("light");
+  });
+
+  describe("typography token methods", () => {
+    it("setTypographyToken uiFontFamily applies correctly and leaves other tokens unchanged", () => {
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.typography.uiFontFamily).toBe("Inter, sans-serif");
+      expect(snapshot.resolved.typography.codeFontFamily).toBe(
+        DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily,
+      );
+      expect(snapshot.resolved.typography.uiFontSize).toBe(
+        DEFAULT_TYPOGRAPHY_TOKENS.uiFontSize,
+      );
+    });
+
+    it("setTypographyToken codeFontFamily applies correctly", () => {
+      store.setTypographyToken("codeFontFamily", "Fira Code, monospace");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.typography.codeFontFamily).toBe("Fira Code, monospace");
+    });
+
+    it("setTypographyToken uiFontSize applies correctly", () => {
+      store.setTypographyToken("uiFontSize", "16px");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.typography.uiFontSize).toBe("16px");
+    });
+
+    it("setTypographyToken lineHeight applies correctly", () => {
+      store.setTypographyToken("lineHeight", "1.8");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.typography.lineHeight).toBe("1.8");
+    });
+
+    it("resetTypographyToken restores default value", () => {
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      store.resetTypographyToken("uiFontFamily");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.typography.uiFontFamily).toBe(
+        DEFAULT_TYPOGRAPHY_TOKENS.uiFontFamily,
+      );
+    });
+
+    it("isTypographyTokenOverridden tracks override state correctly", () => {
+      expect(store.isTypographyTokenOverridden("uiFontFamily")).toBe(false);
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      expect(store.isTypographyTokenOverridden("uiFontFamily")).toBe(true);
+      store.resetTypographyToken("uiFontFamily");
+      expect(store.isTypographyTokenOverridden("uiFontFamily")).toBe(false);
+    });
+
+    it("setTypographyToken notifies subscribers", () => {
+      const listener = vi.fn();
+      store.subscribe(listener);
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it("setTypographyToken marks isDirty as true", () => {
+      expect(store.getSnapshot().isDirty).toBe(false);
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      expect(store.getSnapshot().isDirty).toBe(true);
+    });
+
+    it("exportTheme includes typography override", () => {
+      store.createTheme("Typo Test", "dark");
+      store.setTypographyToken("codeFontFamily", "Fira Code, monospace");
+      const json = store.exportTheme();
+      const parsed = JSON.parse(json);
+      expect(parsed.overrides.typography.codeFontFamily).toBe("Fira Code, monospace");
+    });
   });
 });
