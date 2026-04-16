@@ -86,6 +86,7 @@ import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
 import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
+import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -3401,6 +3402,8 @@ export default function Sidebar() {
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
           />
+
+          <StaleSavedProjectsList />
 
           <SidebarSeparator />
           <SidebarChromeFooter />
