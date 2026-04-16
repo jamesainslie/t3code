@@ -2,11 +2,13 @@ import type {
   Theme,
   ResolvedTheme,
   ResolvedColorTokens,
+  ResolvedIconSetConfig,
+  IconSetManifest,
   TypographyTokens,
   TransparencyTokens,
   ThemeBase,
 } from "@t3tools/contracts";
-import { DEFAULT_TYPOGRAPHY_TOKENS, DEFAULT_TRANSPARENCY_TOKENS } from "@t3tools/contracts";
+import { DEFAULT_TYPOGRAPHY_TOKENS, DEFAULT_TRANSPARENCY_TOKENS, DEFAULT_ICON_SET_CONFIG } from "@t3tools/contracts";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
 
 function getBaseColors(base: ThemeBase): ResolvedColorTokens {
@@ -51,6 +53,21 @@ function mergeTransparency(
   } as Required<TransparencyTokens>;
 }
 
+function makeDefaultManifest(id: string, type: "file-icons" | "ui-icons"): IconSetManifest {
+  return { id, name: id, version: "0.0.0", type };
+}
+
+function resolveIcons(
+  overrides: { readonly fileIcons?: string | undefined; readonly uiIcons?: string | undefined } | undefined,
+): ResolvedIconSetConfig {
+  const fileIconsId = overrides?.fileIcons ?? DEFAULT_ICON_SET_CONFIG.fileIcons;
+  const uiIconsId = overrides?.uiIcons ?? DEFAULT_ICON_SET_CONFIG.uiIcons;
+  return {
+    fileIcons: makeDefaultManifest(fileIconsId, "file-icons"),
+    uiIcons: makeDefaultManifest(uiIconsId, "ui-icons"),
+  };
+}
+
 export function resolveTheme(theme: Theme): ResolvedTheme {
   const baseColors = getBaseColors(theme.base);
   return {
@@ -60,5 +77,6 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
     colors: mergeColors(baseColors, theme.overrides.colors as Record<string, string | undefined>),
     typography: mergeTypography(theme.overrides.typography),
     transparency: mergeTransparency(theme.overrides.transparency),
+    icons: resolveIcons(theme.overrides.icons),
   };
 }

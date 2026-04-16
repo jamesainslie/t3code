@@ -189,7 +189,7 @@ export const ThemeSchema = Schema.Struct({
 
 export type Theme = typeof ThemeSchema.Type;
 
-// --- Resolved Theme (all tokens filled, no optionals) ---
+// --- Resolved Color Tokens ---
 
 export interface ResolvedColorTokens {
   readonly appChromeBackground: string;
@@ -256,6 +256,36 @@ export interface ResolvedColorTokens {
   readonly destructiveForeground: string;
 }
 
+// --- Icon Set Manifest ---
+
+export const IconSetType = Schema.Literals(
+  ["file-icons", "ui-icons"] as const,
+);
+export type IconSetType = typeof IconSetType.Type;
+
+export const IconSetManifestSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  version: Schema.String,
+  type: IconSetType,
+  description: Schema.optional(Schema.String),
+  previewIcons: Schema.optional(Schema.Array(Schema.String)),
+});
+
+export type IconSetManifest = typeof IconSetManifestSchema.Type;
+
+export interface ResolvedIconSetConfig {
+  readonly fileIcons: IconSetManifest;
+  readonly uiIcons: IconSetManifest;
+}
+
+export const DEFAULT_ICON_SET_CONFIG: { fileIcons: string; uiIcons: string } = {
+  fileIcons: "default",
+  uiIcons: "default",
+};
+
+// --- Resolved Theme (all tokens filled, no optionals) ---
+
 export interface ResolvedTheme {
   readonly id: string;
   readonly name: string;
@@ -263,4 +293,5 @@ export interface ResolvedTheme {
   readonly colors: ResolvedColorTokens;
   readonly typography: Required<TypographyTokens>;
   readonly transparency: Required<TransparencyTokens>;
+  readonly icons: ResolvedIconSetConfig;
 }
