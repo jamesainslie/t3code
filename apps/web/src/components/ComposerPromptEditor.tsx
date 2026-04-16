@@ -78,6 +78,7 @@ import {
 } from "./composerInlineChip";
 import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
 import { formatProviderSkillDisplayName } from "~/providerSkillPresentation";
+import { themeStore } from "../theme";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const COMPOSER_EDITOR_HMR_KEY = `composer-editor-${Math.random().toString(36).slice(2)}`;
@@ -431,7 +432,7 @@ function isComposerInlineTokenNode(candidate: unknown): candidate is ComposerInl
 }
 
 function resolvedThemeFromDocument(): "light" | "dark" {
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  return themeStore.getSnapshot().resolvedTheme;
 }
 
 function renderMentionChipDom(container: HTMLElement, pathValue: string): void {
