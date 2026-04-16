@@ -2,6 +2,7 @@ import * as FS from "node:fs";
 import * as Path from "node:path";
 
 import type { ClientSettings, PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
+import { makeRemoteIdentityKey } from "@t3tools/contracts";
 import { Predicate } from "effect";
 
 interface ClientSettingsDocument {
@@ -79,6 +80,7 @@ function toPersistedSavedEnvironmentRecord(
     wsBaseUrl: record.wsBaseUrl,
     createdAt: record.createdAt,
     lastConnectedAt: record.lastConnectedAt,
+    ...(record.sshConfig ? { sshConfig: record.sshConfig } : {}),
   };
 }
 
@@ -123,14 +125,40 @@ export function writeSavedEnvironmentRegistry(
   } satisfies SavedEnvironmentRegistryDocument);
 }
 
+/**
+ * Returns true if `record` matches `key` either by environmentId or by a
+ * identity key derived from the record's sshConfig. Secret keys may be
+ * either an EnvironmentId (legacy) or a RemoteIdentityKey (current).
+ */
+function savedEnvironmentRecordMatchesKey(
+  record: PersistedSavedEnvironmentStorageRecord,
+  key: string,
+): boolean {
+  if (record.environmentId === key) {
+    return true;
+  }
+  if (record.sshConfig) {
+    const derivedIdentityKey = makeRemoteIdentityKey({
+      host: record.sshConfig.host,
+      user: record.sshConfig.user,
+      port: record.sshConfig.port,
+      workspaceRoot: record.sshConfig.workspaceRoot,
+    });
+    if (derivedIdentityKey === key) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function readSavedEnvironmentSecret(input: {
   readonly registryPath: string;
   readonly environmentId: string;
   readonly secretStorage: DesktopSecretStorage;
 }): string | null {
   const document = readSavedEnvironmentRegistryDocument(input.registryPath);
-  const encoded = document.records.find(
-    (record) => record.environmentId === input.environmentId,
+  const encoded = document.records.find((record) =>
+    savedEnvironmentRecordMatchesKey(record, input.environmentId),
   )?.encryptedBearerToken;
   if (!encoded) {
     return null;
@@ -163,7 +191,7 @@ export function writeSavedEnvironmentSecret(input: {
 
   writeJsonFile(input.registryPath, {
     records: document.records.map((record) => {
-      if (record.environmentId !== input.environmentId) {
+      if (!savedEnvironmentRecordMatchesKey(record, input.environmentId)) {
         return record;
       }
 
@@ -172,12 +200,7 @@ export function writeSavedEnvironmentSecret(input: {
         .encryptString(input.secret)
         .toString("base64");
       return {
-        environmentId: record.environmentId,
-        label: record.label,
-        httpBaseUrl: record.httpBaseUrl,
-        wsBaseUrl: record.wsBaseUrl,
-        createdAt: record.createdAt,
-        lastConnectedAt: record.lastConnectedAt,
+        ...record,
         encryptedBearerToken,
       } satisfies PersistedSavedEnvironmentStorageRecord;
     }),
@@ -193,7 +216,8 @@ export function removeSavedEnvironmentSecret(input: {
   if (
     !document.records.some(
       (record) =>
-        record.environmentId === input.environmentId && record.encryptedBearerToken !== undefined,
+        savedEnvironmentRecordMatchesKey(record, input.environmentId) &&
+        record.encryptedBearerToken !== undefined,
     )
   ) {
     return;
@@ -201,7 +225,7 @@ export function removeSavedEnvironmentSecret(input: {
 
   writeJsonFile(input.registryPath, {
     records: document.records.map((record) => {
-      if (record.environmentId !== input.environmentId) {
+      if (!savedEnvironmentRecordMatchesKey(record, input.environmentId)) {
         return record;
       }
 

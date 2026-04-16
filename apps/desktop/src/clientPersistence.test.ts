@@ -4,6 +4,7 @@ import * as path from "node:path";
 
 import {
   EnvironmentId,
+  makeRemoteIdentityKey,
   type ClientSettings,
   type PersistedSavedEnvironmentRecord,
 } from "@t3tools/contracts";
@@ -230,5 +231,102 @@ describe("clientPersistence", () => {
         secretStorage,
       }),
     ).toBe("bearer-token");
+  });
+
+  describe("identity-key keyed secrets (sshConfig records)", () => {
+    const sshConfig = {
+      host: "hephaestus",
+      user: "james",
+      port: 22,
+      projectId: "proj-1",
+      workspaceRoot: "/workspace",
+    };
+    const identityKey = makeRemoteIdentityKey(sshConfig);
+    const sshRecord: PersistedSavedEnvironmentRecord = {
+      ...savedRegistryRecord,
+      sshConfig,
+    };
+
+    it("writes a secret keyed by identityKey and reads it back", () => {
+      const registryPath = makeTempPath("saved-environments.json");
+      const secretStorage = makeSecretStorage(true);
+
+      writeSavedEnvironmentRegistry(registryPath, [sshRecord]);
+
+      expect(
+        writeSavedEnvironmentSecret({
+          registryPath,
+          environmentId: identityKey,
+          secret: "bearer-token",
+          secretStorage,
+        }),
+      ).toBe(true);
+
+      expect(
+        readSavedEnvironmentSecret({
+          registryPath,
+          environmentId: identityKey,
+          secretStorage,
+        }),
+      ).toBe("bearer-token");
+    });
+
+    it("still matches legacy secrets keyed by environmentId", () => {
+      const registryPath = makeTempPath("saved-environments.json");
+      const secretStorage = makeSecretStorage(true);
+
+      writeSavedEnvironmentRegistry(registryPath, [sshRecord]);
+
+      writeSavedEnvironmentSecret({
+        registryPath,
+        environmentId: sshRecord.environmentId,
+        secret: "bearer-token",
+        secretStorage,
+      });
+
+      expect(
+        readSavedEnvironmentSecret({
+          registryPath,
+          environmentId: sshRecord.environmentId,
+          secretStorage,
+        }),
+      ).toBe("bearer-token");
+    });
+
+    it("removes a secret looked up by identityKey", () => {
+      const registryPath = makeTempPath("saved-environments.json");
+      const secretStorage = makeSecretStorage(true);
+
+      writeSavedEnvironmentRegistry(registryPath, [sshRecord]);
+      writeSavedEnvironmentSecret({
+        registryPath,
+        environmentId: identityKey,
+        secret: "bearer-token",
+        secretStorage,
+      });
+
+      removeSavedEnvironmentSecret({
+        registryPath,
+        environmentId: identityKey,
+      });
+
+      expect(
+        readSavedEnvironmentSecret({
+          registryPath,
+          environmentId: identityKey,
+          secretStorage,
+        }),
+      ).toBeNull();
+    });
+
+    it("preserves sshConfig when roundtripping through read/write", () => {
+      const registryPath = makeTempPath("saved-environments.json");
+
+      writeSavedEnvironmentRegistry(registryPath, [sshRecord]);
+
+      const reloaded = readSavedEnvironmentRegistry(registryPath);
+      expect(reloaded).toEqual([sshRecord]);
+      expect(reloaded[0]?.sshConfig).toEqual(sshConfig);
+    });
   });
 });
