@@ -2,18 +2,13 @@
 export { ThemeStore } from "./store";
 export type { ThemeStoreSnapshot } from "./store";
 export { resolveTheme } from "./engine";
-export {
-  applyCssTokens,
-  clearCssTokens,
-  colorTokenToCssProperty,
-  buildCssPropertyMap,
-} from "./applicator";
+export { applyCssTokens, clearCssTokens, colorTokenToCssProperty, buildCssPropertyMap, applyTypographyCssTokens, clearTypographyCssTokens, typographyTokenToCssProperty, buildTypographyCssMap } from "./applicator";
 export { buildTerminalTheme } from "./terminal-mapper";
 export type { TerminalTheme } from "./terminal-mapper";
 export { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
 
 import { ThemeStore } from "./store";
-import { applyCssTokens } from "./applicator";
+import { applyCssTokens, applyTypographyCssTokens } from "./applicator";
 
 // Singleton store instance — initialized once on module load
 export const themeStore = new ThemeStore();
@@ -28,6 +23,7 @@ function applyThemeToDom(): void {
   // Apply all color tokens as CSS custom properties (requires real style API)
   if (root.style) {
     applyCssTokens(root, resolved.colors);
+    applyTypographyCssTokens(root, resolved.typography);
     root.style.backgroundColor = resolved.colors.appChromeBackground;
   }
 
@@ -43,14 +39,8 @@ function applyThemeToDom(): void {
   }
 
   // Sync to Electron desktop bridge if available
-  if (
-    typeof window !== "undefined" &&
-    (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } })
-      .desktopBridge?.setTheme
-  ) {
-    const bridge = (
-      window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }
-    ).desktopBridge;
+  if (typeof window !== "undefined" && (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge?.setTheme) {
+    const bridge = (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge;
     bridge?.setTheme?.(resolvedTheme).catch(() => {
       // ignore — not in Electron context
     });
