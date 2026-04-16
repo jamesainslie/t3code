@@ -4,7 +4,7 @@ import { ThemeStore } from "./store";
 import { buildTerminalTheme } from "./terminal-mapper";
 import { buildCssPropertyMap, buildTypographyCssMap } from "./applicator";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
-import { DEFAULT_TYPOGRAPHY_TOKENS } from "@t3tools/contracts";
+import { DEFAULT_TYPOGRAPHY_TOKENS, DEFAULT_TRANSPARENCY_TOKENS } from "@t3tools/contracts";
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -187,6 +187,70 @@ describe("Theme Engine Integration", () => {
 
       // Sparse: non-overridden typography tokens are absent
       expect(parsed.overrides.typography.uiFontFamily).toBeUndefined();
+    });
+  });
+
+  describe("Transparency integration", () => {
+    it("transparency roundtrip: create -> set -> export -> import", () => {
+      const store = new ThemeStore();
+      store.createTheme("Transparency RT", "dark");
+
+      store.setTransparencyToken("windowOpacity", 0.75);
+
+      const json = store.exportTheme();
+      const store2 = new ThemeStore();
+      store2.importTheme(json);
+
+      expect(store2.getSnapshot().resolved.transparency.windowOpacity).toBe(0.75);
+    });
+
+    it("transparency + color independence: neither interferes with the other", () => {
+      const store = new ThemeStore();
+      store.createTheme("Mixed Transparency", "dark");
+
+      store.setTransparencyToken("windowOpacity", 0.85);
+      store.setColorToken("background", "#ff0000");
+
+      const resolved = store.getSnapshot().resolved;
+      expect(resolved.transparency.windowOpacity).toBe(0.85);
+      expect(resolved.colors.background).toBe("#ff0000");
+    });
+
+    it("vibrancy token persistence through export/import", () => {
+      const store = new ThemeStore();
+      store.createTheme("Vibrancy Test", "dark");
+
+      store.setTransparencyToken("vibrancy", "auto");
+
+      const json = store.exportTheme();
+      const parsed = JSON.parse(json);
+      expect(parsed.overrides.transparency.vibrancy).toBe("auto");
+    });
+
+    it("transparency reset to defaults", () => {
+      const store = new ThemeStore();
+      store.createTheme("Reset Test", "dark");
+
+      store.setTransparencyToken("windowOpacity", 0.85);
+      expect(store.getSnapshot().resolved.transparency.windowOpacity).toBe(0.85);
+
+      store.resetTransparencyToken("windowOpacity");
+      expect(store.getSnapshot().resolved.transparency.windowOpacity).toBe(
+        DEFAULT_TRANSPARENCY_TOKENS.windowOpacity,
+      );
+    });
+
+    it("sparse transparency: only overridden tokens appear in export", () => {
+      const store = new ThemeStore();
+      store.createTheme("Sparse Transparency", "dark");
+
+      store.setTransparencyToken("windowOpacity", 0.9);
+
+      const json = store.exportTheme();
+      const parsed = JSON.parse(json);
+
+      expect(parsed.overrides.transparency.windowOpacity).toBe(0.9);
+      expect(parsed.overrides.transparency.vibrancy).toBeUndefined();
     });
   });
 });
