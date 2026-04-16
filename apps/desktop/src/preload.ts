@@ -29,6 +29,8 @@ const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environment-re
 const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
+const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
@@ -63,6 +65,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(SET_SAVED_ENVIRONMENT_SECRET_CHANNEL, environmentId, secret),
   removeSavedEnvironmentSecret: (environmentId) =>
     ipcRenderer.invoke(REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL, environmentId),
+  getSavedProjectRegistry: () => ipcRenderer.invoke(GET_SAVED_PROJECT_REGISTRY_CHANNEL),
+  setSavedProjectRegistry: (records) =>
+    ipcRenderer.invoke(SET_SAVED_PROJECT_REGISTRY_CHANNEL, records),
   getServerExposureState: () => ipcRenderer.invoke(GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) => ipcRenderer.invoke(SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),

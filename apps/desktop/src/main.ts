@@ -47,6 +47,7 @@ import type {
   DesktopServerExposureMode,
   DesktopServerExposureState,
   PersistedSavedEnvironmentRecord,
+  PersistedSavedProjectRecord,
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
@@ -73,6 +74,10 @@ import {
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
 } from "./clientPersistence";
+import {
+  readSavedProjectRegistry,
+  writeSavedProjectRegistry,
+} from "./savedProjectsPersistence";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import { resolveDesktopServerExposure } from "./serverExposure";
@@ -127,6 +132,8 @@ const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environment-re
 const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
+const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
@@ -147,6 +154,7 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
 const SAVED_ENVIRONMENT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-environments.json");
+const SAVED_PROJECT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-projects.json");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -1629,6 +1637,23 @@ function registerIpcHandlers(): void {
       });
     },
   );
+
+  ipcMain.removeHandler(GET_SAVED_PROJECT_REGISTRY_CHANNEL);
+  ipcMain.handle(GET_SAVED_PROJECT_REGISTRY_CHANNEL, async () =>
+    readSavedProjectRegistry(SAVED_PROJECT_REGISTRY_PATH),
+  );
+
+  ipcMain.removeHandler(SET_SAVED_PROJECT_REGISTRY_CHANNEL);
+  ipcMain.handle(SET_SAVED_PROJECT_REGISTRY_CHANNEL, async (_event, rawRecords: unknown) => {
+    if (!Array.isArray(rawRecords)) {
+      throw new Error("Invalid saved project registry payload.");
+    }
+
+    writeSavedProjectRegistry(
+      SAVED_PROJECT_REGISTRY_PATH,
+      rawRecords as readonly PersistedSavedProjectRecord[],
+    );
+  });
 
   ipcMain.removeHandler(GET_SERVER_EXPOSURE_STATE_CHANNEL);
   ipcMain.handle(GET_SERVER_EXPOSURE_STATE_CHANNEL, async () => getDesktopServerExposureState());

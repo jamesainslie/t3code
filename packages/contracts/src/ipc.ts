@@ -51,6 +51,7 @@ import type {
 } from "./orchestration";
 import type { EnvironmentId } from "./baseSchemas";
 import type { RemoteIdentityKey } from "./remoteIdentity.js";
+import type { PersistedSavedProjectRecord } from "./savedProjectKey.js";
 import { EditorId } from "./editor";
 import { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings";
 
@@ -207,6 +208,10 @@ export interface DesktopBridge {
     secret: string,
   ) => Promise<boolean>;
   removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
+  getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
+  setSavedProjectRegistry: (
+    records: readonly PersistedSavedProjectRecord[],
+  ) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: () => Promise<string | null>;
@@ -288,6 +293,10 @@ export interface LocalApi {
       secret: string,
     ) => Promise<boolean>;
     removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
+    getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
+    setSavedProjectRegistry: (
+      records: readonly PersistedSavedProjectRecord[],
+    ) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

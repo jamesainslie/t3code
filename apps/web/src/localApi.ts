@@ -18,10 +18,12 @@ import {
   readBrowserClientSettings,
   readBrowserSavedEnvironmentRegistry,
   readBrowserSavedEnvironmentSecret,
+  readBrowserSavedProjectRegistry,
   removeBrowserSavedEnvironmentSecret,
   writeBrowserClientSettings,
   writeBrowserSavedEnvironmentRegistry,
   writeBrowserSavedEnvironmentSecret,
+  writeBrowserSavedProjectRegistry,
 } from "./clientPersistenceStorage";
 
 let cachedApi: LocalApi | undefined;
@@ -107,6 +109,18 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
           return window.desktopBridge.removeSavedEnvironmentSecret(environmentId);
         }
         removeBrowserSavedEnvironmentSecret(environmentId);
+      },
+      getSavedProjectRegistry: async () => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.getSavedProjectRegistry();
+        }
+        return readBrowserSavedProjectRegistry();
+      },
+      setSavedProjectRegistry: async (records) => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.setSavedProjectRegistry(records);
+        }
+        writeBrowserSavedProjectRegistry(records);
       },
     },
     server: {
