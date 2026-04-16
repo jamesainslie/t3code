@@ -39,11 +39,28 @@ function applyThemeToDom(): void {
   }
 
   // Sync to Electron desktop bridge if available
-  if (typeof window !== "undefined" && (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge?.setTheme) {
-    const bridge = (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge;
-    bridge?.setTheme?.(resolvedTheme).catch(() => {
+  const bridge = (window as Window & {
+    desktopBridge?: {
+      setTheme?: (t: string) => Promise<void>;
+      setWindowOpacity?: (opacity: number) => Promise<void>;
+      setVibrancy?: (vibrancy: "under-window" | null) => Promise<void>;
+    };
+  }).desktopBridge;
+
+  if (typeof window !== "undefined" && bridge?.setTheme) {
+    bridge.setTheme(resolvedTheme).catch(() => {
       // ignore — not in Electron context
     });
+  }
+
+  // Apply transparency tokens via desktop bridge
+  const transparency = resolved.transparency;
+  if (bridge?.setWindowOpacity) {
+    bridge.setWindowOpacity(transparency.windowOpacity).catch(() => {});
+  }
+  if (bridge?.setVibrancy) {
+    const vibrancy = transparency.vibrancy === "auto" ? "under-window" : null;
+    bridge.setVibrancy(vibrancy).catch(() => {});
   }
 }
 
