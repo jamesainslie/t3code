@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useNavigate } from "@tanstack/react-router";
 import type { EnvironmentId, ProjectId, SavedProjectKey } from "@t3tools/contracts";
 
 import {
@@ -26,7 +27,17 @@ export function StaleSavedProjectsList(props: {
     readonly projectId: ProjectId;
   }) => void;
 }) {
-  const { onReconnected } = props;
+  const setActiveEnvironmentId = useStore((state) => state.setActiveEnvironmentId);
+  const navigate = useNavigate();
+
+  const defaultOnReconnected = useCallback(
+    (result: { readonly environmentId: EnvironmentId; readonly projectId: ProjectId }) => {
+      setActiveEnvironmentId(result.environmentId);
+      void navigate({ to: "/" }).catch(() => undefined);
+    },
+    [setActiveEnvironmentId, navigate],
+  );
+  const onReconnected = props.onReconnected ?? defaultOnReconnected;
   const liveProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const savedProjects = useSavedProjectRegistryStore(
     useShallow((state) => Object.values(state.byKey)),
@@ -70,7 +81,7 @@ export function StaleSavedProjectsList(props: {
             </Tooltip>
             <SavedProjectReconnectButton
               savedProjectKey={entry.key as SavedProjectKey}
-              {...(onReconnected ? { onReconnected } : {})}
+              onReconnected={onReconnected}
             />
           </li>
         ))}
