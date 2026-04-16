@@ -4,9 +4,7 @@ import { COLOR_SECTIONS } from "./colorSections";
 import { ColorTokenRow } from "./ColorTokenRow";
 
 export function ColorsPanel() {
-  const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(COLOR_SECTIONS.map((s) => s.id)),
-  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(COLOR_SECTIONS.map((s) => s.id)));
 
   const toggleSection = (id: string) => {
     setExpanded((prev) => {
@@ -36,18 +34,12 @@ export function ColorsPanel() {
                 <ChevronRightIcon className="size-3.5" />
               )}
               {section.title}
-              <span className="text-xs text-muted-foreground">
-                ({section.tokens.length})
-              </span>
+              <span className="text-xs text-muted-foreground">({section.tokens.length})</span>
             </button>
             {isExpanded && (
               <div className="border-t border-border px-3 pb-2">
                 {section.tokens.map((token) => (
-                  <ColorTokenRow
-                    key={token.key}
-                    tokenKey={token.key}
-                    label={token.label}
-                  />
+                  <ColorTokenRow key={token.key} tokenKey={token.key} label={token.label} />
                 ))}
               </div>
             )}

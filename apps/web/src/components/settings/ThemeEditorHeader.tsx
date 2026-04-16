@@ -74,11 +74,7 @@ export function ThemeEditorHeader() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Select
-          value={themeSnapshot.theme.id}
-          onValueChange={handleSelectTheme}
-          items={themeItems}
-        >
+        <Select value={themeSnapshot.theme.id} onValueChange={handleSelectTheme} items={themeItems}>
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>

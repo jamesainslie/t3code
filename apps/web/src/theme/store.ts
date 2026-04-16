@@ -122,9 +122,7 @@ export class ThemeStore {
     this.savedThemes = loadSavedThemes();
 
     const activeId = loadActiveThemeId();
-    const activeCustom = activeId
-      ? this.savedThemes.find((t) => t.id === activeId)
-      : undefined;
+    const activeCustom = activeId ? this.savedThemes.find((t) => t.id === activeId) : undefined;
 
     const base = resolveBaseFromPreference(this.preference);
     const theme = activeCustom ?? makeDefaultTheme(base);

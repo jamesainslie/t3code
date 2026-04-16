@@ -93,12 +93,7 @@ function ColorPicker({ value, onChange, className, disabled = false }: ColorPick
         <span className="sr-only">Pick color</span>
       </PopoverTrigger>
 
-      <PopoverContent
-        side="bottom"
-        align="start"
-        className="w-auto"
-        data-slot="color-picker-popup"
-      >
+      <PopoverContent side="bottom" align="start" className="w-auto" data-slot="color-picker-popup">
         <div className="flex flex-col gap-3">
           <input
             type="color"

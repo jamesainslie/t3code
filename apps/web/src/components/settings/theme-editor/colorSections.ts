@@ -14,9 +14,7 @@ export const COLOR_SECTIONS: ColorSection[] = [
   {
     id: "app-chrome",
     title: "App Chrome",
-    tokens: [
-      { key: "appChromeBackground", label: "Background" },
-    ],
+    tokens: [{ key: "appChromeBackground", label: "Background" }],
   },
   {
     id: "sidebar",

@@ -33,9 +33,7 @@ function mergeTypography(
   if (!overrides) return { ...DEFAULT_TYPOGRAPHY_TOKENS };
   return {
     ...DEFAULT_TYPOGRAPHY_TOKENS,
-    ...Object.fromEntries(
-      Object.entries(overrides).filter(([, v]) => v !== undefined),
-    ),
+    ...Object.fromEntries(Object.entries(overrides).filter(([, v]) => v !== undefined)),
   } as Required<TypographyTokens>;
 }
 
@@ -45,9 +43,7 @@ function mergeTransparency(
   if (!overrides) return { ...DEFAULT_TRANSPARENCY_TOKENS };
   return {
     ...DEFAULT_TRANSPARENCY_TOKENS,
-    ...Object.fromEntries(
-      Object.entries(overrides).filter(([, v]) => v !== undefined),
-    ),
+    ...Object.fromEntries(Object.entries(overrides).filter(([, v]) => v !== undefined)),
   } as Required<TransparencyTokens>;
 }
 

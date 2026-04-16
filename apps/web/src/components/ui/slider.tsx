@@ -14,15 +14,7 @@ interface SliderProps {
   disabled?: boolean;
 }
 
-function Slider({
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-  className,
-  disabled = false,
-}: SliderProps) {
+function Slider({ value, onChange, min, max, step = 1, className, disabled = false }: SliderProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(Number(e.target.value));
   };

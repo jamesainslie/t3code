@@ -2,7 +2,12 @@
 export { ThemeStore } from "./store";
 export type { ThemeStoreSnapshot } from "./store";
 export { resolveTheme } from "./engine";
-export { applyCssTokens, clearCssTokens, colorTokenToCssProperty, buildCssPropertyMap } from "./applicator";
+export {
+  applyCssTokens,
+  clearCssTokens,
+  colorTokenToCssProperty,
+  buildCssPropertyMap,
+} from "./applicator";
 export { buildTerminalTheme } from "./terminal-mapper";
 export type { TerminalTheme } from "./terminal-mapper";
 export { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
@@ -38,8 +43,14 @@ function applyThemeToDom(): void {
   }
 
   // Sync to Electron desktop bridge if available
-  if (typeof window !== "undefined" && (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge?.setTheme) {
-    const bridge = (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }).desktopBridge;
+  if (
+    typeof window !== "undefined" &&
+    (window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } })
+      .desktopBridge?.setTheme
+  ) {
+    const bridge = (
+      window as Window & { desktopBridge?: { setTheme?: (t: string) => Promise<void> } }
+    ).desktopBridge;
     bridge?.setTheme?.(resolvedTheme).catch(() => {
       // ignore — not in Electron context
     });

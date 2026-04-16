@@ -181,9 +181,7 @@ export const ThemeSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({} as ThemeOverrides)),
   ),
   metadata: ThemeMetadataSchema.pipe(
-    Schema.withDecodingDefault(
-      Effect.succeed({ version: 1 } as ThemeMetadata),
-    ),
+    Schema.withDecodingDefault(Effect.succeed({ version: 1 } as ThemeMetadata)),
   ),
 });
 

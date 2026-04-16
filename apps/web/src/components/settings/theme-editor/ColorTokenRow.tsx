@@ -26,9 +26,7 @@ export function ColorTokenRow({ tokenKey, label }: ColorTokenRowProps) {
   return (
     <div className="flex items-center justify-between py-1.5">
       <div className="flex items-center gap-2">
-        {isOverridden && (
-          <div className="size-1.5 rounded-full bg-primary" title="Customized" />
-        )}
+        {isOverridden && <div className="size-1.5 rounded-full bg-primary" title="Customized" />}
         <span className="text-sm text-foreground">{label}</span>
       </div>
       <div className="flex items-center gap-1.5">
