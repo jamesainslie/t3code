@@ -16,5 +16,18 @@ export * from "./project";
 export * from "./hostResource";
 export * from "./rpc";
 export * from "./remoteConnection";
-export { type RemoteIdentityKey, type RemoteIdentityFields, makeRemoteIdentityKey, parseRemoteIdentityKey } from "./remoteIdentity.js";
+export {
+  type RemoteIdentityKey,
+  type RemoteIdentityFields,
+  makeRemoteIdentityKey,
+  parseRemoteIdentityKey,
+} from "./remoteIdentity.js";
+export {
+  type SavedProjectKey,
+  type SavedProjectKeyFields,
+  type SavedRemoteProject,
+  type PersistedSavedProjectRecord,
+  makeSavedProjectKey,
+  parseSavedProjectKey,
+} from "./savedProjectKey.js";
 export * from "./theme";
