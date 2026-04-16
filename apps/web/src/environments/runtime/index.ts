@@ -27,6 +27,11 @@ export {
 } from "./projectsCatalog";
 
 export {
+  selectSidebarProjectEntries,
+  type SidebarProjectEntry,
+} from "./sidebarProjectsSelector";
+
+export {
   addOrReconnectSavedEnvironment,
   addSavedEnvironment,
   connectSavedEnvironment,
