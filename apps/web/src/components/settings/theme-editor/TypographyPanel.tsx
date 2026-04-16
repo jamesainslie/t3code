@@ -3,7 +3,12 @@ import { themeStore } from "../../../theme";
 import { TypographyTokenRow } from "./TypographyTokenRow";
 import { FontSizeControl } from "./FontSizeControl";
 import { LineHeightControl } from "./LineHeightControl";
-import { CODE_FONT_PRESETS, FontFamilySelect, UI_FONT_PRESETS } from "./FontFamilySelect";
+import {
+  CODE_FONT_PRESETS,
+  FontFamilySelect,
+  TERMINAL_FONT_PRESETS,
+  UI_FONT_PRESETS,
+} from "./FontFamilySelect";
 import type { TypographyTokens } from "@t3tools/contracts";
 
 export function TypographyPanel() {
@@ -22,6 +27,7 @@ export function TypographyPanel() {
 
   const uiFontOverridden = themeStore.isTypographyTokenOverridden("uiFontFamily");
   const codeFontOverridden = themeStore.isTypographyTokenOverridden("codeFontFamily");
+  const terminalFontOverridden = themeStore.isTypographyTokenOverridden("terminalFontFamily");
 
   return (
     <div className="flex flex-col gap-3">
@@ -43,6 +49,14 @@ export function TypographyPanel() {
               value={typography.codeFontFamily ?? ""}
               isOverridden={codeFontOverridden}
               onChange={(v) => handleChange("codeFontFamily", v)}
+            />
+          </TypographyTokenRow>
+          <TypographyTokenRow tokenKey="terminalFontFamily" label="Terminal Font">
+            <FontFamilySelect
+              presets={TERMINAL_FONT_PRESETS}
+              value={typography.terminalFontFamily ?? ""}
+              isOverridden={terminalFontOverridden}
+              onChange={(v) => handleChange("terminalFontFamily", v)}
             />
           </TypographyTokenRow>
         </div>

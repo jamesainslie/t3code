@@ -85,13 +85,24 @@ describe("buildTypographyCssMap", () => {
     expect(map["--code-font-family"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.codeFontFamily);
   });
 
+  it("maps --terminal-font-family to DEFAULT_TYPOGRAPHY_TOKENS.terminalFontFamily", () => {
+    const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
+    expect(map["--terminal-font-family"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.terminalFontFamily);
+  });
+
+  it("maps --terminal-font-size to DEFAULT_TYPOGRAPHY_TOKENS.terminalFontSize", () => {
+    const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
+    expect(map["--terminal-font-size"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.terminalFontSize);
+  });
+
   it("does not contain --custom-font-url key", () => {
     const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
     expect(map).not.toHaveProperty("--custom-font-url");
   });
 
-  it("has exactly 5 entries", () => {
+  it("has exactly 7 entries", () => {
+    // ui + code + terminal font families, ui + code + terminal font sizes, lineHeight
     const map = buildTypographyCssMap(DEFAULT_TYPOGRAPHY_TOKENS);
-    expect(Object.keys(map)).toHaveLength(5);
+    expect(Object.keys(map)).toHaveLength(7);
   });
 });

@@ -85,6 +85,27 @@ function terminalThemeFromApp(): ITheme {
   return buildTerminalTheme(resolved.colors);
 }
 
+const FALLBACK_TERMINAL_FONT_FAMILY =
+  '"SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
+const FALLBACK_TERMINAL_FONT_SIZE = 12;
+
+/**
+ * Reads the current terminal font settings from the theme store. Returns
+ * the resolved family (either the user's pick or the theme default) and
+ * a numeric pixel size (xterm.js takes `fontSize` as a number, but the
+ * theme stores it as a CSS length string like "13px").
+ */
+function terminalFontFromApp(): { fontFamily: string; fontSize: number } {
+  const { resolved } = themeStore.getSnapshot();
+  const family = resolved.typography.terminalFontFamily?.trim();
+  const rawSize = resolved.typography.terminalFontSize?.trim();
+  const parsed = rawSize ? Number.parseFloat(rawSize) : Number.NaN;
+  return {
+    fontFamily: family && family.length > 0 ? family : FALLBACK_TERMINAL_FONT_FAMILY,
+    fontSize: Number.isFinite(parsed) && parsed > 0 ? parsed : FALLBACK_TERMINAL_FONT_SIZE,
+  };
+}
+
 function getTerminalSelectionRect(mountElement: HTMLElement): DOMRect | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -217,12 +238,13 @@ export function TerminalViewport({
     if (!api || !localApi) return;
 
     const fitAddon = new FitAddon();
+    const initialFont = terminalFontFromApp();
     const terminal = new Terminal({
       cursorBlink: true,
       lineHeight: 1.2,
-      fontSize: 12,
+      fontSize: initialFont.fontSize,
       scrollback: 5_000,
-      fontFamily: '"SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
+      fontFamily: initialFont.fontFamily,
       theme: terminalThemeFromApp(),
     });
     terminal.loadAddon(fitAddon);
@@ -442,6 +464,28 @@ export function TerminalViewport({
       const activeTerminal = terminalRef.current;
       if (!activeTerminal) return;
       activeTerminal.options.theme = terminalThemeFromApp();
+
+      // Re-apply font when theme changes. Only mutate options when the
+      // values differ to avoid needlessly refitting on every theme tick.
+      const nextFont = terminalFontFromApp();
+      let fontChanged = false;
+      if (activeTerminal.options.fontFamily !== nextFont.fontFamily) {
+        activeTerminal.options.fontFamily = nextFont.fontFamily;
+        fontChanged = true;
+      }
+      if (activeTerminal.options.fontSize !== nextFont.fontSize) {
+        activeTerminal.options.fontSize = nextFont.fontSize;
+        fontChanged = true;
+      }
+      if (fontChanged) {
+        // Cell metrics change with font, so re-fit to keep rows/cols in
+        // sync with the drawer size.
+        try {
+          fitAddonRef.current?.fit();
+        } catch {
+          // fit() can throw during transient detached states; safe to ignore.
+        }
+      }
       activeTerminal.refresh(0, activeTerminal.rows - 1);
     });
     themeObserver.observe(document.documentElement, {

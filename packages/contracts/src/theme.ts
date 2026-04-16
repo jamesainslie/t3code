@@ -104,8 +104,10 @@ export type ColorTokens = typeof ColorTokensSchema.Type;
 export const TypographyTokensSchema = Schema.Struct({
   uiFontFamily: Schema.optional(Schema.String),
   codeFontFamily: Schema.optional(Schema.String),
+  terminalFontFamily: Schema.optional(Schema.String),
   uiFontSize: Schema.optional(Schema.String),
   codeFontSize: Schema.optional(Schema.String),
+  terminalFontSize: Schema.optional(Schema.String),
   lineHeight: Schema.optional(Schema.String),
   customFontUrl: Schema.optional(Schema.String),
 });
@@ -117,8 +119,10 @@ export const DEFAULT_TYPOGRAPHY_TOKENS: Required<TypographyTokens> = {
     'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   codeFontFamily:
     'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+  terminalFontFamily: '"SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
   uiFontSize: "14px",
   codeFontSize: "13px",
+  terminalFontSize: "12px",
   lineHeight: "1.5",
   customFontUrl: "",
 };
