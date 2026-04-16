@@ -3,7 +3,9 @@ import {
   type EnvironmentId,
   type OrchestrationEvent,
   type OrchestrationReadModel,
+  type ProjectId,
   type RemoteIdentityKey,
+  type SavedProjectKey,
   type SavedRemoteEnvironment,
   type ServerConfig,
   type SshEnvironmentConfig,
@@ -829,6 +831,49 @@ export async function connectSavedEnvironment(identityKey: RemoteIdentityKey): P
     setRuntimeError(environmentId, error);
     throw error;
   }
+}
+
+/**
+ * Reconnects the parent environment for a saved project and returns the
+ * resolved (environmentId, projectId) pair so the caller can navigate to it.
+ *
+ * Throws if the saved project or its parent environment are not present in
+ * the local registry. If the environment is already connected this short-
+ * circuits and immediately returns; otherwise it delegates to
+ * {@link connectSavedEnvironment}.
+ */
+export async function reconnectSavedProject(
+  savedProjectKey: SavedProjectKey,
+): Promise<{ environmentId: EnvironmentId; projectId: ProjectId }> {
+  const savedProject = useSavedProjectRegistryStore.getState().byKey[savedProjectKey];
+  if (!savedProject) {
+    throw new Error(`Saved project not found: ${savedProjectKey}`);
+  }
+
+  const savedEnvironment =
+    useSavedEnvironmentRegistryStore.getState().byIdentityKey[savedProject.environmentIdentityKey];
+  if (!savedEnvironment) {
+    throw new Error(
+      `Parent saved environment is missing for project ${savedProject.name}. ` +
+        "Re-pair the environment to reconnect this project.",
+    );
+  }
+  if (!savedEnvironment.environmentId) {
+    throw new Error(
+      `Parent saved environment ${savedEnvironment.label} has no environmentId; cannot reconnect.`,
+    );
+  }
+
+  // If there's already a live connection, no further work is needed — the
+  // caller just navigates to (environmentId, projectId).
+  if (!environmentConnections.has(savedEnvironment.environmentId)) {
+    await connectSavedEnvironment(savedProject.environmentIdentityKey);
+  }
+
+  return {
+    environmentId: savedEnvironment.environmentId,
+    projectId: savedProject.projectId,
+  };
 }
 
 export async function removeSavedEnvironment(environmentId: EnvironmentId): Promise<void> {

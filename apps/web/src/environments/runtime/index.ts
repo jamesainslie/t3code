@@ -40,6 +40,7 @@ export {
   getPrimaryEnvironmentConnection,
   readEnvironmentConnection,
   reconnectSavedEnvironment,
+  reconnectSavedProject,
   removeSavedEnvironment,
   requireEnvironmentConnection,
   resetEnvironmentServiceForTests,
