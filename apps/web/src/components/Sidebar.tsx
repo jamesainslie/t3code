@@ -1841,12 +1841,25 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             />
           )}
           <ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />
-          {isRemoteProject && remoteConnectionState && (
+          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+            {project.name}
+          </span>
+        </SidebarMenuButton>
+        {/* Remote connection indicator – visible by default, crossfades
+            with the "new thread" button on hover. Reflects live connection
+            state (green = connected, pulsing = connecting, red/grey =
+            error/disconnected) and click-to-reconnect when offline. */}
+        {isRemoteProject && remoteConnectionState && (
+          <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
             <RemoteConnectionIcon
               state={remoteConnectionState}
               tooltip={
                 remoteConnectionState === "connected"
-                  ? "Remote: connected"
+                  ? `Remote: connected${
+                      project.remoteEnvironmentLabels.length > 0
+                        ? ` (${project.remoteEnvironmentLabels.join(", ")})`
+                        : ""
+                    }`
                   : remoteConnectionState === "connecting"
                     ? "Remote: connecting…"
                     : remoteConnectionState === "error"
@@ -1857,34 +1870,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
                 : {})}
             />
-          )}
-          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-            {project.name}
-          </span>
-        </SidebarMenuButton>
-        {/* Environment badge – visible by default, crossfades with the
-            "new thread" button on hover using the same pointer-events +
-            opacity pattern as the thread row archive/timestamp swap. */}
-        {project.environmentPresence === "remote-only" && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  aria-label={
-                    project.environmentPresence === "remote-only"
-                      ? "Remote project"
-                      : "Available in multiple environments"
-                  }
-                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0"
-                />
-              }
-            >
-              <CloudIcon className="size-3" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">
-              Remote environment: {project.remoteEnvironmentLabels.join(", ")}
-            </TooltipPopup>
-          </Tooltip>
+          </div>
         )}
         <Tooltip>
           <TooltipTrigger
