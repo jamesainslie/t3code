@@ -2,8 +2,9 @@
 import { afterEach, describe, expect, it, beforeEach, vi } from "vitest";
 import { ThemeStore } from "./store";
 import { buildTerminalTheme } from "./terminal-mapper";
-import { buildCssPropertyMap } from "./applicator";
+import { buildCssPropertyMap, buildTypographyCssMap } from "./applicator";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
+import { DEFAULT_TYPOGRAPHY_TOKENS } from "@t3tools/contracts";
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -115,5 +116,77 @@ describe("Theme Engine Integration", () => {
     // Switch back to Theme A — its background should be restored
     store.selectTheme(idA);
     expect(store.getSnapshot().resolved.colors.background).toBe("#111111");
+  });
+
+  describe("Typography integration", () => {
+    it("typography lifecycle: create -> customize -> export -> import", () => {
+      const store = new ThemeStore();
+      store.createTheme("Typo Test", "dark");
+
+      store.setTypographyToken("uiFontFamily", "Inter, sans-serif");
+      store.setTypographyToken("codeFontSize", "15px");
+
+      // Export and re-import into a fresh store
+      const json = store.exportTheme();
+      const store2 = new ThemeStore();
+      store2.importTheme(json);
+
+      const resolved = store2.getSnapshot().resolved;
+      expect(resolved.typography.uiFontFamily).toBe("Inter, sans-serif");
+      expect(resolved.typography.codeFontSize).toBe("15px");
+      // Non-overridden tokens fall back to defaults
+      expect(resolved.typography.lineHeight).toBe(DEFAULT_TYPOGRAPHY_TOKENS.lineHeight);
+    });
+
+    it("typography CSS map end-to-end", () => {
+      const store = new ThemeStore();
+      store.createTheme("CSS Typo", "dark");
+
+      store.setTypographyToken("codeFontFamily", "JetBrains Mono, monospace");
+
+      const resolved = store.getSnapshot().resolved;
+      const cssMap = buildTypographyCssMap(resolved.typography);
+
+      expect(cssMap["--code-font-family"]).toBe("JetBrains Mono, monospace");
+      expect(cssMap["--ui-font-family"]).toBe(DEFAULT_TYPOGRAPHY_TOKENS.uiFontFamily);
+    });
+
+    it("typography isolation across themes", () => {
+      const store = new ThemeStore();
+
+      // Create Theme A and set uiFontSize
+      store.createTheme("Theme A", "dark");
+      store.setTypographyToken("uiFontSize", "18px");
+      const idA = store.getSnapshot().theme.id;
+
+      // Flush debounced persist so Theme A's overrides are saved
+      vi.advanceTimersByTime(300);
+
+      // Create Theme B with a different uiFontSize
+      store.createTheme("Theme B", "dark");
+      store.setTypographyToken("uiFontSize", "12px");
+
+      // Switch back to Theme A — its font size should be restored
+      store.selectTheme(idA);
+      expect(store.getSnapshot().resolved.typography.uiFontSize).toBe("18px");
+    });
+
+    it("mixed color + typography: export contains both, sparse overrides only", () => {
+      const store = new ThemeStore();
+      store.createTheme("Mixed", "dark");
+
+      store.setColorToken("background", "#1a1a2e");
+      store.setTypographyToken("codeFontFamily", "Fira Code");
+
+      const json = store.exportTheme();
+      const parsed = JSON.parse(json);
+
+      // Both override sections present
+      expect(parsed.overrides.colors.background).toBe("#1a1a2e");
+      expect(parsed.overrides.typography.codeFontFamily).toBe("Fira Code");
+
+      // Sparse: non-overridden typography tokens are absent
+      expect(parsed.overrides.typography.uiFontFamily).toBeUndefined();
+    });
   });
 });
