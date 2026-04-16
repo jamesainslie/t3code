@@ -73,6 +73,7 @@ export type DesktopUpdateStatus =
 
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
+export type DesktopPlatform = "darwin" | "win32" | "linux";
 
 export interface DesktopRuntimeInfo {
   hostArch: DesktopRuntimeArch;
@@ -206,6 +207,9 @@ export interface DesktopBridge {
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
+  setWindowOpacity: (opacity: number) => Promise<void>;
+  setVibrancy: (vibrancy: "under-window" | null) => Promise<void>;
+  getPlatform: () => Promise<DesktopPlatform>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
