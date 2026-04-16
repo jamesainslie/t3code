@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeStore } from "./store";
 import { DARK_DEFAULTS, LIGHT_DEFAULTS } from "./defaults";
-import { DEFAULT_TYPOGRAPHY_TOKENS } from "@t3tools/contracts";
+import { DEFAULT_TYPOGRAPHY_TOKENS, DEFAULT_TRANSPARENCY_TOKENS } from "@t3tools/contracts";
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -213,6 +213,64 @@ describe("ThemeStore", () => {
       const json = store.exportTheme();
       const parsed = JSON.parse(json);
       expect(parsed.overrides.typography.codeFontFamily).toBe("Fira Code, monospace");
+    });
+  });
+
+  describe("transparency token methods", () => {
+    it("setTransparencyToken windowOpacity applies correctly", () => {
+      store.setTransparencyToken("windowOpacity", 0.85);
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.windowOpacity).toBe(0.85);
+    });
+
+    it("other transparency tokens unchanged after setting windowOpacity", () => {
+      store.setTransparencyToken("windowOpacity", 0.85);
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.vibrancy).toBe(
+        DEFAULT_TRANSPARENCY_TOKENS.vibrancy,
+      );
+    });
+
+    it("setTransparencyToken vibrancy applies correctly", () => {
+      store.setTransparencyToken("vibrancy", "auto");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.vibrancy).toBe("auto");
+    });
+
+    it("resetTransparencyToken restores default value", () => {
+      store.setTransparencyToken("windowOpacity", 0.85);
+      store.resetTransparencyToken("windowOpacity");
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.windowOpacity).toBe(
+        DEFAULT_TRANSPARENCY_TOKENS.windowOpacity,
+      );
+    });
+
+    it("isTransparencyTokenOverridden tracks override state correctly", () => {
+      expect(store.isTransparencyTokenOverridden("windowOpacity")).toBe(false);
+      store.setTransparencyToken("windowOpacity", 0.85);
+      expect(store.isTransparencyTokenOverridden("windowOpacity")).toBe(true);
+      store.resetTransparencyToken("windowOpacity");
+      expect(store.isTransparencyTokenOverridden("windowOpacity")).toBe(false);
+    });
+
+    it("clamps windowOpacity below 0.5 to 0.5", () => {
+      store.setTransparencyToken("windowOpacity", 0.3);
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.windowOpacity).toBe(0.5);
+    });
+
+    it("clamps windowOpacity above 1.0 to 1.0", () => {
+      store.setTransparencyToken("windowOpacity", 1.5);
+      const snapshot = store.getSnapshot();
+      expect(snapshot.resolved.transparency.windowOpacity).toBe(1.0);
+    });
+
+    it("setTransparencyToken notifies subscribers", () => {
+      const listener = vi.fn();
+      store.subscribe(listener);
+      store.setTransparencyToken("windowOpacity", 0.9);
+      expect(listener).toHaveBeenCalled();
     });
   });
 });
