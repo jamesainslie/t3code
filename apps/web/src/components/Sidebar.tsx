@@ -85,6 +85,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
+import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -1331,12 +1332,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (!api) return;
 
         // Build menu items, prepending remote-specific items when applicable
-        type MenuItemId =
-          | "copy-path"
-          | "delete"
-          | "reconnect"
-          | "disconnect"
-          | "remove-remote";
+        type MenuItemId = "copy-path" | "delete" | "reconnect" | "disconnect" | "remove-remote";
         const menuItems: Array<{ id: MenuItemId; label: string; destructive?: boolean }> = [];
 
         if (isRemoteProject && remoteIdentityKey) {
@@ -1466,8 +1462,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const runtimeState =
         useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
       if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState()
-        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
+        environmentId
+      ] as RemoteIdentityKey | undefined;
       if (!identityKey) return true;
       try {
         await connectSavedEnvironment(identityKey);
@@ -2133,6 +2130,9 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter className="p-2">
       <SidebarUpdatePill />
+      <div className="flex justify-center px-1 pb-1 pt-0.5">
+        <SidebarRemoteReconnectPill />
+      </div>
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -2848,8 +2848,9 @@ export default function Sidebar() {
       const runtimeState =
         useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
       if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState()
-        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
+        environmentId
+      ] as RemoteIdentityKey | undefined;
       if (!identityKey) return true;
       try {
         await connectSavedEnvironment(identityKey);
