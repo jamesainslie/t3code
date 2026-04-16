@@ -63,6 +63,8 @@ describe("environment runtime catalog stores", () => {
           getSavedEnvironmentSecret: async () => null,
           setSavedEnvironmentSecret: async () => true,
           removeSavedEnvironmentSecret: async () => undefined,
+          getSavedProjectRegistry: async () => [],
+          setSavedProjectRegistry: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -141,6 +143,8 @@ describe("environment runtime catalog stores", () => {
           getSavedEnvironmentSecret: async () => null,
           setSavedEnvironmentSecret: async () => true,
           removeSavedEnvironmentSecret: async () => undefined,
+          getSavedProjectRegistry: async () => [],
+          setSavedProjectRegistry: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -218,6 +222,8 @@ describe("saved environment bearer token: identity-keyed storage with environmen
           getSavedEnvironmentSecret: getSpy,
           setSavedEnvironmentSecret: setSpy,
           removeSavedEnvironmentSecret: removeSpy,
+          getSavedProjectRegistry: async () => [],
+          setSavedProjectRegistry: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });

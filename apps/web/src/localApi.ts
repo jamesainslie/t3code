@@ -7,6 +7,7 @@ import { resetWsConnectionStateForTests } from "./rpc/wsConnectionState";
 import {
   resetSavedEnvironmentRegistryStoreForTests,
   resetSavedEnvironmentRuntimeStoreForTests,
+  resetSavedProjectRegistryStoreForTests,
 } from "./environments/runtime";
 import {
   getPrimaryEnvironmentConnection,
@@ -163,6 +164,7 @@ export async function __resetLocalApiForTests() {
   resetRequestLatencyStateForTests();
   resetSavedEnvironmentRegistryStoreForTests();
   resetSavedEnvironmentRuntimeStoreForTests();
+  resetSavedProjectRegistryStoreForTests();
   resetServerStateForTests();
   resetWsConnectionStateForTests();
 }

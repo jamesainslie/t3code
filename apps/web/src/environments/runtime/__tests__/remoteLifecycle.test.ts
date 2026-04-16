@@ -58,6 +58,8 @@ describe("remote environment lifecycle integration", () => {
           getSavedEnvironmentSecret: async () => null,
           setSavedEnvironmentSecret: async () => true,
           removeSavedEnvironmentSecret: async () => undefined,
+          getSavedProjectRegistry: async () => [],
+          setSavedProjectRegistry: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -142,9 +144,9 @@ describe("remote environment lifecycle integration", () => {
 
       useSavedEnvironmentRegistryStore.getState().upsert(record);
 
-      expect(
-        useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[envId],
-      ).toBe(record.identityKey);
+      expect(useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[envId]).toBe(
+        record.identityKey,
+      );
     });
 
     it("updates reverse index when environmentId changes for same identityKey", () => {

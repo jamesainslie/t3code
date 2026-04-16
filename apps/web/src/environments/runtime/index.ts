@@ -18,6 +18,15 @@ export {
 export { connectionLog, useConnectionLogStore, type ConnectionLogEntry } from "./connectionLog";
 
 export {
+  hasSavedProjectRegistryHydrated,
+  listAllSavedProjectRecords,
+  listSavedProjectRecordsForEnvironment,
+  resetSavedProjectRegistryStoreForTests,
+  useSavedProjectRegistryStore,
+  waitForSavedProjectRegistryHydration,
+} from "./projectsCatalog";
+
+export {
   addOrReconnectSavedEnvironment,
   addSavedEnvironment,
   connectSavedEnvironment,
