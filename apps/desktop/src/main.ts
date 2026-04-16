@@ -108,6 +108,9 @@ syncShellEnvironment();
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
+const SET_WINDOW_OPACITY_CHANNEL = "desktop:set-window-opacity";
+const SET_VIBRANCY_CHANNEL = "desktop:set-vibrancy";
+const GET_PLATFORM_CHANNEL = "desktop:get-platform";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 const MENU_ACTION_CHANNEL = "desktop:menu-action";
@@ -1681,6 +1684,33 @@ function registerIpcHandlers(): void {
     }
 
     nativeTheme.themeSource = theme;
+  });
+
+  ipcMain.removeHandler(SET_WINDOW_OPACITY_CHANNEL);
+  ipcMain.handle(SET_WINDOW_OPACITY_CHANNEL, async (_event, rawOpacity: unknown) => {
+    if (typeof rawOpacity !== "number" || !Number.isFinite(rawOpacity)) return;
+    const opacity = Math.max(0.5, Math.min(1.0, rawOpacity));
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    if (win && !win.isDestroyed()) {
+      win.setOpacity(opacity);
+    }
+  });
+
+  ipcMain.removeHandler(SET_VIBRANCY_CHANNEL);
+  ipcMain.handle(SET_VIBRANCY_CHANNEL, async (_event, rawVibrancy: unknown) => {
+    if (process.platform !== "darwin") return;
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    if (!win || win.isDestroyed()) return;
+    if (rawVibrancy === "under-window") {
+      win.setVibrancy("under-window");
+    } else {
+      win.setVibrancy(null);
+    }
+  });
+
+  ipcMain.removeHandler(GET_PLATFORM_CHANNEL);
+  ipcMain.handle(GET_PLATFORM_CHANNEL, async () => {
+    return process.platform;
   });
 
   ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);
