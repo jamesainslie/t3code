@@ -10,6 +10,8 @@ import {
   ThemeBase,
   DEFAULT_TYPOGRAPHY_TOKENS,
   DEFAULT_TRANSPARENCY_TOKENS,
+  IconSetManifestSchema,
+  DEFAULT_ICON_SET_CONFIG,
 } from "./theme";
 
 describe("Theme Schema", () => {
@@ -88,5 +90,63 @@ describe("Theme Schema", () => {
     expect(() => Schema.decodeUnknownSync(ThemeBase)("light")).not.toThrow();
     expect(() => Schema.decodeUnknownSync(ThemeBase)("dark")).not.toThrow();
     expect(() => Schema.decodeUnknownSync(ThemeBase)("system")).toThrow();
+  });
+});
+
+describe("IconSetManifestSchema", () => {
+  it("decodes a valid manifest with all fields", () => {
+    const input = {
+      id: "catppuccin-icons",
+      name: "Catppuccin Icons",
+      version: "1.0.0",
+      type: "file-icons",
+      description: "Pastel file icons",
+      previewIcons: ["ts.svg", "rs.svg", "go.svg"],
+    };
+    const result = Schema.decodeUnknownSync(IconSetManifestSchema)(input);
+    expect(result.id).toBe("catppuccin-icons");
+    expect(result.name).toBe("Catppuccin Icons");
+    expect(result.version).toBe("1.0.0");
+    expect(result.type).toBe("file-icons");
+    expect(result.description).toBe("Pastel file icons");
+    expect(result.previewIcons).toEqual(["ts.svg", "rs.svg", "go.svg"]);
+  });
+
+  it("decodes a minimal manifest (only required fields)", () => {
+    const input = {
+      id: "default",
+      name: "Default",
+      version: "0.1.0",
+      type: "ui-icons",
+    };
+    const result = Schema.decodeUnknownSync(IconSetManifestSchema)(input);
+    expect(result.id).toBe("default");
+    expect(result.name).toBe("Default");
+    expect(result.version).toBe("0.1.0");
+    expect(result.type).toBe("ui-icons");
+    expect(result.description).toBeUndefined();
+    expect(result.previewIcons).toBeUndefined();
+  });
+
+  it("rejects invalid type value", () => {
+    const input = {
+      id: "bad",
+      name: "Bad",
+      version: "1.0.0",
+      type: "syntax-icons",
+    };
+    expect(() =>
+      Schema.decodeUnknownSync(IconSetManifestSchema)(input),
+    ).toThrow();
+  });
+});
+
+describe("DEFAULT_ICON_SET_CONFIG", () => {
+  it("has fileIcons set to 'default'", () => {
+    expect(DEFAULT_ICON_SET_CONFIG.fileIcons).toBe("default");
+  });
+
+  it("has uiIcons set to 'default'", () => {
+    expect(DEFAULT_ICON_SET_CONFIG.uiIcons).toBe("default");
   });
 });
