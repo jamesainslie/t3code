@@ -2,6 +2,7 @@ import {
   EnvironmentId,
   ProjectId,
   type LocalApi,
+  type OrchestrationProject,
   type PersistedSavedProjectRecord,
   type SavedRemoteProject,
   makeRemoteIdentityKey,
@@ -9,10 +10,12 @@ import {
 } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useSavedEnvironmentRegistryStore } from "../catalog";
 import {
   hasSavedProjectRegistryHydrated,
   listSavedProjectRecordsForEnvironment,
   resetSavedProjectRegistryStoreForTests,
+  syncSavedProjectsFromReadModel,
   useSavedProjectRegistryStore,
   waitForSavedProjectRegistryHydration,
 } from "../projectsCatalog";
@@ -269,5 +272,178 @@ describe("saved project registry hydration", () => {
 
     const stored = useSavedProjectRegistryStore.getState().byKey[live.savedProjectKey];
     expect(stored?.name).toBe("Live name");
+  });
+});
+
+describe("syncSavedProjectsFromReadModel", () => {
+  const envId = EnvironmentId.make("env-live-a");
+
+  function makeOrchestrationProject(overrides: {
+    id?: string;
+    title?: string;
+    workspaceRoot?: string;
+    repositoryCanonicalKey?: string | null;
+    deletedAt?: string | null;
+  }): OrchestrationProject {
+    return {
+      id: ProjectId.make(overrides.id ?? "proj-1"),
+      title: (overrides.title ?? "Project 1") as OrchestrationProject["title"],
+      workspaceRoot: (overrides.workspaceRoot ??
+        "/srv/a/proj-1") as OrchestrationProject["workspaceRoot"],
+      repositoryIdentity:
+        overrides.repositoryCanonicalKey === undefined
+          ? undefined
+          : overrides.repositoryCanonicalKey === null
+            ? null
+            : {
+                canonicalKey:
+                  overrides.repositoryCanonicalKey as unknown as OrchestrationProject["workspaceRoot"],
+              },
+      defaultModelSelection: null,
+      scripts: [],
+      createdAt: "2026-04-01T00:00:00.000Z" as OrchestrationProject["createdAt"],
+      updatedAt: "2026-04-01T00:00:00.000Z" as OrchestrationProject["updatedAt"],
+      deletedAt: (overrides.deletedAt ?? null) as OrchestrationProject["deletedAt"],
+    } as OrchestrationProject;
+  }
+
+  function seedEnvironmentRegistry() {
+    useSavedEnvironmentRegistryStore.getState().upsert({
+      identityKey: ENV_A,
+      host: "a.example.com",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/srv/a",
+      label: "Env A",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      environmentId: envId,
+      wsBaseUrl: "wss://a.example.com/",
+      httpBaseUrl: "https://a.example.com/",
+      lastConnectedAt: null,
+      projectId: envId as string,
+    });
+  }
+
+  beforeEach(async () => {
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: makePersistedStub(),
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+  });
+
+  afterEach(async () => {
+    resetSavedProjectRegistryStoreForTests();
+    useSavedEnvironmentRegistryStore.getState().reset();
+    const { __resetLocalApiForTests } = await import("../../../localApi");
+    await __resetLocalApiForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it("no-ops when the environment has no identityKey in the registry", () => {
+    syncSavedProjectsFromReadModel(
+      [makeOrchestrationProject({})],
+      EnvironmentId.make("env-unknown"),
+    );
+    expect(useSavedProjectRegistryStore.getState().byKey).toEqual({});
+  });
+
+  it("upserts non-deleted projects into the registry using the env identityKey", () => {
+    seedEnvironmentRegistry();
+    syncSavedProjectsFromReadModel(
+      [
+        makeOrchestrationProject({ id: "proj-a1", title: "Alpha" }),
+        makeOrchestrationProject({ id: "proj-a2", title: "Beta" }),
+      ],
+      envId,
+    );
+
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list.map((entry) => entry.name)).toEqual(["Alpha", "Beta"]);
+    expect(list[0]!.lastSyncedEnvironmentId).toBe(envId);
+  });
+
+  it("filters out soft-deleted projects", () => {
+    seedEnvironmentRegistry();
+    syncSavedProjectsFromReadModel(
+      [
+        makeOrchestrationProject({ id: "proj-a1", title: "Alpha" }),
+        makeOrchestrationProject({
+          id: "proj-a2",
+          title: "Beta",
+          deletedAt: "2026-04-02T00:00:00.000Z",
+        }),
+      ],
+      envId,
+    );
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list.map((entry) => entry.name)).toEqual(["Alpha"]);
+  });
+
+  it("extracts repositoryIdentity.canonicalKey when present", () => {
+    seedEnvironmentRegistry();
+    syncSavedProjectsFromReadModel(
+      [
+        makeOrchestrationProject({
+          id: "proj-a1",
+          title: "Alpha",
+          repositoryCanonicalKey: "git:repo-abc",
+        }),
+      ],
+      envId,
+    );
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list[0]!.repositoryCanonicalKey).toBe("git:repo-abc");
+  });
+
+  it("prunes saved projects that no longer exist in the snapshot for that env", () => {
+    seedEnvironmentRegistry();
+
+    // First sync: two projects
+    syncSavedProjectsFromReadModel(
+      [
+        makeOrchestrationProject({ id: "proj-a1", title: "Alpha" }),
+        makeOrchestrationProject({ id: "proj-a2", title: "Beta" }),
+      ],
+      envId,
+    );
+    expect(listSavedProjectRecordsForEnvironment(ENV_A)).toHaveLength(2);
+
+    // Second sync: only one remains — the other should be pruned
+    syncSavedProjectsFromReadModel(
+      [makeOrchestrationProject({ id: "proj-a1", title: "Alpha" })],
+      envId,
+    );
+    const list = listSavedProjectRecordsForEnvironment(ENV_A);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.projectId).toBe(ProjectId.make("proj-a1"));
+  });
+
+  it("preserves firstSeenAt across repeated syncs but advances lastSeenAt", () => {
+    seedEnvironmentRegistry();
+
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(new Date("2026-04-01T00:00:00.000Z").getTime())
+      .mockReturnValueOnce(new Date("2026-04-10T00:00:00.000Z").getTime());
+
+    syncSavedProjectsFromReadModel(
+      [makeOrchestrationProject({ id: "proj-a1", title: "Alpha" })],
+      envId,
+    );
+    const firstSnapshot = listSavedProjectRecordsForEnvironment(ENV_A)[0]!;
+
+    syncSavedProjectsFromReadModel(
+      [makeOrchestrationProject({ id: "proj-a1", title: "Alpha" })],
+      envId,
+    );
+    const secondSnapshot = listSavedProjectRecordsForEnvironment(ENV_A)[0]!;
+
+    expect(secondSnapshot.firstSeenAt).toBe(firstSnapshot.firstSeenAt);
+    expect(secondSnapshot.lastSeenAt).not.toBe(firstSnapshot.lastSeenAt);
+
+    clock.mockRestore();
   });
 });

@@ -55,6 +55,7 @@ import {
 } from "./catalog";
 import { createEnvironmentConnection, type EnvironmentConnection } from "./connection";
 import { connectionLog } from "./connectionLog";
+import { syncSavedProjectsFromReadModel } from "./projectsCatalog";
 import {
   useStore,
   selectProjectsAcrossEnvironments,
@@ -288,6 +289,7 @@ function createEnvironmentConnectionHandlers() {
     syncSnapshot: (snapshot: OrchestrationReadModel, environmentId: EnvironmentId) => {
       useStore.getState().syncServerReadModel(snapshot, environmentId);
       reconcileSnapshotDerivedState();
+      syncSavedProjectsFromReadModel(snapshot.projects, environmentId);
     },
     applyTerminalEvent: (event: TerminalEvent, environmentId: EnvironmentId) => {
       const threadRef = scopeThreadRef(environmentId, ThreadId.make(event.threadId));

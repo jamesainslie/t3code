@@ -1,6 +1,7 @@
 import {
   EnvironmentId,
   ProjectId,
+  type OrchestrationProject,
   type PersistedSavedProjectRecord,
   type RemoteIdentityKey,
   type SavedProjectKey,
@@ -11,6 +12,7 @@ import {
 import { create } from "zustand";
 
 import { ensureLocalApi } from "../../localApi";
+import { useSavedEnvironmentRegistryStore } from "./catalog";
 
 interface SavedProjectRegistryState {
   readonly byKey: Record<SavedProjectKey, SavedRemoteProject>;
@@ -251,6 +253,51 @@ export function listAllSavedProjectRecords(): ReadonlyArray<SavedRemoteProject> 
   return Object.values(useSavedProjectRegistryStore.getState().byKey).toSorted((left, right) =>
     left.name.localeCompare(right.name),
   );
+}
+
+/**
+ * Projects a server-side read model's projects into the saved project registry.
+ *
+ * - Looks up the `environmentIdentityKey` for `environmentId` via the saved
+ *   environment registry. If none exists, this is a no-op (the parent
+ *   environment must be saved first).
+ * - Upserts every non-deleted project (preserving `firstSeenAt` for existing
+ *   records via `upsertMany`).
+ * - Prunes any saved project for this environment whose `projectId` is not in
+ *   the snapshot (the server is the authority for the active project set).
+ */
+export function syncSavedProjectsFromReadModel(
+  projects: ReadonlyArray<OrchestrationProject>,
+  environmentId: EnvironmentId,
+): void {
+  const identityKey =
+    useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[environmentId];
+  if (!identityKey) {
+    return;
+  }
+
+  const now = new Date(Date.now()).toISOString();
+  const activeProjects = projects.filter((project) => project.deletedAt === null);
+
+  const records: SavedRemoteProject[] = activeProjects.map((project) => ({
+    savedProjectKey: makeSavedProjectKey({
+      environmentIdentityKey: identityKey,
+      projectId: project.id,
+    }),
+    environmentIdentityKey: identityKey,
+    projectId: project.id,
+    name: project.title,
+    workspaceRoot: project.workspaceRoot,
+    repositoryCanonicalKey: project.repositoryIdentity?.canonicalKey ?? null,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    lastSyncedEnvironmentId: environmentId,
+  }));
+
+  useSavedProjectRegistryStore.getState().upsertMany(records);
+
+  const seenProjectIds = new Set(activeProjects.map((project) => project.id));
+  useSavedProjectRegistryStore.getState().pruneMissing(identityKey, seenProjectIds);
 }
 
 export function resetSavedProjectRegistryStoreForTests() {
