@@ -1,0 +1,110 @@
+name: fork-boundary-check
+
+# Warns when a PR touches upstream-churning hotspots instead of the fork
+# extension modules. Pushes contributors toward the fork/ extension pattern
+# (see FORK_ARCHITECTURE.md).
+#
+# This workflow is fork-local (jamesainslie/t3code) and must not be
+# upstreamed — pingdotgg/t3code has no notion of a "fork boundary".
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/src/components/Sidebar.tsx"
+      - "packages/contracts/src/orchestration.ts"
+      - "apps/server/src/ws.ts"
+      - "apps/server/src/rpc/registry.ts"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  boundary-reminder:
+    # Only run on the fork, never upstream
+    if: github.repository == 'jamesainslie/t3code'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute touched hotspots
+        id: hotspots
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const hotspots = [
+              {
+                path: 'apps/web/src/components/Sidebar.tsx',
+                suggestion: 'If you are adding fork-only UI, extract it under `apps/web/src/components/sidebar/` and import into Sidebar.tsx — see `useAddProjectFlow`, `ensureRemoteConnected`, and `buildRemoteContextMenuItems` for prior art.',
+              },
+              {
+                path: 'packages/contracts/src/orchestration.ts',
+                suggestion: 'If you are adding a fork-only schema field, extend the upstream struct in `packages/contracts/src/fork/orchestration.ts` via `Schema.Struct` spread — never inline into the upstream-owned struct.',
+              },
+              {
+                path: 'apps/server/src/ws.ts',
+                suggestion: 'If you are adding a fork-only RPC method, register it via `apps/server/src/rpc/handlers/fork.ts` — do not edit ws.ts directly.',
+              },
+              {
+                path: 'apps/server/src/rpc/registry.ts',
+                suggestion: 'The RPC method registry dispatches to handler modules; fork-only methods live in `handlers/fork.ts`.',
+              },
+            ];
+
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const touched = hotspots.filter((h) =>
+              files.some((f) => f.filename === h.path),
+            );
+            core.setOutput('count', String(touched.length));
+            core.setOutput('json', JSON.stringify(touched));
+
+      - name: Post boundary reminder comment
+        if: steps.hotspots.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const touched = JSON.parse(process.env.TOUCHED);
+            const lines = [
+              '### Fork boundary reminder',
+              '',
+              'This PR touches upstream-churning files. Before merging, check whether the change can live in a fork extension module instead — that keeps upstream syncs mechanical.',
+              '',
+            ];
+            for (const { path, suggestion } of touched) {
+              lines.push(`- \`${path}\` — ${suggestion}`);
+            }
+            lines.push('');
+            lines.push('See `FORK_ARCHITECTURE.md` for the full pattern.');
+            lines.push('');
+            lines.push('_This is a reminder, not a blocker. If the edit genuinely belongs in the upstream file (e.g. bug fix, upstream-compatible change), dismiss this comment._');
+
+            const body = lines.join('\n');
+            const marker = '<!-- fork-boundary-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            const finalBody = `${marker}\n${body}`;
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: finalBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: finalBody,
+              });
+            }
+        env:
+          TOUCHED: ${{ steps.hotspots.outputs.json }}
