@@ -180,11 +180,9 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
-import {
-  connectSavedEnvironment,
-  disconnectSavedEnvironment,
-  removeSavedEnvironment,
-} from "../environments/runtime";
+import { connectSavedEnvironment } from "../environments/runtime";
+import { ensureRemoteConnected } from "./sidebar/remoteGuards";
+import { buildRemoteContextMenuItems } from "./sidebar/buildRemoteContextMenuItems";
 import type { Project, SidebarThreadSummary } from "../types";
 import {
   buildPhysicalToLogicalProjectKeyMap,
@@ -1452,62 +1450,17 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           };
         };
 
-        const menuItems: Array<ContextMenuItem<string>> = [];
-
-        // Prepend remote-specific items when this project is tied to an SSH
-        // environment. These actions target the shared environment so every
-        // project on the same host is affected — label uses the env name.
-        if (isRemoteProject && remoteIdentityKey) {
-          const connState = remoteConnectionState;
-          const envLabel = project.remoteEnvironmentLabels[0] ?? null;
-          if (connState === "disconnected" || connState === "error") {
-            const id = "reconnect";
-            actionHandlers.set(id, () => {
-              void connectSavedEnvironment(remoteIdentityKey).catch((error) => {
-                toastManager.add({
-                  type: "error",
-                  title: "Failed to reconnect",
-                  description: error instanceof Error ? error.message : "Unknown error.",
-                });
-              });
-            });
-            menuItems.push({
-              id,
-              label: envLabel ? `Reconnect to ${envLabel}` : "Reconnect",
-            });
-          }
-          if (connState === "connected" || connState === "connecting") {
-            const id = "disconnect";
-            actionHandlers.set(id, () => {
-              void disconnectSavedEnvironment(project.environmentId).catch((error) => {
-                toastManager.add({
-                  type: "error",
-                  title: "Failed to disconnect",
-                  description: error instanceof Error ? error.message : "Unknown error.",
-                });
-              });
-            });
-            menuItems.push({
-              id,
-              label: envLabel ? `Disconnect from ${envLabel}` : "Disconnect",
-            });
-          }
-          const removeRemoteId = "remove-remote";
-          actionHandlers.set(removeRemoteId, async () => {
-            const confirmed = await api.dialogs.confirm(
-              `Remove remote connection for "${project.name}"? This will not delete the project data on the remote host.`,
-            );
-            if (!confirmed) return;
-            void removeSavedEnvironment(project.environmentId).catch((error) => {
-              toastManager.add({
-                type: "error",
-                title: "Failed to remove remote",
-                description: error instanceof Error ? error.message : "Unknown error.",
-              });
-            });
+        const { items: remoteItems, actionHandlers: remoteHandlers } =
+          buildRemoteContextMenuItems({
+            project,
+            remoteIdentityKey: isRemoteProject ? remoteIdentityKey ?? null : null,
+            remoteConnectionState,
+            api,
           });
-          menuItems.push({ id: removeRemoteId, label: "Remove remote", destructive: true });
-        }
+        remoteHandlers.forEach((v, k) => actionHandlers.set(k, v));
+
+        const menuItems: Array<ContextMenuItem<string>> = [];
+        menuItems.push(...remoteItems);
 
         menuItems.push(buildTargetedItem("rename", "Rename project"));
         menuItems.push(buildTargetedItem("grouping", "Project grouping…"));
@@ -1539,39 +1492,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       memberThreadCountByPhysicalKey,
       openProjectGroupingDialog,
       openProjectRenameDialog,
-      project.environmentId,
-      project.groupedProjectCount,
-      project.memberProjects,
-      project.name,
-      project.remoteEnvironmentLabels,
+      project,
       remoteConnectionState,
       remoteIdentityKey,
       suppressProjectClickForContextMenuRef,
     ],
-  );
-
-  const ensureRemoteConnected = useCallback(
-    async (environmentId: EnvironmentId): Promise<boolean> => {
-      const runtimeState =
-        useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
-      if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
-        environmentId
-      ] as RemoteIdentityKey | undefined;
-      if (!identityKey) return true;
-      try {
-        await connectSavedEnvironment(identityKey);
-        return true;
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to reconnect",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-        return false;
-      }
-    },
-    [],
   );
 
   const navigateToThread = useCallback(
@@ -1590,7 +1515,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (ok) doNavigate();
       });
     },
-    [clearSelection, ensureRemoteConnected, router, setSelectionAnchor],
+    [clearSelection, router, setSelectionAnchor],
   );
 
   const handleThreadClick = useCallback(
@@ -1633,7 +1558,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     },
     [
       clearSelection,
-      ensureRemoteConnected,
       rangeSelectTo,
       router,
       setSelectionAnchor,
@@ -2979,30 +2903,6 @@ export default function Sidebar() {
     focusMostRecentThreadForProject,
   });
 
-  const ensureRemoteConnected = useCallback(
-    async (environmentId: EnvironmentId): Promise<boolean> => {
-      const runtimeState =
-        useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
-      if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
-        environmentId
-      ] as RemoteIdentityKey | undefined;
-      if (!identityKey) return true;
-      try {
-        await connectSavedEnvironment(identityKey);
-        return true;
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to reconnect",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-        return false;
-      }
-    },
-    [],
-  );
-
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
       const doNavigate = () => {
@@ -3019,7 +2919,7 @@ export default function Sidebar() {
         if (ok) doNavigate();
       });
     },
-    [clearSelection, ensureRemoteConnected, navigate, setSelectionAnchor],
+    [clearSelection, navigate, setSelectionAnchor],
   );
 
   const projectDnDSensors = useSensors(
