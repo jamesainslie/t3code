@@ -38,6 +38,7 @@ import {
   nativeTheme,
   protocol,
   safeStorage,
+  session,
   shell,
 } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
@@ -74,10 +75,7 @@ import {
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
 } from "./clientPersistence";
-import {
-  readSavedProjectRegistry,
-  writeSavedProjectRegistry,
-} from "./savedProjectsPersistence";
+import { readSavedProjectRegistry, writeSavedProjectRegistry } from "./savedProjectsPersistence";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import { resolveDesktopServerExposure } from "./serverExposure";
@@ -2196,6 +2194,17 @@ app
     configureApplicationMenu();
     registerDesktopProtocol();
     configureAutoUpdater();
+
+    // Grant the `local-fonts` permission up-front so the renderer can
+    // call queryLocalFonts() to enumerate installed system fonts (used
+    // by the Appearance → Typography terminal font picker to surface
+    // installed Nerd Fonts). All other permissions fall through to
+    // Electron's default behavior (grant).
+    session.defaultSession.setPermissionRequestHandler(
+      (_webContents, _permission, callback) => {
+        callback(true);
+      },
+    );
     void bootstrap().catch((error) => {
       if (isBackendReadinessAborted(error) && isQuitting) {
         return;

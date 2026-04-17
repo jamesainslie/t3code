@@ -30,72 +30,16 @@ export const UI_FONT_PRESETS: readonly FontPreset[] = [
 ];
 
 /**
- * Nerd Fonts for the terminal. Each stack prefers the "Nerd Font Mono"
- * variant (single-width glyphs, best for terminal cell metrics), falls
- * back to the regular Nerd Font variant, and finally to system monospace
- * so the app still looks sane on machines where the font isn't installed.
- *
- * Family names follow the official Nerd Fonts naming convention
- * (https://www.nerdfonts.com). Users who install via Homebrew
- * (`brew install --cask font-<name>-nerd-font`) or the Nerd Fonts
- * installer will get these exact family names registered with the OS.
+ * Synthetic presets that anchor the terminal font dropdown regardless of
+ * what's installed on the system: the "System default" sentinel resets
+ * the override, and "System Monospace" maps to a safe fallback stack.
+ * Installed Nerd Fonts are appended dynamically via `useInstalledNerdFonts`.
  */
-export const TERMINAL_FONT_PRESETS: readonly FontPreset[] = [
+export const TERMINAL_FONT_STATIC_PRESETS: readonly FontPreset[] = [
   { label: "System default", value: "" },
   {
     label: "System Monospace",
     value: '"SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
-  },
-  {
-    label: "JetBrainsMono Nerd Font",
-    value:
-      '"JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, monospace',
-  },
-  {
-    label: "Hack Nerd Font",
-    value: '"Hack Nerd Font Mono", "Hack Nerd Font", Hack, ui-monospace, monospace',
-  },
-  {
-    label: "FiraCode Nerd Font",
-    value: '"FiraCode Nerd Font Mono", "FiraCode Nerd Font", "Fira Code", ui-monospace, monospace',
-  },
-  {
-    label: "MesloLGS Nerd Font",
-    value:
-      '"MesloLGS Nerd Font Mono", "MesloLGS Nerd Font", "MesloLGS NF", Menlo, ui-monospace, monospace',
-  },
-  {
-    label: "Iosevka Nerd Font",
-    value: '"Iosevka Nerd Font Mono", "Iosevka Nerd Font", Iosevka, ui-monospace, monospace',
-  },
-  {
-    label: "CaskaydiaCove Nerd Font",
-    value:
-      '"CaskaydiaCove Nerd Font Mono", "CaskaydiaCove Nerd Font", "Cascadia Code", ui-monospace, monospace',
-  },
-  {
-    label: "SauceCodePro Nerd Font",
-    value:
-      '"SauceCodePro Nerd Font Mono", "SauceCodePro Nerd Font", "Source Code Pro", ui-monospace, monospace',
-  },
-  {
-    label: "Hasklug Nerd Font",
-    value: '"Hasklug Nerd Font Mono", "Hasklug Nerd Font", Hasklig, ui-monospace, monospace',
-  },
-  {
-    label: "RobotoMono Nerd Font",
-    value:
-      '"RobotoMono Nerd Font Mono", "RobotoMono Nerd Font", "Roboto Mono", ui-monospace, monospace',
-  },
-  {
-    label: "UbuntuMono Nerd Font",
-    value:
-      '"UbuntuMono Nerd Font Mono", "UbuntuMono Nerd Font", "Ubuntu Mono", ui-monospace, monospace',
-  },
-  {
-    label: "DejaVuSansMono Nerd Font",
-    value:
-      '"DejaVuSansMono Nerd Font Mono", "DejaVuSansMono Nerd Font", "DejaVu Sans Mono", ui-monospace, monospace',
   },
 ];
 

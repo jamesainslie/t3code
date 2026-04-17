@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTheme } from "../../../hooks/useTheme";
 import { themeStore } from "../../../theme";
 import { TypographyTokenRow } from "./TypographyTokenRow";
@@ -6,9 +7,10 @@ import { LineHeightControl } from "./LineHeightControl";
 import {
   CODE_FONT_PRESETS,
   FontFamilySelect,
-  TERMINAL_FONT_PRESETS,
+  TERMINAL_FONT_STATIC_PRESETS,
   UI_FONT_PRESETS,
 } from "./FontFamilySelect";
+import { useInstalledNerdFonts } from "./useInstalledNerdFonts";
 import type { TypographyTokens } from "@t3tools/contracts";
 
 export function TypographyPanel() {
@@ -28,6 +30,30 @@ export function TypographyPanel() {
   const uiFontOverridden = themeStore.isTypographyTokenOverridden("uiFontFamily");
   const codeFontOverridden = themeStore.isTypographyTokenOverridden("codeFontFamily");
   const terminalFontOverridden = themeStore.isTypographyTokenOverridden("terminalFontFamily");
+
+  const installedNerdFonts = useInstalledNerdFonts();
+  const terminalPresets = useMemo(
+    () => [...TERMINAL_FONT_STATIC_PRESETS, ...installedNerdFonts.fonts],
+    [installedNerdFonts.fonts],
+  );
+  const terminalFontHint = (() => {
+    switch (installedNerdFonts.status) {
+      case "loading":
+        return "Scanning installed fonts…";
+      case "unsupported":
+        return "System font enumeration isn't available in this browser.";
+      case "denied":
+        return "Font access was denied. Grant permission to see installed Nerd Fonts.";
+      case "error":
+        return `Couldn't read installed fonts${
+          installedNerdFonts.error ? `: ${installedNerdFonts.error}` : "."
+        }`;
+      case "ready":
+        return installedNerdFonts.fonts.length === 0
+          ? "No Nerd Fonts found in your system font library."
+          : null;
+    }
+  })();
 
   return (
     <div className="flex flex-col gap-3">
@@ -53,12 +79,15 @@ export function TypographyPanel() {
           </TypographyTokenRow>
           <TypographyTokenRow tokenKey="terminalFontFamily" label="Terminal Font">
             <FontFamilySelect
-              presets={TERMINAL_FONT_PRESETS}
+              presets={terminalPresets}
               value={typography.terminalFontFamily ?? ""}
               isOverridden={terminalFontOverridden}
               onChange={(v) => handleChange("terminalFontFamily", v)}
             />
           </TypographyTokenRow>
+          {terminalFontHint && (
+            <div className="px-1 pb-2 text-xs text-muted-foreground">{terminalFontHint}</div>
+          )}
         </div>
       </div>
 
