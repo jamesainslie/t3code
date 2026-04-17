@@ -4,10 +4,14 @@ import type { DesktopServerExposureMode } from "@t3tools/contracts";
 
 export interface DesktopSettings {
   readonly serverExposureMode: DesktopServerExposureMode;
+  readonly transparencyEnabled: boolean;
+  readonly windowOpacity: number;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   serverExposureMode: "local-only",
+  transparencyEnabled: false,
+  windowOpacity: 1,
 };
 
 export function setDesktopServerExposurePreference(
@@ -31,11 +35,18 @@ export function readDesktopSettings(settingsPath: string): DesktopSettings {
     const raw = FS.readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw) as {
       readonly serverExposureMode?: unknown;
+      readonly transparencyEnabled?: unknown;
+      readonly windowOpacity?: unknown;
     };
 
     return {
       serverExposureMode:
         parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
+      transparencyEnabled: parsed.transparencyEnabled === true,
+      windowOpacity:
+        typeof parsed.windowOpacity === "number" && Number.isFinite(parsed.windowOpacity)
+          ? Math.max(0.5, Math.min(1.0, parsed.windowOpacity))
+          : 1,
     };
   } catch {
     return DEFAULT_DESKTOP_SETTINGS;

@@ -51,16 +51,9 @@ export function ResourceMetricRow({
           className={cn("size-2 shrink-0 rounded-full", stateDotColor[state])}
           aria-hidden="true"
         />
-        {Icon && (
-          <Icon
-            className="size-3.5 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-        )}
+        {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
         <span className="text-foreground">{label}</span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {summary}
-        </span>
+        <span className="ml-auto text-xs text-muted-foreground">{summary}</span>
       </div>
 
       {/* Usage bar */}
@@ -91,9 +84,7 @@ export function ResourceMetricRow({
             <span aria-hidden="true">{expanded ? "\u25be" : "\u25b8"}</span>
             <span>Details</span>
           </button>
-          {expanded && (
-            <div className="mt-1 space-y-0.5 pl-4 text-xs">{children}</div>
-          )}
+          {expanded && <div className="mt-1 space-y-0.5 pl-4 text-xs">{children}</div>}
         </>
       )}
     </div>
@@ -102,13 +93,7 @@ export function ResourceMetricRow({
 
 // ─── Detail Key-Value Row ───────────────────────────────────────────
 
-export function DetailKV({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+export function DetailKV({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground">{label}</span>

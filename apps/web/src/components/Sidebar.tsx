@@ -85,6 +85,8 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
+import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
+import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -1331,21 +1333,26 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (!api) return;
 
         // Build menu items, prepending remote-specific items when applicable
-        type MenuItemId =
-          | "copy-path"
-          | "delete"
-          | "reconnect"
-          | "disconnect"
-          | "remove-remote";
+        type MenuItemId = "copy-path" | "delete" | "reconnect" | "disconnect" | "remove-remote";
         const menuItems: Array<{ id: MenuItemId; label: string; destructive?: boolean }> = [];
 
         if (isRemoteProject && remoteIdentityKey) {
           const connState = remoteConnectionState;
+          // Use the environment label to make the scope of disconnect /
+          // reconnect obvious: these actions target the shared SSH
+          // environment, so every project on the same host is affected.
+          const envLabel = project.remoteEnvironmentLabels[0] ?? null;
           if (connState === "disconnected" || connState === "error") {
-            menuItems.push({ id: "reconnect", label: "Reconnect" });
+            menuItems.push({
+              id: "reconnect",
+              label: envLabel ? `Reconnect to ${envLabel}` : "Reconnect",
+            });
           }
           if (connState === "connected" || connState === "connecting") {
-            menuItems.push({ id: "disconnect", label: "Disconnect" });
+            menuItems.push({
+              id: "disconnect",
+              label: envLabel ? `Disconnect from ${envLabel}` : "Disconnect",
+            });
           }
           menuItems.push({ id: "remove-remote", label: "Remove remote", destructive: true });
         }
@@ -1466,8 +1473,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const runtimeState =
         useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
       if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState()
-        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
+        environmentId
+      ] as RemoteIdentityKey | undefined;
       if (!identityKey) return true;
       try {
         await connectSavedEnvironment(identityKey);
@@ -1843,12 +1851,25 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             />
           )}
           <ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />
-          {isRemoteProject && remoteConnectionState && (
+          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+            {project.name}
+          </span>
+        </SidebarMenuButton>
+        {/* Remote connection indicator – visible by default, crossfades
+            with the "new thread" button on hover. Reflects live connection
+            state (green = connected, pulsing = connecting, red/grey =
+            error/disconnected) and click-to-reconnect when offline. */}
+        {isRemoteProject && remoteConnectionState && (
+          <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
             <RemoteConnectionIcon
               state={remoteConnectionState}
               tooltip={
                 remoteConnectionState === "connected"
-                  ? "Remote: connected"
+                  ? `Remote: connected${
+                      project.remoteEnvironmentLabels.length > 0
+                        ? ` (${project.remoteEnvironmentLabels.join(", ")})`
+                        : ""
+                    }`
                   : remoteConnectionState === "connecting"
                     ? "Remote: connecting…"
                     : remoteConnectionState === "error"
@@ -1859,34 +1880,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
                 : {})}
             />
-          )}
-          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-            {project.name}
-          </span>
-        </SidebarMenuButton>
-        {/* Environment badge – visible by default, crossfades with the
-            "new thread" button on hover using the same pointer-events +
-            opacity pattern as the thread row archive/timestamp swap. */}
-        {project.environmentPresence === "remote-only" && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  aria-label={
-                    project.environmentPresence === "remote-only"
-                      ? "Remote project"
-                      : "Available in multiple environments"
-                  }
-                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0"
-                />
-              }
-            >
-              <CloudIcon className="size-3" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">
-              Remote environment: {project.remoteEnvironmentLabels.join(", ")}
-            </TooltipPopup>
-          </Tooltip>
+          </div>
         )}
         <Tooltip>
           <TooltipTrigger
@@ -2133,6 +2127,9 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter className="p-2">
       <SidebarUpdatePill />
+      <div className="flex justify-center px-1 pb-1 pt-0.5">
+        <SidebarRemoteReconnectPill />
+      </div>
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -2848,8 +2845,9 @@ export default function Sidebar() {
       const runtimeState =
         useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.connectionState ?? null;
       if (runtimeState !== "disconnected" && runtimeState !== "error") return true;
-      const identityKey = useSavedEnvironmentRegistryStore.getState()
-        .identityKeyByEnvironmentId[environmentId] as RemoteIdentityKey | undefined;
+      const identityKey = useSavedEnvironmentRegistryStore.getState().identityKeyByEnvironmentId[
+        environmentId
+      ] as RemoteIdentityKey | undefined;
       if (!identityKey) return true;
       try {
         await connectSavedEnvironment(identityKey);
@@ -3400,6 +3398,8 @@ export default function Sidebar() {
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
           />
+
+          <StaleSavedProjectsList />
 
           <SidebarSeparator />
           <SidebarChromeFooter />

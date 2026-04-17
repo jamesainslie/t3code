@@ -10,9 +10,7 @@ export interface HostResourceMonitorOptions {
   readonly sampleIntervalMs?: number;
 }
 
-export function makeHostResourceMonitorLive(
-  options?: HostResourceMonitorOptions,
-) {
+export function makeHostResourceMonitorLive(options?: HostResourceMonitorOptions) {
   const intervalMs = options?.sampleIntervalMs ?? DEFAULT_SAMPLE_INTERVAL_MS;
 
   return Layer.effect(

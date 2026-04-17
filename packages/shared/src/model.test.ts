@@ -53,6 +53,13 @@ describe("normalizeModelSlug", () => {
     expect(normalizeModelSlug("sonnet", "claudeAgent")).toBe("claude-sonnet-4-6");
   });
 
+  it("resolves opus aliases to the latest Opus release", () => {
+    expect(normalizeModelSlug("opus", "claudeAgent")).toBe("claude-opus-4-7");
+    expect(normalizeModelSlug("opus-4.7", "claudeAgent")).toBe("claude-opus-4-7");
+    expect(normalizeModelSlug("claude-opus-4.7", "claudeAgent")).toBe("claude-opus-4-7");
+    expect(normalizeModelSlug("opus-4.6", "claudeAgent")).toBe("claude-opus-4-6");
+  });
+
   it("returns null for empty or missing values", () => {
     expect(normalizeModelSlug("")).toBeNull();
     expect(normalizeModelSlug("   ")).toBeNull();
@@ -227,6 +234,16 @@ describe("resolveApiModelId", () => {
 
   it("returns the model as-is for Codex selections", () => {
     expect(resolveApiModelId({ provider: "codex", model: "gpt-5.4" })).toBe("gpt-5.4");
+  });
+
+  it("appends [1m] suffix for claude-opus-4-7 with 1m context window", () => {
+    expect(
+      resolveApiModelId({
+        provider: "claudeAgent",
+        model: "claude-opus-4-7",
+        options: { contextWindow: "1m" },
+      }),
+    ).toBe("claude-opus-4-7[1m]");
   });
 });
 

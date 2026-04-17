@@ -38,6 +38,7 @@ describe("desktopSettings", () => {
     });
 
     expect(readDesktopSettings(settingsPath)).toEqual({
+      ...DEFAULT_DESKTOP_SETTINGS,
       serverExposureMode: "network-accessible",
     });
   });

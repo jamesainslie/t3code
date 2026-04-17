@@ -18,6 +18,17 @@ export {
 export { connectionLog, useConnectionLogStore, type ConnectionLogEntry } from "./connectionLog";
 
 export {
+  hasSavedProjectRegistryHydrated,
+  listAllSavedProjectRecords,
+  listSavedProjectRecordsForEnvironment,
+  resetSavedProjectRegistryStoreForTests,
+  useSavedProjectRegistryStore,
+  waitForSavedProjectRegistryHydration,
+} from "./projectsCatalog";
+
+export { selectSidebarProjectEntries, type SidebarProjectEntry } from "./sidebarProjectsSelector";
+
+export {
   addOrReconnectSavedEnvironment,
   addSavedEnvironment,
   connectSavedEnvironment,
@@ -26,6 +37,7 @@ export {
   getPrimaryEnvironmentConnection,
   readEnvironmentConnection,
   reconnectSavedEnvironment,
+  reconnectSavedProject,
   removeSavedEnvironment,
   requireEnvironmentConnection,
   resetEnvironmentServiceForTests,

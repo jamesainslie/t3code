@@ -92,20 +92,35 @@ export const useRemoteConnectionStore = create<RemoteConnectionStore>((set, get)
         const idx = phases.findIndex((p) => p.phase === event.phase);
         const found = idx >= 0 ? phases[idx] : undefined;
         if (found) {
-          phases[idx] = { phase: found.phase, label: found.label, status: "complete", logs: found.logs };
+          phases[idx] = {
+            phase: found.phase,
+            label: found.label,
+            status: "complete",
+            logs: found.logs,
+          };
         }
       } else if (event.type === "log" && event.phase != null && event.message) {
         const idx = phases.findIndex((p) => p.phase === event.phase);
         const found = idx >= 0 ? phases[idx] : undefined;
         if (found) {
-          phases[idx] = { phase: found.phase, label: found.label, status: found.status, logs: [...found.logs, event.message] };
+          phases[idx] = {
+            phase: found.phase,
+            label: found.label,
+            status: found.status,
+            logs: [...found.logs, event.message],
+          };
         }
       } else if (event.type === "error") {
         if (event.phase != null) {
           const idx = phases.findIndex((p) => p.phase === event.phase);
           const found = idx >= 0 ? phases[idx] : undefined;
           if (found) {
-            phases[idx] = { phase: found.phase, label: found.label, status: "error", logs: found.logs };
+            phases[idx] = {
+              phase: found.phase,
+              label: found.label,
+              status: "error",
+              logs: found.logs,
+            };
           }
         }
         const updated: RemoteConnectionEntry = {

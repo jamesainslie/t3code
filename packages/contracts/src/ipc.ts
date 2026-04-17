@@ -51,6 +51,7 @@ import type {
 } from "./orchestration";
 import type { EnvironmentId } from "./baseSchemas";
 import type { RemoteIdentityKey } from "./remoteIdentity.js";
+import type { PersistedSavedProjectRecord } from "./savedProjectKey.js";
 import { EditorId } from "./editor";
 import { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings";
 
@@ -73,6 +74,7 @@ export type DesktopUpdateStatus =
 
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
+export type DesktopPlatform = "darwin" | "win32" | "linux";
 
 export interface DesktopRuntimeInfo {
   hostArch: DesktopRuntimeArch;
@@ -198,14 +200,22 @@ export interface DesktopBridge {
   setSavedEnvironmentRegistry: (
     records: readonly PersistedSavedEnvironmentRecord[],
   ) => Promise<void>;
-  getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
-  setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
-  removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<string | null>;
+  setSavedEnvironmentSecret: (
+    key: EnvironmentId | RemoteIdentityKey,
+    secret: string,
+  ) => Promise<boolean>;
+  removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
+  getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
+  setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
+  setWindowOpacity: (opacity: number) => Promise<void>;
+  setVibrancy: (vibrancy: "under-window" | null) => Promise<void>;
+  getPlatform: () => Promise<DesktopPlatform>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
@@ -271,9 +281,14 @@ export interface LocalApi {
     setSavedEnvironmentRegistry: (
       records: readonly PersistedSavedEnvironmentRecord[],
     ) => Promise<void>;
-    getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
-    setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
-    removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+    getSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<string | null>;
+    setSavedEnvironmentSecret: (
+      key: EnvironmentId | RemoteIdentityKey,
+      secret: string,
+    ) => Promise<boolean>;
+    removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
+    getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
+    setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

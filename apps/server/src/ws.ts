@@ -908,11 +908,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             { "rpc.aggregate": "auth" },
           ),
         [WS_METHODS.serverSubscribeLogStream]: (_input) =>
-          observeRpcStream(
-            WS_METHODS.serverSubscribeLogStream,
-            Stream.empty,
-            { "rpc.aggregate": "server" },
-          ),
+          observeRpcStream(WS_METHODS.serverSubscribeLogStream, Stream.empty, {
+            "rpc.aggregate": "server",
+          }),
         [WS_METHODS.subscribeHostResources]: (input) =>
           observeRpcStreamEffect(
             WS_METHODS.subscribeHostResources,
@@ -951,7 +949,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         return yield* Effect.acquireUseRelease(
           sessions.markConnected(session.sessionId).pipe(Effect.andThen(tracker.onConnect)),
           () => rpcWebSocketHttpEffect,
-          () => sessions.markDisconnected(session.sessionId).pipe(Effect.andThen(tracker.onDisconnect)),
+          () =>
+            sessions.markDisconnected(session.sessionId).pipe(Effect.andThen(tracker.onDisconnect)),
         );
       }).pipe(Effect.catchTag("AuthError", respondToAuthError)),
     ),

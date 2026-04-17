@@ -38,6 +38,7 @@ import {
   nativeTheme,
   protocol,
   safeStorage,
+  session,
   shell,
 } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
@@ -47,6 +48,7 @@ import type {
   DesktopServerExposureMode,
   DesktopServerExposureState,
   PersistedSavedEnvironmentRecord,
+  PersistedSavedProjectRecord,
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
@@ -73,6 +75,7 @@ import {
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
 } from "./clientPersistence";
+import { readSavedProjectRegistry, writeSavedProjectRegistry } from "./savedProjectsPersistence";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import { resolveDesktopServerExposure } from "./serverExposure";
@@ -108,6 +111,9 @@ syncShellEnvironment();
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
+const SET_WINDOW_OPACITY_CHANNEL = "desktop:set-window-opacity";
+const SET_VIBRANCY_CHANNEL = "desktop:set-vibrancy";
+const GET_PLATFORM_CHANNEL = "desktop:get-platform";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 const MENU_ACTION_CHANNEL = "desktop:menu-action";
@@ -124,6 +130,8 @@ const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environment-re
 const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
+const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
@@ -144,6 +152,7 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
 const SAVED_ENVIRONMENT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-environments.json");
+const SAVED_PROJECT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-projects.json");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -1627,6 +1636,23 @@ function registerIpcHandlers(): void {
     },
   );
 
+  ipcMain.removeHandler(GET_SAVED_PROJECT_REGISTRY_CHANNEL);
+  ipcMain.handle(GET_SAVED_PROJECT_REGISTRY_CHANNEL, async () =>
+    readSavedProjectRegistry(SAVED_PROJECT_REGISTRY_PATH),
+  );
+
+  ipcMain.removeHandler(SET_SAVED_PROJECT_REGISTRY_CHANNEL);
+  ipcMain.handle(SET_SAVED_PROJECT_REGISTRY_CHANNEL, async (_event, rawRecords: unknown) => {
+    if (!Array.isArray(rawRecords)) {
+      throw new Error("Invalid saved project registry payload.");
+    }
+
+    writeSavedProjectRegistry(
+      SAVED_PROJECT_REGISTRY_PATH,
+      rawRecords as readonly PersistedSavedProjectRecord[],
+    );
+  });
+
   ipcMain.removeHandler(GET_SERVER_EXPOSURE_STATE_CHANNEL);
   ipcMain.handle(GET_SERVER_EXPOSURE_STATE_CHANNEL, async () => getDesktopServerExposureState());
 
@@ -1681,6 +1707,33 @@ function registerIpcHandlers(): void {
     }
 
     nativeTheme.themeSource = theme;
+  });
+
+  ipcMain.removeHandler(SET_WINDOW_OPACITY_CHANNEL);
+  ipcMain.handle(SET_WINDOW_OPACITY_CHANNEL, async (_event, rawOpacity: unknown) => {
+    if (typeof rawOpacity !== "number" || !Number.isFinite(rawOpacity)) return;
+    const opacity = Math.max(0.5, Math.min(1.0, rawOpacity));
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    if (win && !win.isDestroyed()) {
+      win.setOpacity(opacity);
+    }
+  });
+
+  ipcMain.removeHandler(SET_VIBRANCY_CHANNEL);
+  ipcMain.handle(SET_VIBRANCY_CHANNEL, async (_event, rawVibrancy: unknown) => {
+    if (process.platform !== "darwin") return;
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    if (!win || win.isDestroyed()) return;
+    if (rawVibrancy === "under-window") {
+      win.setVibrancy("under-window");
+    } else {
+      win.setVibrancy(null);
+    }
+  });
+
+  ipcMain.removeHandler(GET_PLATFORM_CHANNEL);
+  ipcMain.handle(GET_PLATFORM_CHANNEL, async () => {
+    return process.platform;
   });
 
   ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);
@@ -1892,10 +1945,7 @@ function registerIpcHandlers(): void {
   ipcMain.removeHandler(SSH_KILL_REMOTE_SESSION_CHANNEL);
   ipcMain.handle(
     SSH_KILL_REMOTE_SESSION_CHANNEL,
-    async (
-      _event,
-      opts: { host: string; user: string; port: number; projectId: string },
-    ) => {
+    async (_event, opts: { host: string; user: string; port: number; projectId: string }) => {
       await sshKillRemoteSession(opts);
     },
   );
@@ -2144,6 +2194,17 @@ app
     configureApplicationMenu();
     registerDesktopProtocol();
     configureAutoUpdater();
+
+    // Grant the `local-fonts` permission up-front so the renderer can
+    // call queryLocalFonts() to enumerate installed system fonts (used
+    // by the Appearance → Typography terminal font picker to surface
+    // installed Nerd Fonts). All other permissions fall through to
+    // Electron's default behavior (grant).
+    session.defaultSession.setPermissionRequestHandler(
+      (_webContents, _permission, callback) => {
+        callback(true);
+      },
+    );
     void bootstrap().catch((error) => {
       if (isBackendReadinessAborted(error) && isQuitting) {
         return;

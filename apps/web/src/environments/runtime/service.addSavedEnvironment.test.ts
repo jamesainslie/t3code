@@ -97,7 +97,10 @@ describe("addSavedEnvironment", () => {
 
     expect(mockPersistSavedEnvironmentRecord).toHaveBeenCalledTimes(1);
     expect(mockWriteSavedEnvironmentBearerToken).toHaveBeenCalledWith(
-      EnvironmentId.make("environment-1"),
+      expect.objectContaining({
+        identityKey: expect.any(String),
+        environmentId: EnvironmentId.make("environment-1"),
+      }),
       "bearer-token",
     );
     expect(mockSetSavedEnvironmentRegistry).toHaveBeenCalledWith([]);

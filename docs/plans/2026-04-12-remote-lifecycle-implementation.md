@@ -13,6 +13,7 @@
 ## Task 1: Add RemoteIdentityKey type and helpers to contracts
 
 **Files:**
+
 - Create: `packages/contracts/src/remoteIdentity.ts`
 - Modify: `packages/contracts/src/index.ts`
 - Create: `packages/contracts/src/remoteIdentity.test.ts`
@@ -36,8 +37,18 @@ describe("RemoteIdentityKey", () => {
   });
 
   it("produces different keys for different workspaces on same host", () => {
-    const a = makeRemoteIdentityKey({ host: "devbox", user: "james", port: 22, workspaceRoot: "/home/james/app1" });
-    const b = makeRemoteIdentityKey({ host: "devbox", user: "james", port: 22, workspaceRoot: "/home/james/app2" });
+    const a = makeRemoteIdentityKey({
+      host: "devbox",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/home/james/app1",
+    });
+    const b = makeRemoteIdentityKey({
+      host: "devbox",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/home/james/app2",
+    });
     expect(a).not.toBe(b);
   });
 
@@ -89,8 +100,14 @@ export function parseRemoteIdentityKey(key: string): RemoteIdentityFields | null
 **Step 4: Export from index**
 
 Add to `packages/contracts/src/index.ts`:
+
 ```typescript
-export { type RemoteIdentityKey, type RemoteIdentityFields, makeRemoteIdentityKey, parseRemoteIdentityKey } from "./remoteIdentity.js";
+export {
+  type RemoteIdentityKey,
+  type RemoteIdentityFields,
+  makeRemoteIdentityKey,
+  parseRemoteIdentityKey,
+} from "./remoteIdentity.js";
 ```
 
 **Step 5: Run test to verify it passes**
@@ -110,6 +127,7 @@ git commit -m "feat(contracts): add RemoteIdentityKey type and helpers"
 ## Task 2: Add SavedRemoteEnvironment type to contracts
 
 **Files:**
+
 - Modify: `packages/contracts/src/ipc.ts`
 
 **Step 1: Add the new type alongside the existing PersistedSavedEnvironmentRecord**
@@ -144,7 +162,8 @@ Add to the `DesktopBridge` interface (around line 213):
 
 ```typescript
 sshProbe: (opts: { host: string; user: string; port: number }) => Promise<{ reachable: boolean }>;
-sshKillRemoteSession: (opts: { host: string; user: string; port: number; projectId: string }) => Promise<void>;
+sshKillRemoteSession: (opts: { host: string; user: string; port: number; projectId: string }) =>
+  Promise<void>;
 ```
 
 **Step 3: Run typecheck**
@@ -164,6 +183,7 @@ git commit -m "feat(contracts): add SavedRemoteEnvironment type and new IPC meth
 ## Task 3: Implement sshProbe and sshKillRemoteSession in desktop
 
 **Files:**
+
 - Modify: `apps/desktop/src/sshManager.ts`
 - Modify: `apps/desktop/src/main.ts`
 - Modify: `apps/desktop/src/preload.ts`
@@ -173,7 +193,11 @@ git commit -m "feat(contracts): add SavedRemoteEnvironment type and new IPC meth
 After `sshGetStatus()` (around line 92):
 
 ```typescript
-export async function sshProbe(opts: { host: string; user: string; port: number }): Promise<{ reachable: boolean }> {
+export async function sshProbe(opts: {
+  host: string;
+  user: string;
+  port: number;
+}): Promise<{ reachable: boolean }> {
   const controlPath = controlSocketPath({
     host: opts.host,
     user: opts.user,
@@ -212,12 +236,14 @@ Import `controlSocketPath` from `@t3tools/shared/ssh` at the top.
 **Step 2: Register IPC handlers in main.ts**
 
 Add constants (around line 136):
+
 ```typescript
 const SSH_PROBE_CHANNEL = "desktop:ssh-probe";
 const SSH_KILL_REMOTE_SESSION_CHANNEL = "desktop:ssh-kill-remote-session";
 ```
 
 Add handlers alongside existing SSH handlers (around line 1878):
+
 ```typescript
 ipcMain.handle(SSH_PROBE_CHANNEL, async (_event, opts) => {
   return sshProbe(opts);
@@ -233,6 +259,7 @@ Import `sshProbe` and `sshKillRemoteSession` from `./sshManager`.
 **Step 3: Expose in preload.ts**
 
 Add to the bridge object (around line 119):
+
 ```typescript
 sshProbe: (opts: { host: string; user: string; port: number }) =>
   ipcRenderer.invoke(SSH_PROBE_CHANNEL, opts),
@@ -257,17 +284,21 @@ git commit -m "feat(desktop): add sshProbe and sshKillRemoteSession IPC handlers
 ## Task 4: Refactor registry store from environmentId-keyed to identityKey-keyed
 
 **Files:**
+
 - Modify: `apps/web/src/environments/runtime/catalog.ts`
 - Modify: `apps/web/src/environments/runtime/service.ts`
 
 This is the biggest refactor. The registry store changes from:
+
 ```typescript
-byId: Record<EnvironmentId, SavedEnvironmentRecord>
+byId: Record<EnvironmentId, SavedEnvironmentRecord>;
 ```
+
 to:
+
 ```typescript
-byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>
-identityKeyByEnvironmentId: Record<EnvironmentId, RemoteIdentityKey>
+byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>;
+identityKeyByEnvironmentId: Record<EnvironmentId, RemoteIdentityKey>;
 ```
 
 **Step 1: Update catalog.ts store**
@@ -297,6 +328,7 @@ Every call site that uses `environmentId` to look up registry entries needs to g
 **Step 3: Add the identity-to-connection bridge maps**
 
 In service.ts, add alongside `environmentConnections`:
+
 ```typescript
 const identityKeyToEnvironmentId = new Map<RemoteIdentityKey, EnvironmentId>();
 ```
@@ -329,6 +361,7 @@ git commit -m "refactor: rekey saved environment registry by RemoteIdentityKey"
 ## Task 5: Replace addSavedEnvironment with addOrReconnectSavedEnvironment
 
 **Files:**
+
 - Modify: `apps/web/src/environments/runtime/service.ts`
 - Modify: `apps/web/src/components/AddRemoteProjectDialog.tsx`
 
@@ -406,6 +439,7 @@ export async function addOrReconnectSavedEnvironment(input: {
 **Step 2: Update AddRemoteProjectDialog.tsx**
 
 In `handleSubmit()` (around line 282):
+
 - Replace `addSavedEnvironment()` call with `addOrReconnectSavedEnvironment()`
 - Check `result.isReconnect` — if true, skip the `project.create` dispatch
 - Update status messages accordingly
@@ -427,6 +461,7 @@ git commit -m "feat: replace addSavedEnvironment with addOrReconnectSavedEnviron
 ## Task 6: Implement lazy startup (don't auto-provision on launch)
 
 **Files:**
+
 - Modify: `apps/web/src/environments/runtime/service.ts`
 
 **Step 1: Change syncSavedEnvironmentConnections()**
@@ -479,6 +514,7 @@ git commit -m "feat: lazy startup — show saved remotes as disconnected, connec
 ## Task 7: Add cloud connectivity icon to sidebar
 
 **Files:**
+
 - Create: `apps/web/src/components/RemoteConnectionIcon.tsx`
 - Create: `apps/web/src/components/__tests__/RemoteConnectionIcon.test.tsx`
 - Modify: `apps/web/src/components/Sidebar.tsx`
@@ -595,6 +631,7 @@ git commit -m "feat(web): add cloud connectivity icon for remote projects in sid
 ## Task 8: Add reconnect/disconnect/remove context menu items
 
 **Files:**
+
 - Modify: `apps/web/src/components/Sidebar.tsx`
 
 **Step 1: Extend the project context menu**
@@ -607,7 +644,9 @@ const remoteRuntimeState = isRemote
   ? useSavedEnvironmentRuntimeStore.getState().byId[project.environmentId]
   : null;
 const isConnected = remoteRuntimeState?.connectionState === "connected";
-const isDisconnected = remoteRuntimeState?.connectionState === "disconnected" || remoteRuntimeState?.connectionState === "error";
+const isDisconnected =
+  remoteRuntimeState?.connectionState === "disconnected" ||
+  remoteRuntimeState?.connectionState === "error";
 
 const menuItems = [
   { id: "copy-path", label: "Copy Project Path" },
@@ -635,7 +674,7 @@ if (clicked === "disconnect") {
 }
 if (clicked === "remove-remote") {
   const confirmed = await api.dialogs.confirm(
-    `Remove remote "${project.name}"? This will disconnect and delete the saved environment.`
+    `Remove remote "${project.name}"? This will disconnect and delete the saved environment.`,
   );
   if (!confirmed) return;
   const identityKey = findIdentityKeyForProject(project);
@@ -661,6 +700,7 @@ git commit -m "feat(web): add reconnect/disconnect/remove context menu for remot
 ## Task 9: Add reconnect detection to AddRemoteProjectDialog
 
 **Files:**
+
 - Modify: `apps/web/src/components/AddRemoteProjectDialog.tsx`
 
 **Step 1: Add identity key matching**
@@ -677,8 +717,8 @@ const candidateIdentityKey = useMemo(() => {
   return makeRemoteIdentityKey({ host: h, user: u, port: p, workspaceRoot: w });
 }, [host, user, port, workspaceRoot]);
 
-const existingRemote = useSavedEnvironmentRegistryStore(
-  (s) => candidateIdentityKey ? s.byIdentityKey[candidateIdentityKey] ?? null : null,
+const existingRemote = useSavedEnvironmentRegistryStore((s) =>
+  candidateIdentityKey ? (s.byIdentityKey[candidateIdentityKey] ?? null) : null,
 );
 const isReconnectMode = existingRemote !== null;
 ```
@@ -710,6 +750,7 @@ git commit -m "feat(web): detect existing remote in dialog and switch to reconne
 ## Task 10: Add Remote Environments settings panel section
 
 **Files:**
+
 - Create: `apps/web/src/components/settings/RemoteEnvironmentsSettings.tsx`
 - Create: `apps/web/src/components/settings/__tests__/RemoteEnvironmentsSettings.test.tsx`
 - Modify: `apps/web/src/components/settings/SettingsPanels.browser.tsx` or `SettingsPanels.tsx`
@@ -717,6 +758,7 @@ git commit -m "feat(web): detect existing remote in dialog and switch to reconne
 **Step 1: Write the component**
 
 Table listing all saved remotes with:
+
 - Label (editable inline)
 - Host (`user@host:port workspace`)
 - Status (cloud icon + text)
@@ -749,6 +791,7 @@ git commit -m "feat(web): add Remote Environments settings panel"
 ## Task 11: Thread click triggers reconnect for disconnected remotes
 
 **Files:**
+
 - Modify: `apps/web/src/components/Sidebar.tsx`
 
 **Step 1: Add reconnect-on-thread-click**
@@ -758,7 +801,10 @@ In the thread click handler, check if the thread's environment is disconnected. 
 ```typescript
 const handleThreadClick = async (threadRef) => {
   const runtimeState = useSavedEnvironmentRuntimeStore.getState().byId[threadRef.environmentId];
-  if (runtimeState?.connectionState === "disconnected" || runtimeState?.connectionState === "error") {
+  if (
+    runtimeState?.connectionState === "disconnected" ||
+    runtimeState?.connectionState === "error"
+  ) {
     const identityKey = findIdentityKeyForEnvironmentId(threadRef.environmentId);
     if (identityKey) {
       await connectSavedEnvironment(identityKey);
@@ -790,6 +836,7 @@ git commit -m "feat(web): reconnect on thread click for disconnected remotes, gr
 ## Task 12: Persistence migration — backward compatibility
 
 **Files:**
+
 - Modify: `apps/web/src/environments/runtime/catalog.ts`
 
 **Step 1: Write migration in hydration path**
@@ -846,6 +893,7 @@ git commit -m "feat: add persistence migration for identity-keyed saved environm
 ## Task 13: Integration test — full lifecycle
 
 **Files:**
+
 - Create: `apps/web/src/environments/runtime/__tests__/remoteLifecycle.test.ts`
 
 **Step 1: Write integration tests covering:**
@@ -875,6 +923,7 @@ git commit -m "test: add integration tests for remote environment lifecycle"
 ## Task 14: Final cleanup and typecheck
 
 **Files:**
+
 - Remove dead code from old `addSavedEnvironment()` callers
 - Remove `bunfig.toml` from project root if still present
 - Clean up `.claude/worktrees/` submodule entries from git

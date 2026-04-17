@@ -140,13 +140,9 @@ export function evaluateThresholds(
     1,
     Math.round(thresholds.cpu.sustainedSeconds / sampleIntervalSeconds),
   );
-  const newCpuSamples = [
-    ...state.cpuSamples,
-    sample.cpu.usagePercent,
-  ].slice(-windowSize);
+  const newCpuSamples = [...state.cpuSamples, sample.cpu.usagePercent].slice(-windowSize);
 
-  const sustainedPercent =
-    newCpuSamples.reduce((sum, v) => sum + v, 0) / newCpuSamples.length;
+  const sustainedPercent = newCpuSamples.reduce((sum, v) => sum + v, 0) / newCpuSamples.length;
 
   const cpuState = evaluatePercentMetric(
     sustainedPercent,
@@ -174,10 +170,7 @@ export function evaluateThresholds(
       stopped: sample.containers.stopped,
       total: sample.containers.total,
     };
-    if (
-      state.lastContainerCount !== null &&
-      sample.containers.total !== state.lastContainerCount
-    ) {
+    if (state.lastContainerCount !== null && sample.containers.total !== state.lastContainerCount) {
       transitions.push({
         metric: "containers",
         previousState: "normal",
@@ -194,10 +187,7 @@ export function evaluateThresholds(
   let nextKubecontextState: MetricState = state.kubecontext;
 
   if (sample.kubecontext !== null) {
-    const kubeResult = evaluateKubecontext(
-      sample.kubecontext.context,
-      dangerPatterns,
-    );
+    const kubeResult = evaluateKubecontext(sample.kubecontext.context, dangerPatterns);
 
     kubecontextSnapshot = {
       state: kubeResult.state,
@@ -229,10 +219,7 @@ export function evaluateThresholds(
   const remoteState: MetricState = sample.remote.isRoot ? "critical" : "normal";
 
   // Emit transition on isRemote change, isRoot change, or state change
-  if (
-    sample.remote.isRemote !== state.lastIsRemote ||
-    sample.remote.isRoot !== state.lastIsRoot
-  ) {
+  if (sample.remote.isRemote !== state.lastIsRemote || sample.remote.isRoot !== state.lastIsRoot) {
     transitions.push({
       metric: "remote",
       previousState: state.remote,
@@ -307,12 +294,7 @@ export const ThresholdEvaluatorLive = Layer.effect(
     return {
       evaluate: (sample: RawSample, _workspacePath: string) =>
         Ref.modify(stateRef, (current) => {
-          const result = evaluateThresholds(
-            sample,
-            current,
-            thresholds,
-            dangerPatterns,
-          );
+          const result = evaluateThresholds(sample, current, thresholds, dangerPatterns);
           return [result, result.nextState] as const;
         }),
     };

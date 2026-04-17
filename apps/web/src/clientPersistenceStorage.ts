@@ -4,6 +4,7 @@ import {
   type ClientSettings,
   type EnvironmentId as EnvironmentIdValue,
   type PersistedSavedEnvironmentRecord,
+  type PersistedSavedProjectRecord,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -11,6 +12,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorag
 
 export const CLIENT_SETTINGS_STORAGE_KEY = "t3code:client-settings:v1";
 export const SAVED_ENVIRONMENT_REGISTRY_STORAGE_KEY = "t3code:saved-environment-registry:v1";
+export const SAVED_PROJECT_REGISTRY_STORAGE_KEY = "t3code:saved-project-registry:v1";
 
 const BrowserSavedEnvironmentRecordSchema = Schema.Struct({
   environmentId: EnvironmentId,
@@ -191,4 +193,56 @@ export function removeBrowserSavedEnvironmentSecret(environmentId: EnvironmentId
       return toPersistedSavedEnvironmentRecord(record);
     }),
   });
+}
+
+const BrowserSavedProjectRecordSchema = Schema.Struct({
+  savedProjectKey: Schema.String,
+  environmentIdentityKey: Schema.String,
+  projectId: Schema.String,
+  name: Schema.String,
+  workspaceRoot: Schema.String,
+  repositoryCanonicalKey: Schema.NullOr(Schema.String),
+  firstSeenAt: Schema.String,
+  lastSeenAt: Schema.String,
+  lastSyncedEnvironmentId: Schema.NullOr(Schema.String),
+});
+
+const BrowserSavedProjectRegistryDocumentSchema = Schema.Struct({
+  version: Schema.optionalKey(Schema.Number),
+  records: Schema.optionalKey(Schema.Array(BrowserSavedProjectRecordSchema)),
+});
+type BrowserSavedProjectRegistryDocument = typeof BrowserSavedProjectRegistryDocumentSchema.Type;
+
+function readBrowserSavedProjectRegistryDocument(): BrowserSavedProjectRegistryDocument {
+  if (!hasWindow()) {
+    return {};
+  }
+
+  try {
+    const parsed = getLocalStorageItem(
+      SAVED_PROJECT_REGISTRY_STORAGE_KEY,
+      BrowserSavedProjectRegistryDocumentSchema,
+    );
+    return parsed ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function readBrowserSavedProjectRegistry(): ReadonlyArray<PersistedSavedProjectRecord> {
+  return readBrowserSavedProjectRegistryDocument().records ?? [];
+}
+
+export function writeBrowserSavedProjectRegistry(
+  records: ReadonlyArray<PersistedSavedProjectRecord>,
+): void {
+  if (!hasWindow()) {
+    return;
+  }
+
+  setLocalStorageItem(
+    SAVED_PROJECT_REGISTRY_STORAGE_KEY,
+    { version: 1, records } satisfies BrowserSavedProjectRegistryDocument,
+    BrowserSavedProjectRegistryDocumentSchema,
+  );
 }
