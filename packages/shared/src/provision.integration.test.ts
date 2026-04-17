@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { SshConnectionManager } from "./sshManager";
-import { provision, teardown } from "./provision";
+import { SshConnectionManager } from "./sshManager.ts";
+import { provision, teardown } from "./provision.ts";
 
 /**
  * Integration smoke test for the remote SSH provisioner.

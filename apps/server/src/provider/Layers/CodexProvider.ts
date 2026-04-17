@@ -32,22 +32,22 @@ import {
   providerModelsFromSettings,
   spawnAndCollect,
   type CommandResult,
-} from "../providerSnapshot";
-import { makeManagedServerProvider } from "../makeManagedServerProvider";
+} from "../providerSnapshot.ts";
+import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import {
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
   parseCodexCliVersion,
-} from "../codexCliVersion";
+} from "../codexCliVersion.ts";
 import {
   adjustCodexModelsForAccount,
   codexAuthSubLabel,
   codexAuthSubType,
   type CodexAccountSnapshot,
-} from "../codexAccount";
-import { probeCodexDiscovery } from "../codexAppServer";
-import { CodexProvider } from "../Services/CodexProvider";
-import { ServerSettingsService } from "../../serverSettings";
+} from "../codexAccount.ts";
+import { probeCodexDiscovery } from "../codexAppServer.ts";
+import { CodexProvider } from "../Services/CodexProvider.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
 const DEFAULT_CODEX_MODEL_CAPABILITIES: ModelCapabilities = {
@@ -552,6 +552,46 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   });
 });
 
+const makePendingCodexProvider = (codexSettings: CodexSettings): ServerProvider => {
+  const checkedAt = new Date().toISOString();
+  const models = providerModelsFromSettings(
+    BUILT_IN_MODELS,
+    PROVIDER,
+    codexSettings.customModels,
+    DEFAULT_CODEX_MODEL_CAPABILITIES,
+  );
+
+  if (!codexSettings.enabled) {
+    return buildServerProvider({
+      provider: PROVIDER,
+      enabled: false,
+      checkedAt,
+      models,
+      probe: {
+        installed: false,
+        version: null,
+        status: "warning",
+        auth: { status: "unknown" },
+        message: "Codex is disabled in T3 Code settings.",
+      },
+    });
+  }
+
+  return buildServerProvider({
+    provider: PROVIDER,
+    enabled: true,
+    checkedAt,
+    models,
+    probe: {
+      installed: false,
+      version: null,
+      status: "warning",
+      auth: { status: "unknown" },
+      message: "Codex provider status has not been checked in this session yet.",
+    },
+  });
+};
+
 export const CodexProviderLive = Layer.effect(
   CodexProvider,
   Effect.gen(function* () {
@@ -602,6 +642,7 @@ export const CodexProviderLive = Layer.effect(
         Stream.map((settings) => settings.providers.codex),
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
+      initialSnapshot: makePendingCodexProvider,
       checkProvider,
     });
   }),

@@ -14,7 +14,7 @@ import {
   remoteServerStateFile,
   resolveRemotePlatform,
   tmuxSessionName,
-} from "./ssh";
+} from "./ssh.ts";
 
 describe("parseProbeOutput", () => {
   it("parses valid probe output", () => {

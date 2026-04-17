@@ -5,6 +5,7 @@ import {
   type EnvironmentId as EnvironmentIdValue,
   type PersistedSavedEnvironmentRecord,
   type PersistedSavedProjectRecord,
+  type RemoteIdentityKey,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -145,7 +146,7 @@ export function writeBrowserSavedEnvironmentRegistry(
 }
 
 export function readBrowserSavedEnvironmentSecret(
-  environmentId: EnvironmentIdValue,
+  environmentId: EnvironmentIdValue | RemoteIdentityKey,
 ): string | null {
   return (
     readBrowserSavedEnvironmentRecordsWithSecrets().find(
@@ -155,7 +156,7 @@ export function readBrowserSavedEnvironmentSecret(
 }
 
 export function writeBrowserSavedEnvironmentSecret(
-  environmentId: EnvironmentIdValue,
+  environmentId: EnvironmentIdValue | RemoteIdentityKey,
   secret: string,
 ): boolean {
   const document = readBrowserSavedEnvironmentRegistryDocument();
@@ -182,7 +183,9 @@ export function writeBrowserSavedEnvironmentSecret(
   return found;
 }
 
-export function removeBrowserSavedEnvironmentSecret(environmentId: EnvironmentIdValue): void {
+export function removeBrowserSavedEnvironmentSecret(
+  environmentId: EnvironmentIdValue | RemoteIdentityKey,
+): void {
   const document = readBrowserSavedEnvironmentRegistryDocument();
   writeBrowserSavedEnvironmentRegistryDocument({
     version: document.version ?? 1,

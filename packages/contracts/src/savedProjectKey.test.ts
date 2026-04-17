@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { ProjectId } from "./baseSchemas";
-import { makeRemoteIdentityKey } from "./remoteIdentity";
-import { makeSavedProjectKey, parseSavedProjectKey } from "./savedProjectKey";
+import { ProjectId } from "./baseSchemas.ts";
+import { makeRemoteIdentityKey } from "./remoteIdentity.ts";
+import { makeSavedProjectKey, parseSavedProjectKey } from "./savedProjectKey.ts";
 
 describe("savedProjectKey", () => {
   const environmentIdentityKey = makeRemoteIdentityKey({

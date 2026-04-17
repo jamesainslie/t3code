@@ -126,7 +126,6 @@ describe("reconnectSavedProject", () => {
       workspaceRoot: "/srv/a",
       label: "Env A",
       createdAt: "2026-04-01T00:00:00.000Z",
-      // @ts-expect-error — exercising the "environmentId missing" defensive branch
       environmentId: null,
       wsBaseUrl: "wss://a.example.com/",
       httpBaseUrl: "https://a.example.com/",

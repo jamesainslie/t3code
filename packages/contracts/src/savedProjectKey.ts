@@ -1,7 +1,7 @@
-import type { EnvironmentId, ProjectId } from "./baseSchemas";
-import { ProjectId as ProjectIdSchema } from "./baseSchemas";
-import type { RemoteIdentityKey } from "./remoteIdentity";
-import { parseRemoteIdentityKey } from "./remoteIdentity";
+import type { EnvironmentId, ProjectId } from "./baseSchemas.ts";
+import { ProjectId as ProjectIdSchema } from "./baseSchemas.ts";
+import type { RemoteIdentityKey } from "./remoteIdentity.ts";
+import { parseRemoteIdentityKey } from "./remoteIdentity.ts";
 
 /**
  * Branded stable key for a persisted remote project. Composed as

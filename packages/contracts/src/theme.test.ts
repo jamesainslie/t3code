@@ -12,7 +12,7 @@ import {
   DEFAULT_TRANSPARENCY_TOKENS,
   IconSetManifestSchema,
   DEFAULT_ICON_SET_CONFIG,
-} from "./theme";
+} from "./theme.ts";
 
 describe("Theme Schema", () => {
   it("decodes a minimal theme with only required fields", () => {

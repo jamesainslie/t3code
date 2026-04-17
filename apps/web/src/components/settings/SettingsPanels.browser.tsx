@@ -7,6 +7,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   type DesktopBridge,
+  type DesktopUpdateChannel,
   type DesktopUpdateState,
   type LocalApi,
   type ServerConfig,
@@ -262,10 +263,12 @@ function makeClientSession(input: {
 const createDesktopBridgeStub = (overrides?: {
   readonly serverExposureState?: Awaited<ReturnType<DesktopBridge["getServerExposureState"]>>;
   readonly setServerExposureMode?: DesktopBridge["setServerExposureMode"];
+  readonly setUpdateChannel?: DesktopBridge["setUpdateChannel"];
 }): DesktopBridge => {
   const idleUpdateState: DesktopUpdateState = {
     enabled: false,
     status: "idle",
+    channel: "latest",
     currentVersion: "0.0.0-test",
     hostArch: "arm64",
     appArch: "arm64",
@@ -280,6 +283,7 @@ const createDesktopBridgeStub = (overrides?: {
   };
 
   return {
+    getAppBranding: vi.fn().mockReturnValue(null),
     getLocalEnvironmentBootstrap: () => ({
       label: "Local environment",
       httpBaseUrl: "http://127.0.0.1:3773",
@@ -312,10 +316,19 @@ const createDesktopBridgeStub = (overrides?: {
     pickFolder: vi.fn().mockResolvedValue(null),
     confirm: vi.fn().mockResolvedValue(false),
     setTheme: vi.fn().mockResolvedValue(undefined),
+    setWindowOpacity: vi.fn().mockResolvedValue(undefined),
+    setVibrancy: vi.fn().mockResolvedValue(undefined),
+    getPlatform: vi.fn().mockResolvedValue("darwin"),
     showContextMenu: vi.fn().mockResolvedValue(null),
     openExternal: vi.fn().mockResolvedValue(true),
     onMenuAction: () => () => {},
     getUpdateState: vi.fn().mockResolvedValue(idleUpdateState),
+    setUpdateChannel:
+      overrides?.setUpdateChannel ??
+      vi.fn().mockImplementation(async (channel: DesktopUpdateChannel) => ({
+        ...idleUpdateState,
+        channel,
+      })),
     checkForUpdate: vi.fn().mockResolvedValue({ checked: false, state: idleUpdateState }),
     downloadUpdate: vi
       .fn()
