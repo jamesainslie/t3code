@@ -28,7 +28,9 @@
           try {
             const activeId = window.localStorage.getItem("t3code:active-theme-id:v1");
             if (activeId && !activeId.startsWith("default-")) {
-              const themes = JSON.parse(window.localStorage.getItem("t3code:custom-themes:v1") || "[]");
+              const themes = JSON.parse(
+                window.localStorage.getItem("t3code:custom-themes:v1") || "[]",
+              );
               const active = themes.find((t) => t.id === activeId);
               if (active?.overrides?.colors?.appChromeBackground) {
                 chromeColor = active.overrides.colors.appChromeBackground;

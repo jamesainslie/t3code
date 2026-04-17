@@ -35,12 +35,10 @@ function isPersistedSavedProjectRecord(value: unknown): value is PersistedSavedP
     typeof value.projectId === "string" &&
     typeof value.name === "string" &&
     typeof value.workspaceRoot === "string" &&
-    (value.repositoryCanonicalKey === null ||
-      typeof value.repositoryCanonicalKey === "string") &&
+    (value.repositoryCanonicalKey === null || typeof value.repositoryCanonicalKey === "string") &&
     typeof value.firstSeenAt === "string" &&
     typeof value.lastSeenAt === "string" &&
-    (value.lastSyncedEnvironmentId === null ||
-      typeof value.lastSyncedEnvironmentId === "string")
+    (value.lastSyncedEnvironmentId === null || typeof value.lastSyncedEnvironmentId === "string")
   );
 }
 

@@ -9,10 +9,7 @@ import {
 } from "../environments/runtime";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { toastManager } from "./ui/toast";
-import {
-  computeRemotePillModel,
-  type RemotePillState,
-} from "./SidebarRemoteReconnectPill.logic";
+import { computeRemotePillModel, type RemotePillState } from "./SidebarRemoteReconnectPill.logic";
 
 /**
  * Tailwind color classes for each pill state. The halo uses `animate-ping`
@@ -63,9 +60,7 @@ export function SidebarRemoteReconnectPill() {
   const records = useSavedEnvironmentRegistryStore(
     useShallow((state) => Object.values(state.byIdentityKey)),
   );
-  const runtimeById = useSavedEnvironmentRuntimeStore(
-    useShallow((state) => state.byId),
-  );
+  const runtimeById = useSavedEnvironmentRuntimeStore(useShallow((state) => state.byId));
   const [busy, setBusy] = useState(false);
 
   const model = useMemo(

@@ -125,9 +125,9 @@ describe("useSavedProjectRegistryStore", () => {
     useSavedProjectRegistryStore.getState().upsertMany([project]);
     useSavedProjectRegistryStore.getState().upsertMany([project]);
 
-    expect(useSavedProjectRegistryStore.getState().keysByEnvironmentIdentityKey[ENV_A]).toHaveLength(
-      1,
-    );
+    expect(
+      useSavedProjectRegistryStore.getState().keysByEnvironmentIdentityKey[ENV_A],
+    ).toHaveLength(1);
   });
 
   it("pruneMissing removes only entries for the given environment whose projectIds are absent", () => {

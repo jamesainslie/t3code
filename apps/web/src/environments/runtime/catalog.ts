@@ -384,9 +384,7 @@ export async function writeSavedEnvironmentBearerToken(
   return ensureLocalApi().persistence.setSavedEnvironmentSecret(record.identityKey, bearerToken);
 }
 
-export async function removeSavedEnvironmentBearerToken(
-  record: BearerTokenLocator,
-): Promise<void> {
+export async function removeSavedEnvironmentBearerToken(record: BearerTokenLocator): Promise<void> {
   const persistence = ensureLocalApi().persistence;
   await persistence.removeSavedEnvironmentSecret(record.identityKey);
   if (record.environmentId) {

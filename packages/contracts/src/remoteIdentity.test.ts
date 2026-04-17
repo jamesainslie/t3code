@@ -13,8 +13,18 @@ describe("RemoteIdentityKey", () => {
   });
 
   it("produces different keys for different workspaces on same host", () => {
-    const a = makeRemoteIdentityKey({ host: "devbox", user: "james", port: 22, workspaceRoot: "/home/james/app1" });
-    const b = makeRemoteIdentityKey({ host: "devbox", user: "james", port: 22, workspaceRoot: "/home/james/app2" });
+    const a = makeRemoteIdentityKey({
+      host: "devbox",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/home/james/app1",
+    });
+    const b = makeRemoteIdentityKey({
+      host: "devbox",
+      user: "james",
+      port: 22,
+      workspaceRoot: "/home/james/app2",
+    });
     expect(a).not.toBe(b);
   });
 

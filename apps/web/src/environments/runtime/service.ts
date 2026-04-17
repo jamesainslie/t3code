@@ -587,8 +587,7 @@ async function ensureSavedEnvironmentConnection(
     }
   }
 
-  const bearerToken =
-    options?.bearerToken ?? (await readSavedEnvironmentBearerToken(record));
+  const bearerToken = options?.bearerToken ?? (await readSavedEnvironmentBearerToken(record));
   if (!bearerToken) {
     useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
       authState: "requires-auth",

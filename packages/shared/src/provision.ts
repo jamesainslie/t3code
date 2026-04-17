@@ -181,8 +181,14 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     emit({ type: "error", phase: 2, message: msg });
     throw new Error(msg);
   }
-  log(`phase 2: ${probe.os}/${probe.arch}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`);
-  emit({ type: "log", phase: 2, message: `${probe.os}/${probe.arch}, version ${probe.currentVersion || "(none)"}` });
+  log(
+    `phase 2: ${probe.os}/${probe.arch}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`,
+  );
+  emit({
+    type: "log",
+    phase: 2,
+    message: `${probe.os}/${probe.arch}, version ${probe.currentVersion || "(none)"}`,
+  });
   emit({ type: "phase-complete", phase: 2, label: "Probing remote environment" });
 
   const t3Home = `${remoteHome}/.t3`;
@@ -209,8 +215,14 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   const localNormalized = normalizeVersion(localVersion);
   if (!sessionExists && remoteNormalized !== localNormalized) {
     emit({ type: "phase-start", phase: 3, label: "Transferring binaries" });
-    log(`phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring binaries...`);
-    emit({ type: "log", phase: 3, message: `Version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized})` });
+    log(
+      `phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring binaries...`,
+    );
+    emit({
+      type: "log",
+      phase: 3,
+      message: `Version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized})`,
+    });
     onStatus?.("provisioning");
     // Kill any orphaned t3 processes that may be holding the binary open
     await runSshCommand(target, `pkill -9 -f 't3 serve' 2>/dev/null || true`).catch(() => {});
@@ -263,7 +275,11 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
       try {
         remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
       } catch (err) {
-        emit({ type: "error", phase: 4, message: err instanceof Error ? err.message : String(err) });
+        emit({
+          type: "error",
+          phase: 4,
+          message: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
     } else {
@@ -332,7 +348,11 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     localPort = await findFreeLocalPort();
     await setupPortForward(target, localPort, remotePort);
     log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
-    emit({ type: "log", phase: 5, message: `Tunnel: localhost:${localPort} → remote:${remotePort}` });
+    emit({
+      type: "log",
+      phase: 5,
+      message: `Tunnel: localhost:${localPort} → remote:${remotePort}`,
+    });
     emit({ type: "phase-complete", phase: 5, label: "Setting up secure tunnel" });
   } catch (err) {
     emit({ type: "error", phase: 5, message: err instanceof Error ? err.message : String(err) });

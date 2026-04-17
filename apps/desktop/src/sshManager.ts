@@ -51,10 +51,8 @@ export async function sshConnect(opts: SshConnectOptions): Promise<SshConnectRes
     projectId: opts.projectId,
     workspaceRoot: opts.workspaceRoot,
     localVersion: opts.localVersion,
-    serverBinaryPath: (platform, arch) =>
-      Path.join(binDir, `t3-server-${platform}-${arch}`),
-    tmuxBinaryPath: (platform, arch) =>
-      Path.join(binDir, `tmux-${platform}-${arch}`),
+    serverBinaryPath: (platform, arch) => Path.join(binDir, `t3-server-${platform}-${arch}`),
+    tmuxBinaryPath: (platform, arch) => Path.join(binDir, `tmux-${platform}-${arch}`),
     sshManager: globalSshManager,
     onStatus: opts.onStatus,
     ...(opts.onLog != null ? { onLog: opts.onLog } : {}),
@@ -93,11 +91,9 @@ export function sshGetStatus(): { connections: Array<{ projectId: string; wsUrl:
   };
 }
 
-export function sshProbe(opts: {
-  host: string;
-  user: string;
-  port: number;
-}): { reachable: boolean } {
+export function sshProbe(opts: { host: string; user: string; port: number }): {
+  reachable: boolean;
+} {
   try {
     const args = buildCheckSocketArgs(opts);
     ChildProcess.execFileSync("ssh", args, { timeout: 3_000, stdio: "ignore" });

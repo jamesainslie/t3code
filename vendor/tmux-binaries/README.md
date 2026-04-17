@@ -8,9 +8,9 @@ to deploy tmux on remote hosts that don't have it installed.
 
 ## Files
 
-| File | Platform | Size |
-|------|----------|------|
-| `tmux-linux-x64` | Linux x86_64 | ~2.9 MB |
+| File               | Platform      | Size    |
+| ------------------ | ------------- | ------- |
+| `tmux-linux-x64`   | Linux x86_64  | ~2.9 MB |
 | `tmux-linux-arm64` | Linux aarch64 | ~2.6 MB |
 
 ## Updating

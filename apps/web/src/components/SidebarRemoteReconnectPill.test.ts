@@ -1,4 +1,8 @@
-import { EnvironmentId, makeRemoteIdentityKey, type SavedRemoteEnvironment } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  makeRemoteIdentityKey,
+  type SavedRemoteEnvironment,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { SavedEnvironmentRuntimeState } from "../environments/runtime";
@@ -27,7 +31,9 @@ function makeRemote(overrides: {
 }
 
 function makeRuntime(
-  partial: Partial<SavedEnvironmentRuntimeState> & { connectionState: SavedEnvironmentRuntimeState["connectionState"] },
+  partial: Partial<SavedEnvironmentRuntimeState> & {
+    connectionState: SavedEnvironmentRuntimeState["connectionState"];
+  },
 ): SavedEnvironmentRuntimeState {
   return {
     connectionState: partial.connectionState,
@@ -54,7 +60,10 @@ describe("computeRemotePillModel", () => {
   });
 
   it("hides the pill when only records without environmentId are present", () => {
-    const draft = { ...makeRemote({ environmentId: "env-1", label: "draft" }), environmentId: null as unknown as EnvironmentId };
+    const draft = {
+      ...makeRemote({ environmentId: "env-1", label: "draft" }),
+      environmentId: null as unknown as EnvironmentId,
+    };
     expect(computeRemotePillModel({ records: [draft], runtimeById: {} }).state).toBe("hidden");
   });
 

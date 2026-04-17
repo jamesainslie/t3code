@@ -76,18 +76,51 @@ function DebugStateInspector({
 
   return (
     <div className="mt-2 space-y-1 rounded border border-border/40 bg-muted/30 p-2 font-mono text-[11px] text-muted-foreground">
-      <div><span className="text-muted-foreground/70">identityKey:</span> {record.identityKey}</div>
-      <div><span className="text-muted-foreground/70">environmentId:</span> {record.environmentId ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">httpBaseUrl:</span> {record.httpBaseUrl ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">wsBaseUrl:</span> {record.wsBaseUrl ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">connectionState:</span> {runtimeState?.connectionState ?? "unknown"}</div>
-      <div><span className="text-muted-foreground/70">authState:</span> {runtimeState?.authState ?? "unknown"}</div>
-      <div><span className="text-muted-foreground/70">role:</span> {runtimeState?.role ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">connectedAt:</span> {runtimeState?.connectedAt ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">disconnectedAt:</span> {runtimeState?.disconnectedAt ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">lastError:</span> {runtimeState?.lastError ?? "null"}</div>
-      <div><span className="text-muted-foreground/70">sshConfig:</span> {record.user}@{record.host}:{record.port} {record.workspaceRoot}</div>
-      <div><span className="text-muted-foreground/70">bearer:</span> {runtimeState?.authState === "authenticated" ? "present" : "missing"}</div>
+      <div>
+        <span className="text-muted-foreground/70">identityKey:</span> {record.identityKey}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">environmentId:</span>{" "}
+        {record.environmentId ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">httpBaseUrl:</span>{" "}
+        {record.httpBaseUrl ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">wsBaseUrl:</span> {record.wsBaseUrl ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">connectionState:</span>{" "}
+        {runtimeState?.connectionState ?? "unknown"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">authState:</span>{" "}
+        {runtimeState?.authState ?? "unknown"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">role:</span> {runtimeState?.role ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">connectedAt:</span>{" "}
+        {runtimeState?.connectedAt ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">disconnectedAt:</span>{" "}
+        {runtimeState?.disconnectedAt ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">lastError:</span>{" "}
+        {runtimeState?.lastError ?? "null"}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">sshConfig:</span> {record.user}@{record.host}:
+        {record.port} {record.workspaceRoot}
+      </div>
+      <div>
+        <span className="text-muted-foreground/70">bearer:</span>{" "}
+        {runtimeState?.authState === "authenticated" ? "present" : "missing"}
+      </div>
       <div className="pt-1">
         <Button size="xs" variant="outline" onClick={handleDumpToConsole}>
           Dump to console
@@ -136,11 +169,7 @@ function RemoteEnvironmentRow({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => setShowDebug((prev) => !prev)}
-          >
+          <Button size="xs" variant="ghost" onClick={() => setShowDebug((prev) => !prev)}>
             {showDebug ? "Hide Debug" : "Debug"}
           </Button>
           {isConnected ? (
@@ -172,9 +201,7 @@ function RemoteEnvironmentRow({
           </Button>
         </div>
       </div>
-      {showDebug ? (
-        <DebugStateInspector record={record} runtimeState={runtimeState} />
-      ) : null}
+      {showDebug ? <DebugStateInspector record={record} runtimeState={runtimeState} /> : null}
     </div>
   );
 }
@@ -261,15 +288,16 @@ export function RemoteEnvironmentsSection() {
   const entries: RemoteEnvironmentEntry[] = useMemo(
     () =>
       Object.values(byIdentityKey)
-        .filter((r): r is SavedRemoteEnvironment & { environmentId: EnvironmentId } =>
-          r.environmentId !== null,
+        .filter(
+          (r): r is SavedRemoteEnvironment & { environmentId: EnvironmentId } =>
+            r.environmentId !== null,
         )
         .toSorted((a, b) => a.label.localeCompare(b.label))
         .map((record) => ({
           record,
           connectionState:
-            (runtimeById[record.environmentId]?.connectionState as SavedEnvironmentConnectionState) ??
-            "disconnected",
+            (runtimeById[record.environmentId]
+              ?.connectionState as SavedEnvironmentConnectionState) ?? "disconnected",
           runtimeState: runtimeById[record.environmentId] ?? null,
         })),
     [byIdentityKey, runtimeById],
@@ -378,10 +406,7 @@ export function ConnectionLogViewer() {
 
   const handleCopy = useCallback(() => {
     const text = filteredEntries
-      .map(
-        (e) =>
-          `[${formatLogTimestamp(e.timestamp)}] [${e.level}] [${e.source}] ${e.message}`,
-      )
+      .map((e) => `[${formatLogTimestamp(e.timestamp)}] [${e.level}] [${e.source}] ${e.message}`)
       .join("\n");
     void navigator.clipboard.writeText(text);
     toastManager.add({ type: "info", title: "Copied connection log to clipboard" });
@@ -419,10 +444,11 @@ export function ConnectionLogViewer() {
           ) : (
             filteredEntries.map((entry) => (
               <div key={entry.id} className={`${LOG_LEVEL_COLORS[entry.level]} leading-relaxed`}>
-                <span className="text-muted-foreground/60">[{formatLogTimestamp(entry.timestamp)}]</span>{" "}
+                <span className="text-muted-foreground/60">
+                  [{formatLogTimestamp(entry.timestamp)}]
+                </span>{" "}
                 <span className="font-semibold">[{entry.level}]</span>{" "}
-                <span className="text-muted-foreground/80">[{entry.source}]</span>{" "}
-                {entry.message}
+                <span className="text-muted-foreground/80">[{entry.source}]</span> {entry.message}
               </div>
             ))
           )}

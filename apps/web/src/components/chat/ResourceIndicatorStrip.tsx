@@ -1,12 +1,5 @@
 import type { HostResourceSnapshot, MetricState } from "@t3tools/contracts";
-import {
-  Container,
-  Cpu,
-  Globe,
-  HardDrive,
-  MemoryStick,
-  Ship,
-} from "lucide-react";
+import { Container, Cpu, Globe, HardDrive, MemoryStick, Ship } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { cn } from "~/lib/utils";
 
@@ -39,16 +32,12 @@ function IndicatorIcon({ label, icon: Icon, colorClass }: IndicatorIconProps) {
   );
 }
 
-export function ResourceIndicatorStrip({
-  snapshot,
-}: ResourceIndicatorStripProps) {
+export function ResourceIndicatorStrip({ snapshot }: ResourceIndicatorStripProps) {
   if (snapshot === null) {
     return null;
   }
 
-  const remoteState: MetricState = snapshot.remote.isRoot
-    ? "critical"
-    : "normal";
+  const remoteState: MetricState = snapshot.remote.isRoot ? "critical" : "normal";
 
   const kubeState: MetricState = snapshot.kubecontext?.isDanger
     ? "critical"
@@ -65,11 +54,7 @@ export function ResourceIndicatorStrip({
         icon={MemoryStick}
         colorClass={getMetricColorClass(snapshot.ram.state)}
       />
-      <IndicatorIcon
-        label="CPU"
-        icon={Cpu}
-        colorClass={getMetricColorClass(snapshot.cpu.state)}
-      />
+      <IndicatorIcon label="CPU" icon={Cpu} colorClass={getMetricColorClass(snapshot.cpu.state)} />
       <IndicatorIcon
         label="Disk"
         icon={HardDrive}
@@ -83,17 +68,9 @@ export function ResourceIndicatorStrip({
         />
       )}
       {snapshot.kubecontext !== null && (
-        <IndicatorIcon
-          label="Kubernetes"
-          icon={Ship}
-          colorClass={getMetricColorClass(kubeState)}
-        />
+        <IndicatorIcon label="Kubernetes" icon={Ship} colorClass={getMetricColorClass(kubeState)} />
       )}
-      <IndicatorIcon
-        label="Host"
-        icon={Globe}
-        colorClass={getMetricColorClass(remoteState)}
-      />
+      <IndicatorIcon label="Host" icon={Globe} colorClass={getMetricColorClass(remoteState)} />
     </div>
   );
 }

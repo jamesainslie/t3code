@@ -200,18 +200,14 @@ export interface DesktopBridge {
   setSavedEnvironmentRegistry: (
     records: readonly PersistedSavedEnvironmentRecord[],
   ) => Promise<void>;
-  getSavedEnvironmentSecret: (
-    key: EnvironmentId | RemoteIdentityKey,
-  ) => Promise<string | null>;
+  getSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<string | null>;
   setSavedEnvironmentSecret: (
     key: EnvironmentId | RemoteIdentityKey,
     secret: string,
   ) => Promise<boolean>;
   removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
   getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
-  setSavedProjectRegistry: (
-    records: readonly PersistedSavedProjectRecord[],
-  ) => Promise<void>;
+  setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: () => Promise<string | null>;
@@ -285,18 +281,14 @@ export interface LocalApi {
     setSavedEnvironmentRegistry: (
       records: readonly PersistedSavedEnvironmentRecord[],
     ) => Promise<void>;
-    getSavedEnvironmentSecret: (
-      key: EnvironmentId | RemoteIdentityKey,
-    ) => Promise<string | null>;
+    getSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<string | null>;
     setSavedEnvironmentSecret: (
       key: EnvironmentId | RemoteIdentityKey,
       secret: string,
     ) => Promise<boolean>;
     removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
     getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
-    setSavedProjectRegistry: (
-      records: readonly PersistedSavedProjectRecord[],
-    ) => Promise<void>;
+    setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

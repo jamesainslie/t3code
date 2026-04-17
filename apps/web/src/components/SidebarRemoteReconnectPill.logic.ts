@@ -7,12 +7,7 @@ import type { SavedEnvironmentRuntimeState } from "../environments/runtime";
  * per-environment runtime state — no component-local state is involved, which
  * keeps the rendering path pure and trivially testable.
  */
-export type RemotePillState =
-  | "hidden"
-  | "connected"
-  | "connecting"
-  | "reconnect"
-  | "error";
+export type RemotePillState = "hidden" | "connected" | "connecting" | "reconnect" | "error";
 
 export interface RemotePillModel {
   readonly state: RemotePillState;

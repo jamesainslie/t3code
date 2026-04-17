@@ -26,10 +26,7 @@ export {
   waitForSavedProjectRegistryHydration,
 } from "./projectsCatalog";
 
-export {
-  selectSidebarProjectEntries,
-  type SidebarProjectEntry,
-} from "./sidebarProjectsSelector";
+export { selectSidebarProjectEntries, type SidebarProjectEntry } from "./sidebarProjectsSelector";
 
 export {
   addOrReconnectSavedEnvironment,

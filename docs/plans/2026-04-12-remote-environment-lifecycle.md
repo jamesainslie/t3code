@@ -101,6 +101,7 @@ interface SavedEnvironmentRegistryState {
 ## Startup Behavior
 
 Lazy reconnect:
+
 1. Hydrate saved environment registry from disk
 2. Show all saved remotes in sidebar as "Disconnected" (gray cloud)
 3. Do NOT provision any tunnels automatically
@@ -112,12 +113,12 @@ Lazy reconnect:
 
 Renders inline with project name for remote projects only:
 
-| State | Icon | Color |
-|-------|------|-------|
-| Connected | `Cloud` | `text-emerald-500` |
-| Connecting | `Cloud` | `text-muted-foreground animate-pulse` |
-| Disconnected | `CloudOff` | `text-muted-foreground` |
-| Error | `CloudOff` | `text-red-500` |
+| State        | Icon       | Color                                 |
+| ------------ | ---------- | ------------------------------------- |
+| Connected    | `Cloud`    | `text-emerald-500`                    |
+| Connecting   | `Cloud`    | `text-muted-foreground animate-pulse` |
+| Disconnected | `CloudOff` | `text-muted-foreground`               |
+| Error        | `CloudOff` | `text-red-500`                        |
 
 Click behavior: when disconnected/error, clicking the cloud triggers reconnect (no dialog).
 
@@ -156,10 +157,10 @@ Detection happens as user types — computed `identityKey` checked against regis
 
 New "Remote Environments" section with a table:
 
-| Label | Host | Status | Last Connected | Actions |
-|-------|------|--------|----------------|---------|
-| devbox | james@hephaestus:22 ~/myapp | Connected | just now | Disconnect - Remove |
-| staging | james@staging:22 ~/api | Disconnected | 2 days ago | Reconnect - Remove |
+| Label   | Host                        | Status       | Last Connected | Actions             |
+| ------- | --------------------------- | ------------ | -------------- | ------------------- |
+| devbox  | james@hephaestus:22 ~/myapp | Connected    | just now       | Disconnect - Remove |
+| staging | james@staging:22 ~/api      | Disconnected | 2 days ago     | Reconnect - Remove  |
 
 - Labels editable inline
 - "Remove all disconnected" bulk action at bottom
@@ -170,10 +171,10 @@ New "Remote Environments" section with a table:
 
 ```typescript
 // Identity layer (stable, persisted)
-identityKeyToEnvironmentId: Map<RemoteIdentityKey, EnvironmentId>
+identityKeyToEnvironmentId: Map<RemoteIdentityKey, EnvironmentId>;
 
 // Connection layer (transient, keyed by environmentId for WS routing)
-environmentConnections: Map<EnvironmentId, EnvironmentConnection>
+environmentConnections: Map<EnvironmentId, EnvironmentConnection>;
 ```
 
 ### addOrReconnectSavedEnvironment()

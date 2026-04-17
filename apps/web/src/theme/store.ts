@@ -327,11 +327,17 @@ export class ThemeStore {
   }
 
   getFileIconSetId(): string {
-    return (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)?.fileIcons ?? "default";
+    return (
+      (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)
+        ?.fileIcons ?? "default"
+    );
   }
 
   getUiIconSetId(): string {
-    return (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)?.uiIcons ?? "default";
+    return (
+      (this.snapshot.theme.overrides.icons as Record<string, string | undefined> | undefined)
+        ?.uiIcons ?? "default"
+    );
   }
 
   createTheme(name: string, base: ThemeBase): void {

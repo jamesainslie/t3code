@@ -5,10 +5,7 @@ import * as path from "node:path";
 import type { PersistedSavedProjectRecord } from "@t3tools/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  readSavedProjectRegistry,
-  writeSavedProjectRegistry,
-} from "./savedProjectsPersistence";
+import { readSavedProjectRegistry, writeSavedProjectRegistry } from "./savedProjectsPersistence";
 
 const tempDirectories: string[] = [];
 

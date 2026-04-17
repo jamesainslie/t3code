@@ -60,9 +60,7 @@ function ProvisionTimeline({
             {/* Vertical line + icon column */}
             <div className="flex flex-col items-center">
               <PhaseIcon status={p.status} />
-              {!isLast && (
-                <div className="w-px flex-1 bg-border" />
-              )}
+              {!isLast && <div className="w-px flex-1 bg-border" />}
             </div>
             {/* Content */}
             <div className="flex flex-col gap-0.5 pb-3 min-w-0">
@@ -98,7 +96,8 @@ function ProvisionTimeline({
             <div className="flex flex-col items-center">
               {postProvisionStatus === "registering" ? (
                 <Loader2Icon className="size-4 shrink-0 animate-spin text-primary" />
-              ) : postProvisionStatus === "creating-project" || postProvisionStatus === "connected" ? (
+              ) : postProvisionStatus === "creating-project" ||
+                postProvisionStatus === "connected" ? (
                 <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
               ) : (
                 <CircleIcon className="size-4 shrink-0 text-muted-foreground/40" />
@@ -182,8 +181,8 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
     return makeRemoteIdentityKey({ host: h, user: u, port: p, workspaceRoot: w });
   }, [host, user, port, workspaceRoot]);
 
-  const existingRemote = useSavedEnvironmentRegistryStore(
-    (s) => candidateIdentityKey ? s.byIdentityKey[candidateIdentityKey] ?? null : null,
+  const existingRemote = useSavedEnvironmentRegistryStore((s) =>
+    candidateIdentityKey ? (s.byIdentityKey[candidateIdentityKey] ?? null) : null,
   );
   const isReconnectMode = existingRemote !== null;
 
@@ -440,7 +439,11 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
     >
       <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-2xl">
         <h2 className="mb-4 text-sm font-semibold text-foreground">
-          {showTimeline ? "Connecting to Remote" : isReconnectMode ? "Reconnect Remote" : "Add Remote Project"}
+          {showTimeline
+            ? "Connecting to Remote"
+            : isReconnectMode
+              ? "Reconnect Remote"
+              : "Add Remote Project"}
         </h2>
 
         {showTimeline ? (
@@ -588,7 +591,8 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
             )}
             {isReconnectMode && existingRemote && (
               <div className="rounded-md bg-primary/10 px-3 py-2 text-[11px] text-foreground">
-                This remote is already saved as <strong>{existingRemote.label}</strong>. Reconnecting will re-establish the tunnel.
+                This remote is already saved as <strong>{existingRemote.label}</strong>.
+                Reconnecting will re-establish the tunnel.
               </div>
             )}
             {error && (

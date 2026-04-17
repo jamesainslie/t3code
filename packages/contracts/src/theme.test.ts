@@ -135,9 +135,7 @@ describe("IconSetManifestSchema", () => {
       version: "1.0.0",
       type: "syntax-icons",
     };
-    expect(() =>
-      Schema.decodeUnknownSync(IconSetManifestSchema)(input),
-    ).toThrow();
+    expect(() => Schema.decodeUnknownSync(IconSetManifestSchema)(input)).toThrow();
   });
 });
 

@@ -32,9 +32,7 @@ interface SavedProjectRegistryStore extends SavedProjectRegistryState {
 let savedProjectRegistryHydrated = false;
 let savedProjectRegistryHydrationPromise: Promise<void> | null = null;
 
-function toPersistedSavedProjectRecord(
-  record: SavedRemoteProject,
-): PersistedSavedProjectRecord {
+function toPersistedSavedProjectRecord(record: SavedRemoteProject): PersistedSavedProjectRecord {
   return {
     savedProjectKey: record.savedProjectKey,
     environmentIdentityKey: record.environmentIdentityKey,
@@ -48,9 +46,7 @@ function toPersistedSavedProjectRecord(
   };
 }
 
-function migratePersistedRecord(
-  record: PersistedSavedProjectRecord,
-): SavedRemoteProject | null {
+function migratePersistedRecord(record: PersistedSavedProjectRecord): SavedRemoteProject | null {
   const environmentIdentityKey = parseRemoteIdentityKey(record.environmentIdentityKey);
   if (!environmentIdentityKey) return null;
   const projectId = ProjectId.make(record.projectId);
@@ -99,9 +95,7 @@ function persistSavedProjectRegistryState(
   }
 }
 
-function replaceSavedProjectRegistryState(
-  records: ReadonlyArray<SavedRemoteProject>,
-): void {
+function replaceSavedProjectRegistryState(records: ReadonlyArray<SavedRemoteProject>): void {
   const currentByKey = useSavedProjectRegistryStore.getState().byKey;
   const hydratedByKey = Object.fromEntries(
     records.map((record) => [record.savedProjectKey, record]),
