@@ -57,10 +57,7 @@ describe("desktopSettings", () => {
 
   it("preserves the requested network-accessible preference across temporary fallback", () => {
     expect(
-      setDesktopServerExposurePreference(
-        { ...DEFAULT_DESKTOP_SETTINGS },
-        "network-accessible",
-      ),
+      setDesktopServerExposurePreference({ ...DEFAULT_DESKTOP_SETTINGS }, "network-accessible"),
     ).toEqual({
       ...DEFAULT_DESKTOP_SETTINGS,
       serverExposureMode: "network-accessible",
@@ -68,9 +65,7 @@ describe("desktopSettings", () => {
   });
 
   it("persists the requested nightly update channel", () => {
-    expect(
-      setDesktopUpdateChannelPreference({ ...DEFAULT_DESKTOP_SETTINGS }, "nightly"),
-    ).toEqual({
+    expect(setDesktopUpdateChannelPreference({ ...DEFAULT_DESKTOP_SETTINGS }, "nightly")).toEqual({
       ...DEFAULT_DESKTOP_SETTINGS,
       updateChannel: "nightly",
       updateChannelConfiguredByUser: true,

@@ -39,7 +39,9 @@ import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   type ContextMenuItem,
+  DEFAULT_MODEL_BY_PROVIDER,
   type DesktopUpdateState,
+  type EnvironmentId,
   ProjectId,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
@@ -64,7 +66,8 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isMacPlatform, newCommandId } from "../lib/utils";
+import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
   selectProjectByRef,
   selectProjectsAcrossEnvironments,
@@ -2832,6 +2835,16 @@ export default function Sidebar() {
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
   const keybindings = useServerKeybindings();
   const openAddProjectCommandPalette = useCommandPaletteStore((store) => store.openAddProject);
+  const activeEnvironmentId = useStore((store) => store.activeEnvironmentId);
+  const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
+    (settings) => settings.defaultThreadEnvMode,
+  );
+  const [addingProject, setAddingProject] = useState(false);
+  const [newCwd, setNewCwd] = useState("");
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [isAddingProject, setIsAddingProject] = useState(false);
+  const [addProjectError, setAddProjectError] = useState<string | null>(null);
+  const addProjectInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -2845,6 +2858,9 @@ export default function Sidebar() {
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const platform = navigator.platform;
+  const isLinuxDesktop = isElectron && isLinuxPlatform(platform);
+  const shouldBrowseForProjectImmediately = isElectron && !isLinuxDesktop;
+  const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
@@ -2968,6 +2984,132 @@ export default function Sidebar() {
   const newThreadShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.newLocal", newThreadShortcutLabelOptions) ??
     shortcutLabelForCommand(keybindings, "chat.new", newThreadShortcutLabelOptions);
+
+  const focusMostRecentThreadForProject = useCallback(
+    (projectRef: { environmentId: EnvironmentId; projectId: ProjectId }) => {
+      const physicalKey = scopedProjectKey(
+        scopeProjectRef(projectRef.environmentId, projectRef.projectId),
+      );
+      const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
+      const latestThread = sortThreads(
+        (threadsByProjectKey.get(logicalKey) ?? []).filter((thread) => thread.archivedAt === null),
+        sidebarThreadSortOrder,
+      )[0];
+      if (!latestThread) return;
+
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(latestThread.environmentId, latestThread.id)),
+      });
+    },
+    [sidebarThreadSortOrder, navigate, threadsByProjectKey, physicalToLogicalKey],
+  );
+
+  const addProjectFromInput = useCallback(
+    async (rawCwd: string) => {
+      const cwd = rawCwd.trim();
+      if (!cwd || isAddingProject) return;
+      const api = activeEnvironmentId ? readEnvironmentApi(activeEnvironmentId) : undefined;
+      if (!api) return;
+
+      setIsAddingProject(true);
+      const finishAddingProject = () => {
+        setIsAddingProject(false);
+        setNewCwd("");
+        setAddProjectError(null);
+        setAddingProject(false);
+      };
+
+      const existing = projects.find((project) => project.cwd === cwd);
+      if (existing) {
+        focusMostRecentThreadForProject({
+          environmentId: existing.environmentId,
+          projectId: existing.id,
+        });
+        finishAddingProject();
+        return;
+      }
+
+      const projectId = newProjectId();
+      const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId,
+          title,
+          workspaceRoot: cwd,
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          createdAt: new Date().toISOString(),
+        });
+        if (activeEnvironmentId !== null) {
+          await handleNewThread(scopeProjectRef(activeEnvironmentId, projectId), {
+            envMode: defaultThreadEnvMode,
+          }).catch(() => undefined);
+        }
+      } catch (error) {
+        const description =
+          error instanceof Error ? error.message : "An error occurred while adding the project.";
+        setIsAddingProject(false);
+        if (shouldBrowseForProjectImmediately) {
+          toastManager.add({
+            type: "error",
+            title: "Failed to add project",
+            description,
+          });
+        } else {
+          setAddProjectError(description);
+        }
+        return;
+      }
+      finishAddingProject();
+    },
+    [
+      focusMostRecentThreadForProject,
+      activeEnvironmentId,
+      handleNewThread,
+      isAddingProject,
+      projects,
+      shouldBrowseForProjectImmediately,
+      defaultThreadEnvMode,
+    ],
+  );
+
+  const handleAddProject = () => {
+    void addProjectFromInput(newCwd);
+  };
+
+  const canAddProject = newCwd.trim().length > 0 && !isAddingProject;
+
+  const handlePickFolder = async () => {
+    const api = readLocalApi();
+    if (!api || isPickingFolder) return;
+    setIsPickingFolder(true);
+    let pickedPath: string | null = null;
+    try {
+      pickedPath = await api.dialogs.pickFolder();
+    } catch {
+      // Ignore picker failures and leave the current thread selection unchanged.
+    }
+    if (pickedPath) {
+      await addProjectFromInput(pickedPath);
+    } else if (!shouldBrowseForProjectImmediately) {
+      addProjectInputRef.current?.focus();
+    }
+    setIsPickingFolder(false);
+  };
+
+  const handleStartAddProject = () => {
+    setAddProjectError(null);
+    if (shouldBrowseForProjectImmediately) {
+      void handlePickFolder();
+      return;
+    }
+    setAddingProject((prev) => !prev);
+  };
 
   const ensureRemoteConnected = useCallback(
     async (environmentId: EnvironmentId): Promise<boolean> => {

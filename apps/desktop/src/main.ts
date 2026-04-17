@@ -79,10 +79,7 @@ import {
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
 } from "./clientPersistence.ts";
-import {
-  readSavedProjectRegistry,
-  writeSavedProjectRegistry,
-} from "./savedProjectsPersistence.ts";
+import { readSavedProjectRegistry, writeSavedProjectRegistry } from "./savedProjectsPersistence.ts";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness.ts";
 import { showDesktopConfirmDialog } from "./confirmDialog.ts";
 import { resolveDesktopServerExposure } from "./serverExposure.ts";
@@ -96,7 +93,8 @@ import {
   sshKillRemoteSession,
 } from "./sshManager.ts";
 // Resolved at bundle time by tsdown — always matches `t3 --version` on remote
-import { version as T3_SERVER_VERSION } from "../../server/package.json";
+import serverPackageJson from "../../server/package.json" with { type: "json" };
+const T3_SERVER_VERSION: string = serverPackageJson.version;
 import { syncShellEnvironment } from "./syncShellEnvironment.ts";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState.ts";
 import { doesVersionMatchDesktopUpdateChannel } from "./updateChannels.ts";
@@ -2499,11 +2497,9 @@ app
     // by the Appearance → Typography terminal font picker to surface
     // installed Nerd Fonts). All other permissions fall through to
     // Electron's default behavior (grant).
-    session.defaultSession.setPermissionRequestHandler(
-      (_webContents, _permission, callback) => {
-        callback(true);
-      },
-    );
+    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+      callback(true);
+    });
     void bootstrap().catch((error) => {
       if (isBackendReadinessAborted(error) && isQuitting) {
         return;

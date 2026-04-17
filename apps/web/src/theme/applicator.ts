@@ -35,6 +35,7 @@ export function buildTypographyCssMap(tokens: Required<TypographyTokens>): Recor
   const map: Record<string, string> = {};
   for (const [key, value] of Object.entries(tokens)) {
     if (TYPOGRAPHY_NON_CSS_KEYS.has(key)) continue;
+    if (value === undefined) continue;
     map[typographyTokenToCssProperty(key)] = value;
   }
   return map;

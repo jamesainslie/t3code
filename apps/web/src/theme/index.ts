@@ -67,7 +67,7 @@ function applyThemeToDom(): void {
 
   // Apply transparency tokens via desktop bridge
   const transparency = resolved.transparency;
-  if (bridge?.setWindowOpacity) {
+  if (bridge?.setWindowOpacity && transparency.windowOpacity !== undefined) {
     bridge.setWindowOpacity(transparency.windowOpacity).catch(() => {});
   }
   if (bridge?.setVibrancy) {

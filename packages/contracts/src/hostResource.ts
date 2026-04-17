@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ProjectId } from "./baseSchemas";
+import { ProjectId } from "./baseSchemas.ts";
 
 // ─── Metric State & Kind ────────────────────────────────────────────
 

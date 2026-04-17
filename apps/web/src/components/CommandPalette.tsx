@@ -249,16 +249,20 @@ function OpenCommandPaletteDialog() {
     }
 
     for (const record of Object.values(savedEnvironmentRegistry)) {
-      if (seenEnvironmentIds.has(record.environmentId)) {
+      if (record.environmentId === null) {
+        continue;
+      }
+      const environmentId = record.environmentId;
+      if (seenEnvironmentIds.has(environmentId)) {
         continue;
       }
 
-      const runtimeState = savedEnvironmentRuntimeById[record.environmentId];
+      const runtimeState = savedEnvironmentRuntimeById[environmentId];
       options.push({
-        environmentId: record.environmentId,
+        environmentId,
         label: resolveEnvironmentOptionLabel({
           isPrimary: false,
-          environmentId: record.environmentId,
+          environmentId,
           runtimeLabel: runtimeState?.descriptor?.label ?? null,
           savedLabel: record.label,
         }),

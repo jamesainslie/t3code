@@ -213,10 +213,12 @@ function mapProjectShellRow(
     title: row.title,
     workspaceRoot: row.workspaceRoot,
     repositoryIdentity,
+    ...(row.remoteHost !== null ? { remoteHost: row.remoteHost } : {}),
     defaultModelSelection: row.defaultModelSelection,
     scripts: row.scripts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    deletedAt: row.deletedAt,
   };
 }
 

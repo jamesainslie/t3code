@@ -184,6 +184,9 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     pickFolder: async () => null,
     confirm: async () => true,
     setTheme: async () => undefined,
+    setWindowOpacity: async () => undefined,
+    setVibrancy: async () => undefined,
+    getPlatform: async () => "darwin",
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,
@@ -351,6 +354,7 @@ describe("wsApi", () => {
         scripts: [],
         createdAt: "2026-02-24T00:00:00.000Z",
         updatedAt: "2026-02-24T00:00:00.000Z",
+        deletedAt: null,
       },
     } satisfies OrchestrationShellStreamItem;
     emitEvent(shellStreamListeners, shellEvent);

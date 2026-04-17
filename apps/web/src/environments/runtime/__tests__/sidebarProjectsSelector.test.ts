@@ -34,19 +34,25 @@ function makeLiveProject(overrides: {
   cwd?: string;
   repositoryCanonicalKey?: string | null;
 }): Project {
-  return {
+  const base: Project = {
     id: ProjectId.make(overrides.id),
     environmentId: overrides.environmentId ?? ENV_A_LIVE,
     name: overrides.name,
     cwd: overrides.cwd ?? `/live/${overrides.id}`,
-    repositoryIdentity:
-      overrides.repositoryCanonicalKey === undefined
-        ? undefined
-        : overrides.repositoryCanonicalKey === null
-          ? null
-          : { canonicalKey: overrides.repositoryCanonicalKey },
     defaultModelSelection: null,
     scripts: [],
+  };
+  if (overrides.repositoryCanonicalKey === undefined) {
+    return base;
+  }
+  if (overrides.repositoryCanonicalKey === null) {
+    return { ...base, repositoryIdentity: null };
+  }
+  return {
+    ...base,
+    repositoryIdentity: {
+      canonicalKey: overrides.repositoryCanonicalKey,
+    } as NonNullable<Project["repositoryIdentity"]>,
   };
 }
 

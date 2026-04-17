@@ -9,6 +9,7 @@ import {
   type MessageId,
   type OrchestrationReadModel,
   type ProjectId,
+  type RemoteIdentityKey,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
   type ThreadId,
@@ -4596,12 +4597,18 @@ describe("ChatView timeline estimator parity (full app)", () => {
     try {
       await waitForServerConfigToApply();
       useSavedEnvironmentRegistryStore.getState().upsert({
-        environmentId: REMOTE_ENVIRONMENT_ID,
+        identityKey: "james@staging.example.test:22:/srv/staging" as RemoteIdentityKey,
+        host: "staging.example.test",
+        user: "james",
+        port: 22,
+        workspaceRoot: "/srv/staging",
         label: "Staging",
-        httpBaseUrl: "https://staging.example.test",
-        wsBaseUrl: "wss://staging.example.test/ws",
         createdAt: NOW_ISO,
+        environmentId: REMOTE_ENVIRONMENT_ID,
+        wsBaseUrl: "wss://staging.example.test/ws",
+        httpBaseUrl: "https://staging.example.test",
         lastConnectedAt: NOW_ISO,
+        projectId: REMOTE_ENVIRONMENT_ID as string,
       });
       useSavedEnvironmentRuntimeStore.getState().patch(REMOTE_ENVIRONMENT_ID, {
         connectionState: "connected",

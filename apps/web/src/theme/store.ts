@@ -15,6 +15,19 @@ const THEME_KEY = "t3code:theme";
 const CUSTOM_THEMES_KEY = "t3code:custom-themes:v1";
 const ACTIVE_THEME_KEY = "t3code:active-theme-id:v1";
 
+type DeepMutable<T> = {
+  -readonly [P in keyof T]: T[P] extends ReadonlyArray<infer U>
+    ? Array<DeepMutable<U>>
+    : T[P] extends object
+      ? DeepMutable<T[P]>
+      : T[P];
+};
+type MutableTheme = DeepMutable<Theme>;
+
+function cloneTheme(theme: Theme): MutableTheme {
+  return structuredClone(theme) as MutableTheme;
+}
+
 export interface ThemeStoreSnapshot {
   /** The raw theme definition (may have sparse overrides). */
   readonly theme: Theme;
@@ -132,7 +145,9 @@ export class ThemeStore {
     const activeCustom = activeId ? this.savedThemes.find((t) => t.id === activeId) : undefined;
 
     const base = resolveBaseFromPreference(this.preference);
-    const theme = activeCustom ?? makeDefaultTheme(base);
+    const theme: MutableTheme = activeCustom
+      ? cloneTheme(activeCustom)
+      : (makeDefaultTheme(base) as MutableTheme);
 
     // If using a default theme, ensure the base matches the preference
     if (!activeCustom) {
@@ -215,7 +230,7 @@ export class ThemeStore {
   }
 
   setColorToken(tokenName: keyof ColorTokens, value: string): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (!theme.overrides.colors) {
       theme.overrides.colors = {};
     }
@@ -226,7 +241,7 @@ export class ThemeStore {
   }
 
   resetColorToken(tokenName: keyof ColorTokens): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (theme.overrides.colors) {
       delete (theme.overrides.colors as Record<string, string | undefined>)[tokenName];
     }
@@ -242,7 +257,7 @@ export class ThemeStore {
   }
 
   setTypographyToken(tokenName: keyof TypographyTokens, value: string): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (!theme.overrides.typography) {
       theme.overrides.typography = {};
     }
@@ -253,7 +268,7 @@ export class ThemeStore {
   }
 
   resetTypographyToken(tokenName: keyof TypographyTokens): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (theme.overrides.typography) {
       delete (theme.overrides.typography as Record<string, string | undefined>)[tokenName];
     }
@@ -269,7 +284,7 @@ export class ThemeStore {
   }
 
   setTransparencyToken(tokenName: keyof TransparencyTokens, value: number | string): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (!theme.overrides.transparency) {
       theme.overrides.transparency = {};
     }
@@ -289,7 +304,7 @@ export class ThemeStore {
   }
 
   resetTransparencyToken(tokenName: keyof TransparencyTokens): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (theme.overrides.transparency) {
       delete (theme.overrides.transparency as Record<string, unknown>)[tokenName];
     }
@@ -305,7 +320,7 @@ export class ThemeStore {
   }
 
   setFileIconSet(id: string): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (!theme.overrides.icons) {
       theme.overrides.icons = {};
     }
@@ -316,7 +331,7 @@ export class ThemeStore {
   }
 
   setUiIconSet(id: string): void {
-    const theme = structuredClone(this.snapshot.theme);
+    const theme = cloneTheme(this.snapshot.theme);
     if (!theme.overrides.icons) {
       theme.overrides.icons = {};
     }
@@ -360,7 +375,7 @@ export class ThemeStore {
   }
 
   duplicateTheme(name: string): void {
-    const current = structuredClone(this.snapshot.theme);
+    const current = cloneTheme(this.snapshot.theme);
     current.id = generateId();
     current.name = name;
     current.metadata.createdAt = new Date().toISOString();
@@ -412,8 +427,9 @@ export class ThemeStore {
 
   importTheme(json: string): void {
     const parsed = JSON.parse(json);
-    const theme = Schema.decodeUnknownSync(ThemeSchema)(parsed);
+    const decoded = Schema.decodeUnknownSync(ThemeSchema)(parsed);
     // Ensure unique ID on import
+    const theme = cloneTheme(decoded);
     theme.id = generateId();
     this.savedThemes.push(theme);
     saveSavedThemes(this.savedThemes);

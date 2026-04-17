@@ -13,7 +13,7 @@ import {
   HostResourceMonitorError,
   HostResourceStreamEvent,
   HostResourceSubscribeInput,
-} from "./hostResource";
+} from "./hostResource.ts";
 import {
   GitActionProgressEvent,
   GitCheckoutInput,

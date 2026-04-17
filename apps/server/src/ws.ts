@@ -1065,7 +1065,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             WS_METHODS.subscribeHostResources,
             Effect.gen(function* () {
               const monitor = yield* HostResourceMonitor;
-              return monitor.subscribe(input.workspacePath);
+              const shellOption = yield* projectionSnapshotQuery
+                .getProjectShellById(input.projectId)
+                .pipe(Effect.orElseSucceed(() => Option.none()));
+              const workspacePath = Option.match(shellOption, {
+                onNone: () => "",
+                onSome: (shell) => shell.workspaceRoot,
+              });
+              return monitor.subscribe(workspacePath);
             }),
             { "rpc.aggregate": "hostResource" },
           ),

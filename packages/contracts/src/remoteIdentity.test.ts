@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeRemoteIdentityKey, parseRemoteIdentityKey } from "./remoteIdentity";
+import { makeRemoteIdentityKey, parseRemoteIdentityKey } from "./remoteIdentity.ts";
 
 describe("RemoteIdentityKey", () => {
   it("creates a stable key from host+user+port+workspaceRoot", () => {
