@@ -9,12 +9,10 @@ import {
   IsoDateTime,
   MessageId,
   NonNegativeInt,
-  PositiveInt,
   ProjectId,
   ProviderItemId,
   ThreadId,
   TrimmedNonEmptyString,
-  TrimmedString,
   TurnId,
 } from "./baseSchemas.ts";
 
@@ -145,27 +143,18 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
-export const RemoteHost = Schema.Struct({
-  host: TrimmedNonEmptyString,
-  user: TrimmedNonEmptyString,
-  port: Schema.optional(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(22))),
-  label: Schema.optional(TrimmedString),
-});
-export type RemoteHost = typeof RemoteHost.Type;
-
-export const OrchestrationProject = Schema.Struct({
+export const BaseOrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
-  remoteHost: Schema.optional(RemoteHost),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
 });
-export type OrchestrationProject = typeof OrchestrationProject.Type;
+export type BaseOrchestrationProject = typeof BaseOrchestrationProject.Type;
 
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
@@ -312,27 +301,25 @@ export const OrchestrationThread = Schema.Struct({
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
-export const OrchestrationReadModel = Schema.Struct({
+export const BaseOrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
-  projects: Schema.Array(OrchestrationProject),
+  projects: Schema.Array(BaseOrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
   updatedAt: IsoDateTime,
 });
-export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
+export type BaseOrchestrationReadModel = typeof BaseOrchestrationReadModel.Type;
 
-export const OrchestrationProjectShell = Schema.Struct({
+export const BaseOrchestrationProjectShell = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
-  remoteHost: Schema.optional(RemoteHost),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
-  deletedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
-export type OrchestrationProjectShell = typeof OrchestrationProjectShell.Type;
+export type BaseOrchestrationProjectShell = typeof BaseOrchestrationProjectShell.Type;
 
 export const OrchestrationThreadShell = Schema.Struct({
   id: ThreadId,
@@ -357,19 +344,19 @@ export const OrchestrationThreadShell = Schema.Struct({
 });
 export type OrchestrationThreadShell = typeof OrchestrationThreadShell.Type;
 
-export const OrchestrationShellSnapshot = Schema.Struct({
+export const BaseOrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
-  projects: Schema.Array(OrchestrationProjectShell),
+  projects: Schema.Array(BaseOrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
   updatedAt: IsoDateTime,
 });
-export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
+export type BaseOrchestrationShellSnapshot = typeof BaseOrchestrationShellSnapshot.Type;
 
-export const OrchestrationShellStreamEvent = Schema.Union([
+export const BaseOrchestrationShellStreamEvent = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("project-upserted"),
     sequence: NonNegativeInt,
-    project: OrchestrationProjectShell,
+    project: BaseOrchestrationProjectShell,
   }),
   Schema.Struct({
     kind: Schema.Literal("project-removed"),
@@ -387,16 +374,16 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     threadId: ThreadId,
   }),
 ]);
-export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
+export type BaseOrchestrationShellStreamEvent = typeof BaseOrchestrationShellStreamEvent.Type;
 
-export const OrchestrationShellStreamItem = Schema.Union([
+export const BaseOrchestrationShellStreamItem = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("snapshot"),
-    snapshot: OrchestrationShellSnapshot,
+    snapshot: BaseOrchestrationShellSnapshot,
   }),
-  OrchestrationShellStreamEvent,
+  BaseOrchestrationShellStreamEvent,
 ]);
-export type OrchestrationShellStreamItem = typeof OrchestrationShellStreamItem.Type;
+export type BaseOrchestrationShellStreamItem = typeof BaseOrchestrationShellStreamItem.Type;
 
 export const OrchestrationSubscribeThreadInput = Schema.Struct({
   threadId: ThreadId,
@@ -409,17 +396,17 @@ export const OrchestrationThreadDetailSnapshot = Schema.Struct({
 });
 export type OrchestrationThreadDetailSnapshot = typeof OrchestrationThreadDetailSnapshot.Type;
 
-export const ProjectCreateCommand = Schema.Struct({
+export const BaseProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
   commandId: CommandId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
-  remoteHost: Schema.optional(RemoteHost),
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   createdAt: IsoDateTime,
 });
+export type BaseProjectCreateCommand = typeof BaseProjectCreateCommand.Type;
 
 const ProjectMetaUpdateCommand = Schema.Struct({
   type: Schema.Literal("project.meta.update"),
@@ -603,8 +590,8 @@ const ThreadSessionStopCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const DispatchableClientOrchestrationCommand = Schema.Union([
-  ProjectCreateCommand,
+export const BaseDispatchableClientOrchestrationCommand = Schema.Union([
+  BaseProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
@@ -621,11 +608,11 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
 ]);
-export type DispatchableClientOrchestrationCommand =
-  typeof DispatchableClientOrchestrationCommand.Type;
+export type BaseDispatchableClientOrchestrationCommand =
+  typeof BaseDispatchableClientOrchestrationCommand.Type;
 
-export const ClientOrchestrationCommand = Schema.Union([
-  ProjectCreateCommand,
+export const BaseClientOrchestrationCommand = Schema.Union([
+  BaseProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
@@ -642,7 +629,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
 ]);
-export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
+export type BaseClientOrchestrationCommand = typeof BaseClientOrchestrationCommand.Type;
 
 const ThreadSessionSetCommand = Schema.Struct({
   type: Schema.Literal("thread.session.set"),
@@ -709,7 +696,7 @@ const ThreadRevertCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const InternalOrchestrationCommand = Schema.Union([
+export const InternalOrchestrationCommand = Schema.Union([
   ThreadSessionSetCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantCompleteCommand,
@@ -720,11 +707,11 @@ const InternalOrchestrationCommand = Schema.Union([
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
-export const OrchestrationCommand = Schema.Union([
-  DispatchableClientOrchestrationCommand,
+export const BaseOrchestrationCommand = Schema.Union([
+  BaseDispatchableClientOrchestrationCommand,
   InternalOrchestrationCommand,
 ]);
-export type OrchestrationCommand = typeof OrchestrationCommand.Type;
+export type BaseOrchestrationCommand = typeof BaseOrchestrationCommand.Type;
 
 export const OrchestrationEventType = Schema.Literals([
   "project.created",
@@ -756,17 +743,17 @@ export const OrchestrationAggregateKind = Schema.Literals(["project", "thread"])
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
-export const ProjectCreatedPayload = Schema.Struct({
+export const BaseProjectCreatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
-  remoteHost: Schema.optional(RemoteHost),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
+export type BaseProjectCreatedPayload = typeof BaseProjectCreatedPayload.Type;
 
 export const ProjectMetaUpdatedPayload = Schema.Struct({
   projectId: ProjectId,
@@ -945,11 +932,11 @@ const EventBaseFields = {
   metadata: OrchestrationEventMetadata,
 } as const;
 
-export const OrchestrationEvent = Schema.Union([
+export const BaseOrchestrationEvent = Schema.Union([
   Schema.Struct({
     ...EventBaseFields,
     type: Schema.Literal("project.created"),
-    payload: ProjectCreatedPayload,
+    payload: BaseProjectCreatedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
@@ -1057,19 +1044,19 @@ export const OrchestrationEvent = Schema.Union([
     payload: ThreadActivityAppendedPayload,
   }),
 ]);
-export type OrchestrationEvent = typeof OrchestrationEvent.Type;
+export type BaseOrchestrationEvent = typeof BaseOrchestrationEvent.Type;
 
-export const OrchestrationThreadStreamItem = Schema.Union([
+export const BaseOrchestrationThreadStreamItem = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("snapshot"),
     snapshot: OrchestrationThreadDetailSnapshot,
   }),
   Schema.Struct({
     kind: Schema.Literal("event"),
-    event: OrchestrationEvent,
+    event: BaseOrchestrationEvent,
   }),
 ]);
-export type OrchestrationThreadStreamItem = typeof OrchestrationThreadStreamItem.Type;
+export type BaseOrchestrationThreadStreamItem = typeof BaseOrchestrationThreadStreamItem.Type;
 
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
@@ -1158,12 +1145,12 @@ export const OrchestrationReplayEventsInput = Schema.Struct({
 });
 export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInput.Type;
 
-const OrchestrationReplayEventsResult = Schema.Array(OrchestrationEvent);
-export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
+const BaseOrchestrationReplayEventsResult = Schema.Array(BaseOrchestrationEvent);
+export type BaseOrchestrationReplayEventsResult = typeof BaseOrchestrationReplayEventsResult.Type;
 
-export const OrchestrationRpcSchemas = {
+export const BaseOrchestrationRpcSchemas = {
   dispatchCommand: {
-    input: ClientOrchestrationCommand,
+    input: BaseClientOrchestrationCommand,
     output: DispatchResult,
   },
   getTurnDiff: {
@@ -1176,15 +1163,15 @@ export const OrchestrationRpcSchemas = {
   },
   replayEvents: {
     input: OrchestrationReplayEventsInput,
-    output: OrchestrationReplayEventsResult,
+    output: BaseOrchestrationReplayEventsResult,
   },
   subscribeThread: {
     input: OrchestrationSubscribeThreadInput,
-    output: OrchestrationThreadStreamItem,
+    output: BaseOrchestrationThreadStreamItem,
   },
   subscribeShell: {
     input: Schema.Struct({}),
-    output: OrchestrationShellStreamItem,
+    output: BaseOrchestrationShellStreamItem,
   },
 } as const;
 
