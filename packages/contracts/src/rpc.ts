@@ -41,7 +41,6 @@ import {
 } from "./git.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
-  ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
@@ -51,8 +50,8 @@ import {
   OrchestrationGetTurnDiffInput,
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
-  OrchestrationRpcSchemas,
 } from "./orchestration.ts";
+import { ClientOrchestrationCommand, OrchestrationRpcSchemas } from "./fork/orchestration.ts";
 import {
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,

@@ -42,17 +42,19 @@ import type {
 } from "./terminal.ts";
 import type { ServerUpsertKeybindingInput } from "./server.ts";
 import type {
-  ClientOrchestrationCommand,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
+  OrchestrationSubscribeThreadInput,
+} from "./orchestration.ts";
+import type {
+  ClientOrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
   OrchestrationShellStreamItem,
-  OrchestrationSubscribeThreadInput,
   OrchestrationThreadStreamItem,
-} from "./orchestration.ts";
+} from "./fork/orchestration.ts";
 import type { EnvironmentId } from "./baseSchemas.ts";
 import type { RemoteIdentityKey } from "./remoteIdentity.ts";
 import type { PersistedSavedProjectRecord } from "./savedProjectKey.ts";
