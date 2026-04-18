@@ -89,6 +89,7 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
+import { LocalPresenceIcon } from "./LocalPresenceIcon";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
 import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
 import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
@@ -1985,11 +1986,23 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ) : null}
           </span>
         </SidebarMenuButton>
-        {/* Remote connection indicator – visible by default, crossfades
-            with the "new thread" button on hover. Reflects live connection
-            state (green = connected, pulsing = connecting, red/grey =
-            error/disconnected) and click-to-reconnect when offline. */}
-        {isRemoteProject && remoteConnectionState && (
+        {/* Environment presence indicator – visible by default, crossfades
+            with the "new thread" button on hover. Three cases:
+              - local-only: static monitor icon (local projects are always
+                reachable while the app is running, so no state)
+              - remote-only: cloud icon with live connection state
+                (green = connected, pulsing = connecting, red/grey =
+                error/disconnected) and click-to-reconnect when offline
+              - mixed: both icons, positioned side-by-side, so the user can
+                see at a glance that a logical project spans both a local
+                clone and at least one remote peer
+        */}
+        {project.environmentPresence === "local-only" && (
+          <div className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
+            <LocalPresenceIcon />
+          </div>
+        )}
+        {project.environmentPresence === "remote-only" && remoteConnectionState && (
           <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
             <RemoteConnectionIcon
               state={remoteConnectionState}
@@ -2010,6 +2023,32 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
                 : {})}
             />
+          </div>
+        )}
+        {project.environmentPresence === "mixed" && (
+          <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex items-center gap-1 transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
+            <LocalPresenceIcon tooltip="Local clone present" />
+            {remoteConnectionState && (
+              <RemoteConnectionIcon
+                state={remoteConnectionState}
+                tooltip={
+                  remoteConnectionState === "connected"
+                    ? `Remote: connected${
+                        project.remoteEnvironmentLabels.length > 0
+                          ? ` (${project.remoteEnvironmentLabels.join(", ")})`
+                          : ""
+                      }`
+                    : remoteConnectionState === "connecting"
+                      ? "Remote: connecting…"
+                      : remoteConnectionState === "error"
+                        ? "Remote: error — click to reconnect"
+                        : "Remote: disconnected — click to reconnect"
+                }
+                {...(remoteIdentityKey
+                  ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
+                  : {})}
+              />
+            )}
           </div>
         )}
         <Tooltip>
