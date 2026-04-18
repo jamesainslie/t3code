@@ -53,9 +53,18 @@ import {
 } from "./orchestration.ts";
 import { ClientOrchestrationCommand, OrchestrationRpcSchemas } from "./fork/orchestration.ts";
 import {
+  ProjectFileChangeEvent,
+  ProjectFileMonitorError,
+  ProjectFileWatchInput,
+  ProjectReadFileError,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
+  ProjectUpdateFrontmatterError,
+  ProjectUpdateFrontmatterInput,
+  ProjectUpdateFrontmatterResult,
   ProjectWriteFileError,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
@@ -88,6 +97,8 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+  projectsReadFile: "projects.readFile",
+  projectsUpdateFrontmatter: "projects.updateFrontmatter",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -131,6 +142,7 @@ export const WS_METHODS = {
   subscribeAuthAccess: "subscribeAuthAccess",
   serverSubscribeLogStream: "server.subscribeLogStream",
   subscribeHostResources: "subscribeHostResources",
+  subscribeProjectFileChanges: "subscribeProjectFileChanges",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -173,6 +185,21 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
 });
+
+export const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
+  payload: ProjectReadFileInput,
+  success: ProjectReadFileResult,
+  error: ProjectReadFileError,
+});
+
+export const WsProjectsUpdateFrontmatterRpc = Rpc.make(
+  WS_METHODS.projectsUpdateFrontmatter,
+  {
+    payload: ProjectUpdateFrontmatterInput,
+    success: ProjectUpdateFrontmatterResult,
+    error: ProjectUpdateFrontmatterError,
+  },
+);
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
@@ -379,6 +406,16 @@ export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostReso
   stream: true,
 });
 
+export const WsSubscribeProjectFileChangesRpc = Rpc.make(
+  WS_METHODS.subscribeProjectFileChanges,
+  {
+    payload: ProjectFileWatchInput,
+    success: ProjectFileChangeEvent,
+    error: ProjectFileMonitorError,
+    stream: true,
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -387,6 +424,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsReadFileRpc,
+  WsProjectsUpdateFrontmatterRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeGitStatusRpc,
@@ -412,6 +451,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
   WsSubscribeHostResourcesRpc,
+  WsSubscribeProjectFileChangesRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
