@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
@@ -53,3 +53,27 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
+
+// Read markdown file (one-shot)
+
+export const ProjectReadFileInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString,
+});
+export type ProjectReadFileInput = typeof ProjectReadFileInput.Type;
+
+export const ProjectReadFileResult = Schema.Struct({
+  contents: Schema.String,
+  relativePath: TrimmedNonEmptyString,
+  size: NonNegativeInt,
+  mtimeMs: Schema.Number,
+});
+export type ProjectReadFileResult = typeof ProjectReadFileResult.Type;
+
+export const ProjectReadFileError = Schema.Union([
+  Schema.TaggedStruct("NotFound", { relativePath: Schema.String }),
+  Schema.TaggedStruct("TooLarge", { relativePath: Schema.String }),
+  Schema.TaggedStruct("PathOutsideRoot", { relativePath: Schema.String }),
+  Schema.TaggedStruct("NotReadable", { relativePath: Schema.String }),
+]);
+export type ProjectReadFileError = typeof ProjectReadFileError.Type;
