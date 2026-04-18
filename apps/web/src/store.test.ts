@@ -21,6 +21,7 @@ import {
   selectThreadExistsByRef,
   setThreadBranch,
   selectThreadsAcrossEnvironments,
+  upsertOptimisticProject,
   type AppState,
   type EnvironmentState,
 } from "./store";
@@ -1012,5 +1013,95 @@ describe("incremental orchestration updates", () => {
       state: "running",
     });
     expect(threadsOf(next)[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
+  });
+});
+
+describe("upsertOptimisticProject", () => {
+  it("adds a new project to an empty environment", () => {
+    const projectId = ProjectId.make("optimistic-1");
+    const state = makeEmptyState();
+    const next = upsertOptimisticProject(state, localEnvironmentId, {
+      id: projectId,
+      environmentId: localEnvironmentId,
+      name: "My Project",
+      cwd: "/tmp/my-project",
+      defaultModelSelection: {
+        provider: "codex",
+        model: DEFAULT_MODEL_BY_PROVIDER.codex,
+      },
+      createdAt: "2026-04-18T00:00:00.000Z",
+      scripts: [],
+    });
+
+    expect(projectsOf(next)).toHaveLength(1);
+    expect(projectsOf(next)[0]?.id).toBe(projectId);
+    expect(projectsOf(next)[0]?.name).toBe("My Project");
+    expect(projectsOf(next)[0]?.cwd).toBe("/tmp/my-project");
+    expect(localEnvironmentStateOf(next).projectIds).toEqual([projectId]);
+  });
+
+  it("is a no-op when a project with the same id already exists", () => {
+    const projectId = ProjectId.make("existing-1");
+    const state = makeEmptyState({
+      projectIds: [projectId],
+      projectById: {
+        [projectId]: {
+          id: projectId,
+          environmentId: localEnvironmentId,
+          name: "Existing",
+          cwd: "/tmp/existing",
+          defaultModelSelection: null,
+          createdAt: "2026-04-18T00:00:00.000Z",
+          scripts: [],
+        },
+      },
+    });
+
+    const next = upsertOptimisticProject(state, localEnvironmentId, {
+      id: projectId,
+      environmentId: localEnvironmentId,
+      name: "Updated Name",
+      cwd: "/tmp/existing",
+      defaultModelSelection: null,
+      createdAt: "2026-04-18T00:00:00.000Z",
+      scripts: [],
+    });
+
+    // Returns same reference — no mutation
+    expect(next).toBe(state);
+    expect(projectsOf(next)[0]?.name).toBe("Existing");
+  });
+
+  it("is a no-op when a project with the same cwd already exists", () => {
+    const existingId = ProjectId.make("existing-1");
+    const newId = ProjectId.make("optimistic-1");
+    const state = makeEmptyState({
+      projectIds: [existingId],
+      projectById: {
+        [existingId]: {
+          id: existingId,
+          environmentId: localEnvironmentId,
+          name: "Existing",
+          cwd: "/tmp/shared-cwd",
+          defaultModelSelection: null,
+          createdAt: "2026-04-18T00:00:00.000Z",
+          scripts: [],
+        },
+      },
+    });
+
+    const next = upsertOptimisticProject(state, localEnvironmentId, {
+      id: newId,
+      environmentId: localEnvironmentId,
+      name: "Duplicate CWD",
+      cwd: "/tmp/shared-cwd",
+      defaultModelSelection: null,
+      createdAt: "2026-04-18T00:00:00.000Z",
+      scripts: [],
+    });
+
+    expect(next).toBe(state);
+    expect(projectsOf(next)).toHaveLength(1);
+    expect(projectsOf(next)[0]?.id).toBe(existingId);
   });
 });

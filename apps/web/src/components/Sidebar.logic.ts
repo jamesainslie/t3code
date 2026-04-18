@@ -411,6 +411,31 @@ export function resolveProjectStatusIndicator(
   return highestPriorityStatus;
 }
 
+/**
+ * Counts only active (non-archived) threads per member key. Archived threads
+ * are hidden from the sidebar tree, so they must not be counted by any UI
+ * guard that asks "is this project empty?" — otherwise the "Remove project"
+ * action stays disabled for a project that visibly has no threads.
+ */
+export function countActiveThreadsByMember<TThread extends { archivedAt: string | null }>(input: {
+  threads: readonly TThread[];
+  memberKeys: readonly string[];
+  getMemberKey: (thread: TThread) => string | null;
+}): Map<string, number> {
+  const counts = new Map<string, number>(input.memberKeys.map((key) => [key, 0] as const));
+  for (const thread of input.threads) {
+    if (thread.archivedAt !== null) {
+      continue;
+    }
+    const key = input.getMemberKey(thread);
+    if (key === null) {
+      continue;
+    }
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {
   threads: readonly T[];
   activeThreadId: T["id"] | undefined;

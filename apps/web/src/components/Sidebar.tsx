@@ -154,6 +154,7 @@ import {
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
+  countActiveThreadsByMember,
   getSidebarThreadIdsToPrewarm,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
@@ -1107,21 +1108,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       ),
     [project.memberProjects],
   );
-  const memberThreadCountByPhysicalKey = useMemo(() => {
-    const counts = new Map<string, number>(
-      project.memberProjects.map((member) => [member.physicalProjectKey, 0] as const),
-    );
-    for (const thread of projectThreads) {
-      const member = memberProjectByScopedKey.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      );
-      if (!member) {
-        continue;
-      }
-      counts.set(member.physicalProjectKey, (counts.get(member.physicalProjectKey) ?? 0) + 1);
-    }
-    return counts;
-  }, [memberProjectByScopedKey, project.memberProjects, projectThreads]);
+  const memberThreadCountByPhysicalKey = useMemo(
+    () =>
+      countActiveThreadsByMember({
+        threads: projectThreads,
+        memberKeys: project.memberProjects.map((member) => member.physicalProjectKey),
+        getMemberKey: (thread) =>
+          memberProjectByScopedKey.get(
+            scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+          )?.physicalProjectKey ?? null,
+      }),
+    [memberProjectByScopedKey, project.memberProjects, projectThreads],
+  );
 
   const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
     const lastVisitedAtByThreadKey = new Map(
@@ -1323,16 +1321,33 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         toastManager.add({
           type: "warning",
           title: "Project is not empty",
-          description: "Delete all threads in this project before removing it.",
+          description: "Delete or unarchive all threads in this project before removing it.",
         });
         return;
       }
+
+      // Archived threads are hidden from the sidebar tree and are not
+      // counted by the guard above (see countActiveThreadsByMember). Sweep
+      // them here so project.delete does not orphan their history.
+      const archivedThreadsForMember = projectThreads.filter(
+        (thread) =>
+          thread.archivedAt !== null &&
+          thread.environmentId === member.environmentId &&
+          thread.projectId === member.id,
+      );
+
+      const archivedSummary =
+        archivedThreadsForMember.length === 0
+          ? "This removes only this project entry."
+          : archivedThreadsForMember.length === 1
+            ? "This removes the project and deletes 1 archived thread."
+            : `This removes the project and deletes ${archivedThreadsForMember.length} archived threads.`;
 
       const message = [
         `Remove project "${member.name}"?`,
         `Path: ${member.cwd}`,
         ...(member.environmentLabel ? [`Environment: ${member.environmentLabel}`] : []),
-        "This removes only this project entry.",
+        archivedSummary,
       ].join("\n");
       const confirmed = await api.dialogs.confirm(message);
       if (!confirmed) {
@@ -1350,6 +1365,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         const projectApi = readEnvironmentApi(member.environmentId);
         if (!projectApi) {
           throw new Error("Project API unavailable.");
+        }
+        for (const archivedThread of archivedThreadsForMember) {
+          await projectApi.orchestration.dispatchCommand({
+            type: "thread.delete",
+            commandId: newCommandId(),
+            threadId: archivedThread.id,
+          });
         }
         await projectApi.orchestration.dispatchCommand({
           type: "project.delete",
@@ -1375,6 +1397,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       clearProjectDraftThreadId,
       getDraftThreadByProjectRef,
       memberThreadCountByPhysicalKey,
+      projectThreads,
     ],
   );
 
@@ -1451,13 +1474,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           };
         };
 
-        const { items: remoteItems, actionHandlers: remoteHandlers } =
-          buildRemoteContextMenuItems({
-            project,
-            remoteIdentityKey: isRemoteProject ? remoteIdentityKey ?? null : null,
-            remoteConnectionState,
-            api,
-          });
+        const { items: remoteItems, actionHandlers: remoteHandlers } = buildRemoteContextMenuItems({
+          project,
+          remoteIdentityKey: isRemoteProject ? (remoteIdentityKey ?? null) : null,
+          remoteConnectionState,
+          api,
+        });
         remoteHandlers.forEach((v, k) => actionHandlers.set(k, v));
 
         const menuItems: Array<ContextMenuItem<string>> = [];
@@ -1557,13 +1579,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (ok) doNavigate();
       });
     },
-    [
-      clearSelection,
-      rangeSelectTo,
-      router,
-      setSelectionAnchor,
-      toggleThreadSelection,
-    ],
+    [clearSelection, rangeSelectTo, router, setSelectionAnchor, toggleThreadSelection],
   );
 
   const handleMultiSelectContextMenu = useCallback(

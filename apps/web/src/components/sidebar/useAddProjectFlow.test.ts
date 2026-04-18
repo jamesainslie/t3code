@@ -225,6 +225,89 @@ describe("createAddProjectFromInput", () => {
     expect(s.state.addingProject).toBe(false);
   });
 
+  it("calls onProjectDispatched after dispatch and before handleNewThread", async () => {
+    const s = buildMutableState();
+    const callOrder: string[] = [];
+    const dispatchCommand = vi.fn().mockImplementation(async () => {
+      callOrder.push("dispatchCommand");
+    });
+    const onProjectDispatched = vi.fn().mockImplementation(() => {
+      callOrder.push("onProjectDispatched");
+    });
+    const handleNewThread = vi.fn().mockImplementation(async () => {
+      callOrder.push("handleNewThread");
+    });
+    const readEnvironmentApi = vi.fn(() => ({
+      orchestration: { dispatchCommand },
+    })) as unknown as typeof import("../../environmentApi").readEnvironmentApi;
+
+    const run = createAddProjectFromInput({
+      projects: [] as never,
+      activeEnvironmentId: envA,
+      handleNewThread: handleNewThread as never,
+      focusMostRecentThreadForProject: vi.fn(),
+      defaultThreadEnvMode: "local" as ThreadEnvMode,
+      shouldBrowseForProjectImmediately: false,
+      isAddingProject: s.state.isAddingProject,
+      setIsAddingProject: s.setIsAddingProject,
+      setNewCwd: s.setNewCwd,
+      setAddProjectError: s.setAddProjectError,
+      setAddingProject: s.setAddingProject,
+      readEnvironmentApi,
+      onProjectDispatched,
+    });
+
+    await run("/tmp/myproject");
+
+    // Must be called exactly once with the project metadata
+    expect(onProjectDispatched).toHaveBeenCalledTimes(1);
+    const arg = onProjectDispatched.mock.calls[0]![0] as {
+      environmentId: EnvironmentId;
+      projectId: ProjectId;
+      title: string;
+      workspaceRoot: string;
+      createdAt: string;
+    };
+    expect(arg.environmentId).toBe(envA);
+    expect(arg.title).toBe("myproject");
+    expect(arg.workspaceRoot).toBe("/tmp/myproject");
+    expect(typeof arg.projectId).toBe("string");
+    expect(typeof arg.createdAt).toBe("string");
+
+    // Critical ordering: dispatch → optimistic write → navigate
+    expect(callOrder).toEqual(["dispatchCommand", "onProjectDispatched", "handleNewThread"]);
+  });
+
+  it("does not call onProjectDispatched when dispatch fails", async () => {
+    const s = buildMutableState();
+    const dispatchCommand = vi.fn().mockRejectedValue(new Error("network"));
+    const onProjectDispatched = vi.fn();
+    const readEnvironmentApi = vi.fn(() => ({
+      orchestration: { dispatchCommand },
+    })) as unknown as typeof import("../../environmentApi").readEnvironmentApi;
+
+    const run = createAddProjectFromInput({
+      projects: [] as never,
+      activeEnvironmentId: envA,
+      handleNewThread: vi.fn() as never,
+      focusMostRecentThreadForProject: vi.fn(),
+      defaultThreadEnvMode: "local" as ThreadEnvMode,
+      shouldBrowseForProjectImmediately: false,
+      isAddingProject: s.state.isAddingProject,
+      setIsAddingProject: s.setIsAddingProject,
+      setNewCwd: s.setNewCwd,
+      setAddProjectError: s.setAddProjectError,
+      setAddingProject: s.setAddingProject,
+      readEnvironmentApi,
+      onProjectDispatched,
+    });
+
+    await run("/tmp/fail");
+
+    expect(onProjectDispatched).not.toHaveBeenCalled();
+    expect(s.state.addProjectError).toBe("network");
+  });
+
   it("sets addProjectError when dispatch throws and not in browse-immediate mode", async () => {
     const s = buildMutableState();
     const dispatchCommand = vi.fn().mockRejectedValue(new Error("boom"));

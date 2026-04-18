@@ -1897,6 +1897,42 @@ export function applyShellEvent(
   );
 }
 
+/**
+ * Optimistically insert a project into the store. This is used after a
+ * `project.create` command is acknowledged by the server but before the
+ * asynchronous shell stream event arrives, so the sidebar and send handler
+ * see the project immediately.
+ *
+ * If a project with the same id or cwd already exists the call is a no-op
+ * (returns the same state reference) — the real shell event will reconcile.
+ */
+export function upsertOptimisticProject(
+  state: AppState,
+  environmentId: EnvironmentId,
+  project: Project,
+): AppState {
+  const envState = getStoredEnvironmentState(state, environmentId);
+
+  // Already present by id — real event may have arrived first.
+  if (envState.projectById[project.id]) {
+    return state;
+  }
+
+  // Already present by cwd — avoid duplicate entries.
+  const existingByCwd = envState.projectIds.find(
+    (id) => envState.projectById[id]?.cwd === project.cwd,
+  );
+  if (existingByCwd) {
+    return state;
+  }
+
+  return commitEnvironmentState(state, environmentId, {
+    ...envState,
+    projectById: { ...envState.projectById, [project.id]: project },
+    projectIds: [...envState.projectIds, project.id],
+  });
+}
+
 export function setActiveEnvironmentId(state: AppState, environmentId: EnvironmentId): AppState {
   if (state.activeEnvironmentId === environmentId) {
     return state;
@@ -1944,6 +1980,7 @@ interface AppStore extends AppState {
     environmentId: EnvironmentId,
   ) => void;
   applyShellEvent: (event: OrchestrationShellStreamEvent, environmentId: EnvironmentId) => void;
+  upsertOptimisticProject: (environmentId: EnvironmentId, project: Project) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
   setThreadBranch: (
     threadRef: ScopedThreadRef,
@@ -1966,6 +2003,8 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => applyOrchestrationEvents(state, events, environmentId)),
   applyShellEvent: (event, environmentId) =>
     set((state) => applyShellEvent(state, event, environmentId)),
+  upsertOptimisticProject: (environmentId, project) =>
+    set((state) => upsertOptimisticProject(state, environmentId, project)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),
   setThreadBranch: (threadRef, branch, worktreePath) =>
     set((state) => setThreadBranch(state, threadRef, branch, worktreePath)),
