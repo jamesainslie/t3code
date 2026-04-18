@@ -89,6 +89,7 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
+import { LocalPresenceIcon } from "./LocalPresenceIcon";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
 import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
 import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
@@ -153,6 +154,7 @@ import {
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
+  countActiveThreadsByMember,
   getSidebarThreadIdsToPrewarm,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
@@ -1106,21 +1108,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       ),
     [project.memberProjects],
   );
-  const memberThreadCountByPhysicalKey = useMemo(() => {
-    const counts = new Map<string, number>(
-      project.memberProjects.map((member) => [member.physicalProjectKey, 0] as const),
-    );
-    for (const thread of projectThreads) {
-      const member = memberProjectByScopedKey.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      );
-      if (!member) {
-        continue;
-      }
-      counts.set(member.physicalProjectKey, (counts.get(member.physicalProjectKey) ?? 0) + 1);
-    }
-    return counts;
-  }, [memberProjectByScopedKey, project.memberProjects, projectThreads]);
+  const memberThreadCountByPhysicalKey = useMemo(
+    () =>
+      countActiveThreadsByMember({
+        threads: projectThreads,
+        memberKeys: project.memberProjects.map((member) => member.physicalProjectKey),
+        getMemberKey: (thread) =>
+          memberProjectByScopedKey.get(
+            scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+          )?.physicalProjectKey ?? null,
+      }),
+    [memberProjectByScopedKey, project.memberProjects, projectThreads],
+  );
 
   const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
     const lastVisitedAtByThreadKey = new Map(
@@ -1322,16 +1321,33 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         toastManager.add({
           type: "warning",
           title: "Project is not empty",
-          description: "Delete all threads in this project before removing it.",
+          description: "Delete or unarchive all threads in this project before removing it.",
         });
         return;
       }
+
+      // Archived threads are hidden from the sidebar tree and are not
+      // counted by the guard above (see countActiveThreadsByMember). Sweep
+      // them here so project.delete does not orphan their history.
+      const archivedThreadsForMember = projectThreads.filter(
+        (thread) =>
+          thread.archivedAt !== null &&
+          thread.environmentId === member.environmentId &&
+          thread.projectId === member.id,
+      );
+
+      const archivedSummary =
+        archivedThreadsForMember.length === 0
+          ? "This removes only this project entry."
+          : archivedThreadsForMember.length === 1
+            ? "This removes the project and deletes 1 archived thread."
+            : `This removes the project and deletes ${archivedThreadsForMember.length} archived threads.`;
 
       const message = [
         `Remove project "${member.name}"?`,
         `Path: ${member.cwd}`,
         ...(member.environmentLabel ? [`Environment: ${member.environmentLabel}`] : []),
-        "This removes only this project entry.",
+        archivedSummary,
       ].join("\n");
       const confirmed = await api.dialogs.confirm(message);
       if (!confirmed) {
@@ -1349,6 +1365,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         const projectApi = readEnvironmentApi(member.environmentId);
         if (!projectApi) {
           throw new Error("Project API unavailable.");
+        }
+        for (const archivedThread of archivedThreadsForMember) {
+          await projectApi.orchestration.dispatchCommand({
+            type: "thread.delete",
+            commandId: newCommandId(),
+            threadId: archivedThread.id,
+          });
         }
         await projectApi.orchestration.dispatchCommand({
           type: "project.delete",
@@ -1374,6 +1397,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       clearProjectDraftThreadId,
       getDraftThreadByProjectRef,
       memberThreadCountByPhysicalKey,
+      projectThreads,
     ],
   );
 
@@ -1450,13 +1474,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           };
         };
 
-        const { items: remoteItems, actionHandlers: remoteHandlers } =
-          buildRemoteContextMenuItems({
-            project,
-            remoteIdentityKey: isRemoteProject ? remoteIdentityKey ?? null : null,
-            remoteConnectionState,
-            api,
-          });
+        const { items: remoteItems, actionHandlers: remoteHandlers } = buildRemoteContextMenuItems({
+          project,
+          remoteIdentityKey: isRemoteProject ? (remoteIdentityKey ?? null) : null,
+          remoteConnectionState,
+          api,
+        });
         remoteHandlers.forEach((v, k) => actionHandlers.set(k, v));
 
         const menuItems: Array<ContextMenuItem<string>> = [];
@@ -1556,13 +1579,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (ok) doNavigate();
       });
     },
-    [
-      clearSelection,
-      rangeSelectTo,
-      router,
-      setSelectionAnchor,
-      toggleThreadSelection,
-    ],
+    [clearSelection, rangeSelectTo, router, setSelectionAnchor, toggleThreadSelection],
   );
 
   const handleMultiSelectContextMenu = useCallback(
@@ -1985,11 +2002,23 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ) : null}
           </span>
         </SidebarMenuButton>
-        {/* Remote connection indicator – visible by default, crossfades
-            with the "new thread" button on hover. Reflects live connection
-            state (green = connected, pulsing = connecting, red/grey =
-            error/disconnected) and click-to-reconnect when offline. */}
-        {isRemoteProject && remoteConnectionState && (
+        {/* Environment presence indicator – visible by default, crossfades
+            with the "new thread" button on hover. Three cases:
+              - local-only: static monitor icon (local projects are always
+                reachable while the app is running, so no state)
+              - remote-only: cloud icon with live connection state
+                (green = connected, pulsing = connecting, red/grey =
+                error/disconnected) and click-to-reconnect when offline
+              - mixed: both icons, positioned side-by-side, so the user can
+                see at a glance that a logical project spans both a local
+                clone and at least one remote peer
+        */}
+        {project.environmentPresence === "local-only" && (
+          <div className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
+            <LocalPresenceIcon />
+          </div>
+        )}
+        {project.environmentPresence === "remote-only" && remoteConnectionState && (
           <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex size-5 items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
             <RemoteConnectionIcon
               state={remoteConnectionState}
@@ -2010,6 +2039,32 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
                 : {})}
             />
+          </div>
+        )}
+        {project.environmentPresence === "mixed" && (
+          <div className="pointer-events-auto absolute top-1 right-1.5 inline-flex items-center gap-1 transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0">
+            <LocalPresenceIcon tooltip="Local clone present" />
+            {remoteConnectionState && (
+              <RemoteConnectionIcon
+                state={remoteConnectionState}
+                tooltip={
+                  remoteConnectionState === "connected"
+                    ? `Remote: connected${
+                        project.remoteEnvironmentLabels.length > 0
+                          ? ` (${project.remoteEnvironmentLabels.join(", ")})`
+                          : ""
+                      }`
+                    : remoteConnectionState === "connecting"
+                      ? "Remote: connecting…"
+                      : remoteConnectionState === "error"
+                        ? "Remote: error — click to reconnect"
+                        : "Remote: disconnected — click to reconnect"
+                }
+                {...(remoteIdentityKey
+                  ? { onClick: () => void connectSavedEnvironment(remoteIdentityKey) }
+                  : {})}
+              />
+            )}
           </div>
         )}
         <Tooltip>

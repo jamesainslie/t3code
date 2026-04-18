@@ -587,6 +587,20 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     ];
   }
 
+  // SSH remote-session support requires prebuilt t3-server-* and tmux-* binaries
+  // to be present under process.resourcesPath/ssh-binaries at runtime. They are
+  // produced by scripts/build-ssh-binaries.sh, staged into `<stage>/ssh-binaries/`,
+  // and copied into the packaged app via electron-builder's extraResources.
+  // Every platform build bundles all four t3-server targets, because the user
+  // may connect from (e.g.) macOS to any Linux/Darwin remote.
+  buildConfig.extraResources = [
+    {
+      from: "ssh-binaries",
+      to: "ssh-binaries",
+      filter: ["**/*"],
+    },
+  ];
+
   if (platform === "mac") {
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
@@ -720,12 +734,33 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stageAppDir = path.join(stageRoot, "app");
   const stageResourcesDir = path.join(stageAppDir, "apps/desktop/resources");
+  const stageSshBinariesDir = path.join(stageAppDir, "ssh-binaries");
   const distDirs = {
     desktopDist: path.join(repoRoot, "apps/desktop/dist-electron"),
     desktopResources: path.join(repoRoot, "apps/desktop/resources"),
     serverDist: path.join(repoRoot, "apps/server/dist"),
+    sshBinaries: path.join(repoRoot, "dist/ssh-binaries"),
   };
   const bundledClientEntry = path.join(distDirs.serverDist, "client/index.html");
+  // The t3-server-* and tmux-* binaries that sshManager.ts expects under
+  // process.resourcesPath/ssh-binaries at runtime. Building every desktop
+  // artifact without them would ship a broken remote-session feature, so the
+  // build script is always invoked unless --skip-build is passed.
+  //
+  // Linux carries both glibc and musl variants so Alpine/Void remotes work;
+  // the glibc builds keep their historical unsuffixed filenames. Windows and
+  // FreeBSD targets aren't listed because Bun's compile toolchain doesn't
+  // currently produce them (bun-windows-arm64, bun-freebsd-* don't exist).
+  const requiredSshBinaryFiles = [
+    "t3-server-linux-x64",
+    "t3-server-linux-arm64",
+    "t3-server-linux-x64-musl",
+    "t3-server-linux-arm64-musl",
+    "t3-server-darwin-x64",
+    "t3-server-darwin-arm64",
+    "tmux-linux-x64",
+    "tmux-linux-arm64",
+  ] as const;
 
   if (!options.skipBuild) {
     yield* Effect.log("[desktop-artifact] Building desktop/server/web artifacts...");
@@ -737,12 +772,32 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         shell: process.platform === "win32",
       })`bun run build:desktop`,
     );
+    yield* Effect.log("[desktop-artifact] Building ssh remote-session binaries...");
+    yield* runCommand(
+      ChildProcess.make({
+        cwd: repoRoot,
+        ...commandOutputOptions(options.verbose),
+        shell: process.platform === "win32",
+      })`bash scripts/build-ssh-binaries.sh dist/ssh-binaries`,
+    );
   }
 
   for (const [label, dir] of Object.entries(distDirs)) {
     if (!(yield* fs.exists(dir))) {
       return yield* new BuildScriptError({
         message: `Missing ${label} at ${dir}. Run 'bun run build:desktop' first.`,
+      });
+    }
+  }
+
+  // Fail loudly if the ssh-binaries directory is missing any expected file.
+  // Packaging a desktop artifact without these produces a .app that silently
+  // breaks "Add Remote Project" (see sshManager.ts resolveSshBinariesDir).
+  for (const file of requiredSshBinaryFiles) {
+    const binaryPath = path.join(distDirs.sshBinaries, file);
+    if (!(yield* fs.exists(binaryPath))) {
+      return yield* new BuildScriptError({
+        message: `Missing ssh-binary ${file} at ${binaryPath}. Run 'bun run build:ssh-binaries'.`,
       });
     }
   }
@@ -762,6 +817,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
+  // Referenced by the extraResources entry in createBuildConfig. electron-builder
+  // resolves extraResources.from relative to the stage's package.json, so the
+  // binaries must live at `<stageAppDir>/ssh-binaries/`.
+  yield* fs.copy(distDirs.sshBinaries, stageSshBinariesDir);
 
   yield* assertPlatformBuildResources(
     options.platform,

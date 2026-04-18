@@ -76,9 +76,7 @@ describe("buildRemoteContextMenuItems", () => {
   });
 
   it("error state → emits Reconnect + Remove remote, NOT Disconnect", () => {
-    const { items } = buildRemoteContextMenuItems(
-      makeInput({ remoteConnectionState: "error" }),
-    );
+    const { items } = buildRemoteContextMenuItems(makeInput({ remoteConnectionState: "error" }));
     expect(items.map((i) => i.id)).toEqual(["reconnect", "remove-remote"]);
   });
 

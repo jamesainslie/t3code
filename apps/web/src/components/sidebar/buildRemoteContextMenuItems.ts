@@ -1,8 +1,4 @@
-import type {
-  ContextMenuItem,
-  EnvironmentId,
-  RemoteIdentityKey,
-} from "@t3tools/contracts";
+import type { ContextMenuItem, EnvironmentId, RemoteIdentityKey } from "@t3tools/contracts";
 import {
   connectSavedEnvironment,
   disconnectSavedEnvironment,

@@ -15,6 +15,7 @@ import { isLinuxPlatform, newCommandId, newProjectId } from "../../lib/utils";
 import { useSettings } from "~/hooks/useSettings";
 import type { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { toastManager } from "../ui/toast";
+import { upsertOptimisticProject, useStore } from "../../store";
 import type { Project } from "../../types";
 
 export interface UseAddProjectFlowParams {
@@ -54,6 +55,14 @@ export interface AddProjectFlow {
  * Dependencies passed to {@link createAddProjectFromInput}. Extracted as a
  * separate type so the core state machine can be unit-tested without React.
  */
+export interface ProjectDispatchedInfo {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly title: string;
+  readonly workspaceRoot: string;
+  readonly createdAt: string;
+}
+
 export interface AddProjectFromInputDeps {
   readonly projects: readonly Project[];
   readonly activeEnvironmentId: EnvironmentId | null;
@@ -70,6 +79,13 @@ export interface AddProjectFromInputDeps {
   readonly setAddProjectError: (value: string | null) => void;
   readonly setAddingProject: (value: boolean) => void;
   readonly readEnvironmentApi: typeof readEnvironmentApi;
+  /**
+   * Called after the project.create command is acknowledged by the server but
+   * before `handleNewThread` navigates to the draft thread. Implementations
+   * should write the project optimistically to the store so the sidebar and
+   * send handler don't race with the incoming shell stream event.
+   */
+  readonly onProjectDispatched?: (info: ProjectDispatchedInfo) => void;
 }
 
 /**
@@ -108,6 +124,7 @@ export function createAddProjectFromInput(
 
     const projectId = newProjectId();
     const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
+    const createdAt = new Date().toISOString();
     try {
       await api.orchestration.dispatchCommand({
         type: "project.create",
@@ -119,8 +136,20 @@ export function createAddProjectFromInput(
           provider: "codex",
           model: DEFAULT_MODEL_BY_PROVIDER.codex,
         },
-        createdAt: new Date().toISOString(),
+        createdAt,
       });
+      // Write the project to the store before navigating so the sidebar
+      // and send handler see it immediately, without waiting for the
+      // asynchronous shell stream event from the server.
+      if (deps.activeEnvironmentId !== null) {
+        deps.onProjectDispatched?.({
+          environmentId: deps.activeEnvironmentId,
+          projectId,
+          title,
+          workspaceRoot: cwd,
+          createdAt,
+        });
+      }
       if (deps.activeEnvironmentId !== null) {
         await deps
           .handleNewThread(scopeProjectRef(deps.activeEnvironmentId, projectId), {
@@ -255,6 +284,21 @@ export function useAddProjectFlow(params: UseAddProjectFlowParams): AddProjectFl
         setAddProjectError,
         setAddingProject,
         readEnvironmentApi,
+        onProjectDispatched: (info) => {
+          useStore.getState().upsertOptimisticProject(info.environmentId, {
+            id: info.projectId,
+            environmentId: info.environmentId,
+            name: info.title,
+            cwd: info.workspaceRoot,
+            repositoryIdentity: null,
+            defaultModelSelection: {
+              provider: "codex",
+              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            },
+            createdAt: info.createdAt,
+            scripts: [],
+          });
+        },
       });
       await run(rawCwd);
     },
