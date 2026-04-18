@@ -66,7 +66,11 @@ import {
 import { WorkspacePaths } from "./workspace/Services/WorkspacePaths.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 
-const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+// 0 is a sentinel meaning "ask the OS for an ephemeral port" — Bun/Node's HTTP
+// server accepts it and `HttpServer.HttpServer.address.port` reports the actually
+// bound port post-bind. Required for remote-SSH provisioning where each projectId
+// gets its own server and we can't have them all fighting over the default 3773.
+const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 }));
 
 const BootstrapEnvelopeSchema = Schema.Struct({
   mode: Schema.optional(RuntimeMode),

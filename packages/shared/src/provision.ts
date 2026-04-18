@@ -11,11 +11,13 @@
  * @module provision
  */
 import { execFile, spawn as nodeSpawn } from "node:child_process";
+import { access } from "node:fs/promises";
 import { connect as netConnect, createServer } from "node:net";
 import { promisify } from "node:util";
 
 import {
   PROBE_SCRIPT,
+  SUPPORTED_PLATFORMS_DESCRIPTION,
   buildPortForwardArgs,
   buildCancelForwardArgs,
   buildSshArgs,
@@ -30,6 +32,8 @@ import {
   remoteServerLogFile,
   remoteServerStateFile,
   resolveRemotePlatform,
+  type LinuxLibc,
+  type ResolvedPlatform,
   type SshTarget,
 } from "./ssh.js";
 import { SshConnectionManager } from "./sshManager.js";
@@ -63,10 +67,23 @@ export interface ProvisionOptions {
   workspaceRoot: string;
   /** Local app version — remote binary must match */
   localVersion: string;
-  /** Returns the local path to the server binary for the given platform/arch */
-  serverBinaryPath: (platform: string, arch: string) => string;
-  /** Returns the local path to the tmux binary for the given platform/arch */
-  tmuxBinaryPath: (platform: string, arch: string) => string;
+  /**
+   * Returns the local path to the server binary for the given normalized
+   * platform. `libc` is supplied for Linux remotes ("glibc" or "musl") so
+   * callers can select a libc-correct Bun-compiled binary; `undefined` on
+   * macOS where libc isn't meaningful.
+   */
+  serverBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string;
+  /**
+   * Returns the local path to the tmux binary, or `null` if the remote is
+   * expected to provide tmux itself (e.g. Darwin remotes where tmux comes
+   * from Homebrew). When `null` is returned, the provisioner will locate the
+   * remote tmux via `command -v tmux` and symlink it into `~/.t3/bin/tmux`
+   * rather than scp'ing a bundled binary. The vendored static tmux binaries
+   * (from pythops/tmux-linux-binary) are libc-agnostic, so callers can ignore
+   * the `libc` argument for tmux selection.
+   */
+  tmuxBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string | null;
   sshManager: SshConnectionManager;
   /** Optional progress callback */
   onStatus?: (phase: "provisioning" | "starting" | "connected") => void;
@@ -181,25 +198,28 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     emit({ type: "error", phase: 2, message: msg });
     throw new Error(msg);
   }
+  // The probe descriptor includes libc flavor on Linux so operators can see
+  // at a glance which variant the remote resolved to (glibc vs musl).
+  const probeDescriptor = formatProbeDescriptor(probe);
   log(
-    `phase 2: ${probe.os}/${probe.arch}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`,
+    `phase 2: ${probeDescriptor}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`,
   );
   emit({
     type: "log",
     phase: 2,
-    message: `${probe.os}/${probe.arch}, version ${probe.currentVersion || "(none)"}`,
+    message: `${probeDescriptor}, version ${probe.currentVersion || "(none)"}`,
   });
   emit({ type: "phase-complete", phase: 2, label: "Probing remote environment" });
 
   const t3Home = `${remoteHome}/.t3`;
 
-  const platform = resolveRemotePlatform(probe.os, probe.arch);
+  const platform = resolveRemotePlatform(probe.os, probe.arch, probe.libc);
   if (!platform) {
-    const msg = `Unsupported remote platform: ${probe.os}/${probe.arch}`;
+    const msg =
+      `Unsupported remote platform: ${probe.os}/${probe.arch}. ` +
+      `Supported: ${SUPPORTED_PLATFORMS_DESCRIPTION}`;
     emit({ type: "error", phase: 3, message: msg });
-    throw new Error(
-      `Unsupported remote platform: ${probe.os}/${probe.arch}. Supported: linux-x64, linux-arm64, darwin-x64, darwin-arm64`,
-    );
+    throw new Error(msg);
   }
 
   // Phase 3+4: Check for existing tmux session FIRST — if the server is
@@ -213,10 +233,17 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
 
   const remoteNormalized = normalizeVersion(probe.currentVersion);
   const localNormalized = normalizeVersion(localVersion);
-  if (!sessionExists && remoteNormalized !== localNormalized) {
+  const versionMismatch = remoteNormalized !== localNormalized;
+
+  // Install the server binary when needed. Tmux installation is handled as a
+  // separate, always-idempotent step below — we used to bundle tmux install
+  // into this branch, but that meant a prior aborted provision could leave
+  // ~/.t3/bin/t3 at the matching version without its tmux sibling, and then
+  // every subsequent connect would silently skip install and fail in phase 4.
+  if (!sessionExists && versionMismatch) {
     emit({ type: "phase-start", phase: 3, label: "Transferring binaries" });
     log(
-      `phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring binaries...`,
+      `phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring server binary...`,
     );
     emit({
       type: "log",
@@ -228,22 +255,25 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     await runSshCommand(target, `pkill -9 -f 't3 serve' 2>/dev/null || true`).catch(() => {});
     // Small delay to let the process fully exit and release the file
     await sleep(500);
-    const serverBin = opts.serverBinaryPath(platform.platform, platform.arch);
-    const tmuxBin = opts.tmuxBinaryPath(platform.platform, platform.arch);
+    const serverBin = opts.serverBinaryPath(platform.platform, platform.arch, platform.libc);
+    // Fail-fast with an actionable error if the bundled binary is missing
+    // locally. Without this we'd hit an opaque scp ENOENT halfway through.
+    await assertLocalBinaryExists(
+      serverBin,
+      `t3-server binary for ${describeResolvedPlatform(platform)}`,
+      emit,
+    );
     log(`phase 3: uploading server binary: ${serverBin}`);
     emit({ type: "log", phase: 3, message: "Uploading server binary..." });
     try {
       await scpFile(target, serverBin, `${t3Home}/bin/t3`);
-      log(`phase 3: uploading tmux binary: ${tmuxBin}`);
-      emit({ type: "log", phase: 3, message: "Uploading tmux binary..." });
-      await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
-      await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
+      await runSshCommand(target, `chmod +x ${t3Home}/bin/t3`);
     } catch (err) {
       emit({ type: "error", phase: 3, message: err instanceof Error ? err.message : String(err) });
       throw err;
     }
-    log("phase 3: binaries installed and marked executable");
-    emit({ type: "log", phase: 3, message: "Binaries installed" });
+    log("phase 3: server binary installed");
+    emit({ type: "log", phase: 3, message: "Server binary installed" });
     emit({ type: "phase-complete", phase: 3, label: "Transferring binaries" });
   } else if (sessionExists) {
     emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
@@ -252,9 +282,18 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
   } else {
     emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
-    log(`phase 3: version match (${localNormalized}), skipping binary transfer`);
+    log(`phase 3: version match (${localNormalized}), skipping server binary transfer`);
     emit({ type: "log", phase: 3, message: `Version match (${localNormalized})` });
     emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
+  }
+
+  // Always make sure ~/.t3/bin/tmux is present. The check is cheap (single
+  // SSH round-trip) and idempotent, and protects against partial installs from
+  // older app versions or aborted provisions. When a tmux session already
+  // exists the binary must also exist (the session is running it), so skip.
+  if (!sessionExists) {
+    const tmuxBin = opts.tmuxBinaryPath(platform.platform, platform.arch, platform.libc);
+    await ensureRemoteTmuxInstalled(target, t3Home, platform, tmuxBin, log, emit);
   }
 
   let remotePort: number;
@@ -526,6 +565,130 @@ async function runSshCommand(target: SshTarget, command: string): Promise<string
   const args = buildSshCommand(target, command);
   const { stdout } = await execFileAsync("ssh", args, { timeout: 30_000 });
   return stdout;
+}
+
+/**
+ * Locate a usable tmux binary on the remote host.
+ *
+ * Used for platforms where we intentionally don't bundle a tmux binary (Darwin,
+ * where Homebrew is the expected source). Checks `command -v tmux` first, then
+ * falls back to well-known install paths because SSH sessions may run under a
+ * non-login shell whose PATH is narrower than an interactive shell's.
+ *
+ * Returns the absolute path to tmux on the remote, or `null` if no tmux is
+ * found — callers should surface a clear "install tmux on the remote" error.
+ */
+async function locateRemoteTmux(target: SshTarget): Promise<string | null> {
+  const probe =
+    `for p in "$(command -v tmux 2>/dev/null)" ` +
+    `/opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux /opt/local/bin/tmux; do ` +
+    `  if [ -n "$p" ] && [ -x "$p" ]; then echo "TMUX_PATH:$p"; exit 0; fi; ` +
+    `done; exit 0`;
+  const output = await runSshCommand(target, probe);
+  const match = output.match(/^TMUX_PATH:(.+)$/m);
+  return match?.[1]?.trim() ?? null;
+}
+
+/**
+ * Ensure `~/.t3/bin/tmux` exists and is executable on the remote.
+ *
+ * Idempotent — safe to call on every connect. Using `test -x`, which follows
+ * symlinks, means a dangling Homebrew-path symlink from a previous connect
+ * will also be detected and replaced.
+ *
+ * On Linux remotes (`tmuxBin` is a local path) the bundled static tmux is
+ * scp'd into place. On Darwin (`tmuxBin` is `null`) the remote's own tmux is
+ * located and symlinked — we don't bundle a Darwin tmux because Homebrew's
+ * bottles aren't relocatable (they hard-code /opt/homebrew paths).
+ */
+async function ensureRemoteTmuxInstalled(
+  target: SshTarget,
+  t3Home: string,
+  platform: ResolvedPlatform,
+  tmuxBin: string | null,
+  log: (msg: string) => void,
+  emit: (event: Omit<ProvisionEvent, "timestamp">) => void,
+): Promise<void> {
+  // `test -x` follows symlinks and checks the resolved target is executable.
+  // Output is "present" when installed and valid, anything else means reinstall.
+  const check = await runSshCommand(
+    target,
+    `[ -x "${t3Home}/bin/tmux" ] && echo present || echo missing`,
+  );
+  if (check.trim() === "present") {
+    log(`phase 3: ${t3Home}/bin/tmux already installed`);
+    return;
+  }
+
+  if (tmuxBin === null) {
+    log(
+      `phase 3: locating remote tmux (bundled binary intentionally omitted for ${platform.platform})`,
+    );
+    emit({ type: "log", phase: 3, message: "Locating remote tmux..." });
+    const remoteTmuxPath = await locateRemoteTmux(target);
+    if (!remoteTmuxPath) {
+      const msg =
+        `tmux not found on remote (${describeResolvedPlatform(platform)}). ` +
+        `Install it on the remote and retry — e.g. 'brew install tmux' on macOS.`;
+      emit({ type: "error", phase: 3, message: msg });
+      throw new Error(msg);
+    }
+    log(`phase 3: symlinking remote tmux ${remoteTmuxPath} -> ${t3Home}/bin/tmux`);
+    emit({ type: "log", phase: 3, message: `Linking remote tmux (${remoteTmuxPath})` });
+    // `ln -sf` atomically replaces any previous file/symlink so upgrades
+    // don't leave a stale bundled binary behind.
+    await runSshCommand(target, `ln -sf ${remoteTmuxPath} ${t3Home}/bin/tmux`);
+    return;
+  }
+
+  // Validate the local bundled tmux exists before scp — same fail-fast reason
+  // as the server binary: an opaque ENOENT from the middle of a multi-step
+  // provision is much harder to debug than a clean error up front.
+  await assertLocalBinaryExists(
+    tmuxBin,
+    `tmux binary for ${describeResolvedPlatform(platform)}`,
+    emit,
+  );
+  log(`phase 3: uploading tmux binary: ${tmuxBin}`);
+  emit({ type: "log", phase: 3, message: "Uploading tmux binary..." });
+  await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
+  await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
+}
+
+/**
+ * Fail fast if a bundled ssh binary that the provisioner is about to scp is
+ * missing locally. Surfaces a clear "your install is broken" error instead of
+ * an opaque ENOENT from scp mid-provision.
+ */
+async function assertLocalBinaryExists(
+  binPath: string,
+  description: string,
+  emit: (event: Omit<ProvisionEvent, "timestamp">) => void,
+): Promise<void> {
+  try {
+    await access(binPath);
+  } catch {
+    const msg =
+      `${description} not found at ${binPath}. ` +
+      `This usually means the T3 install is missing bundled remote binaries. ` +
+      `Reinstall the app, or (for a dev checkout) run 'bun run build:ssh-binaries' ` +
+      `at the monorepo root.`;
+    emit({ type: "error", phase: 3, message: msg });
+    throw new Error(msg);
+  }
+}
+
+/** Human-friendly description of a resolved platform for logs/errors. */
+function describeResolvedPlatform(platform: ResolvedPlatform): string {
+  if (platform.platform === "linux") {
+    return `linux/${platform.arch}${platform.libc ? `/${platform.libc}` : ""}`;
+  }
+  return `${platform.platform}/${platform.arch}`;
+}
+
+/** Format the raw probe result for user-facing phase-2 logs. */
+function formatProbeDescriptor(probe: { os: string; arch: string; libc?: LinuxLibc }): string {
+  return probe.libc ? `${probe.os}/${probe.arch}/${probe.libc}` : `${probe.os}/${probe.arch}`;
 }
 
 async function writeRemoteFile(
