@@ -140,7 +140,7 @@ export function SidebarRemoteReconnectPill() {
 
   return (
     <Tooltip>
-      <TooltipTrigger delay={300}>{pill}</TooltipTrigger>
+      <TooltipTrigger delay={300} render={pill} />
       <TooltipPopup side="top" sideOffset={4}>
         {model.tooltip}
       </TooltipPopup>

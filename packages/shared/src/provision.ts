@@ -11,7 +11,7 @@
  * @module provision
  */
 import { execFile, spawn as nodeSpawn } from "node:child_process";
-import { createServer } from "node:net";
+import { connect as netConnect, createServer } from "node:net";
 import { promisify } from "node:util";
 
 import {
@@ -353,6 +353,23 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
       phase: 5,
       message: `Tunnel: localhost:${localPort} → remote:${remotePort}`,
     });
+    // Probe the tunnel end-to-end. If the SSH control master has a stale
+    // listener bound to this localPort (possible after a crashed provision
+    // that left a forward pointing at a now-dead remote port), the TCP
+    // connect succeeds but reads return RST. Verifying here turns that
+    // silent failure into a loud one so the caller retries with fresh
+    // state instead of handing the UI a dead baseUrl.
+    try {
+      await verifyTunnel(localPort);
+    } catch (verifyErr) {
+      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+      log(`phase 5: tunnel verification failed (${msg}), cancelling forward`);
+      await cancelPortForward(target, localPort, remotePort);
+      throw new Error(
+        `Tunnel at localhost:${localPort} is not reachable (remote port ${remotePort}). ${msg}`,
+        { cause: verifyErr },
+      );
+    }
     emit({ type: "phase-complete", phase: 5, label: "Setting up secure tunnel" });
   } catch (err) {
     emit({ type: "error", phase: 5, message: err instanceof Error ? err.message : String(err) });
@@ -567,6 +584,51 @@ async function cancelPortForward(
 ): Promise<void> {
   const args = buildCancelForwardArgs({ ...target, localPort, remotePort });
   await execFileAsync("ssh", args, { timeout: 5_000 }).catch(() => {});
+}
+
+/**
+ * Verify that a local SSH tunnel is actually forwarding to a live remote
+ * listener. Opens a TCP connection to 127.0.0.1:localPort and sends a
+ * minimal HTTP request. A healthy tunnel yields bytes back (any HTTP
+ * response, success or error). A stale tunnel (sshd on the far side
+ * cannot reach its target) closes the socket without sending anything,
+ * or errors out with ECONNRESET.
+ */
+export async function verifyTunnel(localPort: number, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const socket = netConnect(localPort, "127.0.0.1");
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(new Error(`Tunnel probe timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    const done = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (err) reject(err);
+      else resolve();
+    };
+    socket.on("connect", () => {
+      socket.write(
+        "GET /api/auth/session HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+      );
+    });
+    socket.on("data", () => done());
+    socket.on("error", (err) => done(new Error(`Tunnel probe failed: ${err.message}`)));
+    socket.on("close", (hadErr) => {
+      if (!settled) {
+        done(
+          new Error(
+            `Tunnel probe closed without receiving any response${hadErr ? " (socket error)" : " (remote RST)"}`,
+          ),
+        );
+      }
+    });
+  });
 }
 
 async function findFreeLocalPort(): Promise<number> {
