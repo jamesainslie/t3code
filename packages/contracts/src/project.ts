@@ -133,3 +133,26 @@ export const ProjectFileMonitorError = Schema.Union([
   Schema.TaggedStruct("MonitorFailed", { detail: Schema.String }),
 ]);
 export type ProjectFileMonitorError = typeof ProjectFileMonitorError.Type;
+
+// Update frontmatter (one-shot write)
+
+export const ProjectUpdateFrontmatterInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString,
+  frontmatter: Schema.Record(Schema.String, Schema.Unknown),
+  expectedMtimeMs: Schema.optional(Schema.Number),
+});
+export type ProjectUpdateFrontmatterInput = typeof ProjectUpdateFrontmatterInput.Type;
+
+export const ProjectUpdateFrontmatterResult = Schema.Struct({
+  mtimeMs: Schema.Number,
+});
+export type ProjectUpdateFrontmatterResult = typeof ProjectUpdateFrontmatterResult.Type;
+
+export const ProjectUpdateFrontmatterError = Schema.Union([
+  Schema.TaggedStruct("FrontmatterInvalid", { relativePath: Schema.String }),
+  Schema.TaggedStruct("ConcurrentModification", { relativePath: Schema.String }),
+  Schema.TaggedStruct("PathOutsideRoot", { relativePath: Schema.String }),
+  Schema.TaggedStruct("NotFound", { relativePath: Schema.String }),
+]);
+export type ProjectUpdateFrontmatterError = typeof ProjectUpdateFrontmatterError.Type;

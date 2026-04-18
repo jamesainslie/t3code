@@ -9,6 +9,9 @@ import {
   ProjectReadFileError,
   ProjectReadFileInput,
   ProjectReadFileResult,
+  ProjectUpdateFrontmatterError,
+  ProjectUpdateFrontmatterInput,
+  ProjectUpdateFrontmatterResult,
 } from "./project.ts";
 
 describe("ProjectReadFileInput", () => {
@@ -214,4 +217,80 @@ describe("ProjectFileMonitorError", () => {
       expect(err._tag).toBe(tag);
     },
   );
+});
+
+describe("ProjectUpdateFrontmatterInput", () => {
+  it("accepts a valid payload without expectedMtimeMs", () => {
+    const decoded = Schema.decodeUnknownSync(ProjectUpdateFrontmatterInput)({
+      cwd: "/a",
+      relativePath: "docs/a.md",
+      frontmatter: { title: "x", comments: [{ id: "c1", text: "hi" }] },
+    });
+    expect(decoded.relativePath).toBe("docs/a.md");
+    expect(decoded.frontmatter.title).toBe("x");
+    expect(decoded.expectedMtimeMs).toBeUndefined();
+  });
+
+  it("accepts expectedMtimeMs when provided", () => {
+    const decoded = Schema.decodeUnknownSync(ProjectUpdateFrontmatterInput)({
+      cwd: "/a",
+      relativePath: "docs/a.md",
+      frontmatter: {},
+      expectedMtimeMs: 1700000000000,
+    });
+    expect(decoded.expectedMtimeMs).toBe(1700000000000);
+  });
+
+  it("rejects empty relativePath", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectUpdateFrontmatterInput)({
+        cwd: "/a",
+        relativePath: "",
+        frontmatter: {},
+      }),
+    ).toThrow();
+  });
+
+  it("rejects empty cwd", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectUpdateFrontmatterInput)({
+        cwd: "",
+        relativePath: "a.md",
+        frontmatter: {},
+      }),
+    ).toThrow();
+  });
+});
+
+describe("ProjectUpdateFrontmatterResult", () => {
+  it("decodes a mtimeMs", () => {
+    const r = Schema.decodeUnknownSync(ProjectUpdateFrontmatterResult)({
+      mtimeMs: 1700000000000,
+    });
+    expect(r.mtimeMs).toBe(1700000000000);
+  });
+});
+
+describe("ProjectUpdateFrontmatterError", () => {
+  it.each([
+    "FrontmatterInvalid",
+    "ConcurrentModification",
+    "PathOutsideRoot",
+    "NotFound",
+  ] as const)("accepts tag %s", (tag) => {
+    const err = Schema.decodeUnknownSync(ProjectUpdateFrontmatterError)({
+      _tag: tag,
+      relativePath: "docs/a.md",
+    });
+    expect(err._tag).toBe(tag);
+  });
+
+  it("rejects unknown tag", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectUpdateFrontmatterError)({
+        _tag: "Unknown",
+        relativePath: "a.md",
+      }),
+    ).toThrow();
+  });
 });
