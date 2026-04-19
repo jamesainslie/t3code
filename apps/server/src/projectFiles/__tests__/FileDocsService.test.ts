@@ -170,6 +170,61 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "suppresses self-echo events for our own updateFrontmatter writes",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "a.md", "---\ntitle: x\n---\n# a\n");
+          yield* writeTextFile(cwd, "b.md", "# b\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const aChangedCount = { value: 0 };
+          const bChangedCount = { value: 0 };
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) => {
+                if (event._tag === "snapshot") {
+                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                }
+                if (event._tag === "changed") {
+                  if (event.relativePath === "a.md") aChangedCount.value += 1;
+                  if (event.relativePath === "b.md") bChangedCount.value += 1;
+                }
+                return Effect.void;
+              }),
+              Effect.forkScoped,
+            );
+
+          yield* Deferred.await(snapshotDeferred);
+
+          // Self-write via updateFrontmatter — must not echo.
+          yield* service.updateFrontmatter({
+            cwd,
+            relativePath: "a.md",
+            frontmatter: { comments: [{ id: "c1", text: "hi" }] },
+          });
+
+          // External write to an unrelated file — must emit.
+          yield* Effect.promise(async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            await fs.writeFile(path.join(cwd, "b.md"), "# b updated\n");
+          });
+
+          yield* Effect.promise(
+            () => new Promise((resolve) => setTimeout(resolve, 400)),
+          );
+
+          expect(aChangedCount.value).toBe(0);
+          expect(bChangedCount.value).toBe(1);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
       "honors .gitignore when collecting the snapshot",
       () =>
         Effect.gen(function* () {

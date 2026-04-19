@@ -15,6 +15,7 @@ import * as nodePath from "node:path";
 
 import chokidar from "chokidar";
 import ignoreFactory from "ignore";
+import * as YAML from "yaml";
 import {
   Effect,
   Exit,
@@ -99,6 +100,77 @@ function sanitizeRelative(cwd: string, absolutePath: string): string | null {
     return null;
   }
   return toPosix(rel);
+}
+
+/**
+ * Rewrite a markdown document's YAML frontmatter, replacing only the `comments`
+ * key and preserving every other key verbatim. Body bytes are preserved
+ * byte-for-byte. Returns a `FrontmatterInvalid` failure if the document has no
+ * `---\n...\n---\n` block.
+ */
+function rewriteFrontmatter(params: {
+  readonly original: string;
+  readonly frontmatter: Record<string, unknown>;
+  readonly relativePath: string;
+}): Effect.Effect<string, { readonly _tag: "FrontmatterInvalid"; readonly relativePath: string }> {
+  return Effect.gen(function* () {
+    const { original, frontmatter, relativePath } = params;
+
+    if (!original.startsWith("---\n") && !original.startsWith("---\r\n")) {
+      return yield* Effect.fail({
+        _tag: "FrontmatterInvalid" as const,
+        relativePath,
+      });
+    }
+
+    const newlineWidth = original.startsWith("---\r\n") ? 5 : 4;
+    const afterOpen = original.slice(newlineWidth);
+    const closeIndex = afterOpen.search(/\r?\n---\r?\n/);
+    if (closeIndex === -1) {
+      return yield* Effect.fail({
+        _tag: "FrontmatterInvalid" as const,
+        relativePath,
+      });
+    }
+
+    const yamlBody = afterOpen.slice(0, closeIndex);
+    // Preserve the exact close-delimiter bytes so CRLF/LF line endings survive.
+    const closeMatch = afterOpen.slice(closeIndex).match(/^(\r?\n---\r?\n)/);
+    const closeDelim = closeMatch?.[1] ?? "\n---\n";
+    const body = afterOpen.slice(closeIndex + closeDelim.length);
+
+    let parsed: Record<string, unknown>;
+    try {
+      const doc = YAML.parse(yamlBody);
+      if (doc === null || doc === undefined) {
+        parsed = {};
+      } else if (typeof doc !== "object" || Array.isArray(doc)) {
+        return yield* Effect.fail({
+          _tag: "FrontmatterInvalid" as const,
+          relativePath,
+        });
+      } else {
+        parsed = { ...(doc as Record<string, unknown>) };
+      }
+    } catch {
+      return yield* Effect.fail({
+        _tag: "FrontmatterInvalid" as const,
+        relativePath,
+      });
+    }
+
+    // Replace only the `comments` key from input; preserve every other key.
+    if (Object.prototype.hasOwnProperty.call(frontmatter, "comments")) {
+      parsed.comments = frontmatter.comments;
+    } else {
+      delete parsed.comments;
+    }
+
+    const stringified = YAML.stringify(parsed).replace(/\s+$/, "");
+    const openDelim = original.startsWith("---\r\n") ? "---\r\n" : "---\n";
+    const nextFrontmatter = `${openDelim}${stringified}${closeDelim}`;
+    return nextFrontmatter + body;
+  });
 }
 
 export const FileDocsServiceLive = Layer.effect(
@@ -470,8 +542,88 @@ export const FileDocsServiceLive = Layer.effect(
         }),
       );
 
-    const updateFrontmatter: FileDocsServiceShape["updateFrontmatter"] = () =>
-      Effect.die("FileDocsService.updateFrontmatter is not implemented");
+    const updateFrontmatter: FileDocsServiceShape["updateFrontmatter"] = (input) =>
+      Effect.gen(function* () {
+        const resolved = yield* workspacePaths
+          .resolveRelativePathWithinRoot({
+            workspaceRoot: input.cwd,
+            relativePath: input.relativePath,
+          })
+          .pipe(
+            Effect.mapError(
+              () =>
+                ({
+                  _tag: "PathOutsideRoot" as const,
+                  relativePath: input.relativePath,
+                }),
+            ),
+          );
+
+        // Prime the self-echo suppression *before* the write so concurrently
+        // delivered chokidar events for this path are dropped.
+        yield* markSelfEcho(resolved.absolutePath);
+
+        const existing = yield* Effect.tryPromise({
+          try: () => fsPromises.readFile(resolved.absolutePath, "utf8"),
+          catch: () =>
+            ({
+              _tag: "NotFound" as const,
+              relativePath: resolved.relativePath,
+            }),
+        });
+
+        const expectedMtimeMs = input.expectedMtimeMs;
+        if (expectedMtimeMs !== undefined) {
+          const stat = yield* Effect.tryPromise({
+            try: () => fsPromises.stat(resolved.absolutePath),
+            catch: () =>
+              ({
+                _tag: "NotFound" as const,
+                relativePath: resolved.relativePath,
+              }),
+          });
+          if (Math.floor(stat.mtimeMs) !== Math.floor(expectedMtimeMs)) {
+            return yield* Effect.fail({
+              _tag: "ConcurrentModification" as const,
+              relativePath: resolved.relativePath,
+            });
+          }
+        }
+
+        const rewritten = yield* rewriteFrontmatter({
+          original: existing,
+          frontmatter: input.frontmatter,
+          relativePath: resolved.relativePath,
+        });
+
+        const tempPath = `${resolved.absolutePath}.tmp`;
+        yield* Effect.tryPromise({
+          try: async () => {
+            await fsPromises.writeFile(tempPath, rewritten, "utf8");
+            await fsPromises.rename(tempPath, resolved.absolutePath);
+          },
+          catch: () =>
+            ({
+              _tag: "NotFound" as const,
+              relativePath: resolved.relativePath,
+            }),
+        });
+
+        // Re-mark self-echo after write to extend the suppression window over
+        // chokidar's post-rename change delivery.
+        yield* markSelfEcho(resolved.absolutePath);
+
+        const afterStat = yield* Effect.tryPromise({
+          try: () => fsPromises.stat(resolved.absolutePath),
+          catch: () =>
+            ({
+              _tag: "NotFound" as const,
+              relativePath: resolved.relativePath,
+            }),
+        });
+
+        return { mtimeMs: afterStat.mtimeMs };
+      });
 
     const recordTurnWrite: FileDocsServiceShape["recordTurnWrite"] = (record: TurnWriteRecord) =>
       SynchronizedRef.update(turnWrites, (map) => {
