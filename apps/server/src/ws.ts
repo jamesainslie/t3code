@@ -4,6 +4,7 @@ import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
+import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore";
 import { GitManager } from "./git/Services/GitManager";
@@ -53,32 +54,31 @@ import { forkHandlers } from "./rpc/handlers/fork.ts";
 const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
-      const services = {
-        projectionSnapshotQuery: yield* ProjectionSnapshotQuery,
-        orchestrationEngine: yield* OrchestrationEngineService,
-        checkpointDiffQuery: yield* CheckpointDiffQuery,
-        keybindings: yield* Keybindings,
-        open: yield* Open,
-        gitManager: yield* GitManager,
-        git: yield* GitCore,
-        gitStatusBroadcaster: yield* GitStatusBroadcaster,
-        terminalManager: yield* TerminalManager,
-        providerRegistry: yield* ProviderRegistry,
-        config: yield* ServerConfig,
-        lifecycleEvents: yield* ServerLifecycleEvents,
-        serverSettings: yield* ServerSettingsService,
-        startup: yield* ServerRuntimeStartup,
-        workspaceEntries: yield* WorkspaceEntries,
-        workspaceFileSystem: yield* WorkspaceFileSystem,
-        fileDocs: yield* FileDocsService,
-        projectSetupScriptRunner: yield* ProjectSetupScriptRunner,
-        repositoryIdentityResolver: yield* RepositoryIdentityResolver,
-        serverEnvironment: yield* ServerEnvironment,
-        serverAuth: yield* ServerAuth,
-        bootstrapCredentials: yield* BootstrapCredentialService,
-        sessions: yield* SessionCredentialService,
-        hostResourceMonitor: yield* HostResourceMonitor,
-      } as const;
+      const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+      const orchestrationEngine = yield* OrchestrationEngineService;
+      const checkpointDiffQuery = yield* CheckpointDiffQuery;
+      const keybindings = yield* Keybindings;
+      const open = yield* Open;
+      const gitManager = yield* GitManager;
+      const git = yield* GitCore;
+      const gitStatusBroadcaster = yield* GitStatusBroadcaster;
+      const terminalManager = yield* TerminalManager;
+      const providerRegistry = yield* ProviderRegistry;
+      const config = yield* ServerConfig;
+      const lifecycleEvents = yield* ServerLifecycleEvents;
+      const serverSettings = yield* ServerSettingsService;
+      const startup = yield* ServerRuntimeStartup;
+      const workspaceEntries = yield* WorkspaceEntries;
+      const workspaceFileSystem = yield* WorkspaceFileSystem;
+      const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
+      const repositoryIdentityResolver = yield* RepositoryIdentityResolver;
+      const serverEnvironment = yield* ServerEnvironment;
+      const serverAuth = yield* ServerAuth;
+      const bootstrapCredentials = yield* BootstrapCredentialService;
+      const sessions = yield* SessionCredentialService;
+      const hostResourceMonitor = yield* HostResourceMonitor;
+      const serverCommandId = (tag: string) =>
+        CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
       const deps = makeHandlerDeps(services, currentSessionId);
 
@@ -851,11 +851,11 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             }),
             { "rpc.aggregate": "auth" },
           ),
-        [WS_METHODS.serverSubscribeLogStream]: (_input) =>
+        [WS_METHODS.subscribeHostResources]: (_input) =>
           observeRpcStream(
-            WS_METHODS.serverSubscribeLogStream,
-            Stream.empty,
-            { "rpc.aggregate": "server" },
+            WS_METHODS.subscribeHostResources,
+            hostResourceMonitor.subscribe(config.cwd),
+            { "rpc.aggregate": "hostResource" },
           ),
       });
     }),

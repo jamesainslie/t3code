@@ -20,6 +20,11 @@ import {
   HostResourceSubscribeInput,
 } from "./hostResource";
 import {
+  HostResourceMonitorError,
+  HostResourceStreamEvent,
+  HostResourceSubscribeInput,
+} from "./hostResource";
+import {
   GitActionProgressEvent,
   GitCheckoutInput,
   GitCheckoutResult,
@@ -145,7 +150,6 @@ export const WS_METHODS = {
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
-  serverSubscribeLogStream: "server.subscribeLogStream",
   subscribeHostResources: "subscribeHostResources",
 } as const;
 
@@ -389,17 +393,6 @@ export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServer
 export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
-  stream: true,
-});
-
-export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribeLogStream, {
-  payload: Schema.Struct({}),
-  success: Schema.Struct({
-    level: Schema.String,
-    message: Schema.String,
-    timestamp: Schema.String,
-  }),
-  error: Schema.Never,
   stream: true,
 });
 
