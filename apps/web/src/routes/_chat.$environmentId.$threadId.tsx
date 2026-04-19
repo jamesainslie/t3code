@@ -10,15 +10,21 @@ import {
   DiffPanelShell,
   type DiffPanelMode,
 } from "../components/DiffPanelShell";
+import { DocPreviewPanel } from "../components/files/DocPreviewPanel";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffRouteSearch,
   parseDiffRouteSearch,
   stripDiffSearchParams,
 } from "../diffRouteSearch";
+import {
+  type PreviewRouteSearch,
+  parsePreviewRouteSearch,
+  stripPreviewSearchParams,
+} from "../previewRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
-import { selectEnvironmentState, selectThreadExistsByRef, useStore } from "../store";
+import { selectEnvironmentState, selectProjectByRef, selectThreadExistsByRef, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
@@ -166,6 +172,18 @@ function ChatThreadRouteView() {
   const serverThreadStarted = threadHasStarted(serverThread);
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
+  const previewPath = diffOpen ? undefined : search.preview;
+  const previewOpen = previewPath != null && previewPath.length > 0;
+  const activeProjectId = serverThread?.projectId ?? null;
+  const activeProject = useStore((store) =>
+    activeProjectId && threadRef
+      ? selectProjectByRef(store, {
+          environmentId: threadRef.environmentId,
+          projectId: activeProjectId,
+        })
+      : undefined,
+  );
+  const activeCwd = serverThread?.worktreePath ?? activeProject?.cwd;
   const shouldUseDiffSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const currentThreadKey = threadRef ? `${threadRef.environmentId}:${threadRef.threadId}` : null;
   const [diffPanelMountState, setDiffPanelMountState] = useState(() => ({
@@ -211,6 +229,16 @@ function ChatThreadRouteView() {
       },
     });
   }, [markDiffOpened, navigate, threadRef]);
+  const closePreview = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: (previous) => stripPreviewSearchParams(previous),
+    });
+  }, [navigate, threadRef]);
 
   useEffect(() => {
     if (!threadRef || !bootstrapComplete) {
@@ -234,6 +262,7 @@ function ChatThreadRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const rightPanelOpen = diffOpen || previewOpen;
 
   if (!shouldUseDiffSheet) {
     return (
@@ -243,16 +272,47 @@ function ChatThreadRouteView() {
             environmentId={threadRef.environmentId}
             threadId={threadRef.threadId}
             onDiffPanelOpen={markDiffOpened}
-            reserveTitleBarControlInset={!diffOpen}
+            reserveTitleBarControlInset={!rightPanelOpen}
             routeKind="server"
           />
         </SidebarInset>
-        <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
-        />
+        {previewOpen && activeCwd ? (
+          <SidebarProvider
+            defaultOpen={false}
+            open={previewOpen}
+            onOpenChange={(open) => {
+              if (!open) closePreview();
+            }}
+            className="w-auto min-h-0 flex-none bg-transparent"
+            style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+          >
+            <Sidebar
+              side="right"
+              collapsible="offcanvas"
+              className="border-l border-border bg-card text-foreground"
+              resizable={{
+                minWidth: DIFF_INLINE_SIDEBAR_MIN_WIDTH,
+                storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
+              }}
+            >
+              <DocPreviewPanel
+                relativePath={previewPath}
+                cwd={activeCwd}
+                environmentId={threadRef.environmentId}
+                mode="sidebar"
+                onClose={closePreview}
+              />
+              <SidebarRail />
+            </Sidebar>
+          </SidebarProvider>
+        ) : (
+          <DiffPanelInlineSidebar
+            diffOpen={diffOpen}
+            onCloseDiff={closeDiff}
+            onOpenDiff={openDiff}
+            renderDiffContent={shouldRenderDiffContent}
+          />
+        )}
       </>
     );
   }
@@ -267,17 +327,32 @@ function ChatThreadRouteView() {
           routeKind="server"
         />
       </SidebarInset>
-      <RightPanelSheet open={diffOpen} onClose={closeDiff}>
-        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
-      </RightPanelSheet>
+      {previewOpen && activeCwd ? (
+        <RightPanelSheet open={previewOpen} onClose={closePreview}>
+          <DocPreviewPanel
+            relativePath={previewPath}
+            cwd={activeCwd}
+            environmentId={threadRef.environmentId}
+            mode="sheet"
+            onClose={closePreview}
+          />
+        </RightPanelSheet>
+      ) : (
+        <RightPanelSheet open={diffOpen} onClose={closeDiff}>
+          {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
+        </RightPanelSheet>
+      )}
     </>
   );
 }
 
 export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
-  validateSearch: (search) => parseDiffRouteSearch(search),
+  validateSearch: (search) => ({
+    ...parseDiffRouteSearch(search),
+    ...parsePreviewRouteSearch(search),
+  }),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
+    middlewares: [retainSearchParams<DiffRouteSearch & PreviewRouteSearch>(["diff", "preview"])],
   },
   component: ChatThreadRouteView,
 });
