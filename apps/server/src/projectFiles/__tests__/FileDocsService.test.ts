@@ -1,10 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Chunk, Deferred, Effect, FileSystem, Layer, Path, Stream } from "effect";
 
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
 import { FileDocsService } from "../Services/FileDocsService.ts";
 import { FileDocsServiceLive } from "../Layers/FileDocsServiceLive.ts";
+import type { ProjectFileChangeEvent } from "@t3tools/contracts";
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(FileDocsServiceLive),
@@ -127,4 +128,48 @@ it.layer(TestLayer)("FileDocsService", (it) => {
       }),
     );
   });
+
+  describe("watch", () => {
+    it.effect(
+      "emits a snapshot event with all matching .md files",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "a.md", "# a\n");
+          yield* writeTextFile(cwd, "docs/b.md", "# b\n");
+          yield* writeTextFile(cwd, "ignore.txt", "text");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) =>
+                event._tag === "snapshot"
+                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                  : Effect.void,
+              ),
+              Effect.forkScoped,
+            );
+
+          const snapshot = yield* Deferred.await(snapshotDeferred);
+
+          if (snapshot._tag !== "snapshot") {
+            throw new Error("expected snapshot event");
+          }
+          const files = snapshot.files.map((f) => f.relativePath).toSorted();
+          expect(files).toEqual(["a.md", "docs/b.md"]);
+          for (const file of snapshot.files) {
+            expect(file.oversized).toBe(false);
+            expect(file.size).toBeGreaterThan(0);
+            expect(file.mtimeMs).toBeGreaterThan(0);
+          }
+        }),
+      { timeout: 10_000 },
+    );
+  });
 });
+
+// Unused Chunk import keeps the helper available for subsequent tests.
+void Chunk;
