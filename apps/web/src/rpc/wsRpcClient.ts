@@ -168,12 +168,22 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     },
     projectFiles: {
       readFile: (input) =>
-        transport.request((client) => client[WS_METHODS.projectsReadFile](input)),
+        transport.request((client) =>
+          // Tagged-struct errors aren't Error subclasses; cast for transport compatibility
+          client[WS_METHODS.projectsReadFile](input) as Effect.Effect<any, Error, never>,
+        ),
       updateFrontmatter: (input) =>
-        transport.request((client) => client[WS_METHODS.projectsUpdateFrontmatter](input)),
+        transport.request((client) =>
+          client[WS_METHODS.projectsUpdateFrontmatter](input) as Effect.Effect<any, Error, never>,
+        ),
       onFileChange: (input, listener, options) =>
         transport.subscribe(
-          (client) => client[WS_METHODS.subscribeProjectFileChanges](input),
+          (client) =>
+            client[WS_METHODS.subscribeProjectFileChanges](input) as Stream.Stream<
+              any,
+              Error,
+              never
+            >,
           listener,
           options,
         ),
