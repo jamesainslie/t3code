@@ -11,6 +11,7 @@ import {
   type DiffPanelMode,
 } from "../components/DiffPanelShell";
 import { DocPreviewPanel } from "../components/files/DocPreviewPanel";
+import { readEnvironmentConnection } from "../environments/runtime";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffRouteSearch,
@@ -22,6 +23,7 @@ import {
   parsePreviewRouteSearch,
   stripPreviewSearchParams,
 } from "../previewRouteSearch";
+import { useDocsAutoSurface } from "../hooks/useDocsAutoSurface";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { selectEnvironmentState, selectProjectByRef, selectThreadExistsByRef, useStore } from "../store";
@@ -240,6 +242,36 @@ function ChatThreadRouteView() {
     });
   }, [navigate, threadRef]);
 
+  const [touchedPaths, setTouchedPaths] = useState<readonly string[] | undefined>(undefined);
+  const rpcClient = useMemo(() => {
+    if (!threadRef) return null;
+    return readEnvironmentConnection(threadRef.environmentId)?.client ?? null;
+  }, [threadRef]);
+
+  const onAutoSurface = useCallback(
+    (relativePath: string, paths: readonly string[]) => {
+      if (!threadRef) return;
+      setTouchedPaths(paths);
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+        search: (previous) => {
+          const rest = stripPreviewSearchParams(previous);
+          return { ...rest, preview: relativePath };
+        },
+      });
+    },
+    [navigate, threadRef],
+  );
+
+  useDocsAutoSurface({
+    rpcClient,
+    cwd: activeCwd ?? null,
+    threadId: threadRef?.threadId ?? null,
+    previewOpen,
+    onAutoSurface,
+  });
+
   useEffect(() => {
     if (!threadRef || !bootstrapComplete) {
       return;
@@ -261,6 +293,21 @@ function ChatThreadRouteView() {
     return null;
   }
 
+  const openPreview = useCallback(
+    (relativePath: string) => {
+      if (!threadRef) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+        search: (previous) => {
+          const rest = stripPreviewSearchParams(previous);
+          return { ...rest, preview: relativePath };
+        },
+      });
+    },
+    [navigate, threadRef],
+  );
+
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
   const rightPanelOpen = diffOpen || previewOpen;
 
@@ -272,6 +319,7 @@ function ChatThreadRouteView() {
             environmentId={threadRef.environmentId}
             threadId={threadRef.threadId}
             onDiffPanelOpen={markDiffOpened}
+            onPreviewFile={openPreview}
             reserveTitleBarControlInset={!rightPanelOpen}
             routeKind="server"
           />
@@ -301,6 +349,7 @@ function ChatThreadRouteView() {
                 environmentId={threadRef.environmentId}
                 mode="sidebar"
                 onClose={closePreview}
+                touchedPaths={touchedPaths}
               />
               <SidebarRail />
             </Sidebar>
@@ -324,6 +373,7 @@ function ChatThreadRouteView() {
           environmentId={threadRef.environmentId}
           threadId={threadRef.threadId}
           onDiffPanelOpen={markDiffOpened}
+          onPreviewFile={openPreview}
           routeKind="server"
         />
       </SidebarInset>
@@ -335,6 +385,7 @@ function ChatThreadRouteView() {
             environmentId={threadRef.environmentId}
             mode="sheet"
             onClose={closePreview}
+            touchedPaths={touchedPaths}
           />
         </RightPanelSheet>
       ) : (

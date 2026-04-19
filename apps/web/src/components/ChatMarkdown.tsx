@@ -55,6 +55,8 @@ interface ChatMarkdownProps {
   text: string;
   cwd: string | undefined;
   isStreaming?: boolean;
+  /** Callback invoked when the user selects "Preview in panel" from a file link context menu */
+  onPreview?: ((relativePath: string) => void) | undefined;
 }
 
 const CODE_FENCE_LANGUAGE_REGEX = /(?:^|\s)language-([^\s]+)/;
@@ -249,6 +251,7 @@ interface MarkdownFileLinkProps {
   label: string;
   theme: "light" | "dark";
   className?: string | undefined;
+  onPreview?: ((relativePath: string) => void) | undefined;
 }
 
 const MARKDOWN_LINK_HREF_PATTERN = /\[[^\]]*]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
@@ -339,6 +342,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   label,
   theme,
   className,
+  onPreview,
 }: MarkdownFileLinkProps) {
   const handleOpen = useCallback(() => {
     const api = readLocalApi();
@@ -395,17 +399,24 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       const api = readLocalApi();
       if (!api) return;
 
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "open", label: "Open in editor" },
-          { id: "copy-relative", label: "Copy relative path" },
-          { id: "copy-full", label: "Copy full path" },
-        ] as const,
-        { x: event.clientX, y: event.clientY },
-      );
+      const menuItems = [
+        { id: "open", label: "Open in editor" },
+        ...(onPreview ? [{ id: "preview", label: "Preview in panel" }] : []),
+        { id: "copy-relative", label: "Copy relative path" },
+        { id: "copy-full", label: "Copy full path" },
+      ] as const;
+
+      const clicked = await api.contextMenu.show(menuItems, {
+        x: event.clientX,
+        y: event.clientY,
+      });
 
       if (clicked === "open") {
         handleOpen();
+        return;
+      }
+      if (clicked === "preview" && onPreview) {
+        onPreview(displayPath);
         return;
       }
       if (clicked === "copy-relative") {
@@ -416,7 +427,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         handleCopy(targetPath, "Full path");
       }
     },
-    [displayPath, handleCopy, handleOpen, targetPath],
+    [displayPath, handleCopy, handleOpen, onPreview, targetPath],
   );
 
   return (
@@ -466,11 +477,12 @@ function areMarkdownFileLinkPropsEqual(
     previous.filePath === next.filePath &&
     previous.label === next.label &&
     previous.theme === next.theme &&
-    previous.className === next.className
+    previous.className === next.className &&
+    previous.onPreview === next.onPreview
   );
 }
 
-function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
+function ChatMarkdown({ text, cwd, isStreaming = false, onPreview }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
@@ -524,6 +536,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
             label={labelParts.join(" · ")}
             theme={resolvedTheme}
             className={props.className}
+            onPreview={onPreview}
           />
         );
       },
@@ -554,6 +567,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
       fileLinkParentSuffixByPath,
       isStreaming,
       markdownFileLinkMetaByHref,
+      onPreview,
       resolvedTheme,
     ],
   );
