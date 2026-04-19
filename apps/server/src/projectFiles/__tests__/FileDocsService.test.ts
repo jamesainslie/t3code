@@ -170,6 +170,73 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "honors .gitignore when collecting the snapshot",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "keep.md", "# keep\n");
+          yield* writeTextFile(cwd, "secrets/a.md", "# hidden\n");
+          yield* writeTextFile(cwd, ".gitignore", "secrets/\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) =>
+                event._tag === "snapshot"
+                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                  : Effect.void,
+              ),
+              Effect.forkScoped,
+            );
+
+          const snapshot = yield* Deferred.await(snapshotDeferred);
+          if (snapshot._tag !== "snapshot") {
+            throw new Error("expected snapshot event");
+          }
+          const files = snapshot.files.map((f) => f.relativePath).toSorted();
+          expect(files).toEqual(["keep.md"]);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
+      "ignores node_modules and other hard-coded directories by default",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "ok.md", "# ok\n");
+          yield* writeTextFile(cwd, "node_modules/x.md", "# bad\n");
+          yield* writeTextFile(cwd, ".git/HEAD", "ref: x");
+          yield* writeTextFile(cwd, "dist/out.md", "# out\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) =>
+                event._tag === "snapshot"
+                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                  : Effect.void,
+              ),
+              Effect.forkScoped,
+            );
+
+          const snapshot = yield* Deferred.await(snapshotDeferred);
+          if (snapshot._tag !== "snapshot") {
+            throw new Error("expected snapshot event");
+          }
+          const files = snapshot.files.map((f) => f.relativePath).toSorted();
+          expect(files).toEqual(["ok.md"]);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
       "flags oversized files in snapshot and suppresses their change events",
       () =>
         Effect.gen(function* () {
