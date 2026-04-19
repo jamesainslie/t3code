@@ -341,13 +341,7 @@ const createDesktopBridgeStub = (overrides?: {
     sshDisconnect: vi.fn().mockResolvedValue({ ok: true }),
     sshStatus: vi.fn().mockResolvedValue({ connections: [] }),
     onSshStatusUpdate: vi.fn(),
-    onSshProvisionEvent: vi.fn().mockReturnValue(() => {}),
     recordRemoteHost: vi.fn().mockResolvedValue(undefined),
-    getSavedSshHosts: vi.fn().mockResolvedValue([]),
-    saveSshHost: vi.fn().mockResolvedValue(undefined),
-    removeSavedSshHost: vi.fn().mockResolvedValue(undefined),
-    sshProbe: vi.fn().mockResolvedValue({ reachable: false }),
-    sshKillRemoteSession: vi.fn().mockResolvedValue(undefined),
   };
 };
 

@@ -174,8 +174,6 @@ import {
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { useHostResource, startHostResourceSync } from "~/rpc/hostResourceState";
 import { readEnvironmentConnection } from "~/environments/runtime";
-import { retainThreadDetailSubscription } from "../environments/runtime/service";
-import { RightPanelSheet } from "./RightPanelSheet";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -845,13 +843,6 @@ export default function ChatView(props: ChatViewProps) {
     if (!connection) return;
     return startHostResourceSync(connection.client.hostResource, activeProject.id);
   }, [activeProject?.id, environmentId]);
-
-  useEffect(() => {
-    if (routeKind !== "server") {
-      return;
-    }
-    return retainThreadDetailSubscription(environmentId, threadId);
-  }, [environmentId, routeKind, threadId]);
 
   // Compute the list of environments this logical project spans, used to
   // drive the environment picker in BranchToolbar.

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyHostResourceStreamEvent, worstState } from "../hostResourceState";
+import {
+  applyHostResourceStreamEvent,
+  worstState,
+} from "../hostResourceState";
 import type { HostResourceSnapshot, HostResourceStreamEvent } from "@t3tools/contracts";
 
 describe("hostResourceState", () => {

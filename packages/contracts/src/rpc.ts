@@ -15,6 +15,11 @@ import {
   HostResourceSubscribeInput,
 } from "./hostResource.ts";
 import {
+  HostResourceMonitorError,
+  HostResourceStreamEvent,
+  HostResourceSubscribeInput,
+} from "./hostResource";
+import {
   GitActionProgressEvent,
   GitCheckoutInput,
   GitCheckoutResult,
@@ -142,7 +147,6 @@ export const WS_METHODS = {
   subscribeAuthAccess: "subscribeAuthAccess",
   serverSubscribeLogStream: "server.subscribeLogStream",
   subscribeHostResources: "subscribeHostResources",
-  subscribeProjectFileChanges: "subscribeProjectFileChanges",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -406,16 +410,6 @@ export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostReso
   stream: true,
 });
 
-export const WsSubscribeProjectFileChangesRpc = Rpc.make(
-  WS_METHODS.subscribeProjectFileChanges,
-  {
-    payload: ProjectFileWatchInput,
-    success: ProjectFileChangeEvent,
-    error: ProjectFileMonitorError,
-    stream: true,
-  },
-);
-
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -451,12 +445,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
   WsSubscribeHostResourcesRpc,
-  WsSubscribeProjectFileChangesRpc,
+  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
   WsServerSubscribeLogStreamRpc,
-  WsOrchestrationSubscribeShellRpc,
-  WsOrchestrationSubscribeThreadRpc,
 );

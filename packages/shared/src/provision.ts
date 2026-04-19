@@ -11,13 +11,11 @@
  * @module provision
  */
 import { execFile, spawn as nodeSpawn } from "node:child_process";
-import { access } from "node:fs/promises";
-import { connect as netConnect, createServer } from "node:net";
+import { createServer } from "node:net";
 import { promisify } from "node:util";
 
 import {
   PROBE_SCRIPT,
-  SUPPORTED_PLATFORMS_DESCRIPTION,
   buildPortForwardArgs,
   buildCancelForwardArgs,
   buildSshArgs,
@@ -25,15 +23,12 @@ import {
   buildTmuxKillCommand,
   buildTmuxStartCommand,
   controlSocketPath,
-  normalizeVersion,
   parseProbeOutput,
   remoteAuthTokenFile,
   remoteEnvFile,
   remoteServerLogFile,
   remoteServerStateFile,
   resolveRemotePlatform,
-  type LinuxLibc,
-  type ResolvedPlatform,
   type SshTarget,
 } from "./ssh.js";
 import { SshConnectionManager } from "./sshManager.js";
@@ -48,49 +43,21 @@ export interface ServerState {
   pairingUrl?: string;
 }
 
-export type ProvisionEventType = "phase-start" | "phase-complete" | "log" | "error";
-
-export interface ProvisionEvent {
-  type: ProvisionEventType;
-  /** Phase number (1-5) */
-  phase?: number;
-  /** Human-readable label for the phase */
-  label?: string;
-  /** Detail message (log line, error message) */
-  message?: string;
-  timestamp: number;
-}
-
 export interface ProvisionOptions {
   target: SshTarget;
   projectId: string;
   workspaceRoot: string;
   /** Local app version — remote binary must match */
   localVersion: string;
-  /**
-   * Returns the local path to the server binary for the given normalized
-   * platform. `libc` is supplied for Linux remotes ("glibc" or "musl") so
-   * callers can select a libc-correct Bun-compiled binary; `undefined` on
-   * macOS where libc isn't meaningful.
-   */
-  serverBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string;
-  /**
-   * Returns the local path to the tmux binary, or `null` if the remote is
-   * expected to provide tmux itself (e.g. Darwin remotes where tmux comes
-   * from Homebrew). When `null` is returned, the provisioner will locate the
-   * remote tmux via `command -v tmux` and symlink it into `~/.t3/bin/tmux`
-   * rather than scp'ing a bundled binary. The vendored static tmux binaries
-   * (from pythops/tmux-linux-binary) are libc-agnostic, so callers can ignore
-   * the `libc` argument for tmux selection.
-   */
-  tmuxBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string | null;
+  /** Returns the local path to the server binary for the given platform/arch */
+  serverBinaryPath: (platform: string, arch: string) => string;
+  /** Returns the local path to the tmux binary for the given platform/arch */
+  tmuxBinaryPath: (platform: string, arch: string) => string;
   sshManager: SshConnectionManager;
   /** Optional progress callback */
   onStatus?: (phase: "provisioning" | "starting" | "connected") => void;
   /** Optional callback for real-time remote server log lines */
   onLog?: (line: string) => void;
-  /** Optional granular provisioning event callback */
-  onProvisionEvent?: (event: ProvisionEvent) => void;
 }
 
 export interface ProvisionResult {
@@ -150,76 +117,38 @@ export function buildStartServerCommand(projectId: string, workspaceRoot: string
 // ── Provisioner ───────────────────────────────────────────────────────
 
 export async function provision(opts: ProvisionOptions): Promise<ProvisionResult> {
-  const { target, projectId, workspaceRoot, localVersion, onStatus, onProvisionEvent } = opts;
+  const { target, projectId, workspaceRoot, localVersion, onStatus } = opts;
   const log = (msg: string) => console.log(`[ssh-provision] ${target.user}@${target.host}: ${msg}`);
-
-  const emit = (event: Omit<ProvisionEvent, "timestamp">) => {
-    onProvisionEvent?.({ ...event, timestamp: Date.now() });
-  };
 
   onStatus?.("provisioning");
 
   // Phase 1: Ensure master SSH connection
   log("phase 1: checking SSH control socket...");
-  emit({ type: "phase-start", phase: 1, label: "Establishing SSH connection" });
-  try {
-    await opts.sshManager.getOrCreate(target);
-  } catch (err) {
-    emit({ type: "error", phase: 1, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  }
+  await opts.sshManager.getOrCreate(target);
   log("phase 1: SSH master connection ready");
-  emit({ type: "log", phase: 1, message: "SSH master connection ready" });
-  emit({ type: "phase-complete", phase: 1, label: "Establishing SSH connection" });
 
   // Phase 2: Probe remote environment and resolve the remote home directory.
   log("phase 2: probing remote environment...");
-  emit({ type: "phase-start", phase: 2, label: "Probing remote environment" });
-  let probe: ReturnType<typeof parseProbeOutput>;
-  let remoteHome: string;
-  try {
-    const [probeOutput, home] = await Promise.all([
-      runSshCommand(target, PROBE_SCRIPT),
-      runSshCommand(target, "echo $HOME").then((s) => s.trim()),
-    ]);
-    probe = parseProbeOutput(probeOutput);
-    remoteHome = home;
-  } catch (err) {
-    emit({ type: "error", phase: 2, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  }
+  const [probeOutput, remoteHome] = await Promise.all([
+    runSshCommand(target, PROBE_SCRIPT),
+    runSshCommand(target, "echo $HOME").then((s) => s.trim()),
+  ]);
+  const probe = parseProbeOutput(probeOutput);
   if (!probe) {
-    const msg = "Failed to parse remote probe output";
-    emit({ type: "error", phase: 2, message: msg });
-    throw new Error(msg);
+    throw new Error(`Failed to parse remote probe output: ${JSON.stringify(probeOutput)}`);
   }
   if (!remoteHome || remoteHome.startsWith("$")) {
-    const msg = `Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`;
-    emit({ type: "error", phase: 2, message: msg });
-    throw new Error(msg);
+    throw new Error(`Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`);
   }
-  // The probe descriptor includes libc flavor on Linux so operators can see
-  // at a glance which variant the remote resolved to (glibc vs musl).
-  const probeDescriptor = formatProbeDescriptor(probe);
-  log(
-    `phase 2: ${probeDescriptor}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`,
-  );
-  emit({
-    type: "log",
-    phase: 2,
-    message: `${probeDescriptor}, version ${probe.currentVersion || "(none)"}`,
-  });
-  emit({ type: "phase-complete", phase: 2, label: "Probing remote environment" });
+  log(`phase 2: ${probe.os}/${probe.arch}, remote version=${probe.currentVersion || "(none)"}, home=${remoteHome}`);
 
   const t3Home = `${remoteHome}/.t3`;
 
-  const platform = resolveRemotePlatform(probe.os, probe.arch, probe.libc);
+  const platform = resolveRemotePlatform(probe.os, probe.arch);
   if (!platform) {
-    const msg =
-      `Unsupported remote platform: ${probe.os}/${probe.arch}. ` +
-      `Supported: ${SUPPORTED_PLATFORMS_DESCRIPTION}`;
-    emit({ type: "error", phase: 3, message: msg });
-    throw new Error(msg);
+    throw new Error(
+      `Unsupported remote platform: ${probe.os}/${probe.arch}. Supported: linux-x64, linux-arm64, darwin-x64, darwin-arm64`,
+    );
   }
 
   // Phase 3+4: Check for existing tmux session FIRST — if the server is
@@ -231,76 +160,31 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   log(`phase 3: tmux check raw output: ${JSON.stringify(tmuxCheckOutput.trim())}`);
   const sessionExists = tmuxCheckOutput.trim() === "exists";
 
-  const remoteNormalized = normalizeVersion(probe.currentVersion);
-  const localNormalized = normalizeVersion(localVersion);
-  const versionMismatch = remoteNormalized !== localNormalized;
-
-  // Install the server binary when needed. Tmux installation is handled as a
-  // separate, always-idempotent step below — we used to bundle tmux install
-  // into this branch, but that meant a prior aborted provision could leave
-  // ~/.t3/bin/t3 at the matching version without its tmux sibling, and then
-  // every subsequent connect would silently skip install and fail in phase 4.
-  if (!sessionExists && versionMismatch) {
-    emit({ type: "phase-start", phase: 3, label: "Transferring binaries" });
-    log(
-      `phase 3: version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized}), transferring server binary...`,
-    );
-    emit({
-      type: "log",
-      phase: 3,
-      message: `Version mismatch (remote=${remoteNormalized || "none"}, local=${localNormalized})`,
-    });
+  if (!sessionExists && probe.currentVersion !== localVersion) {
+    log(`phase 3: version mismatch (remote=${probe.currentVersion || "none"}, local=${localVersion}), transferring binaries...`);
     onStatus?.("provisioning");
     // Kill any orphaned t3 processes that may be holding the binary open
     await runSshCommand(target, `pkill -9 -f 't3 serve' 2>/dev/null || true`).catch(() => {});
     // Small delay to let the process fully exit and release the file
     await sleep(500);
-    const serverBin = opts.serverBinaryPath(platform.platform, platform.arch, platform.libc);
-    // Fail-fast with an actionable error if the bundled binary is missing
-    // locally. Without this we'd hit an opaque scp ENOENT halfway through.
-    await assertLocalBinaryExists(
-      serverBin,
-      `t3-server binary for ${describeResolvedPlatform(platform)}`,
-      emit,
-    );
+    const serverBin = opts.serverBinaryPath(platform.platform, platform.arch);
+    const tmuxBin = opts.tmuxBinaryPath(platform.platform, platform.arch);
     log(`phase 3: uploading server binary: ${serverBin}`);
-    emit({ type: "log", phase: 3, message: "Uploading server binary..." });
-    try {
-      await scpFile(target, serverBin, `${t3Home}/bin/t3`);
-      await runSshCommand(target, `chmod +x ${t3Home}/bin/t3`);
-    } catch (err) {
-      emit({ type: "error", phase: 3, message: err instanceof Error ? err.message : String(err) });
-      throw err;
-    }
-    log("phase 3: server binary installed");
-    emit({ type: "log", phase: 3, message: "Server binary installed" });
-    emit({ type: "phase-complete", phase: 3, label: "Transferring binaries" });
+    await scpFile(target, serverBin, `${t3Home}/bin/t3`);
+    log(`phase 3: uploading tmux binary: ${tmuxBin}`);
+    await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
+    await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
+    log("phase 3: binaries installed and marked executable");
   } else if (sessionExists) {
-    emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
     log("phase 3: tmux session exists, skipping binary transfer (server is running)");
-    emit({ type: "log", phase: 3, message: "Server already running, skipping transfer" });
-    emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
   } else {
-    emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
-    log(`phase 3: version match (${localNormalized}), skipping server binary transfer`);
-    emit({ type: "log", phase: 3, message: `Version match (${localNormalized})` });
-    emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
-  }
-
-  // Always make sure ~/.t3/bin/tmux is present. The check is cheap (single
-  // SSH round-trip) and idempotent, and protects against partial installs from
-  // older app versions or aborted provisions. When a tmux session already
-  // exists the binary must also exist (the session is running it), so skip.
-  if (!sessionExists) {
-    const tmuxBin = opts.tmuxBinaryPath(platform.platform, platform.arch, platform.libc);
-    await ensureRemoteTmuxInstalled(target, t3Home, platform, tmuxBin, log, emit);
+    log(`phase 3: version match (${localVersion}), skipping binary transfer`);
   }
 
   let remotePort: number;
   let pairingUrl: string | undefined;
 
   if (sessionExists) {
-    emit({ type: "phase-start", phase: 4, label: "Reconnecting to server" });
     log("phase 4: tmux session exists, reading state file...");
     const stateJson = await runSshCommand(
       target,
@@ -309,37 +193,17 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     const state = parseServerStateFile(stateJson.trim());
     if (!state) {
       log("phase 4: state file missing/corrupt, killing stale session and cold-starting...");
-      emit({ type: "log", phase: 4, message: "State file corrupt, restarting server..." });
       await runSshCommand(target, buildTmuxKillCommand(projectId));
-      try {
-        remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
-      } catch (err) {
-        emit({
-          type: "error",
-          phase: 4,
-          message: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
+      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
     } else {
       remotePort = state.port;
       pairingUrl = state.pairingUrl;
       log(`phase 4: reconnected to existing server on remote port ${remotePort}`);
-      emit({ type: "log", phase: 4, message: `Reconnected on port ${remotePort}` });
     }
-    emit({ type: "phase-complete", phase: 4, label: "Reconnecting to server" });
   } else {
-    emit({ type: "phase-start", phase: 4, label: "Starting remote server" });
     log("phase 4: no tmux session, cold-starting server...");
-    try {
-      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
-    } catch (err) {
-      emit({ type: "error", phase: 4, message: err instanceof Error ? err.message : String(err) });
-      throw err;
-    }
+    remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
     log(`phase 4: server started on remote port ${remotePort}`);
-    emit({ type: "log", phase: 4, message: `Server started on port ${remotePort}` });
-    emit({ type: "phase-complete", phase: 4, label: "Starting remote server" });
   }
 
   // Extract the pairing URL from the server's stdout log. The state file may
@@ -381,39 +245,9 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
 
   // Phase 5: Set up SSH port forward
   log("phase 5: setting up port forward...");
-  emit({ type: "phase-start", phase: 5, label: "Setting up secure tunnel" });
-  let localPort: number;
-  try {
-    localPort = await findFreeLocalPort();
-    await setupPortForward(target, localPort, remotePort);
-    log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
-    emit({
-      type: "log",
-      phase: 5,
-      message: `Tunnel: localhost:${localPort} → remote:${remotePort}`,
-    });
-    // Probe the tunnel end-to-end. If the SSH control master has a stale
-    // listener bound to this localPort (possible after a crashed provision
-    // that left a forward pointing at a now-dead remote port), the TCP
-    // connect succeeds but reads return RST. Verifying here turns that
-    // silent failure into a loud one so the caller retries with fresh
-    // state instead of handing the UI a dead baseUrl.
-    try {
-      await verifyTunnel(localPort);
-    } catch (verifyErr) {
-      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
-      log(`phase 5: tunnel verification failed (${msg}), cancelling forward`);
-      await cancelPortForward(target, localPort, remotePort);
-      throw new Error(
-        `Tunnel at localhost:${localPort} is not reachable (remote port ${remotePort}). ${msg}`,
-        { cause: verifyErr },
-      );
-    }
-    emit({ type: "phase-complete", phase: 5, label: "Setting up secure tunnel" });
-  } catch (err) {
-    emit({ type: "error", phase: 5, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  }
+  const localPort = await findFreeLocalPort();
+  await setupPortForward(target, localPort, remotePort);
+  log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
 
   if (pairingUrl) {
     log(`provisioning complete — pairing URL available`);
@@ -567,130 +401,6 @@ async function runSshCommand(target: SshTarget, command: string): Promise<string
   return stdout;
 }
 
-/**
- * Locate a usable tmux binary on the remote host.
- *
- * Used for platforms where we intentionally don't bundle a tmux binary (Darwin,
- * where Homebrew is the expected source). Checks `command -v tmux` first, then
- * falls back to well-known install paths because SSH sessions may run under a
- * non-login shell whose PATH is narrower than an interactive shell's.
- *
- * Returns the absolute path to tmux on the remote, or `null` if no tmux is
- * found — callers should surface a clear "install tmux on the remote" error.
- */
-async function locateRemoteTmux(target: SshTarget): Promise<string | null> {
-  const probe =
-    `for p in "$(command -v tmux 2>/dev/null)" ` +
-    `/opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux /opt/local/bin/tmux; do ` +
-    `  if [ -n "$p" ] && [ -x "$p" ]; then echo "TMUX_PATH:$p"; exit 0; fi; ` +
-    `done; exit 0`;
-  const output = await runSshCommand(target, probe);
-  const match = output.match(/^TMUX_PATH:(.+)$/m);
-  return match?.[1]?.trim() ?? null;
-}
-
-/**
- * Ensure `~/.t3/bin/tmux` exists and is executable on the remote.
- *
- * Idempotent — safe to call on every connect. Using `test -x`, which follows
- * symlinks, means a dangling Homebrew-path symlink from a previous connect
- * will also be detected and replaced.
- *
- * On Linux remotes (`tmuxBin` is a local path) the bundled static tmux is
- * scp'd into place. On Darwin (`tmuxBin` is `null`) the remote's own tmux is
- * located and symlinked — we don't bundle a Darwin tmux because Homebrew's
- * bottles aren't relocatable (they hard-code /opt/homebrew paths).
- */
-async function ensureRemoteTmuxInstalled(
-  target: SshTarget,
-  t3Home: string,
-  platform: ResolvedPlatform,
-  tmuxBin: string | null,
-  log: (msg: string) => void,
-  emit: (event: Omit<ProvisionEvent, "timestamp">) => void,
-): Promise<void> {
-  // `test -x` follows symlinks and checks the resolved target is executable.
-  // Output is "present" when installed and valid, anything else means reinstall.
-  const check = await runSshCommand(
-    target,
-    `[ -x "${t3Home}/bin/tmux" ] && echo present || echo missing`,
-  );
-  if (check.trim() === "present") {
-    log(`phase 3: ${t3Home}/bin/tmux already installed`);
-    return;
-  }
-
-  if (tmuxBin === null) {
-    log(
-      `phase 3: locating remote tmux (bundled binary intentionally omitted for ${platform.platform})`,
-    );
-    emit({ type: "log", phase: 3, message: "Locating remote tmux..." });
-    const remoteTmuxPath = await locateRemoteTmux(target);
-    if (!remoteTmuxPath) {
-      const msg =
-        `tmux not found on remote (${describeResolvedPlatform(platform)}). ` +
-        `Install it on the remote and retry — e.g. 'brew install tmux' on macOS.`;
-      emit({ type: "error", phase: 3, message: msg });
-      throw new Error(msg);
-    }
-    log(`phase 3: symlinking remote tmux ${remoteTmuxPath} -> ${t3Home}/bin/tmux`);
-    emit({ type: "log", phase: 3, message: `Linking remote tmux (${remoteTmuxPath})` });
-    // `ln -sf` atomically replaces any previous file/symlink so upgrades
-    // don't leave a stale bundled binary behind.
-    await runSshCommand(target, `ln -sf ${remoteTmuxPath} ${t3Home}/bin/tmux`);
-    return;
-  }
-
-  // Validate the local bundled tmux exists before scp — same fail-fast reason
-  // as the server binary: an opaque ENOENT from the middle of a multi-step
-  // provision is much harder to debug than a clean error up front.
-  await assertLocalBinaryExists(
-    tmuxBin,
-    `tmux binary for ${describeResolvedPlatform(platform)}`,
-    emit,
-  );
-  log(`phase 3: uploading tmux binary: ${tmuxBin}`);
-  emit({ type: "log", phase: 3, message: "Uploading tmux binary..." });
-  await scpFile(target, tmuxBin, `${t3Home}/bin/tmux`);
-  await runSshCommand(target, `chmod +x ${t3Home}/bin/t3 ${t3Home}/bin/tmux`);
-}
-
-/**
- * Fail fast if a bundled ssh binary that the provisioner is about to scp is
- * missing locally. Surfaces a clear "your install is broken" error instead of
- * an opaque ENOENT from scp mid-provision.
- */
-async function assertLocalBinaryExists(
-  binPath: string,
-  description: string,
-  emit: (event: Omit<ProvisionEvent, "timestamp">) => void,
-): Promise<void> {
-  try {
-    await access(binPath);
-  } catch {
-    const msg =
-      `${description} not found at ${binPath}. ` +
-      `This usually means the T3 install is missing bundled remote binaries. ` +
-      `Reinstall the app, or (for a dev checkout) run 'bun run build:ssh-binaries' ` +
-      `at the monorepo root.`;
-    emit({ type: "error", phase: 3, message: msg });
-    throw new Error(msg);
-  }
-}
-
-/** Human-friendly description of a resolved platform for logs/errors. */
-function describeResolvedPlatform(platform: ResolvedPlatform): string {
-  if (platform.platform === "linux") {
-    return `linux/${platform.arch}${platform.libc ? `/${platform.libc}` : ""}`;
-  }
-  return `${platform.platform}/${platform.arch}`;
-}
-
-/** Format the raw probe result for user-facing phase-2 logs. */
-function formatProbeDescriptor(probe: { os: string; arch: string; libc?: LinuxLibc }): string {
-  return probe.libc ? `${probe.os}/${probe.arch}/${probe.libc}` : `${probe.os}/${probe.arch}`;
-}
-
 async function writeRemoteFile(
   target: SshTarget,
   remotePath: string,
@@ -747,51 +457,6 @@ async function cancelPortForward(
 ): Promise<void> {
   const args = buildCancelForwardArgs({ ...target, localPort, remotePort });
   await execFileAsync("ssh", args, { timeout: 5_000 }).catch(() => {});
-}
-
-/**
- * Verify that a local SSH tunnel is actually forwarding to a live remote
- * listener. Opens a TCP connection to 127.0.0.1:localPort and sends a
- * minimal HTTP request. A healthy tunnel yields bytes back (any HTTP
- * response, success or error). A stale tunnel (sshd on the far side
- * cannot reach its target) closes the socket without sending anything,
- * or errors out with ECONNRESET.
- */
-export async function verifyTunnel(localPort: number, timeoutMs = 3000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const socket = netConnect(localPort, "127.0.0.1");
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      reject(new Error(`Tunnel probe timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    const done = (err?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      socket.destroy();
-      if (err) reject(err);
-      else resolve();
-    };
-    socket.on("connect", () => {
-      socket.write(
-        "GET /api/auth/session HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-      );
-    });
-    socket.on("data", () => done());
-    socket.on("error", (err) => done(new Error(`Tunnel probe failed: ${err.message}`)));
-    socket.on("close", (hadErr) => {
-      if (!settled) {
-        done(
-          new Error(
-            `Tunnel probe closed without receiving any response${hadErr ? " (socket error)" : " (remote RST)"}`,
-          ),
-        );
-      }
-    });
-  });
 }
 
 async function findFreeLocalPort(): Promise<number> {

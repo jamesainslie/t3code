@@ -8,7 +8,7 @@
  * @module sshManager
  */
 import { spawn as nodeSpawn } from "node:child_process";
-import { buildCheckSocketArgs, buildSshArgs, type SshTarget } from "./ssh.ts";
+import { buildCheckSocketArgs, buildSshArgs, type SshTarget } from "./ssh";
 
 /** Minimal interface for a spawned process — allows mocking in tests. */
 export interface ProcessHandle {

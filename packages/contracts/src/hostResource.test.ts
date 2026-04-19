@@ -16,7 +16,7 @@ import {
   ContainersMetric,
   KubecontextMetric,
   RemoteMetric,
-} from "./hostResource.ts";
+} from "./hostResource";
 
 const decodeMetricState = Schema.decodeUnknownSync(MetricState);
 const decodeResourceMetricKind = Schema.decodeUnknownSync(ResourceMetricKind);

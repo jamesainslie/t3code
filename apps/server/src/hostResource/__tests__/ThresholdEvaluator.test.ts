@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ResourceThresholds, KubeDangerPatterns } from "@t3tools/contracts";
+import {
+  ResourceThresholds,
+  KubeDangerPatterns,
+} from "@t3tools/contracts";
 import type { RawSample } from "../Services/ResourceSampler.ts";
 import type { EvaluatorState } from "../Services/ThresholdEvaluator.ts";
-import { evaluateThresholds, makeInitialState } from "../Layers/ThresholdEvaluator.ts";
+import {
+  evaluateThresholds,
+  makeInitialState,
+} from "../Layers/ThresholdEvaluator.ts";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -282,7 +288,13 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         cpu: { usagePercent: 90, coreCount: 8 },
       });
       const state = makeInitialState();
-      const result = evaluateThresholds(sample, state, thresholds, dangerPatterns, 5);
+      const result = evaluateThresholds(
+        sample,
+        state,
+        thresholds,
+        dangerPatterns,
+        5,
+      );
 
       expect(result.snapshot.cpu.state).toBe("warn");
       expect(result.nextState.cpu).toBe("warn");
@@ -356,7 +368,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const kubeTransitions = result.transitions.filter((t) => t.metric === "kubecontext");
+      const kubeTransitions = result.transitions.filter(
+        (t) => t.metric === "kubecontext",
+      );
       expect(kubeTransitions).toHaveLength(1);
       expect(kubeTransitions[0]).toEqual({
         metric: "kubecontext",
@@ -417,7 +431,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const containerTransitions = result.transitions.filter((t) => t.metric === "containers");
+      const containerTransitions = result.transitions.filter(
+        (t) => t.metric === "containers",
+      );
       expect(containerTransitions).toHaveLength(1);
       expect(containerTransitions[0]).toEqual({
         metric: "containers",
@@ -443,7 +459,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const containerTransitions = result.transitions.filter((t) => t.metric === "containers");
+      const containerTransitions = result.transitions.filter(
+        (t) => t.metric === "containers",
+      );
       expect(containerTransitions).toHaveLength(0);
     });
 
@@ -482,10 +500,14 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       );
 
       expect(result.nextState.remote).toBe("critical");
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions.length).toBeGreaterThanOrEqual(1);
       // Should have a transition to critical for root
-      expect(remoteTransitions.some((t) => t.currentState === "critical")).toBe(true);
+      expect(
+        remoteTransitions.some((t) => t.currentState === "critical"),
+      ).toBe(true);
     });
 
     it("emits transition when isRemote changes", () => {
@@ -509,7 +531,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions).toHaveLength(1);
       expect(result.nextState.lastIsRemote).toBe(true);
     });
@@ -536,7 +560,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions).toHaveLength(0);
     });
   });
@@ -564,12 +590,18 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const ramTransitions = result.transitions.filter((t) => t.metric === "ram");
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const ramTransitions = result.transitions.filter(
+        (t) => t.metric === "ram",
+      );
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(ramTransitions).toHaveLength(1);
       expect(ramTransitions[0]!.currentState).toBe("warn");
       expect(remoteTransitions.length).toBeGreaterThanOrEqual(1);
-      expect(remoteTransitions.some((t) => t.currentState === "critical")).toBe(true);
+      expect(
+        remoteTransitions.some((t) => t.currentState === "critical"),
+      ).toBe(true);
     });
   });
 
@@ -592,7 +624,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
 
       expect(result.snapshot.disk.state).toBe("warn");
       expect(result.nextState.disk).toBe("warn");
-      const diskTransitions = result.transitions.filter((t) => t.metric === "disk");
+      const diskTransitions = result.transitions.filter(
+        (t) => t.metric === "disk",
+      );
       expect(diskTransitions).toHaveLength(1);
     });
   });

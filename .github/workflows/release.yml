@@ -359,6 +359,38 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  build-ssh-binaries:
+    name: Build SSH server binaries
+    needs: preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build t3 server binaries
+        run: bash scripts/build-ssh-binaries.sh dist/ssh-binaries
+
+      - name: Download tmux static binaries
+        run: bash scripts/download-tmux-binaries.sh dist/ssh-binaries
+
+      - name: Upload SSH binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: ssh-binaries
+          path: dist/ssh-binaries/
+          if-no-files-found: error
+          retention-days: 1
+
   release:
     name: Publish GitHub Release
     needs: [preflight, build, publish_cli, build-ssh-binaries]
@@ -464,7 +496,7 @@ jobs:
             release-assets/*.AppImage
             release-assets/*.exe
             release-assets/*.blockmap
-            release-assets/*.yml
+            release-assets/latest*.yml
             release-assets/t3-server-*
             release-assets/tmux-*
           fail_on_unmatched_files: true

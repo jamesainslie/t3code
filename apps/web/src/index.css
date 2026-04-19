@@ -5,8 +5,6 @@
 @custom-variant wco (&:is(.wco, .wco *));
 
 @theme inline {
-  --font-sans: var(--ui-font-family);
-  --font-mono: var(--code-font-family);
   --animate-pulse-slow: pulse-slow 2s ease-in-out infinite;
   --animate-skeleton: skeleton 2s -1s infinite linear;
   --color-warning-foreground: var(--warning-foreground);
@@ -42,13 +40,8 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   @keyframes pulse-slow {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.6;
-    }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
   @keyframes skeleton {
     to {

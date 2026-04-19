@@ -427,27 +427,14 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const serverAuth = yield* ServerAuth;
 
-          // Resolve the *actually bound* port rather than the configured one.
-          // When the user (or SSH provisioner) passes --port 0 to let the OS
-          // pick a free ephemeral port, serverConfig.port stays at 0 while the
-          // real port lives on HttpServer.HttpServer.address. The state file is
-          // the source of truth read by the SSH provisioner to set up the
-          // local tunnel, so this value MUST be the bound port. This phase
-          // runs after Deferred.await(httpListening), so the server has
-          // already bound and address.port is populated.
-          const httpServer = yield* HttpServer.HttpServer;
-          const address = httpServer.address;
-          const boundPort =
-            typeof address === "string" || !("port" in address)
-              ? serverConfig.port
-              : address.port;
-
+          // Issue a pairing URL so the SSH provisioner can register this
+          // server as a saved environment on the client.
           const pairingUrl = yield* serverAuth
-            .issueStartupPairingUrl(`http://localhost:${boundPort}`)
+            .issueStartupPairingUrl(`http://localhost:${serverConfig.port}`)
             .pipe(Effect.catch(() => Effect.succeed(undefined)));
 
           const stateJson = JSON.stringify({
-            port: boundPort,
+            port: serverConfig.port,
             pid: process.pid,
             startedAt: new Date().toISOString(),
             ...(pairingUrl ? { pairingUrl } : {}),

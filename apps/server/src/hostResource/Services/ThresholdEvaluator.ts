@@ -1,7 +1,11 @@
 import { Context } from "effect";
 import type { Effect } from "effect";
 import type { RawSample } from "./ResourceSampler.ts";
-import type { MetricState, ResourceMetricKind, HostResourceSnapshot } from "@t3tools/contracts";
+import type {
+  MetricState,
+  ResourceMetricKind,
+  HostResourceSnapshot,
+} from "@t3tools/contracts";
 
 // ─── Evaluator State ───────────────────────────────────────────────
 
@@ -39,7 +43,10 @@ export interface EvaluationResult {
 
 export interface ThresholdEvaluatorShape {
   /** Evaluate a raw sample against thresholds. Returns snapshot + any transitions. */
-  readonly evaluate: (sample: RawSample, workspacePath: string) => Effect.Effect<EvaluationResult>;
+  readonly evaluate: (
+    sample: RawSample,
+    workspacePath: string,
+  ) => Effect.Effect<EvaluationResult>;
 }
 
 export class ThresholdEvaluator extends Context.Service<

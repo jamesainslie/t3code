@@ -127,6 +127,13 @@ export interface WsRpcClient {
       options?: StreamSubscriptionOptions,
     ) => () => void;
   };
+  readonly hostResource: {
+    readonly onResourceEvent: (
+      input: RpcInput<typeof WS_METHODS.subscribeHostResources>,
+      listener: (event: HostResourceStreamEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+  };
 }
 
 export function createWsRpcClient(transport: WsTransport): WsRpcClient {
@@ -256,6 +263,14 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       subscribeThread: (input, listener, options) =>
         transport.subscribe(
           (client) => client[ORCHESTRATION_WS_METHODS.subscribeThread](input),
+          listener,
+          options,
+        ),
+    },
+    hostResource: {
+      onResourceEvent: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeHostResources](input),
           listener,
           options,
         ),

@@ -9,49 +9,47 @@ import {
   serverEnvironmentRouteLayer,
   staticAndDevRouteLayer,
   browserApiCorsLayer,
-} from "./http.ts";
-import { fixPath } from "./os-jank.ts";
-import { websocketRpcRouteLayer } from "./ws.ts";
-import { OpenLive } from "./open.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
-import { ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
-import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService.ts";
-import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger.ts";
-import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory.ts";
-import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime.ts";
-import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter.ts";
-import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter.ts";
-import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry.ts";
-import { makeProviderServiceLive } from "./provider/Layers/ProviderService.ts";
-import { ProviderSessionReaperLive } from "./provider/Layers/ProviderSessionReaper.ts";
-import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery.ts";
-import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore.ts";
-import { GitCoreLive } from "./git/Layers/GitCore.ts";
-import { GitHubCliLive } from "./git/Layers/GitHubCli.ts";
-import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster.ts";
-import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration.ts";
-import { TerminalManagerLive } from "./terminal/Layers/Manager.ts";
-import { GitManagerLive } from "./git/Layers/GitManager.ts";
-import { KeybindingsLive } from "./keybindings.ts";
-import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./serverRuntimeStartup.ts";
-import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor.ts";
-import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus.ts";
-import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion.ts";
-import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
-import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
-import { DisconnectReactorLive } from "./orchestration/Layers/DisconnectReactor.ts";
-import { WsClientTrackerLive } from "./wsClientTracker.ts";
-import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
-import { ServerSettingsLive } from "./serverSettings.ts";
-import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
-import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver.ts";
-import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
-import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
-import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
-import { FileDocsServiceLive } from "./projectFiles/Layers/FileDocsServiceLive.ts";
-import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner.ts";
-import { ObservabilityLive } from "./observability/Layers/Observability.ts";
-import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment.ts";
+} from "./http";
+import { fixPath } from "./os-jank";
+import { websocketRpcRouteLayer } from "./ws";
+import { OpenLive } from "./open";
+import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
+import { ServerLifecycleEventsLive } from "./serverLifecycleEvents";
+import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
+import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
+import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
+import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
+import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter";
+import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter";
+import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
+import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
+import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
+import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
+import { GitCoreLive } from "./git/Layers/GitCore";
+import { GitHubCliLive } from "./git/Layers/GitHubCli";
+import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
+import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
+import { TerminalManagerLive } from "./terminal/Layers/Manager";
+import { GitManagerLive } from "./git/Layers/GitManager";
+import { KeybindingsLive } from "./keybindings";
+import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./serverRuntimeStartup";
+import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
+import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus";
+import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
+import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
+import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
+import { DisconnectReactorLive } from "./orchestration/Layers/DisconnectReactor";
+import { WsClientTrackerLive } from "./wsClientTracker";
+import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
+import { ServerSettingsLive } from "./serverSettings";
+import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
+import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver";
+import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries";
+import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem";
+import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
+import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
+import { ObservabilityLive } from "./observability/Layers/Observability";
+import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
 import {
   authBearerBootstrapRouteLayer,
   authBootstrapRouteLayer,
@@ -75,11 +73,8 @@ import {
 import {
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
-} from "./orchestration/http.ts";
-import { RemoteEnvLive } from "./remote/Layers/RemoteEnv.ts";
-import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor.ts";
-import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler.ts";
-import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator.ts";
+} from "./orchestration/http";
+import { RemoteEnvLive } from "./remote/Layers/RemoteEnv";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -244,9 +239,6 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(RemoteEnvLive),
-  Layer.provideMerge(HostResourceMonitorLive),
-  Layer.provideMerge(ResourceSamplerLive),
-  Layer.provideMerge(ThresholdEvaluatorLive),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
