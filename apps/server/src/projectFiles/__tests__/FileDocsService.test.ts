@@ -170,6 +170,120 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "[updateFrontmatter] replaces only the comments key and preserves body",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          const body = "# Hello\n\nBody line one\nBody line two\n";
+          const original = `---\ntitle: x\ntags: [a, b]\n---\n${body}`;
+          yield* writeTextFile(cwd, "doc.md", original);
+
+          yield* service.updateFrontmatter({
+            cwd,
+            relativePath: "doc.md",
+            frontmatter: { comments: [{ id: "c1", text: "hi" }] },
+          });
+
+          const readResult = yield* service.readFile({ cwd, relativePath: "doc.md" });
+          expect(readResult.contents.endsWith(body)).toBe(true);
+          // title/tags must still be present; comments should be added.
+          expect(readResult.contents).toMatch(/title:\s*x/);
+          expect(readResult.contents).toMatch(/tags:/);
+          expect(readResult.contents).toMatch(/comments:/);
+          expect(readResult.contents).toMatch(/c1/);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
+      "[updateFrontmatter] returns FrontmatterInvalid when the file has no frontmatter",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "plain.md", "# No frontmatter here\n");
+
+          const error = yield* service
+            .updateFrontmatter({
+              cwd,
+              relativePath: "plain.md",
+              frontmatter: { comments: [] },
+            })
+            .pipe(Effect.flip);
+
+          expect(error._tag).toBe("FrontmatterInvalid");
+          expect(error.relativePath).toBe("plain.md");
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
+      "[updateFrontmatter] returns ConcurrentModification when expectedMtimeMs is stale",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "doc.md", "---\ntitle: x\n---\n# body\n");
+
+          const error = yield* service
+            .updateFrontmatter({
+              cwd,
+              relativePath: "doc.md",
+              frontmatter: { comments: [] },
+              expectedMtimeMs: 1,
+            })
+            .pipe(Effect.flip);
+
+          expect(error._tag).toBe("ConcurrentModification");
+          expect(error.relativePath).toBe("doc.md");
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
+      "[updateFrontmatter] returns NotFound for missing files",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+
+          const error = yield* service
+            .updateFrontmatter({
+              cwd,
+              relativePath: "missing.md",
+              frontmatter: { comments: [] },
+            })
+            .pipe(Effect.flip);
+
+          expect(error._tag).toBe("NotFound");
+          expect(error.relativePath).toBe("missing.md");
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
+      "[updateFrontmatter] returns PathOutsideRoot for escaping paths",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+
+          const error = yield* service
+            .updateFrontmatter({
+              cwd,
+              relativePath: "../escape.md",
+              frontmatter: { comments: [] },
+            })
+            .pipe(Effect.flip);
+
+          expect(error._tag).toBe("PathOutsideRoot");
+          expect(error.relativePath).toBe("../escape.md");
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
       "suppresses self-echo events for our own updateFrontmatter writes",
       () =>
         Effect.gen(function* () {
