@@ -51,6 +51,10 @@ const HARD_CODED_IGNORES = [
   "target",
 ];
 
+function noop(): void {
+  /* no-op placeholder until the snapshot-ready promise resolver is assigned. */
+}
+
 const MARKDOWN_EXTENSIONS = [".md", ".markdown"] as const;
 
 function isMarkdown(filePath: string): boolean {
@@ -237,7 +241,7 @@ export const FileDocsServiceLive = Layer.effect(
           const scope = yield* Scope.make();
           const files = new Map<string, FileMeta>();
           let ready = false;
-          let resolveReady: () => void = () => {};
+          let resolveReady: () => void = noop;
           const snapshotReady = new Promise<void>((resolve) => {
             resolveReady = resolve;
           });
@@ -381,14 +385,11 @@ export const FileDocsServiceLive = Layer.effect(
           });
           watcher.on("error", (error) => {
             runFork(
-              PubSub.publish(pubsub, {
-                _tag: "snapshot",
-                files: handle.snapshot,
-              }).pipe(Effect.asVoid),
+              Effect.logWarning("FileDocsService chokidar error", {
+                cwd,
+                detail: error instanceof Error ? error.message : String(error),
+              }),
             );
-            // Also log so we don't lose visibility in tests.
-            // eslint-disable-next-line no-console
-            console.warn("[FileDocsService] chokidar error", error);
           });
 
           const onReady = new Promise<void>((resolveChokidar) => {
@@ -436,24 +437,20 @@ export const FileDocsServiceLive = Layer.effect(
       );
 
     const releaseWatcher = (cwd: string) =>
-      SynchronizedRef.modifyEffect(watchers, (map) =>
-        Effect.gen(function* () {
-          const existing = map.get(cwd);
-          if (!existing) {
-            return [null as Scope.Scope | null, map] as const;
-          }
-          if (existing.subscriberCount > 1) {
-            existing.subscriberCount -= 1;
-            return [null as Scope.Scope | null, map] as const;
-          }
-          const nextMap = new Map(map);
-          nextMap.delete(cwd);
-          return [existing.scope, nextMap] as const;
-        }),
-      ).pipe(
-        Effect.flatMap((scope) =>
-          scope ? Scope.close(scope, Exit.void) : Effect.void,
-        ),
+      SynchronizedRef.modify(watchers, (map) => {
+        const existing = map.get(cwd);
+        if (!existing) {
+          return [null as Scope.Scope | null, map] as const;
+        }
+        if (existing.subscriberCount > 1) {
+          existing.subscriberCount -= 1;
+          return [null as Scope.Scope | null, map] as const;
+        }
+        const nextMap = new Map(map);
+        nextMap.delete(cwd);
+        return [existing.scope, nextMap] as const;
+      }).pipe(
+        Effect.flatMap((scope) => (scope ? Scope.close(scope, Exit.void) : Effect.void)),
       );
 
     const readFile: FileDocsServiceShape["readFile"] = (input) =>
@@ -649,7 +646,7 @@ export const FileDocsServiceLive = Layer.effect(
           _tag: "turnTouchedDoc",
           threadId: input.threadId,
           turnId: input.turnId,
-          paths: [...bucket].sort(),
+          paths: [...bucket].toSorted(),
         });
       });
 
