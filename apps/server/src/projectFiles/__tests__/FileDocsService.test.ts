@@ -170,6 +170,60 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "flags oversized files in snapshot and suppresses their change events",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          const path = yield* Path.Path;
+          const fileSystem = yield* FileSystem.FileSystem;
+          const absolutePath = path.join(cwd, "big.md");
+          const chunk = "x".repeat(1024);
+          const body = chunk.repeat(6 * 1024); // 6 MB
+          yield* fileSystem.writeFileString(absolutePath, body).pipe(Effect.orDie);
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const changedCount = { value: 0 };
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) => {
+                if (event._tag === "snapshot") {
+                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                }
+                if (event._tag === "changed") {
+                  changedCount.value += 1;
+                }
+                return Effect.void;
+              }),
+              Effect.forkScoped,
+            );
+
+          const snapshot = yield* Deferred.await(snapshotDeferred);
+          if (snapshot._tag !== "snapshot") {
+            throw new Error("expected snapshot event");
+          }
+          const entry = snapshot.files.find((f) => f.relativePath === "big.md");
+          expect(entry).toBeDefined();
+          expect(entry?.oversized).toBe(true);
+          expect(entry?.size).toBeGreaterThan(6 * 1024 * 1024 - 1);
+
+          // Update the oversized file and confirm no `changed` event propagates.
+          yield* Effect.promise(async () => {
+            const fs = await import("node:fs/promises");
+            await fs.writeFile(absolutePath, body + "x");
+          });
+          yield* Effect.promise(
+            () => new Promise((resolve) => setTimeout(resolve, 400)),
+          );
+
+          expect(changedCount.value).toBe(0);
+        }),
+      { timeout: 15_000 },
+    );
+
+    it.effect(
       "debounces rapid writes into a single changed event per path",
       () =>
         Effect.gen(function* () {

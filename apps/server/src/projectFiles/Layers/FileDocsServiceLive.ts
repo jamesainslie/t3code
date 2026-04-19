@@ -210,6 +210,7 @@ export const FileDocsServiceLive = Layer.effect(
               return;
             }
 
+            const previous = files.get(relativePath);
             const meta: FileMeta = stat
               ? {
                   size: stat.size,
@@ -223,14 +224,21 @@ export const FileDocsServiceLive = Layer.effect(
               return;
             }
 
-            // Suppress emissions for oversized files.
-            if (meta.oversized) {
-              clearDebounce(`${cwd}:${relativePath}`);
-              return;
-            }
+            // Sticky oversized flag: once a file has been observed oversized,
+            // treat intermediate events as oversized too. Chokidar fires
+            // `change` events mid-write with partial sizes (size=0 right after
+            // `open(O_TRUNC)`); without this guard an oversized file would
+            // slip through its debounce window during every write.
+            const isCurrentlyOversized =
+              meta.oversized || previous?.oversized === true;
 
             const debounceKey = `${cwd}:${relativePath}`;
             clearDebounce(debounceKey);
+
+            if (isCurrentlyOversized) {
+              return;
+            }
+
             if (kind === "add") {
               // Added events fire immediately so the UI can render the new tree
               // entry without waiting on debounce.
@@ -245,14 +253,30 @@ export const FileDocsServiceLive = Layer.effect(
             // change
             const timer = setTimeout(() => {
               debounceTimers.delete(debounceKey);
-              const current = files.get(relativePath);
-              if (!current || current.oversized) return;
-              publishEvent({
-                _tag: "changed",
-                relativePath,
-                size: current.size,
-                mtimeMs: current.mtimeMs,
-              });
+              // Re-stat at emission so we reflect the final write size rather
+              // than a partial mid-flush value (chokidar fires change events
+              // as soon as bytes arrive).
+              void (async () => {
+                try {
+                  const freshStat = await fsPromises.stat(absolutePath);
+                  const finalMeta: FileMeta = {
+                    size: freshStat.size,
+                    mtimeMs: freshStat.mtimeMs,
+                    oversized: freshStat.size > FILE_DOCS_SIZE_CAP_BYTES,
+                  };
+                  files.set(relativePath, finalMeta);
+                  if (finalMeta.oversized) return;
+                  publishEvent({
+                    _tag: "changed",
+                    relativePath,
+                    size: finalMeta.size,
+                    mtimeMs: finalMeta.mtimeMs,
+                  });
+                } catch {
+                  // File was removed before emission — unlink handler will emit
+                  // the `removed` event.
+                }
+              })();
             }, FILE_DOCS_DEBOUNCE_INTERVAL_MS);
             debounceTimers.set(debounceKey, timer);
           };
