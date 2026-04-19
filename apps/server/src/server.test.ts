@@ -105,6 +105,7 @@ import {
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
+import { FileDocsServiceLive } from "./projectFiles/Layers/FileDocsServiceLive.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 
@@ -202,6 +203,7 @@ const workspaceAndProjectServicesLayer = Layer.mergeAll(
     Layer.provide(WorkspacePathsLive),
     Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
   ),
+  FileDocsServiceLive.pipe(Layer.provide(WorkspacePathsLive)),
   ProjectFaviconResolverLive,
 );
 
@@ -401,6 +403,7 @@ const buildAppUnderTest = (options?: {
         Layer.provide(WorkspacePathsLive),
         Layer.provide(workspaceEntriesLayer),
       ),
+      FileDocsServiceLive.pipe(Layer.provide(WorkspacePathsLive)),
       ProjectFaviconResolverLive,
     );
     const gitStatusBroadcasterLayer = options?.layers?.gitStatusBroadcaster

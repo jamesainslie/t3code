@@ -48,6 +48,7 @@ import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdent
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
+import { FileDocsServiceLive } from "./projectFiles/Layers/FileDocsServiceLive.ts";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment.ts";
@@ -203,10 +204,13 @@ const WorkspaceFileSystemLayerLive = WorkspaceFileSystemLive.pipe(
   Layer.provide(WorkspaceEntriesLayerLive),
 );
 
+const FileDocsServiceLayerLive = FileDocsServiceLive.pipe(Layer.provide(WorkspacePathsLive));
+
 const WorkspaceLayerLive = Layer.mergeAll(
   WorkspacePathsLive,
   WorkspaceEntriesLayerLive,
   WorkspaceFileSystemLayerLive,
+  FileDocsServiceLayerLive,
 );
 
 const AuthLayerLive = ServerAuthLive.pipe(

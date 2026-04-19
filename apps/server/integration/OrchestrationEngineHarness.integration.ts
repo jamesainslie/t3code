@@ -75,6 +75,7 @@ import { deriveServerPaths, ServerConfig } from "../src/config.ts";
 import { RemoteEnvLive } from "../src/remote/Layers/RemoteEnv.ts";
 import { WorkspaceEntriesLive } from "../src/workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../src/workspace/Layers/WorkspacePaths.ts";
+import { FileDocsServiceLive } from "../src/projectFiles/Layers/FileDocsServiceLive.ts";
 
 function runGit(cwd: string, args: ReadonlyArray<string>) {
   return execFileSync("git", args, {
@@ -348,6 +349,7 @@ export const makeOrchestrationIntegrationHarness = (
           Layer.provide(NodeServices.layer),
         ),
       ),
+      Layer.provideMerge(FileDocsServiceLive.pipe(Layer.provide(WorkspacePathsLive))),
       Layer.provideMerge(WorkspacePathsLive),
     );
     const disconnectReactorLayer = DisconnectReactorLive.pipe(

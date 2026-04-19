@@ -21,6 +21,7 @@ import { ServerSettingsService } from "./serverSettings.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
+import { FileDocsService } from "./projectFiles/Services/FileDocsService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
 import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
@@ -58,6 +59,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         startup: yield* ServerRuntimeStartup,
         workspaceEntries: yield* WorkspaceEntries,
         workspaceFileSystem: yield* WorkspaceFileSystem,
+        fileDocs: yield* FileDocsService,
         projectSetupScriptRunner: yield* ProjectSetupScriptRunner,
         repositoryIdentityResolver: yield* RepositoryIdentityResolver,
         serverEnvironment: yield* ServerEnvironment,
