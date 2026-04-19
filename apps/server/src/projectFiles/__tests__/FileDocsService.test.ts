@@ -170,6 +170,55 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "debounces rapid writes into a single changed event per path",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "a.md", "# original\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const changedCount = { value: 0 };
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) => {
+                if (event._tag === "snapshot") {
+                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                }
+                if (event._tag === "changed") {
+                  changedCount.value += 1;
+                }
+                return Effect.void;
+              }),
+              Effect.forkScoped,
+            );
+
+          yield* Deferred.await(snapshotDeferred);
+
+          // Issue 5 writes within 50ms — all should coalesce into one event.
+          yield* Effect.promise(async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            for (let i = 0; i < 5; i++) {
+              await fs.writeFile(path.join(cwd, "a.md"), `# v${i}\n`);
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+          });
+
+          // Wait 400ms — longer than debounce window (150ms) and chokidar
+          // settle delay — to be sure the coalesced event has fired.
+          yield* Effect.promise(
+            () => new Promise((resolve) => setTimeout(resolve, 400)),
+          );
+
+          expect(changedCount.value).toBe(1);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
       "emits added/changed/removed events for subsequent file-system mutations",
       () =>
         Effect.gen(function* () {
