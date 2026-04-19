@@ -29,8 +29,6 @@ import type {
   ProjectFileChangeEvent,
   ProjectFileEntry,
   ProjectFileMonitorError,
-  ThreadId,
-  TurnId,
 } from "@t3tools/contracts";
 
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
@@ -139,24 +137,24 @@ function rewriteFrontmatter(params: {
     const closeDelim = closeMatch?.[1] ?? "\n---\n";
     const body = afterOpen.slice(closeIndex + closeDelim.length);
 
-    let parsed: Record<string, unknown>;
-    try {
-      const doc = YAML.parse(yamlBody);
-      if (doc === null || doc === undefined) {
-        parsed = {};
-      } else if (typeof doc !== "object" || Array.isArray(doc)) {
-        return yield* Effect.fail({
+    const doc = yield* Effect.try({
+      try: () => YAML.parse(yamlBody) as unknown,
+      catch: () =>
+        ({
           _tag: "FrontmatterInvalid" as const,
           relativePath,
-        });
-      } else {
-        parsed = { ...(doc as Record<string, unknown>) };
-      }
-    } catch {
+        }),
+    });
+    let parsed: Record<string, unknown>;
+    if (doc === null || doc === undefined) {
+      parsed = {};
+    } else if (typeof doc !== "object" || Array.isArray(doc)) {
       return yield* Effect.fail({
         _tag: "FrontmatterInvalid" as const,
         relativePath,
       });
+    } else {
+      parsed = { ...(doc as Record<string, unknown>) };
     }
 
     // Replace only the `comments` key from input; preserve every other key.
@@ -207,11 +205,8 @@ export const FileDocsServiceLive = Layer.effect(
         return true;
       });
 
-    // turn-touch buffer: `${threadId}::${turnId}` -> cwd -> Set<relativePath>
-    const turnWrites = yield* SynchronizedRef.make(
-      new Map<string, Map<string, Set<string>>>(),
-    );
-    const turnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}::${turnId}`;
+    // turn-touch buffer: cwd -> Set<relativePath>
+    const turnWrites = yield* SynchronizedRef.make(new Map<string, Set<string>>());
 
     // Per-path debounce timer handles per watcher. We track timers in a JS-side map
     // keyed by watcher + path. Each debounce cycle captures the most recent event
@@ -627,37 +622,35 @@ export const FileDocsServiceLive = Layer.effect(
 
     const recordTurnWrite: FileDocsServiceShape["recordTurnWrite"] = (record: TurnWriteRecord) =>
       SynchronizedRef.update(turnWrites, (map) => {
-        const key = turnKey(record.threadId, record.turnId);
-        const cwdMap = new Map(map.get(key) ?? new Map<string, Set<string>>());
-        const existing = cwdMap.get(record.cwd) ?? new Set<string>();
+        if (!isMarkdown(record.relativePath)) return map;
+        const existing = map.get(record.cwd) ?? new Set<string>();
         const nextSet = new Set(existing);
         nextSet.add(record.relativePath);
-        cwdMap.set(record.cwd, nextSet);
         const next = new Map(map);
-        next.set(key, cwdMap);
+        next.set(record.cwd, nextSet);
         return next;
       });
 
     const flushTurnWrites: FileDocsServiceShape["flushTurnWrites"] = (input) =>
       Effect.gen(function* () {
-        const [cwdMap] = yield* SynchronizedRef.modify(turnWrites, (map) => {
-          const key = turnKey(input.threadId, input.turnId);
-          const bucket = map.get(key) ?? new Map<string, Set<string>>();
+        const bucket = yield* SynchronizedRef.modify(turnWrites, (map) => {
+          const existing = map.get(input.cwd) ?? new Set<string>();
           const next = new Map(map);
-          next.delete(key);
-          return [[bucket, key] as const, next] as const;
+          next.delete(input.cwd);
+          return [existing, next] as const;
         });
+        if (bucket.size === 0) return;
+
         const current = yield* SynchronizedRef.get(watchers);
-        for (const [cwd, paths] of cwdMap) {
-          const handle = current.get(cwd);
-          if (!handle) continue;
-          yield* PubSub.publish(handle.pubsub, {
-            _tag: "turnTouchedDoc",
-            threadId: input.threadId,
-            turnId: input.turnId,
-            paths: [...paths].sort(),
-          });
-        }
+        const handle = current.get(input.cwd);
+        if (!handle) return;
+
+        yield* PubSub.publish(handle.pubsub, {
+          _tag: "turnTouchedDoc",
+          threadId: input.threadId,
+          turnId: input.turnId,
+          paths: [...bucket].sort(),
+        });
       });
 
     // markSelfEcho is intentionally kept as a closure captured by

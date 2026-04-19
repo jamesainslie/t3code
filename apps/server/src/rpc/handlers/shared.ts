@@ -40,6 +40,7 @@ import type { ServerSettingsService } from "../../serverSettings.ts";
 import type { TerminalManager } from "../../terminal/Services/Manager.ts";
 import type { WorkspaceEntries } from "../../workspace/Services/WorkspaceEntries.ts";
 import type { WorkspaceFileSystem } from "../../workspace/Services/WorkspaceFileSystem.ts";
+import type { FileDocsService } from "../../projectFiles/Services/FileDocsService.ts";
 import type { ProjectSetupScriptRunner } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import type { RepositoryIdentityResolver } from "../../project/Services/RepositoryIdentityResolver.ts";
 import type { ServerEnvironment } from "../../environment/Services/ServerEnvironment.ts";
@@ -151,6 +152,7 @@ export interface ResolvedServices {
   readonly startup: typeof ServerRuntimeStartup.Service;
   readonly workspaceEntries: typeof WorkspaceEntries.Service;
   readonly workspaceFileSystem: typeof WorkspaceFileSystem.Service;
+  readonly fileDocs: typeof FileDocsService.Service;
   readonly projectSetupScriptRunner: typeof ProjectSetupScriptRunner.Service;
   readonly repositoryIdentityResolver: typeof RepositoryIdentityResolver.Service;
   readonly serverEnvironment: typeof ServerEnvironment.Service;

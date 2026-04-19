@@ -26,6 +26,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { isGitRepository } from "../../git/Utils.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
 import { WorkspaceEntries } from "../../workspace/Services/WorkspaceEntries.ts";
+import { FileDocsService } from "../../projectFiles/Services/FileDocsService.ts";
 
 type ReactorInput =
   | {
@@ -71,6 +72,7 @@ const make = Effect.gen(function* () {
   const receiptBus = yield* RuntimeReceiptBus;
   const workspaceEntries = yield* WorkspaceEntries;
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
+  const fileDocs = yield* FileDocsService;
 
   const appendRevertFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -520,6 +522,26 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const flushDocsTurnWritesForTurnCompletion = Effect.fn(
+    "flushDocsTurnWritesForTurnCompletion",
+  )(function* (
+    event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>,
+    turnId: TurnId | null,
+  ) {
+    if (turnId === null) {
+      return;
+    }
+    const sessionRuntime = yield* resolveSessionRuntimeForThread(event.threadId);
+    if (Option.isNone(sessionRuntime)) {
+      return;
+    }
+    yield* fileDocs.flushTurnWrites({
+      threadId: event.threadId,
+      turnId,
+      cwd: sessionRuntime.value.cwd,
+    });
+  });
+
   const ensurePreTurnBaselineFromDomainTurnStart = Effect.fn(
     "ensurePreTurnBaselineFromDomainTurnStart",
   )(function* (
@@ -769,6 +791,7 @@ const make = Effect.gen(function* () {
           }).pipe(Effect.catch(() => Effect.void)),
         ),
       );
+      yield* flushDocsTurnWritesForTurnCompletion(event, turnId);
       return;
     }
   });

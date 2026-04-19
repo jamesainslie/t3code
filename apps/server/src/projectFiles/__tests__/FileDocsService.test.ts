@@ -170,6 +170,55 @@ it.layer(TestLayer)("FileDocsService", (it) => {
     );
 
     it.effect(
+      "[turn-touch] flushTurnWrites emits turnTouchedDoc events for recorded paths",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "a.md", "# a\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const turnEventDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) => {
+                if (event._tag === "snapshot") {
+                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                }
+                if (event._tag === "turnTouchedDoc") {
+                  return Deferred.succeed(turnEventDeferred, event).pipe(Effect.ignore);
+                }
+                return Effect.void;
+              }),
+              Effect.forkScoped,
+            );
+
+          yield* Deferred.await(snapshotDeferred);
+
+          yield* service.recordTurnWrite({ cwd, relativePath: "a.md" });
+          yield* service.recordTurnWrite({ cwd, relativePath: "docs/b.md" });
+          yield* service.recordTurnWrite({ cwd, relativePath: "not-md.txt" });
+
+          yield* service.flushTurnWrites({
+            threadId: "t-1" as unknown as Parameters<typeof service.flushTurnWrites>[0]["threadId"],
+            turnId: "u-1" as unknown as Parameters<typeof service.flushTurnWrites>[0]["turnId"],
+            cwd,
+          });
+
+          const event = yield* Deferred.await(turnEventDeferred);
+          if (event._tag !== "turnTouchedDoc") {
+            throw new Error("expected turnTouchedDoc");
+          }
+          expect(event.threadId).toBe("t-1");
+          expect(event.turnId).toBe("u-1");
+          expect([...event.paths].toSorted()).toEqual(["a.md", "docs/b.md"]);
+        }),
+      { timeout: 10_000 },
+    );
+
+    it.effect(
       "[updateFrontmatter] replaces only the comments key and preserves body",
       () =>
         Effect.gen(function* () {

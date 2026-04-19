@@ -46,8 +46,6 @@ export const FILE_DOCS_SELF_ECHO_WINDOW_MS = 500;
 export const FILE_DOCS_DEBOUNCE_INTERVAL_MS = 150;
 
 export interface TurnWriteRecord {
-  readonly threadId: ThreadId;
-  readonly turnId: TurnId;
   readonly cwd: string;
   readonly relativePath: string;
 }
@@ -55,6 +53,7 @@ export interface TurnWriteRecord {
 export interface FlushTurnWritesInput {
   readonly threadId: ThreadId;
   readonly turnId: TurnId;
+  readonly cwd: string;
 }
 
 /**
@@ -86,14 +85,20 @@ export interface FileDocsServiceShape {
   ) => Effect.Effect<ProjectUpdateFrontmatterResult, ProjectUpdateFrontmatterError>;
 
   /**
-   * Record a markdown file write performed during the given turn. Used by the
-   * `projectsWriteFile` handler to buffer paths until turn completion.
+   * Record a markdown file write performed during a turn. Buffered by cwd
+   * until the owning turn completes and `flushTurnWrites` drains the bucket.
+   *
+   * Called from the `projectsWriteFile` RPC handler whenever the written
+   * path has a `.md` or `.markdown` extension.
    */
   readonly recordTurnWrite: (record: TurnWriteRecord) => Effect.Effect<void>;
 
   /**
-   * Drain the turn write buffer for the given thread/turn and publish a
-   * `turnTouchedDoc` event for each watched cwd that received writes.
+   * Drain the turn write buffer for the given `cwd` and publish a
+   * `turnTouchedDoc` event (tagged with the given thread/turn) to that
+   * cwd's watch subscription, if any.
+   *
+   * Called from the turn-completion site in the orchestration runtime.
    */
   readonly flushTurnWrites: (input: FlushTurnWritesInput) => Effect.Effect<void>;
 }
