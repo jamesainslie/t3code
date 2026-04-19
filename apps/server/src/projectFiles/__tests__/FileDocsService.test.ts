@@ -168,6 +168,71 @@ it.layer(TestLayer)("FileDocsService", (it) => {
         }),
       { timeout: 10_000 },
     );
+
+    it.effect(
+      "emits added/changed/removed events for subsequent file-system mutations",
+      () =>
+        Effect.gen(function* () {
+          const service = yield* FileDocsService;
+          const cwd = yield* makeTempDir();
+          yield* writeTextFile(cwd, "seed.md", "# seed\n");
+
+          const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const addedDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const changedDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+          const removedDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
+
+          yield* service
+            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
+            .pipe(
+              Stream.runForEach((event) => {
+                switch (event._tag) {
+                  case "snapshot":
+                    return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                  case "added":
+                    return Deferred.succeed(addedDeferred, event).pipe(Effect.ignore);
+                  case "changed":
+                    return Deferred.succeed(changedDeferred, event).pipe(Effect.ignore);
+                  case "removed":
+                    return Deferred.succeed(removedDeferred, event).pipe(Effect.ignore);
+                  default:
+                    return Effect.void;
+                }
+              }),
+              Effect.forkScoped,
+            );
+
+          // Wait until the watcher is ready (first event is always snapshot).
+          yield* Deferred.await(snapshotDeferred);
+
+          yield* writeTextFile(cwd, "new.md", "# new\n");
+          const added = yield* Deferred.await(addedDeferred);
+          expect(added._tag).toBe("added");
+          if (added._tag === "added") {
+            expect(added.relativePath).toBe("new.md");
+          }
+
+          // Wait past the debounce window (150ms) for the change event to flush.
+          yield* writeTextFile(cwd, "seed.md", "# seed updated\n");
+          const changed = yield* Deferred.await(changedDeferred);
+          expect(changed._tag).toBe("changed");
+          if (changed._tag === "changed") {
+            expect(changed.relativePath).toBe("seed.md");
+          }
+
+          yield* Effect.promise(async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            await fs.unlink(path.join(cwd, "new.md"));
+          });
+          const removed = yield* Deferred.await(removedDeferred);
+          expect(removed._tag).toBe("removed");
+          if (removed._tag === "removed") {
+            expect(removed.relativePath).toBe("new.md");
+          }
+        }),
+      { timeout: 10_000 },
+    );
   });
 });
 
