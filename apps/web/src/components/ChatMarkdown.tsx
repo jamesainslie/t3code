@@ -3,6 +3,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import React, {
   Children,
   Suspense,
+  lazy,
   type MouseEvent as ReactMouseEvent,
   isValidElement,
   use,
@@ -29,6 +30,10 @@ import { useTheme } from "../hooks/useTheme";
 import { resolveMarkdownFileLinkMeta, rewriteMarkdownFileUriHref } from "../markdown-links";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
+
+const LazyMermaidCodeBlock = lazy(
+  () => import("./mermaid/MermaidCodeBlock").then((m) => ({ default: m.MermaidCodeBlock })),
+);
 
 class CodeHighlightErrorBoundary extends React.Component<
   { fallback: ReactNode; children: ReactNode },
@@ -68,7 +73,7 @@ const highlightedCodeCache = new LRUCache<string>(
 );
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
-function extractFenceLanguage(className: string | undefined): string {
+export function extractFenceLanguage(className: string | undefined): string {
   const match = className?.match(CODE_FENCE_LANGUAGE_REGEX);
   const raw = match?.[1] ?? "text";
   // Shiki doesn't bundle a gitignore grammar; ini is a close match (#685)
@@ -194,7 +199,7 @@ interface SuspenseShikiCodeBlockProps {
   isStreaming: boolean;
 }
 
-function SuspenseShikiCodeBlock({
+export function SuspenseShikiCodeBlock({
   className,
   code,
   themeName,
@@ -544,6 +549,20 @@ function ChatMarkdown({ text, cwd, isStreaming = false, onPreview }: ChatMarkdow
         const codeBlock = extractCodeBlock(children);
         if (!codeBlock) {
           return <pre {...props}>{children}</pre>;
+        }
+
+        const language = extractFenceLanguage(codeBlock.className);
+        if (language === "mermaid") {
+          return (
+            <Suspense fallback={<pre {...props}>{children}</pre>}>
+              <LazyMermaidCodeBlock
+                code={codeBlock.code}
+                theme={resolvedTheme}
+                diffThemeName={diffThemeName}
+                isStreaming={isStreaming}
+              />
+            </Suspense>
+          );
         }
 
         return (
