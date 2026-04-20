@@ -57,7 +57,6 @@ import {
 } from "./catalog";
 import { connectionLog } from "./connectionLog";
 import { createEnvironmentConnection, type EnvironmentConnection } from "./connection";
-import { connectionLog } from "./connectionLog";
 import {
   syncSavedProjectsFromReadModel,
   syncSavedProjectsFromWebProjects,
