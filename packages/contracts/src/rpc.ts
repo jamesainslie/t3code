@@ -151,6 +151,7 @@ export const WS_METHODS = {
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeHostResources: "subscribeHostResources",
+  subscribeProjectFileChanges: "subscribeProjectFileChanges",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -403,6 +404,16 @@ export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostReso
   stream: true,
 });
 
+export const WsSubscribeProjectFileChangesRpc = Rpc.make(
+  WS_METHODS.subscribeProjectFileChanges,
+  {
+    payload: ProjectFileWatchInput,
+    success: ProjectFileChangeEvent,
+    error: ProjectFileMonitorError,
+    stream: true,
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -439,6 +450,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsSubscribeHostResourcesRpc,
   WsOrchestrationGetSnapshotRpc,
+  WsSubscribeProjectFileChangesRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
