@@ -10,12 +10,6 @@ import {
   ResourceThresholds,
   KubeDangerPatterns,
   HostResourceMonitorError,
-  RamMetric,
-  CpuMetric,
-  DiskMetric,
-  ContainersMetric,
-  KubecontextMetric,
-  RemoteMetric,
 } from "./hostResource.ts";
 
 const decodeMetricState = Schema.decodeUnknownSync(MetricState);

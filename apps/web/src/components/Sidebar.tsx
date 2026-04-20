@@ -3,6 +3,7 @@ import {
   ArrowUpDownIcon,
   ChevronRightIcon,
   CloudIcon,
+  FolderOpenIcon,
   GitPullRequestIcon,
   PlusIcon,
   SearchIcon,
@@ -46,7 +47,6 @@ import {
   type SidebarProjectGroupingMode,
   type ThreadEnvMode,
   ThreadId,
-  type GitStatusResult,
   type RemoteIdentityKey,
 } from "@t3tools/contracts";
 import {
@@ -152,7 +152,6 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
-import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
   countActiveThreadsByMember,
   getSidebarThreadIdsToPrewarm,
@@ -171,7 +170,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
-import { useAddProjectFlow, type AddProjectFlow } from "./sidebar/useAddProjectFlow";
+import { useAddProjectFlow } from "./sidebar/useAddProjectFlow";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
 import { readEnvironmentApi } from "../environmentApi";
@@ -185,7 +184,7 @@ import {
 import { connectSavedEnvironment } from "../environments/runtime";
 import { ensureRemoteConnected } from "./sidebar/remoteGuards";
 import { buildRemoteContextMenuItems } from "./sidebar/buildRemoteContextMenuItems";
-import type { Project, SidebarThreadSummary } from "../types";
+import type { SidebarThreadSummary } from "../types";
 import {
   buildPhysicalToLogicalProjectKeyMap,
   buildSidebarProjectSnapshots,
@@ -2451,6 +2450,9 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const handleFilesClick = useCallback(() => {
+    void navigate({ to: "/files" });
+  }, [navigate]);
   const handleSettingsClick = useCallback(() => {
     void navigate({ to: "/settings" });
   }, [navigate]);
@@ -2462,6 +2464,16 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         <SidebarRemoteReconnectPill />
       </div>
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+            onClick={handleFilesClick}
+          >
+            <FolderOpenIcon className="size-3.5" />
+            <span className="text-xs">Files</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"
@@ -2487,9 +2499,9 @@ interface SidebarProjectsContentProps {
   threadSortOrder: SidebarThreadSortOrder;
   projectGroupingMode: SidebarProjectGroupingMode;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
-  addProjectFlow: AddProjectFlow;
+  shouldShowProjectPathEntry: boolean;
+  handleStartAddProject: () => void;
   onOpenRemoteDialog: () => void;
-  isElectron: boolean;
   isManualProjectSorting: boolean;
   projectDnDSensors: ReturnType<typeof useSensors>;
   projectCollisionDetection: CollisionDetection;
@@ -2529,9 +2541,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     threadSortOrder,
     projectGroupingMode,
     updateSettings,
-    addProjectFlow,
+    shouldShowProjectPathEntry,
+    handleStartAddProject,
     onOpenRemoteDialog,
-    isElectron,
     isManualProjectSorting,
     projectDnDSensors,
     projectCollisionDetection,
@@ -2659,26 +2671,22 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
-                    aria-label={
-                      addProjectFlow.shouldShowProjectPathEntry
-                        ? "Cancel add project"
-                        : "Add project"
-                    }
-                    aria-pressed={addProjectFlow.shouldShowProjectPathEntry}
+                    aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                    aria-pressed={shouldShowProjectPathEntry}
                     data-testid="sidebar-add-project-trigger"
                     className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={addProjectFlow.handleStartAddProject}
+                    onClick={handleStartAddProject}
                   />
                 }
               >
                 <PlusIcon
                   className={`size-3.5 transition-transform duration-150 ${
-                    addProjectFlow.shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                    shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
                   }`}
                 />
               </TooltipTrigger>
               <TooltipPopup side="right">
-                {addProjectFlow.shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
               </TooltipPopup>
             </Tooltip>
           </div>
@@ -2792,7 +2800,6 @@ export default function Sidebar() {
   });
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
   const keybindings = useServerKeybindings();
-  const openAddProjectCommandPalette = useCommandPaletteStore((store) => store.openAddProject);
   const activeEnvironmentId = useStore((store) => store.activeEnvironmentId);
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<string>
@@ -3483,9 +3490,9 @@ export default function Sidebar() {
             threadSortOrder={sidebarThreadSortOrder}
             projectGroupingMode={sidebarProjectGroupingMode}
             updateSettings={updateSettings}
-            addProjectFlow={addProjectFlow}
+            shouldShowProjectPathEntry={addProjectFlow.shouldShowProjectPathEntry}
+            handleStartAddProject={addProjectFlow.handleStartAddProject}
             onOpenRemoteDialog={() => setRemoteDialogOpen(true)}
-            isElectron={isElectron}
             isManualProjectSorting={isManualProjectSorting}
             projectDnDSensors={projectDnDSensors}
             projectCollisionDetection={projectCollisionDetection}

@@ -55,7 +55,6 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               command.workspaceRoot,
               command.createWorkspaceRootIfMissing,
             ),
-        createWorkspaceRootIfMissing: command.createWorkspaceRootIfMissing === true,
       } satisfies OrchestrationCommand;
     }
 

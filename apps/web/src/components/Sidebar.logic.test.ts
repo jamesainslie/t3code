@@ -928,13 +928,18 @@ describe("sortProjectsForSidebar", () => {
   });
 });
 
+type CountActiveThreadsTestThread = {
+  id: string;
+  memberKey: string | null;
+  archivedAt: string | null;
+};
+
+const getCountActiveThreadsTestMemberKey = (thread: CountActiveThreadsTestThread) =>
+  thread.memberKey;
+
 describe("countActiveThreadsByMember", () => {
-  type TestThread = { id: string; memberKey: string | null; archivedAt: string | null };
-
-  const getMemberKey = (thread: TestThread) => thread.memberKey;
-
   it("counts only non-archived threads per member key", () => {
-    const counts = countActiveThreadsByMember<TestThread>({
+    const counts = countActiveThreadsByMember<CountActiveThreadsTestThread>({
       memberKeys: ["member-a", "member-b"],
       threads: [
         { id: "t1", memberKey: "member-a", archivedAt: null },
@@ -942,7 +947,7 @@ describe("countActiveThreadsByMember", () => {
         { id: "t3", memberKey: "member-b", archivedAt: null },
         { id: "t4", memberKey: "member-b", archivedAt: null },
       ],
-      getMemberKey,
+      getMemberKey: getCountActiveThreadsTestMemberKey,
     });
 
     expect(counts.get("member-a")).toBe(1);
@@ -950,36 +955,36 @@ describe("countActiveThreadsByMember", () => {
   });
 
   it("returns zero for a member with only archived threads (so 'Remove project' stays enabled)", () => {
-    const counts = countActiveThreadsByMember<TestThread>({
+    const counts = countActiveThreadsByMember<CountActiveThreadsTestThread>({
       memberKeys: ["member-only-archived"],
       threads: [
         { id: "t1", memberKey: "member-only-archived", archivedAt: "2026-03-09T10:00:00.000Z" },
         { id: "t2", memberKey: "member-only-archived", archivedAt: "2026-03-09T10:01:00.000Z" },
       ],
-      getMemberKey,
+      getMemberKey: getCountActiveThreadsTestMemberKey,
     });
 
     expect(counts.get("member-only-archived")).toBe(0);
   });
 
   it("initializes every member key to zero even if no threads map to it", () => {
-    const counts = countActiveThreadsByMember<TestThread>({
+    const counts = countActiveThreadsByMember<CountActiveThreadsTestThread>({
       memberKeys: ["member-empty"],
       threads: [],
-      getMemberKey,
+      getMemberKey: getCountActiveThreadsTestMemberKey,
     });
 
     expect(counts.get("member-empty")).toBe(0);
   });
 
   it("ignores threads whose getMemberKey returns null (thread not part of this group)", () => {
-    const counts = countActiveThreadsByMember<TestThread>({
+    const counts = countActiveThreadsByMember<CountActiveThreadsTestThread>({
       memberKeys: ["member-a"],
       threads: [
         { id: "t1", memberKey: null, archivedAt: null },
         { id: "t2", memberKey: "member-a", archivedAt: null },
       ],
-      getMemberKey,
+      getMemberKey: getCountActiveThreadsTestMemberKey,
     });
 
     expect(counts.get("member-a")).toBe(1);

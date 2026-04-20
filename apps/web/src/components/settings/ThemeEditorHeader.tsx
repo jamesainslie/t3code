@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { CopyIcon, DownloadIcon, ImportIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -33,10 +33,7 @@ export function ThemeEditorHeader() {
   const [themeName, setThemeName] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const themeItems = useMemo(() => {
-    const themes = themeStore.listThemes();
-    return themes.map((t) => ({ value: t.id, label: t.name }));
-  }, [themeSnapshot]);
+  const themeItems = themeStore.listThemes().map((t) => ({ value: t.id, label: t.name }));
 
   const handleSelectTheme = (id: string | null) => {
     if (id) {
@@ -79,8 +76,8 @@ export function ThemeEditorHeader() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
       if (!file) return;
       const text = await file.text();
       try {
@@ -88,7 +85,7 @@ export function ThemeEditorHeader() {
       } catch {
         // import failed — silently ignore
       }
-    };
+    });
     input.click();
   };
 

@@ -20,8 +20,14 @@ import type {
 } from "./git.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type {
+  ProjectFileChangeEvent,
+  ProjectFileWatchInput,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
+  ProjectUpdateFrontmatterInput,
+  ProjectUpdateFrontmatterResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "./project.ts";
@@ -50,8 +56,6 @@ import type {
 } from "./orchestration.ts";
 import type {
   ClientOrchestrationCommand,
-  OrchestrationEvent,
-  OrchestrationReadModel,
   OrchestrationShellStreamItem,
   OrchestrationThreadStreamItem,
 } from "./fork/orchestration.ts";
@@ -68,6 +72,10 @@ export interface ContextMenuItem<T extends string = string> {
   disabled?: boolean;
   children?: readonly ContextMenuItem<T>[];
 }
+
+export type PickFolderOptions = {
+  readonly initialPath?: string;
+};
 
 export type DesktopUpdateStatus =
   | "disabled"
@@ -151,18 +159,19 @@ export interface PersistedSavedEnvironmentRecord {
 }
 
 export interface SavedRemoteEnvironment {
-  identityKey: RemoteIdentityKey;
-  host: string;
-  user: string;
-  port: number;
-  workspaceRoot: string;
-  label: string;
-  createdAt: string;
-  environmentId: EnvironmentId | null;
-  wsBaseUrl: string | null;
-  httpBaseUrl: string | null;
-  lastConnectedAt: string | null;
-  projectId: string;
+  readonly identityKey: RemoteIdentityKey;
+  readonly host: string;
+  readonly user: string;
+  readonly port: number;
+  readonly workspaceRoot: string;
+  readonly projectId: string;
+  readonly environmentId: EnvironmentId | null;
+  readonly label: string;
+  readonly wsBaseUrl: string | null;
+  readonly httpBaseUrl: string | null;
+  readonly createdAt: string;
+  readonly lastConnectedAt: string | null;
+  readonly sshConfig?: SshEnvironmentConfig | undefined;
 }
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";
@@ -184,32 +193,6 @@ export interface DesktopSshConnectOptions {
 export interface DesktopSshStatusUpdate {
   projectId: string;
   phase: string;
-}
-
-export type SshProvisioningEventType = "phase-start" | "phase-complete" | "log" | "error";
-
-export interface DesktopSshProvisioningEvent {
-  projectId: string;
-  type: SshProvisioningEventType;
-  /** Phase number (1-5) */
-  phase?: number;
-  /** Human-readable label for the phase */
-  label?: string;
-  /** Detail message (log line, error message) */
-  message?: string;
-  timestamp: number;
-}
-
-export interface SavedSshHost {
-  id: string;
-  label: string;
-  host: string;
-  user: string;
-  port: number;
-}
-
-export interface PickFolderOptions {
-  initialPath?: string | null;
 }
 
 export interface DesktopBridge {
@@ -257,18 +240,7 @@ export interface DesktopBridge {
   sshDisconnect: (projectId: string) => Promise<{ ok: boolean }>;
   sshStatus: () => Promise<{ connections: Array<{ projectId: string; wsUrl: string }> }>;
   onSshStatusUpdate: (listener: (update: DesktopSshStatusUpdate) => void) => void;
-  onSshProvisionEvent: (listener: (event: DesktopSshProvisioningEvent) => void) => () => void;
   recordRemoteHost: (opts: { host: string; user: string; port: number }) => Promise<void>;
-  getSavedSshHosts: () => Promise<SavedSshHost[]>;
-  saveSshHost: (host: SavedSshHost) => Promise<void>;
-  removeSavedSshHost: (id: string) => Promise<void>;
-  sshProbe: (opts: { host: string; user: string; port: number }) => Promise<{ reachable: boolean }>;
-  sshKillRemoteSession: (opts: {
-    host: string;
-    user: string;
-    port: number;
-    projectId: string;
-  }) => Promise<void>;
 }
 
 /**
@@ -343,6 +315,19 @@ export interface EnvironmentApi {
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+  };
+  projectFiles: {
+    readFile: (input: ProjectReadFileInput) => Promise<ProjectReadFileResult>;
+    updateFrontmatter: (
+      input: ProjectUpdateFrontmatterInput,
+    ) => Promise<ProjectUpdateFrontmatterResult>;
+    onFileChange: (
+      input: ProjectFileWatchInput,
+      callback: (event: ProjectFileChangeEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build standalone t3 server binaries and bundle vendored tmux for remote SSH
-# provisioning. These are deployed to remote machines via SCP.
+# Build standalone t3 server binaries for remote SSH provisioning.
+# These are Bun-compiled binaries deployed to remote machines via SCP.
 #
 # The compiled binary always uses Bun's SQLite driver (@effect/sql-sqlite-bun).
 # NodeSqliteClient.ts imports node:sqlite which doesn't exist in Bun, so we

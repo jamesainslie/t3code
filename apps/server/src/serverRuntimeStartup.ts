@@ -438,9 +438,7 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
           const httpServer = yield* HttpServer.HttpServer;
           const address = httpServer.address;
           const boundPort =
-            typeof address === "string" || !("port" in address)
-              ? serverConfig.port
-              : address.port;
+            typeof address === "string" || !("port" in address) ? serverConfig.port : address.port;
 
           const pairingUrl = yield* serverAuth
             .issueStartupPairingUrl(`http://localhost:${boundPort}`)

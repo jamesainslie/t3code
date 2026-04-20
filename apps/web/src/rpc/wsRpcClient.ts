@@ -7,6 +7,7 @@ import {
   type HostResourceStreamEvent,
   type LocalApi,
   ORCHESTRATION_WS_METHODS,
+  type ProjectFileChangeEvent,
   type ServerSettingsPatch,
   WS_METHODS,
 } from "@t3tools/contracts";
@@ -68,6 +69,22 @@ export interface WsRpcClient {
   readonly projects: {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
+    readonly readFile: RpcUnaryMethod<typeof WS_METHODS.projectsReadFile>;
+    readonly updateFrontmatter: RpcUnaryMethod<typeof WS_METHODS.projectsUpdateFrontmatter>;
+    readonly onFileChanges: (
+      input: RpcInput<typeof WS_METHODS.subscribeProjectFileChanges>,
+      listener: (event: ProjectFileChangeEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+  };
+  readonly projectFiles: {
+    readonly readFile: RpcUnaryMethod<typeof WS_METHODS.projectsReadFile>;
+    readonly updateFrontmatter: RpcUnaryMethod<typeof WS_METHODS.projectsUpdateFrontmatter>;
+    readonly onFileChange: (
+      input: RpcInput<typeof WS_METHODS.subscribeProjectFileChanges>,
+      listener: (event: ProjectFileChangeEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
   };
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
@@ -155,6 +172,48 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+      readFile: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsReadFile](input)),
+      updateFrontmatter: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsUpdateFrontmatter](input)),
+      onFileChanges: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeProjectFileChanges](input),
+          listener,
+          options,
+        ),
+    },
+    projectFiles: {
+      readFile: (input) =>
+        transport.request(
+          (client) =>
+            // Tagged-struct errors aren't Error subclasses; cast for transport compatibility
+            client[WS_METHODS.projectsReadFile](input) as unknown as Effect.Effect<
+              any,
+              Error,
+              never
+            >,
+        ),
+      updateFrontmatter: (input) =>
+        transport.request(
+          (client) =>
+            client[WS_METHODS.projectsUpdateFrontmatter](input) as unknown as Effect.Effect<
+              any,
+              Error,
+              never
+            >,
+        ),
+      onFileChange: (input, listener, options) =>
+        transport.subscribe(
+          (client) =>
+            client[WS_METHODS.subscribeProjectFileChanges](input) as unknown as Stream.Stream<
+              any,
+              Error,
+              never
+            >,
+          listener,
+          options,
+        ),
     },
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),

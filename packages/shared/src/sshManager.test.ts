@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type ProcessHandle, SshConnectionManager } from "./sshManager.ts";
+import { type ProcessHandle, SshConnectionManager } from "./sshManager.js";
 
 function makeMockProcess(): ProcessHandle {
   const proc = new EventEmitter();

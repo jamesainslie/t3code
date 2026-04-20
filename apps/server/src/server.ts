@@ -52,6 +52,9 @@ import { FileDocsServiceLive } from "./projectFiles/Layers/FileDocsServiceLive.t
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment.ts";
+import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor.ts";
+import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler.ts";
+import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator.ts";
 import {
   authBearerBootstrapRouteLayer,
   authBootstrapRouteLayer,
@@ -77,9 +80,6 @@ import {
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import { RemoteEnvLive } from "./remote/Layers/RemoteEnv.ts";
-import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor.ts";
-import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler.ts";
-import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator.ts";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -238,15 +238,18 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
+  Layer.provideMerge(
+    HostResourceMonitorLive.pipe(
+      Layer.provide(ResourceSamplerLive),
+      Layer.provide(ThresholdEvaluatorLive),
+    ),
+  ),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(RemoteEnvLive),
-  Layer.provideMerge(HostResourceMonitorLive),
-  Layer.provideMerge(ResourceSamplerLive),
-  Layer.provideMerge(ThresholdEvaluatorLive),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(

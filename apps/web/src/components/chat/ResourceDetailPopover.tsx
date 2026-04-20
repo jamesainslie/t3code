@@ -1,7 +1,7 @@
 import type { HostResourceSnapshot } from "@t3tools/contracts";
 import { Cpu, Globe, HardDrive, MemoryStick, Ship, Container } from "lucide-react";
 
-import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 
 import { DetailKV, ResourceMetricRow } from "./ResourceMetricRow";
 
@@ -9,7 +9,9 @@ import { DetailKV, ResourceMetricRow } from "./ResourceMetricRow";
 
 export interface ResourceDetailPopoverProps {
   snapshot: HostResourceSnapshot;
-  children: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactElement;
 }
 
 // ─── Formatting Helpers ─────────────────────────────────────────────
@@ -143,17 +145,20 @@ export function ResourceDetailContent({ snapshot }: { snapshot: HostResourceSnap
   );
 }
 
-// ─── Tooltip Wrapper ────────────────────────────────────────────────
+// ─── Popover Wrapper ────────────────────────────────────────────────
 
-export function ResourceDetailPopover({ snapshot, children }: ResourceDetailPopoverProps) {
+export function ResourceDetailPopover({
+  snapshot,
+  open,
+  onOpenChange,
+  children,
+}: ResourceDetailPopoverProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger delay={300} closeDelay={200} closeOnClick={false}>
-        {children}
-      </TooltipTrigger>
-      <TooltipPopup side="bottom" align="center" sideOffset={8} className="max-w-none p-0 text-sm">
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger render={children} />
+      <PopoverPopup side="bottom" align="center" sideOffset={8}>
         <ResourceDetailContent snapshot={snapshot} />
-      </TooltipPopup>
-    </Tooltip>
+      </PopoverPopup>
+    </Popover>
   );
 }

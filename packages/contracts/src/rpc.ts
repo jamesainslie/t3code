@@ -134,15 +134,17 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
 
+  // Server log stream
+  serverSubscribeLogStream: "server.subscribeLogStream",
+
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
-  serverSubscribeLogStream: "server.subscribeLogStream",
-  subscribeHostResources: "subscribeHostResources",
   subscribeProjectFileChanges: "subscribeProjectFileChanges",
+  subscribeHostResources: "subscribeHostResources",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -192,14 +194,11 @@ export const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
   error: ProjectReadFileError,
 });
 
-export const WsProjectsUpdateFrontmatterRpc = Rpc.make(
-  WS_METHODS.projectsUpdateFrontmatter,
-  {
-    payload: ProjectUpdateFrontmatterInput,
-    success: ProjectUpdateFrontmatterResult,
-    error: ProjectUpdateFrontmatterError,
-  },
-);
+export const WsProjectsUpdateFrontmatterRpc = Rpc.make(WS_METHODS.projectsUpdateFrontmatter, {
+  payload: ProjectUpdateFrontmatterInput,
+  success: ProjectUpdateFrontmatterResult,
+  error: ProjectUpdateFrontmatterError,
+});
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
@@ -388,6 +387,13 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostResources, {
+  payload: HostResourceSubscribeInput,
+  success: HostResourceStreamEvent,
+  error: HostResourceMonitorError,
+  stream: true,
+});
+
 export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribeLogStream, {
   payload: Schema.Struct({}),
   success: Schema.Struct({
@@ -399,22 +405,12 @@ export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribe
   stream: true,
 });
 
-export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostResources, {
-  payload: HostResourceSubscribeInput,
-  success: HostResourceStreamEvent,
-  error: HostResourceMonitorError,
+export const WsSubscribeProjectFileChangesRpc = Rpc.make(WS_METHODS.subscribeProjectFileChanges, {
+  payload: ProjectFileWatchInput,
+  success: ProjectFileChangeEvent,
+  error: ProjectFileMonitorError,
   stream: true,
 });
-
-export const WsSubscribeProjectFileChangesRpc = Rpc.make(
-  WS_METHODS.subscribeProjectFileChanges,
-  {
-    payload: ProjectFileWatchInput,
-    success: ProjectFileChangeEvent,
-    error: ProjectFileMonitorError,
-    stream: true,
-  },
-);
 
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
@@ -450,13 +446,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
-  WsSubscribeHostResourcesRpc,
   WsSubscribeProjectFileChangesRpc,
+  WsSubscribeHostResourcesRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
-  WsServerSubscribeLogStreamRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsServerSubscribeLogStreamRpc,
 );

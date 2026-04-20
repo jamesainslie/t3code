@@ -73,7 +73,11 @@ export interface ProvisionOptions {
    * callers can select a libc-correct Bun-compiled binary; `undefined` on
    * macOS where libc isn't meaningful.
    */
-  serverBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string;
+  serverBinaryPath: (
+    platform: "linux" | "darwin",
+    arch: "x64" | "arm64",
+    libc?: LinuxLibc,
+  ) => string;
   /**
    * Returns the local path to the tmux binary, or `null` if the remote is
    * expected to provide tmux itself (e.g. Darwin remotes where tmux comes
@@ -83,7 +87,11 @@ export interface ProvisionOptions {
    * (from pythops/tmux-linux-binary) are libc-agnostic, so callers can ignore
    * the `libc` argument for tmux selection.
    */
-  tmuxBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string | null;
+  tmuxBinaryPath: (
+    platform: "linux" | "darwin",
+    arch: "x64" | "arm64",
+    libc?: LinuxLibc,
+  ) => string | null;
   sshManager: SshConnectionManager;
   /** Optional progress callback */
   onStatus?: (phase: "provisioning" | "starting" | "connected") => void;
@@ -161,42 +169,21 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
 
   // Phase 1: Ensure master SSH connection
   log("phase 1: checking SSH control socket...");
-  emit({ type: "phase-start", phase: 1, label: "Establishing SSH connection" });
-  try {
-    await opts.sshManager.getOrCreate(target);
-  } catch (err) {
-    emit({ type: "error", phase: 1, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  }
+  await opts.sshManager.getOrCreate(target);
   log("phase 1: SSH master connection ready");
-  emit({ type: "log", phase: 1, message: "SSH master connection ready" });
-  emit({ type: "phase-complete", phase: 1, label: "Establishing SSH connection" });
 
   // Phase 2: Probe remote environment and resolve the remote home directory.
   log("phase 2: probing remote environment...");
-  emit({ type: "phase-start", phase: 2, label: "Probing remote environment" });
-  let probe: ReturnType<typeof parseProbeOutput>;
-  let remoteHome: string;
-  try {
-    const [probeOutput, home] = await Promise.all([
-      runSshCommand(target, PROBE_SCRIPT),
-      runSshCommand(target, "echo $HOME").then((s) => s.trim()),
-    ]);
-    probe = parseProbeOutput(probeOutput);
-    remoteHome = home;
-  } catch (err) {
-    emit({ type: "error", phase: 2, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  }
+  const [probeOutput, remoteHome] = await Promise.all([
+    runSshCommand(target, PROBE_SCRIPT),
+    runSshCommand(target, "echo $HOME").then((s) => s.trim()),
+  ]);
+  const probe = parseProbeOutput(probeOutput);
   if (!probe) {
-    const msg = "Failed to parse remote probe output";
-    emit({ type: "error", phase: 2, message: msg });
-    throw new Error(msg);
+    throw new Error(`Failed to parse remote probe output: ${JSON.stringify(probeOutput)}`);
   }
   if (!remoteHome || remoteHome.startsWith("$")) {
-    const msg = `Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`;
-    emit({ type: "error", phase: 2, message: msg });
-    throw new Error(msg);
+    throw new Error(`Failed to resolve remote home directory: ${JSON.stringify(remoteHome)}`);
   }
   // The probe descriptor includes libc flavor on Linux so operators can see
   // at a glance which variant the remote resolved to (glibc vs musl).
@@ -276,10 +263,7 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     emit({ type: "log", phase: 3, message: "Server binary installed" });
     emit({ type: "phase-complete", phase: 3, label: "Transferring binaries" });
   } else if (sessionExists) {
-    emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
     log("phase 3: tmux session exists, skipping binary transfer (server is running)");
-    emit({ type: "log", phase: 3, message: "Server already running, skipping transfer" });
-    emit({ type: "phase-complete", phase: 3, label: "Binaries up to date" });
   } else {
     emit({ type: "phase-start", phase: 3, label: "Binaries up to date" });
     log(`phase 3: version match (${localNormalized}), skipping server binary transfer`);
@@ -300,7 +284,6 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   let pairingUrl: string | undefined;
 
   if (sessionExists) {
-    emit({ type: "phase-start", phase: 4, label: "Reconnecting to server" });
     log("phase 4: tmux session exists, reading state file...");
     const stateJson = await runSshCommand(
       target,
@@ -309,37 +292,17 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     const state = parseServerStateFile(stateJson.trim());
     if (!state) {
       log("phase 4: state file missing/corrupt, killing stale session and cold-starting...");
-      emit({ type: "log", phase: 4, message: "State file corrupt, restarting server..." });
       await runSshCommand(target, buildTmuxKillCommand(projectId));
-      try {
-        remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
-      } catch (err) {
-        emit({
-          type: "error",
-          phase: 4,
-          message: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
+      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
     } else {
       remotePort = state.port;
       pairingUrl = state.pairingUrl;
       log(`phase 4: reconnected to existing server on remote port ${remotePort}`);
-      emit({ type: "log", phase: 4, message: `Reconnected on port ${remotePort}` });
     }
-    emit({ type: "phase-complete", phase: 4, label: "Reconnecting to server" });
   } else {
-    emit({ type: "phase-start", phase: 4, label: "Starting remote server" });
     log("phase 4: no tmux session, cold-starting server...");
-    try {
-      remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
-    } catch (err) {
-      emit({ type: "error", phase: 4, message: err instanceof Error ? err.message : String(err) });
-      throw err;
-    }
+    remotePort = await coldStart(target, projectId, workspaceRoot, opts.onLog);
     log(`phase 4: server started on remote port ${remotePort}`);
-    emit({ type: "log", phase: 4, message: `Server started on port ${remotePort}` });
-    emit({ type: "phase-complete", phase: 4, label: "Starting remote server" });
   }
 
   // Extract the pairing URL from the server's stdout log. The state file may
@@ -390,14 +353,8 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     emit({
       type: "log",
       phase: 5,
-      message: `Tunnel: localhost:${localPort} → remote:${remotePort}`,
+      message: `Tunnel: localhost:${localPort} -> remote:${remotePort}`,
     });
-    // Probe the tunnel end-to-end. If the SSH control master has a stale
-    // listener bound to this localPort (possible after a crashed provision
-    // that left a forward pointing at a now-dead remote port), the TCP
-    // connect succeeds but reads return RST. Verifying here turns that
-    // silent failure into a loud one so the caller retries with fresh
-    // state instead of handing the UI a dead baseUrl.
     try {
       await verifyTunnel(localPort);
     } catch (verifyErr) {
@@ -476,6 +433,7 @@ async function coldStart(
       : "\n\n(No remote server log available)";
     throw new Error(
       `Timed out waiting for remote T3 server to start (projectId=${projectId})${logSnippet}`,
+      { cause: err },
     );
   } finally {
     logTailer?.kill();
@@ -751,11 +709,8 @@ async function cancelPortForward(
 
 /**
  * Verify that a local SSH tunnel is actually forwarding to a live remote
- * listener. Opens a TCP connection to 127.0.0.1:localPort and sends a
- * minimal HTTP request. A healthy tunnel yields bytes back (any HTTP
- * response, success or error). A stale tunnel (sshd on the far side
- * cannot reach its target) closes the socket without sending anything,
- * or errors out with ECONNRESET.
+ * listener. Any response bytes count as healthy because auth failures are
+ * still proof that the HTTP server is reachable through the tunnel.
  */
 export async function verifyTunnel(localPort: number, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {

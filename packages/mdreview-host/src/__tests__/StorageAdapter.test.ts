@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  type LocalStorageLike,
-  T3StorageAdapter,
-} from "../StorageAdapter.ts";
+import { type LocalStorageLike, T3StorageAdapter } from "../StorageAdapter.ts";
 
 const makeMemoryStorage = (): LocalStorageLike => {
   const store = new Map<string, string>();
@@ -63,9 +60,7 @@ describe("T3StorageAdapter.getLocal / setLocal", () => {
     const backing = makeMemoryStorage();
     const adapter = new T3StorageAdapter({ backing });
     await adapter.setLocal({ lastOpenedFile: "docs/a.md" });
-    expect(backing.getItem("t3code:mdreview:local:lastOpenedFile")).toBe(
-      '"docs/a.md"',
-    );
+    expect(backing.getItem("t3code:mdreview:local:lastOpenedFile")).toBe('"docs/a.md"');
     const got = await adapter.getLocal(["lastOpenedFile"]);
     expect(got).toEqual({ lastOpenedFile: "docs/a.md" });
   });

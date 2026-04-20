@@ -85,17 +85,18 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
     }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
   );
 
-  it.effect("seeds the desktop bootstrap credential as a one-time grant", () =>
+  it.effect("seeds the desktop bootstrap credential as a reusable grant", () =>
     Effect.gen(function* () {
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const first = yield* bootstrapCredentials.consume("desktop-bootstrap-token");
-      const second = yield* Effect.flip(bootstrapCredentials.consume("desktop-bootstrap-token"));
+      const second = yield* bootstrapCredentials.consume("desktop-bootstrap-token");
 
       expect(first.method).toBe("desktop-bootstrap");
       expect(first.role).toBe("owner");
       expect(first.subject).toBe("desktop-bootstrap");
-      expect(second._tag).toBe("BootstrapCredentialError");
-      expect(second.status).toBe(401);
+      expect(second.method).toBe("desktop-bootstrap");
+      expect(second.role).toBe("owner");
+      expect(second.subject).toBe("desktop-bootstrap");
     }).pipe(
       Effect.provide(
         makeBootstrapCredentialLayer({

@@ -1,5 +1,12 @@
 import type { ComponentType } from "react";
-import { ArchiveIcon, ArrowLeftIcon, Link2Icon, PaletteIcon, Settings2Icon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArrowLeftIcon,
+  FileTextIcon,
+  Link2Icon,
+  PaletteIcon,
+  Settings2Icon,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import {
@@ -15,6 +22,7 @@ import {
 export type SettingsSectionPath =
   | "/settings/general"
   | "/settings/appearance"
+  | "/settings/markdown"
   | "/settings/connections"
   | "/settings/archived";
 
@@ -25,6 +33,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Appearance", to: "/settings/appearance", icon: PaletteIcon },
+  { label: "Markdown", to: "/settings/markdown", icon: FileTextIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];

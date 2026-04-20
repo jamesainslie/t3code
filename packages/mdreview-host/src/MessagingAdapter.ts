@@ -1,7 +1,4 @@
-import type {
-  IPCMessage,
-  MessagingAdapter as CoreMessagingAdapter,
-} from "@mdreview/core";
+import type { IPCMessage, MessagingAdapter as CoreMessagingAdapter } from "@mdreview/core";
 
 /**
  * Null messaging adapter for the t3code mdview host. The browser extension

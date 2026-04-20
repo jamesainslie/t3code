@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:net";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { verifyTunnel } from "./provision.ts";
+import { verifyTunnel } from "./provision.js";
 
 describe("verifyTunnel", () => {
   const servers: Server[] = [];

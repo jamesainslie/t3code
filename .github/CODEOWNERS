@@ -1,0 +1,20 @@
+# CODEOWNERS for fork-only boundary enforcement
+#
+# This file exists in the fork jamesainslie/t3code to route reviews for
+# fork-only code paths. Upstream pingdotgg/t3code does not ship a CODEOWNERS,
+# so this file should rarely create merge conflicts during syncs.
+#
+# Fork architecture doc: docs/fork-architecture.md
+
+# Fork-only contract schemas — extend upstream types without editing them
+/packages/contracts/src/fork/                    @jamesainslie
+
+# Fork-only server RPC handlers — registered via the fork handler module
+/apps/server/src/rpc/handlers/fork.ts             @jamesainslie
+
+# Fork-only sidebar extractions — reduce Sidebar.tsx merge surface
+/apps/web/src/components/sidebar/                @jamesainslie
+
+# Fork infrastructure and docs
+/.github/workflows/fork-*.yml                    @jamesainslie
+/FORK_ARCHITECTURE.md                            @jamesainslie

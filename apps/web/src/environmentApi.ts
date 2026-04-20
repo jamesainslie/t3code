@@ -20,6 +20,12 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },
+    projectFiles: {
+      readFile: rpcClient.projectFiles.readFile,
+      updateFrontmatter: rpcClient.projectFiles.updateFrontmatter,
+      onFileChange: (input, callback, options) =>
+        rpcClient.projectFiles.onFileChange(input, callback, options),
+    },
     filesystem: {
       browse: rpcClient.filesystem.browse,
     },

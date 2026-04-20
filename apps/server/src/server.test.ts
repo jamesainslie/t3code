@@ -56,6 +56,7 @@ import {
   CheckpointDiffQuery,
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor.ts";
 import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster.ts";
@@ -84,7 +85,6 @@ import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRu
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import { WsClientTrackerLive } from "./wsClientTracker.ts";
-import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor.ts";
 import {
   BrowserTraceCollector,
   type BrowserTraceCollectorShape,
@@ -195,17 +195,6 @@ const makeDefaultOrchestrationThreadShell = (
     ...overrides,
   };
 };
-
-const workspaceAndProjectServicesLayer = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
-  FileDocsServiceLive.pipe(Layer.provide(WorkspacePathsLive)),
-  ProjectFaviconResolverLive,
-);
 
 const browserOtlpTracingLayer = Layer.mergeAll(
   FetchHttpClient.layer,
@@ -511,6 +500,11 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.checkpointDiffQuery,
         }),
       ),
+      Layer.provide(
+        Layer.mock(HostResourceMonitor)({
+          subscribe: () => Stream.empty,
+        }),
+      ),
     );
 
     const appLayer = servedRoutesLayer.pipe(
@@ -551,11 +545,6 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provideMerge(authTestLayer),
       Layer.provide(workspaceAndProjectServicesLayer),
-      Layer.provide(
-        Layer.mock(HostResourceMonitor)({
-          subscribe: () => Stream.empty,
-        }),
-      ),
       Layer.provide(WsClientTrackerLive),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(layerConfig),
@@ -992,7 +981,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         );
 
         assert.equal(response.status, 204);
-        assert.equal(response.headers.get("access-control-allow-origin"), "*");
+        assert.equal(
+          response.headers.get("access-control-allow-origin"),
+          "http://192.168.86.35:3773",
+        );
+        assert.equal(response.headers.get("access-control-allow-credentials"), "true");
         assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-methods")), [
           "GET",
           "OPTIONS",
@@ -1025,7 +1018,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       };
 
       assert.equal(response.status, 401);
-      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      assert.equal(
+        response.headers.get("access-control-allow-origin"),
+        "http://192.168.86.35:3773",
+      );
+      assert.equal(response.headers.get("access-control-allow-credentials"), "true");
       assert.equal(body.error, "Authentication required.");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
@@ -1618,7 +1615,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       });
 
       assert.equal(response.status, 204);
-      assert.equal(response.headers["access-control-allow-origin"], "*");
+      assert.equal(response.headers["access-control-allow-origin"], "http://localhost:5733");
+      assert.equal(response.headers["access-control-allow-credentials"], "true");
       assert.deepEqual(localTraceRecords, [
         {
           type: "otlp-span",
@@ -1683,7 +1681,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(response.status, 204);
-      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5733");
+      assert.equal(response.headers.get("access-control-allow-credentials"), "true");
       assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-methods")), [
         "GET",
         "OPTIONS",

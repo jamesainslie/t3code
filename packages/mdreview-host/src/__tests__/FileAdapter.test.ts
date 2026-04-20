@@ -2,11 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectFileChangeEvent } from "@t3tools/contracts";
 
-import {
-  FileNotFoundError,
-  type RpcClient,
-  T3FileAdapter,
-} from "../FileAdapter.ts";
+import { FileNotFoundError, type RpcClient, T3FileAdapter } from "../FileAdapter.ts";
 
 type Unsubscribe = () => void;
 type StreamHandler<O> = (value: O) => void;
@@ -18,9 +14,7 @@ interface RecordedStream<O> {
 
 const fakeRpcClient = () => {
   const calls: Array<{ method: string; input: unknown }> = [];
-  const callImpl = vi.fn(
-    async (_method: string, _input: unknown): Promise<unknown> => undefined,
-  );
+  const callImpl = vi.fn(async (_method: string, _input: unknown): Promise<unknown> => undefined);
   const activeStreams: Array<RecordedStream<ProjectFileChangeEvent>> = [];
 
   const client = {
@@ -28,11 +22,7 @@ const fakeRpcClient = () => {
       calls.push({ method, input });
       return (await callImpl(method, input)) as O;
     }) as RpcClient["call"],
-    stream: (<_I, O>(
-      _method: string,
-      _input: _I,
-      handler: (value: O) => void,
-    ) => {
+    stream: (<_I, O>(_method: string, _input: _I, handler: (value: O) => void) => {
       const record: RecordedStream<ProjectFileChangeEvent> = {
         handler: handler as unknown as StreamHandler<ProjectFileChangeEvent>,
         unsubscribed: false,
@@ -80,9 +70,7 @@ describe("T3FileAdapter.readFile", () => {
 
     const adapter = new T3FileAdapter({ client, cwd: "/repo" });
 
-    await expect(adapter.readFile("missing.md")).rejects.toBeInstanceOf(
-      FileNotFoundError,
-    );
+    await expect(adapter.readFile("missing.md")).rejects.toBeInstanceOf(FileNotFoundError);
   });
 
   it("rethrows non-NotFound errors untouched", async () => {
@@ -145,9 +133,7 @@ describe("T3FileAdapter.watch", () => {
 
     stream.handler({
       _tag: "snapshot",
-      files: [
-        { relativePath: "docs/a.md", size: 2, mtimeMs: 1, oversized: false },
-      ],
+      files: [{ relativePath: "docs/a.md", size: 2, mtimeMs: 1, oversized: false }],
     });
 
     expect(cb).not.toHaveBeenCalled();
@@ -172,22 +158,33 @@ describe("T3FileAdapter.listFiles", () => {
     });
 
     const result = await resultPromise;
-    expect(result.map((f) => f.relativePath)).toEqual([
-      "docs/a.md",
-      "README.md",
-    ]);
+    expect(result.map((f) => f.relativePath)).toEqual(["docs/a.md", "README.md"]);
     // listFiles should unsubscribe once it has the snapshot.
     expect(stream.unsubscribed).toBe(true);
   });
 });
 
-describe("T3FileAdapter.writeFile and checkChanged (passthrough noops)", () => {
-  it("writeFile returns a FileWriteResult indicating success (handled by explicit callers)", async () => {
-    const { client } = fakeRpcClient();
+describe("T3FileAdapter.writeFile and checkChanged", () => {
+  it("writes markdown content through the workspace write RPC", async () => {
+    const { client, calls, callImpl } = fakeRpcClient();
+    callImpl.mockResolvedValueOnce({ relativePath: "docs/a.md" });
     const adapter = new T3FileAdapter({ client, cwd: "/repo" });
-    const result = await adapter.writeFile("a.md", "body");
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/not supported/i);
+    const result = await adapter.writeFile("docs/a.md", "body");
+    expect(result).toEqual({ success: true });
+    expect(calls).toEqual([
+      {
+        method: "projects.writeFile",
+        input: { cwd: "/repo", relativePath: "docs/a.md", contents: "body" },
+      },
+    ]);
+  });
+
+  it("reports write RPC failures as FileWriteResult errors", async () => {
+    const { client, callImpl } = fakeRpcClient();
+    callImpl.mockRejectedValueOnce(new Error("disk full"));
+    const adapter = new T3FileAdapter({ client, cwd: "/repo" });
+    const result = await adapter.writeFile("docs/a.md", "body");
+    expect(result).toEqual({ success: false, error: "disk full" });
   });
 
   it("checkChanged reports unchanged without touching the RPC client", async () => {

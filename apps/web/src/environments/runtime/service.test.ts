@@ -1,5 +1,4 @@
 import {
-  EnvironmentId,
   ProjectId,
   type LocalApi,
   makeRemoteIdentityKey,

@@ -94,7 +94,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       expect(ramTransitions).toHaveLength(0);
     });
 
-    it("transitions normal→warn when crossing warn threshold", () => {
+    it("transitions normal->warn when crossing warn threshold", () => {
       const sample = baseSample({
         ram: {
           ...baseSample().ram,
@@ -121,7 +121,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       });
     });
 
-    it("transitions warn→critical when crossing critical threshold", () => {
+    it("transitions warn->critical when crossing critical threshold", () => {
       const sample = baseSample({
         ram: {
           ...baseSample().ram,
@@ -171,7 +171,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       expect(ramTransitions).toHaveLength(0);
     });
 
-    it("transitions warn→normal when dropping below hysteresis band", () => {
+    it("transitions warn->normal when dropping below hysteresis band", () => {
       // 74% is below 80-5=75, so it transitions back to normal
       const sample = baseSample({
         ram: {
@@ -199,7 +199,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       });
     });
 
-    it("transitions critical→warn when dropping below critical hysteresis band", () => {
+    it("transitions critical->warn when dropping below critical hysteresis band", () => {
       // critical threshold = 92, hysteresis = 92-5 = 87
       const sample = baseSample({
         ram: {
@@ -232,7 +232,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
     it("does not trigger warn from a single spike when window > 1", () => {
       // With sustainedSeconds=5 and sampleInterval=1, window=5
       // Pre-fill window with 4 normal samples, then one spike at 90%
-      // Average = (30+30+30+30+90)/5 = 42 → normal
+      // Average = (30+30+30+30+90)/5 = 42 -> normal
       const state: EvaluatorState = {
         ...makeInitialState(),
         cpuSamples: [30, 30, 30, 30],
@@ -245,7 +245,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         state,
         thresholds,
         dangerPatterns,
-        1, // 1-second interval → window of 5
+        1, // 1-second interval -> window of 5
       );
 
       expect(result.snapshot.cpu.state).toBe("normal");
@@ -254,7 +254,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
 
     it("triggers warn when sustained average crosses threshold", () => {
       // With sustainedSeconds=5 and sampleInterval=1, window=5
-      // Fill 5 samples all at 90% → average = 90 → exceeds warn=85
+      // Fill 5 samples all at 90% -> average = 90 -> exceeds warn=85
       const state: EvaluatorState = {
         ...makeInitialState(),
         cpuSamples: [90, 90, 90, 90],
@@ -267,7 +267,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         state,
         thresholds,
         dangerPatterns,
-        1, // 1-second interval → window of 5
+        1, // 1-second interval -> window of 5
       );
 
       expect(result.snapshot.cpu.state).toBe("warn");
@@ -276,8 +276,8 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
     });
 
     it("uses default interval (5s) to compute window of 1 (immediate)", () => {
-      // sustainedSeconds=5, sampleInterval=5 → window=1
-      // A single sample of 90% averages to 90 → exceeds warn=85
+      // sustainedSeconds=5, sampleInterval=5 -> window=1
+      // A single sample of 90% averages to 90 -> exceeds warn=85
       const sample = baseSample({
         cpu: { usagePercent: 90, coreCount: 8 },
       });
@@ -574,7 +574,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
   });
 
   describe("Disk thresholds", () => {
-    it("transitions normal→warn at disk warn threshold", () => {
+    it("transitions normal->warn at disk warn threshold", () => {
       const sample = baseSample({
         disk: {
           ...baseSample().disk,

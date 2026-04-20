@@ -50,16 +50,16 @@ class BrokerWsClient {
 
     this.connectPromise = new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(BROKER_URL);
-      ws.onopen = () => {
+      ws.addEventListener("open", () => {
         this.ws = ws;
         this.connectPromise = null;
         resolve();
-      };
-      ws.onerror = () => {
+      });
+      ws.addEventListener("error", () => {
         this.connectPromise = null;
         reject(new Error("Cannot connect to t3 broker. Start it with: t3 broker"));
-      };
-      ws.onmessage = (e: MessageEvent<string>) => {
+      });
+      ws.addEventListener("message", (e: MessageEvent<string>) => {
         const msg = JSON.parse(e.data) as {
           id: string;
           error?: string;
@@ -70,8 +70,8 @@ class BrokerWsClient {
         this.pending.delete(msg.id);
         if (msg.error) p.reject(new Error(msg.error));
         else p.resolve(msg);
-      };
-      ws.onclose = () => {
+      });
+      ws.addEventListener("close", () => {
         this.ws = null;
         this.connectPromise = null;
         // Drain all in-flight RPCs so callers don't hang
@@ -79,7 +79,7 @@ class BrokerWsClient {
           p.reject(new Error("Broker WebSocket closed unexpectedly"));
         }
         this.pending.clear();
-      };
+      });
     });
     return this.connectPromise;
   }

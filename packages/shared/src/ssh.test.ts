@@ -14,7 +14,7 @@ import {
   remoteServerStateFile,
   resolveRemotePlatform,
   tmuxSessionName,
-} from "./ssh.ts";
+} from "./ssh.js";
 
 describe("parseProbeOutput", () => {
   it("parses current probe output with glibc libc", () => {

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 import {
-  ColorTokensSchema,
-  TypographyTokensSchema,
-  TransparencyTokensSchema,
-  ThemeOverridesSchema,
-  ThemeMetadataSchema,
   ThemeSchema,
   ThemeBase,
   DEFAULT_TYPOGRAPHY_TOKENS,

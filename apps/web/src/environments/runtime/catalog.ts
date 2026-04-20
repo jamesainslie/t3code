@@ -13,11 +13,6 @@ import { create } from "zustand";
 import { ensureLocalApi } from "../../localApi";
 import { getPrimaryKnownEnvironment } from "../primary";
 
-/**
- * @deprecated Use `SavedRemoteEnvironment` from `@t3tools/contracts` instead.
- * This alias is kept temporarily to minimize breakage in callers that will be
- * migrated in subsequent tasks.
- */
 export type SavedEnvironmentRecord = SavedRemoteEnvironment;
 
 interface SavedEnvironmentRegistryState {
@@ -53,13 +48,7 @@ export function toPersistedSavedEnvironmentRecord(
     wsBaseUrl: record.wsBaseUrl ?? "",
     createdAt: record.createdAt,
     lastConnectedAt: record.lastConnectedAt,
-    sshConfig: {
-      host: record.host,
-      user: record.user,
-      port: record.port,
-      projectId: record.projectId,
-      workspaceRoot: record.workspaceRoot,
-    },
+    ...(record.sshConfig ? { sshConfig: record.sshConfig } : {}),
   };
 }
 

@@ -464,7 +464,7 @@ jobs:
             release-assets/*.AppImage
             release-assets/*.exe
             release-assets/*.blockmap
-            release-assets/*.yml
+            release-assets/latest*.yml
             release-assets/t3-server-*
             release-assets/tmux-*
           fail_on_unmatched_files: true

@@ -3,6 +3,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import React, {
   Children,
   Suspense,
+  lazy,
   type MouseEvent as ReactMouseEvent,
   isValidElement,
   use,
@@ -30,6 +31,10 @@ import { resolveMarkdownFileLinkMeta, rewriteMarkdownFileUriHref } from "../mark
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
 
+const LazyMermaidCodeBlock = lazy(() =>
+  import("./mermaid/MermaidCodeBlock").then((m) => ({ default: m.MermaidCodeBlock })),
+);
+
 class CodeHighlightErrorBoundary extends React.Component<
   { fallback: ReactNode; children: ReactNode },
   { hasError: boolean }
@@ -55,6 +60,8 @@ interface ChatMarkdownProps {
   text: string;
   cwd: string | undefined;
   isStreaming?: boolean;
+  /** Callback invoked when the user selects "Preview in panel" from a file link context menu */
+  onPreview?: ((relativePath: string) => void) | undefined;
 }
 
 const CODE_FENCE_LANGUAGE_REGEX = /(?:^|\s)language-([^\s]+)/;
@@ -66,7 +73,7 @@ const highlightedCodeCache = new LRUCache<string>(
 );
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
-function extractFenceLanguage(className: string | undefined): string {
+export function extractFenceLanguage(className: string | undefined): string {
   const match = className?.match(CODE_FENCE_LANGUAGE_REGEX);
   const raw = match?.[1] ?? "text";
   // Shiki doesn't bundle a gitignore grammar; ini is a close match (#685)
@@ -192,7 +199,7 @@ interface SuspenseShikiCodeBlockProps {
   isStreaming: boolean;
 }
 
-function SuspenseShikiCodeBlock({
+export function SuspenseShikiCodeBlock({
   className,
   code,
   themeName,
@@ -249,6 +256,7 @@ interface MarkdownFileLinkProps {
   label: string;
   theme: "light" | "dark";
   className?: string | undefined;
+  onPreview?: ((relativePath: string) => void) | undefined;
 }
 
 const MARKDOWN_LINK_HREF_PATTERN = /\[[^\]]*]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
@@ -339,6 +347,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   label,
   theme,
   className,
+  onPreview,
 }: MarkdownFileLinkProps) {
   const handleOpen = useCallback(() => {
     const api = readLocalApi();
@@ -395,17 +404,24 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       const api = readLocalApi();
       if (!api) return;
 
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "open", label: "Open in editor" },
-          { id: "copy-relative", label: "Copy relative path" },
-          { id: "copy-full", label: "Copy full path" },
-        ] as const,
-        { x: event.clientX, y: event.clientY },
-      );
+      const menuItems = [
+        { id: "open", label: "Open in editor" },
+        ...(onPreview ? [{ id: "preview", label: "Preview in panel" }] : []),
+        { id: "copy-relative", label: "Copy relative path" },
+        { id: "copy-full", label: "Copy full path" },
+      ] as const;
+
+      const clicked = await api.contextMenu.show(menuItems, {
+        x: event.clientX,
+        y: event.clientY,
+      });
 
       if (clicked === "open") {
         handleOpen();
+        return;
+      }
+      if (clicked === "preview" && onPreview) {
+        onPreview(displayPath);
         return;
       }
       if (clicked === "copy-relative") {
@@ -416,7 +432,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         handleCopy(targetPath, "Full path");
       }
     },
-    [displayPath, handleCopy, handleOpen, targetPath],
+    [displayPath, handleCopy, handleOpen, onPreview, targetPath],
   );
 
   return (
@@ -466,11 +482,12 @@ function areMarkdownFileLinkPropsEqual(
     previous.filePath === next.filePath &&
     previous.label === next.label &&
     previous.theme === next.theme &&
-    previous.className === next.className
+    previous.className === next.className &&
+    previous.onPreview === next.onPreview
   );
 }
 
-function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
+function ChatMarkdown({ text, cwd, isStreaming = false, onPreview }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
@@ -524,6 +541,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
             label={labelParts.join(" · ")}
             theme={resolvedTheme}
             className={props.className}
+            onPreview={onPreview}
           />
         );
       },
@@ -531,6 +549,20 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
         const codeBlock = extractCodeBlock(children);
         if (!codeBlock) {
           return <pre {...props}>{children}</pre>;
+        }
+
+        const language = extractFenceLanguage(codeBlock.className);
+        if (language === "mermaid") {
+          return (
+            <Suspense fallback={<pre {...props}>{children}</pre>}>
+              <LazyMermaidCodeBlock
+                code={codeBlock.code}
+                theme={resolvedTheme}
+                diffThemeName={diffThemeName}
+                isStreaming={isStreaming}
+              />
+            </Suspense>
+          );
         }
 
         return (
@@ -554,6 +586,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
       fileLinkParentSuffixByPath,
       isStreaming,
       markdownFileLinkMetaByHref,
+      onPreview,
       resolvedTheme,
     ],
   );

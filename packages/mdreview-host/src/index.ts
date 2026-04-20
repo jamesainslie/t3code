@@ -13,6 +13,13 @@ export {
   type T3StorageAdapterOptions,
 } from "./StorageAdapter.ts";
 
+export {
+  MDREVIEW_PREFERENCES_CHANGED_EVENT,
+  normalizeMdreviewPreferences,
+  readMdreviewPreferences,
+  writeMdreviewPreferences,
+} from "./preferences.ts";
+
 export { T3NullMessagingAdapter } from "./MessagingAdapter.ts";
 
 export {

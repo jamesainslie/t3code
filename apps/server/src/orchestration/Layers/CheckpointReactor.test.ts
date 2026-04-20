@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import type { ProviderKind, ProviderRuntimeEvent, ProviderSession } from "@t3tools/contracts";
+import type {
+  ProjectFileChangeEvent,
+  ProviderKind,
+  ProviderRuntimeEvent,
+  ProviderSession,
+} from "@t3tools/contracts";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -14,7 +19,7 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
@@ -43,6 +48,7 @@ import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { ServerConfig } from "../../config.ts";
 import { WorkspaceEntriesLive } from "../../workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
+import { FileDocsService } from "../../projectFiles/Services/FileDocsService.ts";
 import { FileDocsServiceLive } from "../../projectFiles/Layers/FileDocsServiceLive.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
@@ -215,7 +221,7 @@ async function waitForGitRefExists(cwd: string, ref: string, timeoutMs = 15_000)
 
 describe("CheckpointReactor", () => {
   let runtime: ManagedRuntime.ManagedRuntime<
-    OrchestrationEngineService | CheckpointReactor | CheckpointStore,
+    OrchestrationEngineService | CheckpointReactor | CheckpointStore | FileDocsService,
     unknown
   > | null = null;
   let scope: Scope.Closeable | null = null;
@@ -304,6 +310,7 @@ describe("CheckpointReactor", () => {
     const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
     const reactor = await runtime.runPromise(Effect.service(CheckpointReactor));
     const checkpointStore = await runtime.runPromise(Effect.service(CheckpointStore));
+    const fileDocs = await runtime.runPromise(Effect.service(FileDocsService));
     scope = await Effect.runPromise(Scope.make("sequential"));
     await Effect.runPromise(reactor.start().pipe(Scope.provide(scope)));
     const drain = () => Effect.runPromise(reactor.drain);
@@ -369,6 +376,7 @@ describe("CheckpointReactor", () => {
       engine,
       provider,
       cwd,
+      fileDocs,
       drain,
     };
   }
@@ -447,6 +455,80 @@ describe("CheckpointReactor", () => {
         "README.md",
       ),
     ).toBe("v2\n");
+  });
+
+  it("emits turnTouchedDoc for markdown files changed directly in the workspace", async () => {
+    const harness = await createHarness({ seedFilesystemCheckpoints: false });
+    const createdAt = new Date().toISOString();
+    const snapshotDeferred = await runtime!.runPromise(Deferred.make<ProjectFileChangeEvent>());
+    const turnTouchedDeferred = await runtime!.runPromise(Deferred.make<ProjectFileChangeEvent>());
+
+    await runtime!.runPromise(
+      harness.fileDocs.watch({ cwd: harness.cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+        Stream.runForEach((event) => {
+          if (event._tag === "snapshot") {
+            return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+          }
+          if (event._tag === "turnTouchedDoc") {
+            return Deferred.succeed(turnTouchedDeferred, event).pipe(Effect.ignore);
+          }
+          return Effect.void;
+        }),
+        Effect.forkScoped,
+        Scope.provide(scope!),
+      ),
+    );
+    await runtime!.runPromise(Deferred.await(snapshotDeferred));
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.make("cmd-session-set-doc-touch"),
+        threadId: ThreadId.make("thread-1"),
+        session: {
+          threadId: ThreadId.make("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: createdAt,
+        },
+        createdAt,
+      }),
+    );
+
+    harness.provider.emit({
+      type: "turn.started",
+      eventId: EventId.make("evt-turn-started-doc-touch"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: ThreadId.make("thread-1"),
+      turnId: asTurnId("turn-doc-touch"),
+    });
+    await waitForGitRefExists(
+      harness.cwd,
+      checkpointRefForThreadTurn(ThreadId.make("thread-1"), 0),
+    );
+
+    fs.writeFileSync(path.join(harness.cwd, "GENERATED.md"), "# generated\n", "utf8");
+    harness.provider.emit({
+      type: "turn.completed",
+      eventId: EventId.make("evt-turn-completed-doc-touch"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: ThreadId.make("thread-1"),
+      turnId: asTurnId("turn-doc-touch"),
+      payload: { state: "completed" },
+    });
+
+    const event = await runtime!.runPromise(Deferred.await(turnTouchedDeferred));
+    expect(event).toMatchObject({
+      _tag: "turnTouchedDoc",
+      threadId: ThreadId.make("thread-1"),
+      turnId: asTurnId("turn-doc-touch"),
+      paths: ["GENERATED.md"],
+    });
   });
 
   it("refreshes local git status state on turn completion using the session cwd", async () => {

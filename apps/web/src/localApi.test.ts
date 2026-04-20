@@ -51,6 +51,11 @@ const rpcClientMock = {
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
   },
+  projectFiles: {
+    readFile: vi.fn(),
+    updateFrontmatter: vi.fn(),
+    onFileChange: vi.fn(),
+  },
   filesystem: {
     browse: vi.fn(),
   },
@@ -214,13 +219,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     },
     sshStatus: async () => ({ connections: [] }),
     onSshStatusUpdate: () => undefined,
-    onSshProvisionEvent: () => () => undefined,
     recordRemoteHost: async () => undefined,
-    getSavedSshHosts: async () => [],
-    saveSshHost: async () => undefined,
-    removeSavedSshHost: async () => undefined,
-    sshProbe: async () => ({ reachable: false }),
-    sshKillRemoteSession: async () => undefined,
     ...overrides,
   };
 }

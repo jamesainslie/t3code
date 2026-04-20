@@ -15,8 +15,6 @@ export {
   type SavedEnvironmentRuntimeState,
 } from "./catalog";
 
-export { connectionLog, useConnectionLogStore, type ConnectionLogEntry } from "./connectionLog";
-
 export {
   hasSavedProjectRegistryHydrated,
   listAllSavedProjectRecords,
@@ -44,3 +42,10 @@ export {
   startEnvironmentConnectionService,
   subscribeEnvironmentConnections,
 } from "./service";
+
+export {
+  connectionLog,
+  resetConnectionLogForTests,
+  useConnectionLogStore,
+  type ConnectionLogEntry,
+} from "./connectionLog";
