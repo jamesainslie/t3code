@@ -105,6 +105,9 @@ import {
 } from "./updateMachine.ts";
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch.ts";
 import { resolveDesktopAppBranding } from "./appBranding.ts";
+import { ServerListeningDetector } from "./serverListeningDetector.ts";
+import { readSavedProjectRegistry, writeSavedProjectRegistry } from "./savedProjectsPersistence.ts";
+import { doesVersionMatchDesktopUpdateChannel } from "./updateChannels.ts";
 
 syncShellEnvironment();
 
