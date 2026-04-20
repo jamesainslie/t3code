@@ -56,6 +56,7 @@ import {
   CheckpointDiffQuery,
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor.ts";
 import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster.ts";
@@ -84,7 +85,6 @@ import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRu
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import { WsClientTrackerLive } from "./wsClientTracker.ts";
-import { HostResourceMonitor } from "./hostResource/Services/HostResourceMonitor.ts";
 import {
   BrowserTraceCollector,
   type BrowserTraceCollectorShape,
@@ -511,6 +511,11 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.checkpointDiffQuery,
         }),
       ),
+      Layer.provide(
+        Layer.mock(HostResourceMonitor)({
+          subscribe: () => Stream.empty,
+        }),
+      ),
     );
 
     const appLayer = servedRoutesLayer.pipe(
@@ -551,11 +556,6 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provideMerge(authTestLayer),
       Layer.provide(workspaceAndProjectServicesLayer),
-      Layer.provide(
-        Layer.mock(HostResourceMonitor)({
-          subscribe: () => Stream.empty,
-        }),
-      ),
       Layer.provide(WsClientTrackerLive),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(layerConfig),

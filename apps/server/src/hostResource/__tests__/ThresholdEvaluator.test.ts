@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ResourceThresholds, KubeDangerPatterns } from "@t3tools/contracts";
+import {
+  ResourceThresholds,
+  KubeDangerPatterns,
+} from "@t3tools/contracts";
 import type { RawSample } from "../Services/ResourceSampler.ts";
 import type { EvaluatorState } from "../Services/ThresholdEvaluator.ts";
-import { evaluateThresholds, makeInitialState } from "../Layers/ThresholdEvaluator.ts";
+import {
+  evaluateThresholds,
+  makeInitialState,
+} from "../Layers/ThresholdEvaluator.ts";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -94,7 +100,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       expect(ramTransitions).toHaveLength(0);
     });
 
-    it("transitions normal→warn when crossing warn threshold", () => {
+    it("transitions normal->warn when crossing warn threshold", () => {
       const sample = baseSample({
         ram: {
           ...baseSample().ram,
@@ -121,7 +127,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       });
     });
 
-    it("transitions warn→critical when crossing critical threshold", () => {
+    it("transitions warn->critical when crossing critical threshold", () => {
       const sample = baseSample({
         ram: {
           ...baseSample().ram,
@@ -171,7 +177,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       expect(ramTransitions).toHaveLength(0);
     });
 
-    it("transitions warn→normal when dropping below hysteresis band", () => {
+    it("transitions warn->normal when dropping below hysteresis band", () => {
       // 74% is below 80-5=75, so it transitions back to normal
       const sample = baseSample({
         ram: {
@@ -199,7 +205,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       });
     });
 
-    it("transitions critical→warn when dropping below critical hysteresis band", () => {
+    it("transitions critical->warn when dropping below critical hysteresis band", () => {
       // critical threshold = 92, hysteresis = 92-5 = 87
       const sample = baseSample({
         ram: {
@@ -232,7 +238,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
     it("does not trigger warn from a single spike when window > 1", () => {
       // With sustainedSeconds=5 and sampleInterval=1, window=5
       // Pre-fill window with 4 normal samples, then one spike at 90%
-      // Average = (30+30+30+30+90)/5 = 42 → normal
+      // Average = (30+30+30+30+90)/5 = 42 -> normal
       const state: EvaluatorState = {
         ...makeInitialState(),
         cpuSamples: [30, 30, 30, 30],
@@ -245,7 +251,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         state,
         thresholds,
         dangerPatterns,
-        1, // 1-second interval → window of 5
+        1, // 1-second interval -> window of 5
       );
 
       expect(result.snapshot.cpu.state).toBe("normal");
@@ -254,7 +260,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
 
     it("triggers warn when sustained average crosses threshold", () => {
       // With sustainedSeconds=5 and sampleInterval=1, window=5
-      // Fill 5 samples all at 90% → average = 90 → exceeds warn=85
+      // Fill 5 samples all at 90% -> average = 90 -> exceeds warn=85
       const state: EvaluatorState = {
         ...makeInitialState(),
         cpuSamples: [90, 90, 90, 90],
@@ -267,7 +273,7 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         state,
         thresholds,
         dangerPatterns,
-        1, // 1-second interval → window of 5
+        1, // 1-second interval -> window of 5
       );
 
       expect(result.snapshot.cpu.state).toBe("warn");
@@ -276,13 +282,19 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
     });
 
     it("uses default interval (5s) to compute window of 1 (immediate)", () => {
-      // sustainedSeconds=5, sampleInterval=5 → window=1
-      // A single sample of 90% averages to 90 → exceeds warn=85
+      // sustainedSeconds=5, sampleInterval=5 -> window=1
+      // A single sample of 90% averages to 90 -> exceeds warn=85
       const sample = baseSample({
         cpu: { usagePercent: 90, coreCount: 8 },
       });
       const state = makeInitialState();
-      const result = evaluateThresholds(sample, state, thresholds, dangerPatterns, 5);
+      const result = evaluateThresholds(
+        sample,
+        state,
+        thresholds,
+        dangerPatterns,
+        5,
+      );
 
       expect(result.snapshot.cpu.state).toBe("warn");
       expect(result.nextState.cpu).toBe("warn");
@@ -356,7 +368,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const kubeTransitions = result.transitions.filter((t) => t.metric === "kubecontext");
+      const kubeTransitions = result.transitions.filter(
+        (t) => t.metric === "kubecontext",
+      );
       expect(kubeTransitions).toHaveLength(1);
       expect(kubeTransitions[0]).toEqual({
         metric: "kubecontext",
@@ -417,7 +431,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const containerTransitions = result.transitions.filter((t) => t.metric === "containers");
+      const containerTransitions = result.transitions.filter(
+        (t) => t.metric === "containers",
+      );
       expect(containerTransitions).toHaveLength(1);
       expect(containerTransitions[0]).toEqual({
         metric: "containers",
@@ -443,7 +459,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const containerTransitions = result.transitions.filter((t) => t.metric === "containers");
+      const containerTransitions = result.transitions.filter(
+        (t) => t.metric === "containers",
+      );
       expect(containerTransitions).toHaveLength(0);
     });
 
@@ -482,10 +500,14 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
       );
 
       expect(result.nextState.remote).toBe("critical");
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions.length).toBeGreaterThanOrEqual(1);
       // Should have a transition to critical for root
-      expect(remoteTransitions.some((t) => t.currentState === "critical")).toBe(true);
+      expect(
+        remoteTransitions.some((t) => t.currentState === "critical"),
+      ).toBe(true);
     });
 
     it("emits transition when isRemote changes", () => {
@@ -509,7 +531,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions).toHaveLength(1);
       expect(result.nextState.lastIsRemote).toBe(true);
     });
@@ -536,7 +560,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(remoteTransitions).toHaveLength(0);
     });
   });
@@ -564,17 +590,23 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
         sampleIntervalSeconds,
       );
 
-      const ramTransitions = result.transitions.filter((t) => t.metric === "ram");
-      const remoteTransitions = result.transitions.filter((t) => t.metric === "remote");
+      const ramTransitions = result.transitions.filter(
+        (t) => t.metric === "ram",
+      );
+      const remoteTransitions = result.transitions.filter(
+        (t) => t.metric === "remote",
+      );
       expect(ramTransitions).toHaveLength(1);
       expect(ramTransitions[0]!.currentState).toBe("warn");
       expect(remoteTransitions.length).toBeGreaterThanOrEqual(1);
-      expect(remoteTransitions.some((t) => t.currentState === "critical")).toBe(true);
+      expect(
+        remoteTransitions.some((t) => t.currentState === "critical"),
+      ).toBe(true);
     });
   });
 
   describe("Disk thresholds", () => {
-    it("transitions normal→warn at disk warn threshold", () => {
+    it("transitions normal->warn at disk warn threshold", () => {
       const sample = baseSample({
         disk: {
           ...baseSample().disk,
@@ -592,7 +624,9 @@ describe("ThresholdEvaluator — evaluateThresholds", () => {
 
       expect(result.snapshot.disk.state).toBe("warn");
       expect(result.nextState.disk).toBe("warn");
-      const diskTransitions = result.transitions.filter((t) => t.metric === "disk");
+      const diskTransitions = result.transitions.filter(
+        (t) => t.metric === "disk",
+      );
       expect(diskTransitions).toHaveLength(1);
     });
   });

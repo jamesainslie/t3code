@@ -90,11 +90,6 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
-import { LocalPresenceIcon } from "./LocalPresenceIcon";
-import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
-import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
-import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
-import { retainThreadDetailSubscription } from "../environments/runtime/service";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -2501,7 +2496,8 @@ interface SidebarProjectsContentProps {
   threadSortOrder: SidebarThreadSortOrder;
   projectGroupingMode: SidebarProjectGroupingMode;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
-  addProjectFlow: AddProjectFlow;
+  shouldShowProjectPathEntry: boolean;
+  handleStartAddProject: () => void;
   onOpenRemoteDialog: () => void;
   isElectron: boolean;
   isManualProjectSorting: boolean;
@@ -2543,7 +2539,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     threadSortOrder,
     projectGroupingMode,
     updateSettings,
-    addProjectFlow,
+    shouldShowProjectPathEntry,
+    handleStartAddProject,
     onOpenRemoteDialog,
     isElectron,
     isManualProjectSorting,
@@ -2659,6 +2656,22 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                   <button
                     type="button"
                     aria-label="Add remote project"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={onOpenRemoteDialog}
+                  />
+                }
+              >
+                <ServerIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">Add remote project</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                    aria-pressed={shouldShowProjectPathEntry}
                     className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={onOpenRemoteDialog}
                   />
@@ -3497,7 +3510,8 @@ export default function Sidebar() {
             threadSortOrder={sidebarThreadSortOrder}
             projectGroupingMode={sidebarProjectGroupingMode}
             updateSettings={updateSettings}
-            addProjectFlow={addProjectFlow}
+            shouldShowProjectPathEntry={shouldShowProjectPathEntry}
+            handleStartAddProject={handleStartAddProject}
             onOpenRemoteDialog={() => setRemoteDialogOpen(true)}
             isElectron={isElectron}
             isManualProjectSorting={isManualProjectSorting}

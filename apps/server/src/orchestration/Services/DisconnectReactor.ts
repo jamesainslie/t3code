@@ -20,6 +20,7 @@ export interface DisconnectReactorShape {
   readonly start: () => Effect.Effect<void, never, Scope.Scope>;
 }
 
-export class DisconnectReactor extends Context.Service<DisconnectReactor, DisconnectReactorShape>()(
-  "t3/orchestration/Services/DisconnectReactor",
-) {}
+export class DisconnectReactor extends Context.Service<
+  DisconnectReactor,
+  DisconnectReactorShape
+>()("t3/orchestration/Services/DisconnectReactor") {}

@@ -851,35 +851,16 @@ async function ensureSavedEnvironmentConnection(
 
   // For SSH-tunneled environments, re-provision the tunnel before connecting.
   // The local port may have changed since the last session.
-  const hasSshConfig =
-    record.user !== "unknown" && typeof window !== "undefined" && window.desktopBridge;
-  if (hasSshConfig) {
-    const sshConfig = {
-      host: record.host,
-      user: record.user,
-      port: record.port,
-      projectId: record.projectId,
-      workspaceRoot: record.workspaceRoot,
-    };
+  if (record.sshConfig && typeof window !== "undefined" && window.desktopBridge) {
     try {
-      connectionLog({
-        level: "info",
-        source: "ensureConnection",
-        label: record.label,
-        message: `SSH: Re-provisioning tunnel for ${record.label}`,
-      });
       console.log(`[ssh-reconnect] Re-provisioning tunnel for ${record.label}...`);
-      const result = await window.desktopBridge!.sshConnect(sshConfig);
+      const result = await window.desktopBridge.sshConnect(record.sshConfig);
       const newWsBaseUrl = result.wsUrl.replace(/^ws/, "ws");
       const newHttpBaseUrl = result.httpBaseUrl;
       if (newWsBaseUrl !== record.wsBaseUrl || newHttpBaseUrl !== record.httpBaseUrl) {
-        connectionLog({
-          level: "info",
-          source: "ensureConnection",
-          label: record.label,
-          message: `SSH: Tunnel port changed — ws: ${record.wsBaseUrl} → ${newWsBaseUrl}`,
-        });
-        console.log(`[ssh-reconnect] Tunnel port changed: ${record.wsBaseUrl} → ${newWsBaseUrl}`);
+        console.log(
+          `[ssh-reconnect] Tunnel port changed: ${record.wsBaseUrl} → ${newWsBaseUrl}`,
+        );
         // Update the record with the new tunnel port
         record = {
           ...record,
@@ -899,42 +880,19 @@ async function ensureSavedEnvironmentConnection(
             httpBaseUrl: resolvedTarget.httpBaseUrl,
             credential: resolvedTarget.credential,
           });
-          await writeSavedEnvironmentBearerToken(record, bearerSession.sessionToken);
-          connectionLog({
-            level: "info",
-            source: "ensureConnection",
-            label: record.label,
-            message: `SSH: Bearer token refreshed`,
-          });
+          await writeSavedEnvironmentBearerToken(record.environmentId, bearerSession.sessionToken);
           console.log(`[ssh-reconnect] Bearer token refreshed for ${record.label}`);
           // Pass the fresh token to the connection
-          options = {
-            ...options,
-            bearerToken: bearerSession.sessionToken,
-            role: bearerSession.role,
-          };
+          options = { ...options, bearerToken: bearerSession.sessionToken, role: bearerSession.role };
         } catch (e) {
           console.warn(`[ssh-reconnect] Failed to refresh bearer token, using cached:`, e);
         }
       }
 
-      connectionLog({
-        level: "info",
-        source: "ensureConnection",
-        label: record.label,
-        message: `SSH: Tunnel ready`,
-      });
       console.log(`[ssh-reconnect] Tunnel ready for ${record.label}`);
     } catch (e) {
-      connectionLog({
-        level: "error",
-        source: "ensureConnection",
-        label: record.label,
-        message: `SSH: Tunnel failed — ${e instanceof Error ? e.message : String(e)}`,
-        detail: e,
-      });
       console.error(`[ssh-reconnect] Failed to re-provision tunnel for ${record.label}:`, e);
-      useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
+      useSavedEnvironmentRuntimeStore.getState().patch(record.environmentId, {
         connectionState: "error",
         lastError: `SSH tunnel failed: ${e instanceof Error ? e.message : String(e)}`,
         lastErrorAt: isoNow(),
@@ -946,7 +904,8 @@ async function ensureSavedEnvironmentConnection(
     }
   }
 
-  const bearerToken = options?.bearerToken ?? (await readSavedEnvironmentBearerToken(record));
+  const bearerToken =
+    options?.bearerToken ?? (await readSavedEnvironmentBearerToken(record.environmentId));
   if (!bearerToken) {
     useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
       authState: "requires-auth",
@@ -1254,18 +1213,8 @@ export async function addOrReconnectSavedEnvironment(input: {
   readonly pairingUrl?: string;
   readonly host?: string;
   readonly pairingCode?: string;
-  readonly sshConfig?: SshEnvironmentConfig;
-  readonly label?: string;
-  readonly projectId: string;
-}): Promise<{ record: SavedRemoteEnvironment; isReconnect: boolean }> {
-  connectionLog({
-    level: "info",
-    source: "addOrReconnect",
-    label: input.label ?? null,
-    message: `Starting add/reconnect flow`,
-  });
-
-  // 1. Resolve pairing target
+  readonly sshConfig?: SavedEnvironmentRecord["sshConfig"];
+}): Promise<SavedEnvironmentRecord> {
   const resolvedTarget = resolveRemotePairingTarget({
     ...(input.pairingUrl !== undefined ? { pairingUrl: input.pairingUrl } : {}),
     ...(input.host !== undefined ? { host: input.host } : {}),
@@ -1326,6 +1275,7 @@ export async function addOrReconnectSavedEnvironment(input: {
     httpBaseUrl: resolvedTarget.httpBaseUrl,
     createdAt: existingRecord?.createdAt ?? isoNow(),
     lastConnectedAt: isoNow(),
+    ...(input.sshConfig ? { sshConfig: input.sshConfig } : {}),
   };
 
   // 8. Persist
