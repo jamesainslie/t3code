@@ -50,6 +50,8 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
+import { FileDocsServiceLive } from "./projectFiles/Layers/FileDocsServiceLive";
+import { ProviderSessionReaperLive } from "./provider/Layers/ProviderSessionReaper";
 import { HostResourceMonitorLive } from "./hostResource/Layers/HostResourceMonitor";
 import { ResourceSamplerLive } from "./hostResource/Layers/ResourceSampler";
 import { ThresholdEvaluatorLive } from "./hostResource/Layers/ThresholdEvaluator";

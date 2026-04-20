@@ -15,16 +15,6 @@ import {
   HostResourceSubscribeInput,
 } from "./hostResource.ts";
 import {
-  HostResourceMonitorError,
-  HostResourceStreamEvent,
-  HostResourceSubscribeInput,
-} from "./hostResource";
-import {
-  HostResourceMonitorError,
-  HostResourceStreamEvent,
-  HostResourceSubscribeInput,
-} from "./hostResource";
-import {
   GitActionProgressEvent,
   GitCheckoutInput,
   GitCheckoutResult,
@@ -144,12 +134,16 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
 
+  // Server log stream
+  serverSubscribeLogStream: "server.subscribeLogStream",
+
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
+  subscribeProjectFileChanges: "subscribeProjectFileChanges",
   subscribeHostResources: "subscribeHostResources",
 } as const;
 
@@ -403,6 +397,27 @@ export const WsSubscribeHostResourcesRpc = Rpc.make(WS_METHODS.subscribeHostReso
   stream: true,
 });
 
+export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribeLogStream, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({
+    level: Schema.String,
+    message: Schema.String,
+    timestamp: Schema.String,
+  }),
+  error: Schema.Never,
+  stream: true,
+});
+
+export const WsSubscribeProjectFileChangesRpc = Rpc.make(
+  WS_METHODS.subscribeProjectFileChanges,
+  {
+    payload: ProjectFileWatchInput,
+    success: ProjectFileChangeEvent,
+    error: ProjectFileMonitorError,
+    stream: true,
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -437,11 +452,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
+  WsSubscribeProjectFileChangesRpc,
   WsSubscribeHostResourcesRpc,
-  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsOrchestrationSubscribeShellRpc,
+  WsOrchestrationSubscribeThreadRpc,
   WsServerSubscribeLogStreamRpc,
 );

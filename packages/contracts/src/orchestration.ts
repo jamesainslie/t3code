@@ -17,6 +17,7 @@ import {
   TrimmedString,
   TurnId,
 } from "./baseSchemas.ts";
+import { RemoteHost } from "./fork/remoteHost.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -145,15 +146,7 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
-export const RemoteHost = Schema.Struct({
-  host: TrimmedNonEmptyString,
-  user: TrimmedNonEmptyString,
-  port: Schema.optional(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(22))),
-  label: Schema.optional(TrimmedString),
-});
-export type RemoteHost = typeof RemoteHost.Type;
-
-export const OrchestrationProject = Schema.Struct({
+export const BaseOrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
@@ -413,6 +406,7 @@ export const BaseProjectCreateCommand = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   remoteHost: Schema.optional(RemoteHost),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   createdAt: IsoDateTime,
