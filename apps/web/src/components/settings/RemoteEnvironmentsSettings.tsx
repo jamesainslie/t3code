@@ -1,5 +1,14 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EnvironmentId, RemoteIdentityKey, SavedRemoteEnvironment } from "@t3tools/contracts";
+import {
+  AlertTriangleIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClipboardCopyIcon,
+  InfoIcon,
+  TrashIcon,
+  XCircleIcon,
+} from "lucide-react";
 
 import {
   type SavedEnvironmentConnectionState,
@@ -12,6 +21,11 @@ import {
   useConnectionLogStore,
   type ConnectionLogEntry,
 } from "~/environments/runtime";
+import {
+  type ConnectionLogEntry,
+  useConnectionLogStore,
+} from "~/environments/runtime/connectionLog";
+import { readSavedEnvironmentBearerToken } from "~/environments/runtime/catalog";
 import { RemoteConnectionIcon } from "../RemoteConnectionIcon";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
@@ -40,10 +54,90 @@ function formatRelativeTimeShort(isoString: string | null): string {
   return `${days}d ago`;
 }
 
+function formatLogTime(isoString: string): string {
+  const date = new Date(isoString);
+  return [
+    date.getHours().toString().padStart(2, "0"),
+    date.getMinutes().toString().padStart(2, "0"),
+    date.getSeconds().toString().padStart(2, "0"),
+  ].join(":");
+}
+
 const ROW_CLASSNAME = "border-t border-border/60 px-4 py-3 first:border-t-0 sm:px-5";
+
+// ---------- Debug state inspector ----------
+
+function DebugKeyValue({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex gap-2 text-[11px]">
+      <span className="shrink-0 text-muted-foreground/70">{label}:</span>
+      <span className="break-all font-mono text-foreground/80">{value ?? "null"}</span>
+    </div>
+  );
+}
+
+function DebugStateInspector({
+  record,
+  runtimeState,
+}: {
+  record: SavedRemoteEnvironment & { environmentId: EnvironmentId };
+  runtimeState: SavedEnvironmentRuntimeState;
+}) {
+  const [bearerStatus, setBearerStatus] = useState<"checking" | "present" | "missing">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    readSavedEnvironmentBearerToken(record.environmentId).then((token) => {
+      if (!cancelled) {
+        setBearerStatus(token ? "present" : "missing");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [record.environmentId]);
+
+  const handleDumpToConsole = useCallback(() => {
+    console.log("[debug] Remote environment dump:", {
+      record,
+      runtimeState,
+      bearerStatus,
+    });
+    toastManager.add({ type: "info", title: "Dumped to browser console" });
+  }, [record, runtimeState, bearerStatus]);
+
+  return (
+    <div className="space-y-1.5 border-t border-border/30 pt-2">
+      <DebugKeyValue label="Identity key" value={record.identityKey} />
+      <DebugKeyValue label="Environment ID" value={record.environmentId ?? "null"} />
+      <DebugKeyValue label="wsBaseUrl" value={record.wsBaseUrl} />
+      <DebugKeyValue label="httpBaseUrl" value={record.httpBaseUrl} />
+      <DebugKeyValue label="connectionState" value={runtimeState.connectionState} />
+      <DebugKeyValue label="authState" value={runtimeState.authState} />
+      <DebugKeyValue label="lastError" value={runtimeState.lastError} />
+      <DebugKeyValue label="lastErrorAt" value={runtimeState.lastErrorAt} />
+      <DebugKeyValue label="connectedAt" value={runtimeState.connectedAt} />
+      <DebugKeyValue label="disconnectedAt" value={runtimeState.disconnectedAt} />
+      <DebugKeyValue label="SSH host" value={record.host} />
+      <DebugKeyValue label="SSH user" value={record.user} />
+      <DebugKeyValue label="SSH port" value={String(record.port)} />
+      <DebugKeyValue label="projectId" value={record.projectId} />
+      <DebugKeyValue label="workspaceRoot" value={record.workspaceRoot} />
+      <DebugKeyValue label="Bearer token" value={bearerStatus} />
+      <div className="pt-1">
+        <Button size="xs" variant="outline" onClick={handleDumpToConsole}>
+          Dump to console
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Remote environment row ----------
 
 interface RemoteEnvironmentRowProps {
   readonly environmentId: EnvironmentId;
+  readonly record: SavedRemoteEnvironment & { environmentId: EnvironmentId };
   readonly label: string;
   readonly host: string;
   readonly user: string;
@@ -132,6 +226,7 @@ function DebugStateInspector({
 
 function RemoteEnvironmentRow({
   environmentId,
+  record,
   label,
   host,
   user,
@@ -148,7 +243,10 @@ function RemoteEnvironmentRow({
 }: RemoteEnvironmentRowProps) {
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
-  const [showDebug, setShowDebug] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const runtimeState = useSavedEnvironmentRuntimeStore(
+    (state) => state.byId[environmentId],
+  );
 
   return (
     <div className={ROW_CLASSNAME}>
@@ -169,8 +267,18 @@ function RemoteEnvironmentRow({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button size="xs" variant="ghost" onClick={() => setShowDebug((prev) => !prev)}>
-            {showDebug ? "Hide Debug" : "Debug"}
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => setDebugOpen((prev) => !prev)}
+            aria-label="Toggle debug info"
+          >
+            {debugOpen ? (
+              <ChevronDownIcon className="mr-1 size-3" />
+            ) : (
+              <ChevronRightIcon className="mr-1 size-3" />
+            )}
+            Debug
           </Button>
           {isConnected ? (
             <Button
@@ -201,8 +309,102 @@ function RemoteEnvironmentRow({
           </Button>
         </div>
       </div>
-      {showDebug ? <DebugStateInspector record={record} runtimeState={runtimeState} /> : null}
+      {debugOpen && runtimeState ? (
+        <DebugStateInspector record={record} runtimeState={runtimeState} />
+      ) : null}
     </div>
+  );
+}
+
+// ---------- Connection log viewer ----------
+
+const LOG_LEVEL_STYLES: Record<
+  ConnectionLogEntry["level"],
+  { icon: typeof InfoIcon; className: string }
+> = {
+  info: { icon: InfoIcon, className: "text-muted-foreground" },
+  warn: { icon: AlertTriangleIcon, className: "text-amber-500" },
+  error: { icon: XCircleIcon, className: "text-destructive" },
+};
+
+export function ConnectionLogViewer() {
+  const entries = useConnectionLogStore((state) => state.entries);
+  const clearLog = useConnectionLogStore((state) => state.clear);
+  const [filter, setFilter] = useState<"all" | "errors">("all");
+
+  const filtered = useMemo(() => {
+    const base = filter === "errors" ? entries.filter((e) => e.level === "error") : entries;
+    return [...base].reverse();
+  }, [entries, filter]);
+
+  const handleCopy = useCallback(() => {
+    const text = filtered
+      .map((e) => {
+        const ts = formatLogTime(e.timestamp);
+        const ctx = [e.label, e.identityKey].filter(Boolean).join(" ");
+        const prefix = ctx ? ` [${ctx}]` : "";
+        return `[${ts}] [${e.level}] [${e.source}]${prefix} ${e.message}`;
+      })
+      .join("\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      toastManager.add({ type: "info", title: "Connection log copied to clipboard" });
+    });
+  }, [filtered]);
+
+  return (
+    <SettingsSection title="Connection Log">
+      <div className="px-4 pt-3 pb-1 sm:px-5">
+        <div className="flex items-center gap-2">
+          <Button
+            size="xs"
+            variant={filter === "all" ? "default" : "outline"}
+            onClick={() => setFilter("all")}
+          >
+            All
+          </Button>
+          <Button
+            size="xs"
+            variant={filter === "errors" ? "default" : "outline"}
+            onClick={() => setFilter("errors")}
+          >
+            Errors only
+          </Button>
+          <div className="flex-1" />
+          <Button size="xs" variant="ghost" onClick={handleCopy} aria-label="Copy log to clipboard">
+            <ClipboardCopyIcon className="mr-1 size-3" />
+            Copy
+          </Button>
+          <Button size="xs" variant="ghost" onClick={clearLog} aria-label="Clear log">
+            <TrashIcon className="mr-1 size-3" />
+            Clear
+          </Button>
+        </div>
+      </div>
+      <div className="max-h-[300px] overflow-y-auto px-4 pt-1 pb-3 sm:px-5">
+        {filtered.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">No log entries.</p>
+        ) : (
+          <div className="space-y-0.5">
+            {filtered.map((entry) => {
+              const style = LOG_LEVEL_STYLES[entry.level];
+              const Icon = style.icon;
+              return (
+                <div key={entry.id} className={`flex items-start gap-1.5 text-[11px] ${style.className}`}>
+                  <Icon className="mt-0.5 size-3 shrink-0" />
+                  <span className="shrink-0 font-mono text-muted-foreground/60">
+                    {formatLogTime(entry.timestamp)}
+                  </span>
+                  <span className="shrink-0 font-mono text-muted-foreground/80">
+                    [{entry.source}]
+                  </span>
+                  <span className="break-all">{entry.message}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -251,6 +453,7 @@ export function RemoteEnvironmentsSectionView({
         <RemoteEnvironmentRow
           key={record.identityKey}
           environmentId={record.environmentId!}
+          record={record as SavedRemoteEnvironment & { environmentId: EnvironmentId }}
           label={record.label}
           host={record.host}
           user={record.user}

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+const MAX_LOG_ENTRIES = 500;
+
 export interface ConnectionLogEntry {
   readonly id: string;
   readonly timestamp: string;
@@ -11,52 +13,53 @@ export interface ConnectionLogEntry {
   readonly detail?: unknown;
 }
 
-const MAX_ENTRIES = 500;
-
-interface ConnectionLogState {
+interface ConnectionLogStore {
   readonly entries: ReadonlyArray<ConnectionLogEntry>;
-  readonly append: (entry: ConnectionLogEntry) => void;
+  readonly push: (entry: Omit<ConnectionLogEntry, "id" | "timestamp">) => void;
   readonly clear: () => void;
-  readonly reset: () => void;
 }
 
-export const useConnectionLogStore = create<ConnectionLogState>()((set) => ({
+let counter = 0;
+
+export const useConnectionLogStore = create<ConnectionLogStore>()((set) => ({
   entries: [],
-  append: (entry) =>
+  push: (entry) =>
     set((state) => {
-      const next = [entry, ...state.entries];
-      if (next.length > MAX_ENTRIES) {
-        next.length = MAX_ENTRIES;
+      const newEntry: ConnectionLogEntry = {
+        ...entry,
+        id: String(++counter),
+        timestamp: new Date().toISOString(),
+      };
+      const next = [...state.entries, newEntry];
+      if (next.length > MAX_LOG_ENTRIES) {
+        return { entries: next.slice(next.length - MAX_LOG_ENTRIES) };
       }
       return { entries: next };
     }),
   clear: () => set({ entries: [] }),
-  reset: () => set({ entries: [] }),
 }));
 
-let idCounter = 0;
-
 /**
- * Append a structured log entry to the connection log ring buffer.
+ * Push a connection lifecycle log entry. Convenience wrapper around the store.
  */
-export function connectionLog(input: {
-  readonly level: ConnectionLogEntry["level"];
-  readonly source: string;
-  readonly identityKey?: string | null;
-  readonly label?: string | null;
-  readonly message: string;
-  readonly detail?: unknown;
-}): void {
-  idCounter += 1;
-  const entry: ConnectionLogEntry = {
-    id: `clog-${Date.now()}-${idCounter}`,
-    timestamp: new Date().toISOString(),
-    level: input.level,
-    source: input.source,
-    identityKey: input.identityKey ?? null,
-    label: input.label ?? null,
-    message: input.message,
-    detail: input.detail,
-  };
-  useConnectionLogStore.getState().append(entry);
+export function connectionLog(
+  level: "info" | "warn" | "error",
+  source: string,
+  message: string,
+  opts?: { identityKey?: string; label?: string; detail?: unknown },
+): void {
+  useConnectionLogStore.getState().push({
+    level,
+    source,
+    identityKey: opts?.identityKey ?? null,
+    label: opts?.label ?? null,
+    message,
+    ...(opts?.detail !== undefined ? { detail: opts.detail } : {}),
+  });
+}
+
+/** @internal Exported for testing only. */
+export function resetConnectionLogForTests(): void {
+  counter = 0;
+  useConnectionLogStore.setState({ entries: [] });
 }
