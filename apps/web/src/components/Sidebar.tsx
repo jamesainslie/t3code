@@ -90,6 +90,11 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
+import { LocalPresenceIcon } from "./LocalPresenceIcon";
+import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
+import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
+import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
+import { retainThreadDetailSubscription } from "../environments/runtime/service";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
