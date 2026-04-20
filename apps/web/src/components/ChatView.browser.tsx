@@ -204,6 +204,7 @@ function createMockEnvironmentApi(input: {
       browse: input.browse,
     },
     git: {} as EnvironmentApi["git"],
+    projectFiles: {} as EnvironmentApi["projectFiles"],
     orchestration: {
       dispatchCommand: input.dispatchCommand,
       getTurnDiff: (() => {

@@ -20,8 +20,14 @@ import type {
 } from "./git.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type {
+  ProjectFileChangeEvent,
+  ProjectFileWatchInput,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
+  ProjectUpdateFrontmatterInput,
+  ProjectUpdateFrontmatterResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "./project.ts";
@@ -291,6 +297,19 @@ export interface EnvironmentApi {
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+  };
+  projectFiles: {
+    readFile: (input: ProjectReadFileInput) => Promise<ProjectReadFileResult>;
+    updateFrontmatter: (
+      input: ProjectUpdateFrontmatterInput,
+    ) => Promise<ProjectUpdateFrontmatterResult>;
+    onFileChange: (
+      input: ProjectFileWatchInput,
+      callback: (event: ProjectFileChangeEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;

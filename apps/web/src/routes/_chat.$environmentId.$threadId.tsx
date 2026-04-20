@@ -19,11 +19,17 @@ import {
   stripDiffSearchParams,
 } from "../diffRouteSearch";
 import {
-  type PreviewRouteSearch,
-  parsePreviewRouteSearch,
-  stripPreviewSearchParams,
-} from "../previewRouteSearch";
-import { useDocsAutoSurface } from "../hooks/useDocsAutoSurface";
+  type DocsRouteSearch,
+  parseDocsRouteSearch,
+  stripDocsSearchParams,
+} from "../docsRouteSearch";
+import {
+  DocsPanelHeaderSkeleton,
+  DocsPanelLoadingState,
+  DocsPanelShell,
+  type DocsPanelMode,
+} from "../components/DocsPanelShell";
+import { useDocsChangeToast } from "../hooks/useDocsChangeToast";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { selectEnvironmentState, selectProjectByRef, selectThreadExistsByRef, useStore } from "../store";
@@ -37,6 +43,23 @@ const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
 const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 208;
+
+const DocsPanel = lazy(() => import("../components/DocsPanel"));
+const DOCS_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_docs_sidebar_width";
+const DOCS_INLINE_DEFAULT_WIDTH = "clamp(24rem,40vw,40rem)";
+const DOCS_INLINE_SIDEBAR_MIN_WIDTH = 22 * 16;
+
+const DocsLoadingFallback = (props: { mode: DocsPanelMode }) => (
+  <DocsPanelShell mode={props.mode} header={<DocsPanelHeaderSkeleton />}>
+    <DocsPanelLoadingState label="Loading docs viewer..." />
+  </DocsPanelShell>
+);
+
+const LazyDocsPanel = (props: { mode: DocsPanelMode }) => (
+  <Suspense fallback={<DocsLoadingFallback mode={props.mode} />}>
+    <DocsPanel mode={props.mode} />
+  </Suspense>
+);
 
 const DiffLoadingFallback = (props: { mode: DiffPanelMode }) => {
   return (
@@ -174,18 +197,21 @@ function ChatThreadRouteView() {
   const serverThreadStarted = threadHasStarted(serverThread);
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
-  const previewPath = diffOpen ? undefined : search.preview;
-  const previewOpen = previewPath != null && previewPath.length > 0;
-  const activeProjectId = serverThread?.projectId ?? null;
+  const docsOpen = search.docs === "1";
   const activeProject = useStore((store) =>
-    activeProjectId && threadRef
+    serverThread
       ? selectProjectByRef(store, {
-          environmentId: threadRef.environmentId,
-          projectId: activeProjectId,
+          environmentId: serverThread.environmentId,
+          projectId: serverThread.projectId,
         })
       : undefined,
   );
-  const activeCwd = serverThread?.worktreePath ?? activeProject?.cwd;
+  const activeCwd = serverThread?.worktreePath ?? activeProject?.cwd ?? null;
+  useDocsChangeToast({
+    environmentId: threadRef?.environmentId ?? null,
+    cwd: activeCwd,
+    openDocsPath: docsOpen ? (search.docsPath ?? null) : null,
+  });
   const shouldUseDiffSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const currentThreadKey = threadRef ? `${threadRef.environmentId}:${threadRef.threadId}` : null;
   const [diffPanelMountState, setDiffPanelMountState] = useState(() => ({
@@ -231,46 +257,28 @@ function ChatThreadRouteView() {
       },
     });
   }, [markDiffOpened, navigate, threadRef]);
-  const closePreview = useCallback(() => {
-    if (!threadRef) {
-      return;
-    }
+  const closeDocs = useCallback(() => {
+    if (!threadRef) return;
     void navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
-      search: (previous) => stripPreviewSearchParams(previous),
+      search: (previous) => {
+        const rest = stripDocsSearchParams(previous);
+        return { ...rest };
+      },
     });
   }, [navigate, threadRef]);
-
-  const [touchedPaths, setTouchedPaths] = useState<readonly string[] | undefined>(undefined);
-  const rpcClient = useMemo(() => {
-    if (!threadRef) return null;
-    return readEnvironmentConnection(threadRef.environmentId)?.client ?? null;
-  }, [threadRef]);
-
-  const onAutoSurface = useCallback(
-    (relativePath: string, paths: readonly string[]) => {
-      if (!threadRef) return;
-      setTouchedPaths(paths);
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
-        search: (previous) => {
-          const rest = stripPreviewSearchParams(previous);
-          return { ...rest, preview: relativePath };
-        },
-      });
-    },
-    [navigate, threadRef],
-  );
-
-  useDocsAutoSurface({
-    rpcClient,
-    cwd: activeCwd ?? null,
-    threadId: threadRef?.threadId ?? null,
-    previewOpen,
-    onAutoSurface,
-  });
+  const openDocs = useCallback(() => {
+    if (!threadRef) return;
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: (previous) => ({
+        ...previous,
+        docs: "1" as const,
+      }),
+    });
+  }, [navigate, threadRef]);
 
   useEffect(() => {
     if (!threadRef || !bootstrapComplete) {
@@ -312,55 +320,48 @@ function ChatThreadRouteView() {
   const rightPanelOpen = diffOpen || previewOpen;
 
   if (!shouldUseDiffSheet) {
+    const showDocsSidebar = docsOpen && !diffOpen;
+
     return (
       <>
-        <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
+        <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
           <ChatView
             environmentId={threadRef.environmentId}
             threadId={threadRef.threadId}
             onDiffPanelOpen={markDiffOpened}
-            onPreviewFile={openPreview}
-            reserveTitleBarControlInset={!rightPanelOpen}
+            reserveTitleBarControlInset={!diffOpen && !docsOpen}
             routeKind="server"
           />
         </SidebarInset>
-        {previewOpen && activeCwd ? (
-          <SidebarProvider
-            defaultOpen={false}
-            open={previewOpen}
-            onOpenChange={(open) => {
-              if (!open) closePreview();
-            }}
-            className="w-auto min-h-0 flex-none bg-transparent"
-            style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
-          >
-            <Sidebar
-              side="right"
-              collapsible="offcanvas"
-              className="border-l border-border bg-card text-foreground"
-              resizable={{
-                minWidth: DIFF_INLINE_SIDEBAR_MIN_WIDTH,
-                storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
-              }}
-            >
-              <DocPreviewPanel
-                relativePath={previewPath}
-                cwd={activeCwd}
-                environmentId={threadRef.environmentId}
-                mode="sidebar"
-                onClose={closePreview}
-                touchedPaths={touchedPaths}
-              />
-              <SidebarRail />
-            </Sidebar>
-          </SidebarProvider>
-        ) : (
+        {shouldRenderDiffContent && (
           <DiffPanelInlineSidebar
             diffOpen={diffOpen}
             onCloseDiff={closeDiff}
             onOpenDiff={openDiff}
             renderDiffContent={shouldRenderDiffContent}
           />
+        )}
+        {showDocsSidebar && (
+          <SidebarProvider
+            defaultOpen={false}
+            open={docsOpen}
+            onOpenChange={(open) => (open ? openDocs() : closeDocs())}
+            className="w-auto min-h-0 flex-none bg-transparent"
+            style={{ "--sidebar-width": DOCS_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+          >
+            <Sidebar
+              side="right"
+              collapsible="offcanvas"
+              className="border-l border-border bg-card text-foreground"
+              resizable={{
+                minWidth: DOCS_INLINE_SIDEBAR_MIN_WIDTH,
+                storageKey: DOCS_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
+              }}
+            >
+              <LazyDocsPanel mode="sidebar" />
+              <SidebarRail />
+            </Sidebar>
+          </SidebarProvider>
         )}
       </>
     );
@@ -373,26 +374,15 @@ function ChatThreadRouteView() {
           environmentId={threadRef.environmentId}
           threadId={threadRef.threadId}
           onDiffPanelOpen={markDiffOpened}
-          onPreviewFile={openPreview}
           routeKind="server"
         />
       </SidebarInset>
-      {previewOpen && activeCwd ? (
-        <RightPanelSheet open={previewOpen} onClose={closePreview}>
-          <DocPreviewPanel
-            relativePath={previewPath}
-            cwd={activeCwd}
-            environmentId={threadRef.environmentId}
-            mode="sheet"
-            onClose={closePreview}
-            touchedPaths={touchedPaths}
-          />
-        </RightPanelSheet>
-      ) : (
-        <RightPanelSheet open={diffOpen} onClose={closeDiff}>
-          {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
-        </RightPanelSheet>
-      )}
+      <RightPanelSheet open={diffOpen} onClose={closeDiff}>
+        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
+      </RightPanelSheet>
+      <RightPanelSheet open={docsOpen && !diffOpen} onClose={closeDocs}>
+        <LazyDocsPanel mode="sheet" />
+      </RightPanelSheet>
     </>
   );
 }
@@ -400,10 +390,10 @@ function ChatThreadRouteView() {
 export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
   validateSearch: (search) => ({
     ...parseDiffRouteSearch(search),
-    ...parsePreviewRouteSearch(search),
+    ...parseDocsRouteSearch(search),
   }),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch & PreviewRouteSearch>(["diff", "preview"])],
+    middlewares: [retainSearchParams<DiffRouteSearch & DocsRouteSearch>(["diff", "docs"])],
   },
   component: ChatThreadRouteView,
 });

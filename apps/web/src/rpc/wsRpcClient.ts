@@ -77,6 +77,15 @@ export interface WsRpcClient {
       options?: StreamSubscriptionOptions,
     ) => () => void;
   };
+  readonly projectFiles: {
+    readonly readFile: RpcUnaryMethod<typeof WS_METHODS.projectsReadFile>;
+    readonly updateFrontmatter: RpcUnaryMethod<typeof WS_METHODS.projectsUpdateFrontmatter>;
+    readonly onFileChange: (
+      input: RpcInput<typeof WS_METHODS.subscribeProjectFileChanges>,
+      listener: (event: ProjectFileChangeEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+  };
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
   };
@@ -177,6 +186,28 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       onFileChanges: (input, listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeProjectFileChanges](input),
+          listener,
+          options,
+        ),
+    },
+    projectFiles: {
+      readFile: (input) =>
+        transport.request((client) =>
+          // Tagged-struct errors aren't Error subclasses; cast for transport compatibility
+          client[WS_METHODS.projectsReadFile](input) as Effect.Effect<any, Error, never>,
+        ),
+      updateFrontmatter: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsUpdateFrontmatter](input) as Effect.Effect<any, Error, never>,
+        ),
+      onFileChange: (input, listener, options) =>
+        transport.subscribe(
+          (client) =>
+            client[WS_METHODS.subscribeProjectFileChanges](input) as Stream.Stream<
+              any,
+              Error,
+              never
+            >,
           listener,
           options,
         ),
