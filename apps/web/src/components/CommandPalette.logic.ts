@@ -162,12 +162,14 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
           thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
         ),
         icon: input.icon,
+      },
+      leadingContent !== undefined ? { titleLeadingContent: leadingContent } : {},
+      trailingContent !== undefined ? { titleTrailingContent: trailingContent } : {},
+      {
         run: async () => {
           await input.runThread(thread);
         },
       },
-      leadingContent !== undefined ? { titleLeadingContent: leadingContent } : {},
-      trailingContent !== undefined ? { titleTrailingContent: trailingContent } : {},
     ) satisfies CommandPaletteActionItem;
   });
 }

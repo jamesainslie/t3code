@@ -28,6 +28,7 @@
     "CA_BUNDLE",
     "CURL_CA_BUNDLE"
   ],
+  "globalPassThroughEnv": ["PATHEXT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

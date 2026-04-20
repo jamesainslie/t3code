@@ -552,6 +552,7 @@ describe("wsApi", () => {
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       diffWordWrap: true,
+      favorites: [],
       sidebarProjectGroupingMode: "repository_path" as const,
       sidebarProjectGroupingOverrides: {
         "environment-local:/tmp/project": "separate" as const,
@@ -609,6 +610,7 @@ describe("wsApi", () => {
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       diffWordWrap: true,
+      favorites: [],
       sidebarProjectGroupingMode: "repository_path" as const,
       sidebarProjectGroupingOverrides: {
         "environment-local:/tmp/project": "separate" as const,
