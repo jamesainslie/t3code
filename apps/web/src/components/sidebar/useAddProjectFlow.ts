@@ -15,7 +15,7 @@ import { isLinuxPlatform, newCommandId, newProjectId } from "../../lib/utils";
 import { useSettings } from "~/hooks/useSettings";
 import type { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { toastManager } from "../ui/toast";
-import { upsertOptimisticProject, useStore } from "../../store";
+import { useStore } from "../../store";
 import type { Project } from "../../types";
 
 export interface UseAddProjectFlowParams {

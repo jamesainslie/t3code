@@ -102,22 +102,20 @@ export function MermaidCodeBlock({
           title={copied ? "Copied" : "Copy code"}
           aria-label={copied ? "Copied" : "Copy code"}
         >
-          {copied ? (
-            <CheckIcon className="size-3" />
-          ) : (
-            <CopyIcon className="size-3" />
-          )}
+          {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
         </button>
       </div>
 
       {activeTab === "preview" ? (
-        <MermaidDiagram
-          source={code}
-          theme={theme}
-          onError={handleDiagramError}
-        />
+        <MermaidDiagram source={code} theme={theme} onError={handleDiagramError} />
       ) : (
-        <Suspense fallback={<pre><code>{code}</code></pre>}>
+        <Suspense
+          fallback={
+            <pre>
+              <code>{code}</code>
+            </pre>
+          }
+        >
           <SuspenseShikiCodeBlock
             className="language-mermaid"
             code={code}

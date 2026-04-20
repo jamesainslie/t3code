@@ -56,8 +56,6 @@ import type {
 } from "./orchestration.ts";
 import type {
   ClientOrchestrationCommand,
-  OrchestrationEvent,
-  OrchestrationReadModel,
   OrchestrationShellStreamItem,
   OrchestrationThreadStreamItem,
 } from "./fork/orchestration.ts";
@@ -74,6 +72,10 @@ export interface ContextMenuItem<T extends string = string> {
   disabled?: boolean;
   children?: readonly ContextMenuItem<T>[];
 }
+
+export type PickFolderOptions = {
+  readonly initialPath?: string;
+};
 
 export type DesktopUpdateStatus =
   | "disabled"
@@ -154,6 +156,22 @@ export interface PersistedSavedEnvironmentRecord {
   createdAt: string;
   lastConnectedAt: string | null;
   sshConfig?: SshEnvironmentConfig | undefined;
+}
+
+export interface SavedRemoteEnvironment {
+  readonly identityKey: RemoteIdentityKey;
+  readonly host: string;
+  readonly user: string;
+  readonly port: number;
+  readonly workspaceRoot: string;
+  readonly projectId: string;
+  readonly environmentId: EnvironmentId | null;
+  readonly label: string;
+  readonly wsBaseUrl: string | null;
+  readonly httpBaseUrl: string | null;
+  readonly createdAt: string;
+  readonly lastConnectedAt: string | null;
+  readonly sshConfig?: SshEnvironmentConfig | undefined;
 }
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";

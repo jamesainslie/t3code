@@ -56,10 +56,7 @@ describe("HostResourceMonitor", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const monitor = yield* HostResourceMonitor;
-          const events = yield* monitor.subscribe("/tmp").pipe(
-            Stream.take(1),
-            Stream.runCollect,
-          );
+          const events = yield* monitor.subscribe("/tmp").pipe(Stream.take(1), Stream.runCollect);
           return Array.from(events);
         }),
       ).pipe(Effect.provide(testLayer)),
@@ -90,8 +87,7 @@ describe("HostResourceMonitor", () => {
     ];
 
     const mockSamplerLayer = Layer.succeed(ResourceSampler, {
-      collectSample: () =>
-        Effect.sync(() => samples[Math.min(callCount++, samples.length - 1)]!),
+      collectSample: () => Effect.sync(() => samples[Math.min(callCount++, samples.length - 1)]!),
     });
 
     const testLayer = makeTestLayer(mockSamplerLayer);
@@ -133,10 +129,7 @@ describe("HostResourceMonitor", () => {
         Effect.gen(function* () {
           const monitor = yield* HostResourceMonitor;
           // Take only 1 — the snapshot. The stream should not produce transitions.
-          const events = yield* monitor.subscribe("/tmp").pipe(
-            Stream.take(1),
-            Stream.runCollect,
-          );
+          const events = yield* monitor.subscribe("/tmp").pipe(Stream.take(1), Stream.runCollect);
           return Array.from(events);
         }),
       ).pipe(Effect.provide(testLayer)),

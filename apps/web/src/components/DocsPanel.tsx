@@ -1,4 +1,3 @@
-import { scopeThreadRef } from "@t3tools/client-runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
   type MdreviewAdapters,
@@ -18,24 +17,13 @@ import { useDocsFileState } from "../lib/docsFileState";
 import { selectProjectByRef, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
-import {
-  type DocsMode,
-  parseDocsRouteSearch,
-  stripDocsSearchParams,
-} from "../docsRouteSearch";
+import { type DocsMode, parseDocsRouteSearch, stripDocsSearchParams } from "../docsRouteSearch";
 import { DocsFileTree } from "./DocsFileTree";
-import {
-  DocsPanelLoadingState,
-  DocsPanelShell,
-  type DocsPanelMode,
-} from "./DocsPanelShell";
+import { DocsPanelLoadingState, DocsPanelShell, type DocsPanelMode } from "./DocsPanelShell";
 
 // ── RPC bridge ────────────────────────────────────────────────────────
 
-function buildRpcClientForEnvironment(
-  environmentId: EnvironmentId,
-  cwd: string,
-): RpcClient | null {
+function buildRpcClientForEnvironment(environmentId: EnvironmentId): RpcClient | null {
   const api = readEnvironmentApi(environmentId);
   if (!api) return null;
 
@@ -44,18 +32,14 @@ function buildRpcClientForEnvironment(
       if (method === "projects.readFile") {
         return api.projectFiles.readFile(input as never) as never;
       }
+      if (method === "projects.writeFile") {
+        return api.projects.writeFile(input as never) as never;
+      }
       throw new Error(`Unsupported RPC method: ${method}`);
     },
-    stream: <I, O>(
-      method: string,
-      input: I,
-      handler: (event: O) => void,
-    ): (() => void) => {
+    stream: <I, O>(method: string, input: I, handler: (event: O) => void): (() => void) => {
       if (method === "subscribeProjectFileChanges") {
-        return api.projectFiles.onFileChange(
-          input as never,
-          handler as never,
-        );
+        return api.projectFiles.onFileChange(input as never, handler as never);
       }
       throw new Error(`Unsupported RPC stream: ${method}`);
     },
@@ -71,11 +55,16 @@ function useAdapters(
 ): MdreviewAdapters | null {
   return useMemo(() => {
     if (!environmentId || !cwd) return null;
+    if (typeof localStorage === "undefined") return null;
 
-    const rpcClient = buildRpcClientForEnvironment(environmentId, cwd);
+    const rpcClient = buildRpcClientForEnvironment(environmentId);
     if (!rpcClient) return null;
 
-    const file = new T3FileAdapter({ client: rpcClient, cwd });
+    const file = new T3FileAdapter({
+      client: rpcClient,
+      cwd,
+      defaultWatchGlobs: ["**/*.md", "**/*.markdown"],
+    });
     const storage = new T3StorageAdapter({ backing: localStorage });
     const messaging = new T3NullMessagingAdapter();
 
@@ -86,7 +75,8 @@ function useAdapters(
 // ── File content loader ───────────────────────────────────────────────
 
 function useFileContent(
-  adapters: MdreviewAdapters | null,
+  environmentId: EnvironmentId | null,
+  cwd: string | null,
   selectedPath: string | null,
 ): { content: string | null; isLoading: boolean } {
   const [content, setContent] = useState<string | null>(null);
@@ -94,7 +84,8 @@ function useFileContent(
   const loadIdRef = useRef(0);
 
   useEffect(() => {
-    if (!adapters || !selectedPath) {
+    const api = environmentId ? readEnvironmentApi(environmentId) : undefined;
+    if (!api || !cwd || !selectedPath) {
       setContent(null);
       setIsLoading(false);
       return;
@@ -103,10 +94,10 @@ function useFileContent(
     const loadId = ++loadIdRef.current;
     setIsLoading(true);
 
-    adapters.file.readFile(selectedPath).then(
-      (text: string) => {
+    api.projectFiles.readFile({ cwd, relativePath: selectedPath }).then(
+      (result) => {
         if (loadId === loadIdRef.current) {
-          setContent(text);
+          setContent(result.contents);
           setIsLoading(false);
         }
       },
@@ -119,25 +110,41 @@ function useFileContent(
     );
 
     // Re-fetch on file change
-    const unwatch = adapters.file.watch(selectedPath, () => {
-      const refreshId = ++loadIdRef.current;
-      adapters.file.readFile(selectedPath).then(
-        (text: string) => {
-          if (refreshId === loadIdRef.current) {
-            setContent(text);
-          }
-        },
-        () => {
-          // Ignore read errors on refresh
-        },
-      );
-    });
+    const unwatch = api.projectFiles.onFileChange(
+      { cwd, globs: ["**/*.md", "**/*.markdown"], ignoreGlobs: [] },
+      (event) => {
+        if (
+          !(
+            (event._tag === "changed" || event._tag === "added" || event._tag === "removed") &&
+            event.relativePath === selectedPath
+          )
+        ) {
+          return;
+        }
+
+        const refreshId = ++loadIdRef.current;
+        void api.projectFiles.readFile({ cwd, relativePath: selectedPath }).then(
+          (result) => {
+            if (refreshId === loadIdRef.current) {
+              setContent(result.contents);
+            }
+          },
+          () => {
+            // Ignore read errors on refresh
+          },
+        );
+      },
+    );
+
+    const invalidateLoad = () => {
+      ++loadIdRef.current;
+    };
 
     return () => {
-      ++loadIdRef.current;
+      invalidateLoad();
       unwatch();
     };
-  }, [adapters, selectedPath]);
+  }, [environmentId, cwd, selectedPath]);
 
   return { content, isLoading };
 }
@@ -180,11 +187,12 @@ export default function DocsPanel({ mode = "inline" }: DocsPanelProps) {
   const activeCwd = activeThread?.worktreePath ?? activeProject?.cwd ?? null;
   const environmentId = activeThread?.environmentId ?? null;
 
-  // File state + adapters
+  // File state
   const { files, isPending } = useDocsFileState({ environmentId, cwd: activeCwd });
   const adapters = useAdapters(environmentId, activeCwd);
   const { content, isLoading } = useFileContent(
-    docsMode === "preview" ? adapters : null,
+    docsMode === "preview" ? environmentId : null,
+    activeCwd,
     selectedPath,
   );
 
@@ -245,9 +253,7 @@ export default function DocsPanel({ mode = "inline" }: DocsPanelProps) {
           type="button"
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/90 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
           onClick={toggleMode}
-          aria-label={
-            showBrowser ? "Switch to preview mode" : "Switch to browser mode"
-          }
+          aria-label={showBrowser ? "Switch to preview mode" : "Switch to browser mode"}
           title={showBrowser ? "Preview" : "Browse files"}
         >
           {showBrowser ? (
@@ -284,21 +290,20 @@ export default function DocsPanel({ mode = "inline" }: DocsPanelProps) {
       <DocsPanelLoadingState label="Loading file list..." />
     ) : (
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
-        <DocsFileTree
-          files={files}
-          selectedPath={selectedPath}
-          onSelectFile={selectFile}
-        />
+        <DocsFileTree files={files} selectedPath={selectedPath} onSelectFile={selectFile} />
       </div>
     );
   } else if (isLoading || content === null) {
     body = <DocsPanelLoadingState label="Loading document..." />;
+  } else if (!adapters) {
+    body = <DocsPanelLoadingState label="Preparing renderer..." />;
   } else {
     body = (
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <MdreviewRenderer
           source={content}
-          adapters={adapters!}
+          adapters={adapters}
+          filePath={selectedPath}
           theme={resolvedTheme}
         />
       </div>

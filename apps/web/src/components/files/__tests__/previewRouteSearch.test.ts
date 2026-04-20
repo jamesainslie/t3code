@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePreviewRouteSearch, stripPreviewSearchParams } from "../../../previewRouteSearch";
+import {
+  closePreviewRouteSearch,
+  parsePreviewRouteSearch,
+  stripPreviewSearchParams,
+} from "../../../previewRouteSearch";
 
 describe("parsePreviewRouteSearch", () => {
   it("parses a valid preview param", () => {
@@ -47,5 +51,18 @@ describe("stripPreviewSearchParams", () => {
     });
 
     expect(result).toEqual({ diff: "1" });
+  });
+});
+
+describe("closePreviewRouteSearch", () => {
+  it("explicitly clears preview so retained search middleware does not restore it", () => {
+    const result = closePreviewRouteSearch({
+      preview: "docs/README.md",
+      diff: "1",
+      other: "value",
+    });
+
+    expect(result).toEqual({ diff: "1", other: "value", preview: undefined });
+    expect(result).toHaveProperty("preview", undefined);
   });
 });

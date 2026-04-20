@@ -2,12 +2,7 @@ import { createRequire } from "node:module";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { PtyAdapter } from "../Services/PTY.ts";
-import {
-  PtySpawnError,
-  type PtyAdapterShape,
-  type PtyExitEvent,
-  type PtyProcess,
-} from "../Services/PTY.ts";
+import { type PtyAdapterShape, type PtyExitEvent, type PtyProcess } from "../Services/PTY.ts";
 
 let didEnsureSpawnHelperExecutable = false;
 

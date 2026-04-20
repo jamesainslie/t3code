@@ -1,10 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import {
-  ChevronRightIcon,
-  FileTextIcon,
-  FolderIcon,
-  FolderOpenIcon,
-} from "lucide-react";
+import { ChevronRightIcon, FileTextIcon, FolderIcon, FolderOpenIcon } from "lucide-react";
 import type { ProjectFileEntry } from "@t3tools/contracts";
 import { buildDocsFileTree, type DocsTreeNode } from "~/lib/docsFileTree";
 import { cn } from "~/lib/utils";
@@ -15,9 +10,7 @@ interface DocsFileTreeProps {
   onSelectFile: (relativePath: string) => void;
 }
 
-export const DocsFileTree = memo(function DocsFileTree(
-  props: DocsFileTreeProps,
-) {
+export const DocsFileTree = memo(function DocsFileTree(props: DocsFileTreeProps) {
   const { files, selectedPath, onSelectFile } = props;
   const tree = useMemo(() => buildDocsFileTree(files), [files]);
   const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({});
@@ -55,8 +48,7 @@ export const DocsFileTree = memo(function DocsFileTree(
               {node.name}
             </span>
           </button>
-          {isExpanded &&
-            node.children.map((child) => renderNode(child, depth + 1))}
+          {isExpanded && node.children.map((child) => renderNode(child, depth + 1))}
         </div>
       );
     }
@@ -78,9 +70,7 @@ export const DocsFileTree = memo(function DocsFileTree(
         title={node.oversized ? "File too large to preview" : node.path}
       >
         <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
-        <span className="truncate font-mono text-[11px] text-foreground/90">
-          {node.name}
-        </span>
+        <span className="truncate font-mono text-[11px] text-foreground/90">{node.name}</span>
       </button>
     );
   };
@@ -93,9 +83,5 @@ export const DocsFileTree = memo(function DocsFileTree(
     );
   }
 
-  return (
-    <div className="space-y-0.5 py-1">
-      {tree.map((node) => renderNode(node, 0))}
-    </div>
-  );
+  return <div className="space-y-0.5 py-1">{tree.map((node) => renderNode(node, 0))}</div>;
 });

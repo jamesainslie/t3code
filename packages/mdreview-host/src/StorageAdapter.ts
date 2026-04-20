@@ -23,8 +23,7 @@ export interface T3StorageAdapterOptions {
 const DEFAULT_NAMESPACE = "t3code:mdreview:";
 const LOCAL_SEGMENT = "local:";
 
-const toKeyList = (keys: string | string[]): string[] =>
-  Array.isArray(keys) ? keys : [keys];
+const toKeyList = (keys: string | string[]): string[] => (Array.isArray(keys) ? keys : [keys]);
 
 const decode = (raw: string | null): unknown => {
   if (raw === null) {
@@ -71,10 +70,7 @@ export class T3StorageAdapter implements CoreStorageAdapter {
     this.writeMany(this.localPrefix, data);
   }
 
-  private readMany(
-    prefix: string,
-    keys: string[],
-  ): Record<string, unknown> {
+  private readMany(prefix: string, keys: string[]): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const key of keys) {
       const raw = this.backing.getItem(`${prefix}${key}`);

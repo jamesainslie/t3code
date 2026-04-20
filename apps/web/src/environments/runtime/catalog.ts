@@ -13,21 +13,7 @@ import { create } from "zustand";
 import { ensureLocalApi } from "../../localApi";
 import { getPrimaryKnownEnvironment } from "../primary";
 
-export interface SavedEnvironmentRecord {
-  readonly environmentId: EnvironmentId;
-  readonly label: string;
-  readonly wsBaseUrl: string;
-  readonly httpBaseUrl: string;
-  readonly createdAt: string;
-  readonly lastConnectedAt: string | null;
-  readonly sshConfig?: {
-    readonly host: string;
-    readonly user: string;
-    readonly port: number;
-    readonly projectId: string;
-    readonly workspaceRoot: string;
-  } | undefined;
-}
+export type SavedEnvironmentRecord = SavedRemoteEnvironment;
 
 interface SavedEnvironmentRegistryState {
   readonly byIdentityKey: Record<RemoteIdentityKey, SavedRemoteEnvironment>;

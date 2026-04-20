@@ -1,8 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { createHash } from "node:crypto";
+import { closeSync, openSync, readFileSync, unlinkSync, watch, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
+import { shouldRestartExitedApp } from "./dev-electron-policy.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
@@ -21,6 +24,7 @@ const requiredFiles = [
   "dist-electron/preload.cjs",
   "../server/dist/bin.mjs",
 ];
+const serverBinPath = join(desktopDir, "../server/dist/bin.mjs");
 const watchedDirectories = [
   { directory: "dist-electron", files: new Set(["main.cjs", "preload.cjs"]) },
   { directory: "../server/dist", files: new Set(["bin.mjs"]) },
@@ -28,6 +32,71 @@ const watchedDirectories = [
 const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
 const childTreeGracePeriodMs = 1_200;
+const lockPath = join(
+  tmpdir(),
+  `t3code-desktop-dev-${createHash("sha1").update(desktopDir).digest("hex")}.lock`,
+);
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readLockPid() {
+  try {
+    const rawPid = readFileSync(lockPath, "utf8").trim();
+    const pid = Number.parseInt(rawPid, 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function removeLockFile() {
+  try {
+    unlinkSync(lockPath);
+  } catch {
+    // already gone
+  }
+}
+
+function acquireSingleInstanceLock() {
+  for (;;) {
+    try {
+      const fd = openSync(lockPath, "wx");
+      try {
+        writeFileSync(fd, `${process.pid}\n`, "utf8");
+      } finally {
+        closeSync(fd);
+      }
+      return true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+
+      const ownerPid = readLockPid();
+      if (ownerPid !== null && isProcessAlive(ownerPid)) {
+        console.error(
+          `[desktop-dev] another desktop dev launcher is already running (pid ${ownerPid}); not starting a second Electron instance.`,
+        );
+        return false;
+      }
+
+      removeLockFile();
+    }
+  }
+}
+
+if (!acquireSingleInstanceLock()) {
+  process.exit(0);
+}
+
+process.once("exit", removeLockFile);
 
 await waitForResources({
   baseDir: desktopDir,
@@ -60,12 +129,15 @@ function cleanupStaleDevApps() {
   }
 
   spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], { stdio: "ignore" });
+  spawnSync("pkill", ["-f", "--", `${serverBinPath} --bootstrap-fd`], { stdio: "ignore" });
 }
 
 function startApp() {
   if (shuttingDown || currentApp !== null) {
     return;
   }
+
+  cleanupStaleDevApps();
 
   const app = spawn(
     resolveElectronPath(),
@@ -94,8 +166,14 @@ function startApp() {
       currentApp = null;
     }
 
-    const exitedAbnormally = signal !== null || code !== 0;
-    if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
+    if (
+      shouldRestartExitedApp({
+        code,
+        expectedExit: expectedExits.has(app),
+        shuttingDown,
+        signal,
+      })
+    ) {
       scheduleRestart();
     }
   });
@@ -211,7 +289,6 @@ async function shutdown(exitCode) {
 }
 
 startWatchers();
-cleanupStaleDevApps();
 startApp();
 
 process.once("SIGINT", () => {

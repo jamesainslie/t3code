@@ -15,9 +15,7 @@ import type { WsRpcClient } from "~/rpc/wsRpcClient";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockRpcClient(
-  readFileFn: WsRpcClient["projects"]["readFile"],
-): WsRpcClient {
+function createMockRpcClient(readFileFn: WsRpcClient["projects"]["readFile"]): WsRpcClient {
   return {
     projects: {
       readFile: readFileFn,
@@ -45,9 +43,7 @@ describe("useFileContents RPC wiring", () => {
       size: 13,
       mtimeMs: 12345,
     });
-    const client = createMockRpcClient(
-      readFile as unknown as WsRpcClient["projects"]["readFile"],
-    );
+    const client = createMockRpcClient(readFile as unknown as WsRpcClient["projects"]["readFile"]);
 
     // Simulate what the hook does
     await client.projects.readFile({
@@ -70,9 +66,7 @@ describe("useFileContents RPC wiring", () => {
       mtimeMs: 99999,
     };
     const readFile = vi.fn<any>().mockResolvedValue(expected);
-    const client = createMockRpcClient(
-      readFile as unknown as WsRpcClient["projects"]["readFile"],
-    );
+    const client = createMockRpcClient(readFile as unknown as WsRpcClient["projects"]["readFile"]);
 
     const result = await client.projects.readFile({
       cwd: "/cwd",
@@ -87,9 +81,7 @@ describe("useFileContents RPC wiring", () => {
       _tag: "NotFound",
       relativePath: "missing.ts",
     });
-    const client = createMockRpcClient(
-      readFile as unknown as WsRpcClient["projects"]["readFile"],
-    );
+    const client = createMockRpcClient(readFile as unknown as WsRpcClient["projects"]["readFile"]);
 
     await expect(
       client.projects.readFile({
@@ -107,9 +99,7 @@ describe("useFileContents RPC wiring", () => {
       _tag: "TooLarge",
       relativePath: "huge.bin",
     });
-    const client = createMockRpcClient(
-      readFile as unknown as WsRpcClient["projects"]["readFile"],
-    );
+    const client = createMockRpcClient(readFile as unknown as WsRpcClient["projects"]["readFile"]);
 
     await expect(
       client.projects.readFile({
@@ -179,27 +169,25 @@ describe("parseReadFileError (error handling logic)", () => {
 // Tests: formatReadFileError (error message rendering)
 // ---------------------------------------------------------------------------
 
-describe("formatReadFileError (error message logic)", () => {
-  // Re-implement the formatting logic to verify the route's error messages
-  function formatReadFileError(tag: string, relativePath: string): string {
-    switch (tag) {
-      case "NotFound":
-        return `File not found: ${relativePath}`;
-      case "TooLarge":
-        return `File is too large to display: ${relativePath}`;
-      case "PathOutsideRoot":
-        return `Path is outside the project root: ${relativePath}`;
-      case "NotReadable":
-        return `File is not readable: ${relativePath}`;
-      default:
-        return `Failed to load file: ${relativePath}`;
-    }
+// Re-implement the formatting logic to verify the route's error messages.
+function formatReadFileError(tag: string, relativePath: string): string {
+  switch (tag) {
+    case "NotFound":
+      return `File not found: ${relativePath}`;
+    case "TooLarge":
+      return `File is too large to display: ${relativePath}`;
+    case "PathOutsideRoot":
+      return `Path is outside the project root: ${relativePath}`;
+    case "NotReadable":
+      return `File is not readable: ${relativePath}`;
+    default:
+      return `Failed to load file: ${relativePath}`;
   }
+}
 
+describe("formatReadFileError (error message logic)", () => {
   it("formats NotFound error", () => {
-    expect(formatReadFileError("NotFound", "missing.ts")).toBe(
-      "File not found: missing.ts",
-    );
+    expect(formatReadFileError("NotFound", "missing.ts")).toBe("File not found: missing.ts");
   });
 
   it("formats TooLarge error", () => {
@@ -215,20 +203,14 @@ describe("formatReadFileError (error message logic)", () => {
   });
 
   it("formats NotReadable error", () => {
-    expect(formatReadFileError("NotReadable", "locked.ts")).toBe(
-      "File is not readable: locked.ts",
-    );
+    expect(formatReadFileError("NotReadable", "locked.ts")).toBe("File is not readable: locked.ts");
   });
 
   it("formats unknown error tag with fallback", () => {
-    expect(formatReadFileError("SomethingElse", "file.ts")).toBe(
-      "Failed to load file: file.ts",
-    );
+    expect(formatReadFileError("SomethingElse", "file.ts")).toBe("Failed to load file: file.ts");
   });
 
   it("formats Unknown tag (from parseReadFileError fallback)", () => {
-    expect(formatReadFileError("Unknown", "net.ts")).toBe(
-      "Failed to load file: net.ts",
-    );
+    expect(formatReadFileError("Unknown", "net.ts")).toBe("Failed to load file: net.ts");
   });
 });

@@ -78,8 +78,8 @@ import {
 import {
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
-} from "./orchestration/http";
-import { RemoteEnvLive } from "./remote/Layers/RemoteEnv";
+} from "./orchestration/http.ts";
+import { RemoteEnvLive } from "./remote/Layers/RemoteEnv.ts";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {

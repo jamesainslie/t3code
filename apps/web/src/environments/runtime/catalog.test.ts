@@ -2,7 +2,6 @@ import {
   EnvironmentId,
   type LocalApi,
   type PersistedSavedEnvironmentRecord,
-  type RemoteIdentityKey,
 } from "@t3tools/contracts";
 import { makeRemoteIdentityKey } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +48,10 @@ function makeTestRecord(overrides: {
     lastConnectedAt: null,
     projectId: environmentId as string,
   } as const;
+}
+
+function unresolvedRegistryRead(): void {
+  throw new Error("Registry read resolver was not initialized.");
 }
 
 describe("environment runtime catalog stores", () => {
@@ -126,9 +129,7 @@ describe("environment runtime catalog stores", () => {
   });
 
   it("does not let stale hydration overwrite records added while hydration is in flight", async () => {
-    let resolveRegistryRead: () => void = () => {
-      throw new Error("Registry read resolver was not initialized.");
-    };
+    let resolveRegistryRead: () => void = unresolvedRegistryRead;
 
     vi.stubGlobal("window", {
       nativeApi: {

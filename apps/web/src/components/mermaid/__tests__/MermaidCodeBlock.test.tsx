@@ -69,7 +69,7 @@ describe("MermaidCodeBlock", () => {
   it("does not render the Shiki source block in preview mode", () => {
     const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
     // In preview mode, the SuspenseShikiCodeBlock mock should not be rendered.
-    expect(html).not.toContain("data-testid=\"shiki-block\"");
+    expect(html).not.toContain('data-testid="shiki-block"');
   });
 
   it("does not render the preview button as disabled initially", () => {
@@ -88,20 +88,14 @@ describe("MermaidCodeBlock", () => {
 
   it("renders with dark theme props without errors", () => {
     const html = renderToStaticMarkup(
-      <MermaidCodeBlock
-        {...DEFAULT_PROPS}
-        theme="dark"
-        diffThemeName="pierre-dark"
-      />,
+      <MermaidCodeBlock {...DEFAULT_PROPS} theme="dark" diffThemeName="pierre-dark" />,
     );
     expect(html).toContain("Preview");
     expect(html).toContain("Source");
   });
 
   it("renders with isStreaming=true without errors", () => {
-    const html = renderToStaticMarkup(
-      <MermaidCodeBlock {...DEFAULT_PROPS} isStreaming={true} />,
-    );
+    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} isStreaming={true} />);
     expect(html).toContain("chat-markdown-codeblock");
   });
 });

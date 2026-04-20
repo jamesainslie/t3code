@@ -1,11 +1,7 @@
 import { Atom } from "effect/unstable/reactivity";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect } from "react";
-import type {
-  EnvironmentId,
-  ProjectFileChangeEvent,
-  ProjectFileEntry,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ProjectFileChangeEvent, ProjectFileEntry } from "@t3tools/contracts";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readEnvironmentApi } from "../environmentApi";
 
@@ -65,18 +61,12 @@ export function applyFileChangeEvent(
 // ── Atom Family ────────────────────────────────────────────────────────
 
 const docsFileStateAtom = Atom.family((key: string) =>
-  Atom.make(INITIAL_DOCS_FILE_STATE).pipe(
-    Atom.keepAlive,
-    Atom.withLabel(`docs-file-state:${key}`),
-  ),
+  Atom.make(INITIAL_DOCS_FILE_STATE).pipe(Atom.keepAlive, Atom.withLabel(`docs-file-state:${key}`)),
 );
 
 const EMPTY_ATOM = Atom.make(INITIAL_DOCS_FILE_STATE);
 
-function getDocsFileKey(
-  environmentId: EnvironmentId | null,
-  cwd: string | null,
-): string | null {
+function getDocsFileKey(environmentId: EnvironmentId | null, cwd: string | null): string | null {
   return environmentId && cwd ? `${environmentId}:${cwd}` : null;
 }
 

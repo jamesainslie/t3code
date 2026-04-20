@@ -9,12 +9,10 @@ import {
   IsoDateTime,
   MessageId,
   NonNegativeInt,
-  PositiveInt,
   ProjectId,
   ProviderItemId,
   ThreadId,
   TrimmedNonEmptyString,
-  TrimmedString,
   TurnId,
 } from "./baseSchemas.ts";
 import { RemoteHost } from "./fork/remoteHost.ts";

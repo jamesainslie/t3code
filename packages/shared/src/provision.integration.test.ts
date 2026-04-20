@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { SshConnectionManager } from "./sshManager";
-import { provision, teardown } from "./provision";
+import { provision, teardown } from "./provision.js";
+import { SshConnectionManager } from "./sshManager.js";
 
 /**
  * Integration smoke test for the remote SSH provisioner.
@@ -37,72 +37,64 @@ describe.skipIf(!INTEGRATION_HOST)("provision — SSH integration", () => {
     manager.closeAll();
   });
 
-  it(
-    "provisions and starts a server on the remote host",
-    async () => {
-      const [user = "root", host = ""] = INTEGRATION_HOST!.includes("@")
-        ? INTEGRATION_HOST!.split("@")
-        : ["root", INTEGRATION_HOST!];
+  it("provisions and starts a server on the remote host", async () => {
+    const [user = "root", host = ""] = INTEGRATION_HOST!.includes("@")
+      ? INTEGRATION_HOST!.split("@")
+      : ["root", INTEGRATION_HOST!];
 
-      const statuses: string[] = [];
+    const statuses: string[] = [];
 
-      const result = await provision({
-        target: { host, user, port: 22 },
-        projectId: TEST_PROJECT_ID,
-        workspaceRoot: "/tmp/t3-integration-test",
-        localVersion: "integration-test",
-        serverBinaryPath: (platform, arch) =>
-          process.env["T3_SERVER_BINARY"] ?? `/tmp/t3-server-${platform}-${arch}`,
-        tmuxBinaryPath: (platform, arch) =>
-          process.env["T3_TMUX_BINARY"] ?? `/tmp/tmux-${platform}-${arch}`,
-        sshManager: manager,
-        onStatus: (s) => statuses.push(s),
-      });
+    const result = await provision({
+      target: { host, user, port: 22 },
+      projectId: TEST_PROJECT_ID,
+      workspaceRoot: "/tmp/t3-integration-test",
+      localVersion: "integration-test",
+      serverBinaryPath: (platform, arch) =>
+        process.env["T3_SERVER_BINARY"] ?? `/tmp/t3-server-${platform}-${arch}`,
+      tmuxBinaryPath: (platform, arch) =>
+        process.env["T3_TMUX_BINARY"] ?? `/tmp/tmux-${platform}-${arch}`,
+      sshManager: manager,
+      onStatus: (s) => statuses.push(s),
+    });
 
-      firstLocalPort = result.localPort;
+    firstLocalPort = result.localPort;
 
-      expect(result.remotePort).toBeGreaterThan(0);
-      expect(result.localPort).toBeGreaterThan(0);
-      expect(result.localPort).not.toBe(result.remotePort);
-      expect(typeof result.authToken).toBe("string");
-      expect(result.authToken.length).toBeGreaterThan(0);
-      expect(statuses).toContain("provisioning");
-      expect(statuses[statuses.length - 1]).toBe("connected");
+    expect(result.remotePort).toBeGreaterThan(0);
+    expect(result.localPort).toBeGreaterThan(0);
+    expect(result.localPort).not.toBe(result.remotePort);
+    expect(typeof result.authToken).toBe("string");
+    expect(result.authToken.length).toBeGreaterThan(0);
+    expect(statuses).toContain("provisioning");
+    expect(statuses[statuses.length - 1]).toBe("connected");
 
-      console.log(
-        `Remote server running on port ${result.remotePort}, tunnelled to localhost:${result.localPort}`,
-      );
-    },
-    30_000,
-  );
+    console.log(
+      `Remote server running on port ${result.remotePort}, tunnelled to localhost:${result.localPort}`,
+    );
+  }, 30_000);
 
-  it(
-    "reconnects to an existing session without re-provisioning",
-    async () => {
-      const [user = "root", host = ""] = INTEGRATION_HOST!.includes("@")
-        ? INTEGRATION_HOST!.split("@")
-        : ["root", INTEGRATION_HOST!];
+  it("reconnects to an existing session without re-provisioning", async () => {
+    const [user = "root", host = ""] = INTEGRATION_HOST!.includes("@")
+      ? INTEGRATION_HOST!.split("@")
+      : ["root", INTEGRATION_HOST!];
 
-      const statuses: string[] = [];
+    const statuses: string[] = [];
 
-      const result = await provision({
-        target: { host, user, port: 22 },
-        projectId: TEST_PROJECT_ID,
-        workspaceRoot: "/tmp/t3-integration-test",
-        localVersion: "integration-test",
-        serverBinaryPath: () => "/tmp/t3-server-unused",
-        tmuxBinaryPath: () => "/tmp/tmux-unused",
-        sshManager: manager,
-        onStatus: (s) => statuses.push(s),
-      });
+    const result = await provision({
+      target: { host, user, port: 22 },
+      projectId: TEST_PROJECT_ID,
+      workspaceRoot: "/tmp/t3-integration-test",
+      localVersion: "integration-test",
+      serverBinaryPath: () => "/tmp/t3-server-unused",
+      tmuxBinaryPath: () => "/tmp/tmux-unused",
+      sshManager: manager,
+      onStatus: (s) => statuses.push(s),
+    });
 
-      expect(result.remotePort).toBeGreaterThan(0);
-      // The tmux session already exists — "starting" is skipped
-      expect(statuses).not.toContain("starting");
-      expect(statuses[statuses.length - 1]).toBe("connected");
+    expect(result.remotePort).toBeGreaterThan(0);
+    // The tmux session already exists — "starting" is skipped
+    expect(statuses).not.toContain("starting");
+    expect(statuses[statuses.length - 1]).toBe("connected");
 
-      console.log(`Reconnected to existing session on port ${result.remotePort}`);
-    },
-    15_000,
-  );
+    console.log(`Reconnected to existing session on port ${result.remotePort}`);
+  }, 15_000);
 });

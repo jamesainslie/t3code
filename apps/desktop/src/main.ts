@@ -55,7 +55,6 @@ import type {
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
-  SavedSshHost,
 } from "@t3tools/contracts";
 import { autoUpdater } from "electron-updater";
 
@@ -78,19 +77,19 @@ import {
   writeClientSettings,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
-} from "./clientPersistence";
-import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
-import { showDesktopConfirmDialog } from "./confirmDialog";
-import { resolveDesktopServerExposure } from "./serverExposure";
+} from "./clientPersistence.ts";
+import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness.ts";
+import { showDesktopConfirmDialog } from "./confirmDialog.ts";
+import { resolveDesktopServerExposure } from "./serverExposure.ts";
 import {
   globalSshManager,
   sshConnect,
   sshDisconnect,
   sshGetStatus,
   sshCloseAll,
-} from "./sshManager";
-import { syncShellEnvironment } from "./syncShellEnvironment";
-import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
+} from "./sshManager.ts";
+import { syncShellEnvironment } from "./syncShellEnvironment.ts";
+import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState.ts";
 import {
   createInitialDesktopUpdateState,
   reduceDesktopUpdateStateOnCheckFailure,
@@ -139,7 +138,6 @@ const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
 const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
-const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
 const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
 const SSH_STATUS_CHANNEL = "desktop:ssh-status";
@@ -2305,7 +2303,9 @@ async function bootstrap(): Promise<void> {
   if (isDevelopment) {
     mainWindow = createWindow();
     writeDesktopLogHeader("bootstrap main window created");
-    void waitForBackendHttpReady(backendHttpUrl)
+    void waitForBackendHttpReady(backendHttpUrl, {
+      isReady: (response) => response.ok || response.status === 302,
+    })
       .then(() => {
         writeDesktopLogHeader("bootstrap backend ready");
       })

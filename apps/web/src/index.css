@@ -40,8 +40,13 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   @keyframes pulse-slow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
   }
   @keyframes skeleton {
     to {
@@ -275,13 +280,53 @@ label:has(> select#reasoning-effort) select {
   margin-bottom: 0;
 }
 
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  margin: 1rem 0 0.45rem;
+  color: var(--foreground);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.chat-markdown h1 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+  font-size: 1.45rem;
+}
+
+.chat-markdown h2 {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  padding-bottom: 0.25rem;
+  font-size: 1.2rem;
+}
+
+.chat-markdown h3 {
+  font-size: 1.05rem;
+}
+
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  font-size: 0.95rem;
+}
+
 .chat-markdown p,
 .chat-markdown ul,
 .chat-markdown ol,
 .chat-markdown blockquote,
 .chat-markdown pre,
-.chat-markdown table {
+.chat-markdown table,
+.chat-markdown hr {
   margin: 0.65rem 0;
+}
+
+.chat-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 
 .chat-markdown ul {

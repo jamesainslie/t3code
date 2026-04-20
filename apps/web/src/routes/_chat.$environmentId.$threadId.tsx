@@ -1,5 +1,5 @@
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ChatView from "../components/ChatView";
 import { threadHasStarted } from "../components/ChatView.logic";
@@ -10,8 +10,6 @@ import {
   DiffPanelShell,
   type DiffPanelMode,
 } from "../components/DiffPanelShell";
-import { DocPreviewPanel } from "../components/files/DocPreviewPanel";
-import { readEnvironmentConnection } from "../environments/runtime";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffRouteSearch,
@@ -24,15 +22,38 @@ import {
   stripDocsSearchParams,
 } from "../docsRouteSearch";
 import {
+  closePreviewRouteSearch,
+  type PreviewRouteSearch,
+  parsePreviewRouteSearch,
+  stripPreviewSearchParams,
+} from "../previewRouteSearch";
+import {
   DocsPanelHeaderSkeleton,
   DocsPanelLoadingState,
   DocsPanelShell,
   type DocsPanelMode,
 } from "../components/DocsPanelShell";
+import {
+  DocPreviewHeaderSkeleton,
+  DocPreviewLoadingState,
+  DocPreviewPanelShell,
+  type DocPreviewPanelMode,
+} from "../components/files/DocPreviewPanelShell";
+import { readEnvironmentConnection } from "../environments/runtime";
+import { useDocsAutoSurface } from "../hooks/useDocsAutoSurface";
 import { useDocsChangeToast } from "../hooks/useDocsChangeToast";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import {
+  collectMarkdownActivityPreviewPaths,
+  findMarkdownActivityPreviewSignal,
+} from "../lib/markdownActivityPreview";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
-import { selectEnvironmentState, selectProjectByRef, selectThreadExistsByRef, useStore } from "../store";
+import {
+  selectEnvironmentState,
+  selectProjectByRef,
+  selectThreadExistsByRef,
+  useStore,
+} from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
@@ -48,6 +69,9 @@ const DocsPanel = lazy(() => import("../components/DocsPanel"));
 const DOCS_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_docs_sidebar_width";
 const DOCS_INLINE_DEFAULT_WIDTH = "clamp(24rem,40vw,40rem)";
 const DOCS_INLINE_SIDEBAR_MIN_WIDTH = 22 * 16;
+const PREVIEW_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_doc_preview_sidebar_width";
+const PREVIEW_INLINE_DEFAULT_WIDTH = "clamp(24rem,40vw,42rem)";
+const PREVIEW_INLINE_SIDEBAR_MIN_WIDTH = 22 * 16;
 
 const DocsLoadingFallback = (props: { mode: DocsPanelMode }) => (
   <DocsPanelShell mode={props.mode} header={<DocsPanelHeaderSkeleton />}>
@@ -58,6 +82,31 @@ const DocsLoadingFallback = (props: { mode: DocsPanelMode }) => (
 const LazyDocsPanel = (props: { mode: DocsPanelMode }) => (
   <Suspense fallback={<DocsLoadingFallback mode={props.mode} />}>
     <DocsPanel mode={props.mode} />
+  </Suspense>
+);
+
+const DocPreviewPanel = lazy(() =>
+  import("../components/files/DocPreviewPanel").then((module) => ({
+    default: module.DocPreviewPanel,
+  })),
+);
+
+const DocPreviewLoadingFallback = (props: { mode: DocPreviewPanelMode }) => (
+  <DocPreviewPanelShell mode={props.mode} header={<DocPreviewHeaderSkeleton />}>
+    <DocPreviewLoadingState label="Loading file preview..." />
+  </DocPreviewPanelShell>
+);
+
+const LazyDocPreviewPanel = (props: {
+  relativePath: string;
+  cwd: string;
+  environmentId: NonNullable<ReturnType<typeof resolveThreadRouteRef>>["environmentId"];
+  mode: DocPreviewPanelMode;
+  onClose: () => void;
+  touchedPaths?: readonly string[];
+}) => (
+  <Suspense fallback={<DocPreviewLoadingFallback mode={props.mode} />}>
+    <DocPreviewPanel {...props} />
   </Suspense>
 );
 
@@ -198,6 +247,8 @@ function ChatThreadRouteView() {
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
   const docsOpen = search.docs === "1";
+  const previewOpen = typeof search.preview === "string";
+  const previewPath = previewOpen ? search.preview : undefined;
   const activeProject = useStore((store) =>
     serverThread
       ? selectProjectByRef(store, {
@@ -207,6 +258,7 @@ function ChatThreadRouteView() {
       : undefined,
   );
   const activeCwd = serverThread?.worktreePath ?? activeProject?.cwd ?? null;
+  const [previewTouchedPaths, setPreviewTouchedPaths] = useState<readonly string[] | null>(null);
   useDocsChangeToast({
     environmentId: threadRef?.environmentId ?? null,
     cwd: activeCwd,
@@ -279,6 +331,85 @@ function ChatThreadRouteView() {
       }),
     });
   }, [navigate, threadRef]);
+  const navigatePreview = useCallback(
+    (relativePath: string) => {
+      if (!threadRef) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+        search: (previous) => {
+          const rest = stripPreviewSearchParams(previous);
+          return { ...rest, preview: relativePath };
+        },
+      });
+    },
+    [navigate, threadRef],
+  );
+  const openPreview = useCallback(
+    (relativePath: string) => {
+      setPreviewTouchedPaths(null);
+      navigatePreview(relativePath);
+    },
+    [navigatePreview],
+  );
+  const openAutoPreview = useCallback(
+    (relativePath: string, touchedPaths: readonly string[]) => {
+      setPreviewTouchedPaths(touchedPaths);
+      navigatePreview(relativePath);
+    },
+    [navigatePreview],
+  );
+  const closePreview = useCallback(() => {
+    if (!threadRef) return;
+    setPreviewTouchedPaths(null);
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: closePreviewRouteSearch,
+    });
+  }, [navigate, threadRef]);
+  const autoSurfaceClient = threadRef
+    ? (readEnvironmentConnection(threadRef.environmentId)?.client ?? null)
+    : null;
+  const lastActivityPreviewSignalKeyRef = useRef<string | null>(null);
+  const activityPreviewSignal = useMemo(
+    () =>
+      findMarkdownActivityPreviewSignal({
+        activities: serverThread?.activities ?? [],
+        cwd: activeCwd,
+        turnId: serverThread?.latestTurn?.turnId ?? null,
+      }),
+    [activeCwd, serverThread?.activities, serverThread?.latestTurn?.turnId],
+  );
+  const chatMentionedMarkdownPaths = useMemo(
+    () =>
+      collectMarkdownActivityPreviewPaths({
+        activities: serverThread?.activities ?? [],
+        cwd: activeCwd,
+      }),
+    [activeCwd, serverThread?.activities],
+  );
+  useDocsAutoSurface({
+    rpcClient: autoSurfaceClient,
+    cwd: activeCwd,
+    threadId: threadRef?.threadId ?? null,
+    previewOpen,
+    onAutoSurface: openAutoPreview,
+  });
+
+  useEffect(() => {
+    if (!activityPreviewSignal) {
+      return;
+    }
+    if (lastActivityPreviewSignalKeyRef.current === activityPreviewSignal.key) {
+      return;
+    }
+
+    lastActivityPreviewSignalKeyRef.current = activityPreviewSignal.key;
+    if (!previewOpen) {
+      openAutoPreview(activityPreviewSignal.paths[0]!, activityPreviewSignal.paths);
+    }
+  }, [activityPreviewSignal, openAutoPreview, previewOpen]);
 
   useEffect(() => {
     if (!threadRef || !bootstrapComplete) {
@@ -301,26 +432,29 @@ function ChatThreadRouteView() {
     return null;
   }
 
-  const openPreview = useCallback(
-    (relativePath: string) => {
-      if (!threadRef) return;
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
-        search: (previous) => {
-          const rest = stripPreviewSearchParams(previous);
-          return { ...rest, preview: relativePath };
-        },
-      });
-    },
-    [navigate, threadRef],
-  );
-
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
-  const rightPanelOpen = diffOpen || previewOpen;
+  const rightPanelOpen = diffOpen || docsOpen || previewOpen;
+  const previewTogglePath =
+    previewPath ?? previewTouchedPaths?.[0] ?? chatMentionedMarkdownPaths[0];
+  const markdownPreviewAvailable = previewOpen || previewTogglePath !== undefined;
+  const toggleMarkdownPreview = () => {
+    if (previewOpen) {
+      closePreview();
+      return;
+    }
+    if (previewTogglePath) {
+      openPreview(previewTogglePath);
+    }
+  };
+  const previewTouchedPathsForActivePath = previewPath
+    ? Array.from(
+        new Set([previewPath, ...(previewTouchedPaths ?? []), ...chatMentionedMarkdownPaths]),
+      )
+    : undefined;
 
   if (!shouldUseDiffSheet) {
-    const showDocsSidebar = docsOpen && !diffOpen;
+    const showPreviewSidebar = previewPath !== undefined && !diffOpen;
+    const showDocsSidebar = docsOpen && !diffOpen && !showPreviewSidebar;
 
     return (
       <>
@@ -329,7 +463,11 @@ function ChatThreadRouteView() {
             environmentId={threadRef.environmentId}
             threadId={threadRef.threadId}
             onDiffPanelOpen={markDiffOpened}
-            reserveTitleBarControlInset={!diffOpen && !docsOpen}
+            onPreviewFile={openPreview}
+            markdownPreviewOpen={previewOpen}
+            markdownPreviewAvailable={markdownPreviewAvailable}
+            onToggleMarkdownPreview={toggleMarkdownPreview}
+            reserveTitleBarControlInset={!rightPanelOpen}
             routeKind="server"
           />
         </SidebarInset>
@@ -363,6 +501,37 @@ function ChatThreadRouteView() {
             </Sidebar>
           </SidebarProvider>
         )}
+        {showPreviewSidebar && activeCwd && (
+          <SidebarProvider
+            defaultOpen={false}
+            open={previewOpen}
+            onOpenChange={(open) => (open ? navigatePreview(previewPath) : closePreview())}
+            className="w-auto min-h-0 flex-none bg-transparent"
+            style={{ "--sidebar-width": PREVIEW_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+          >
+            <Sidebar
+              side="right"
+              collapsible="offcanvas"
+              className="border-l border-border bg-card text-foreground"
+              resizable={{
+                minWidth: PREVIEW_INLINE_SIDEBAR_MIN_WIDTH,
+                storageKey: PREVIEW_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
+              }}
+            >
+              <LazyDocPreviewPanel
+                relativePath={previewPath}
+                cwd={activeCwd}
+                environmentId={threadRef.environmentId}
+                mode="sidebar"
+                onClose={closePreview}
+                {...(previewTouchedPathsForActivePath
+                  ? { touchedPaths: previewTouchedPathsForActivePath }
+                  : {})}
+              />
+              <SidebarRail />
+            </Sidebar>
+          </SidebarProvider>
+        )}
       </>
     );
   }
@@ -374,14 +543,32 @@ function ChatThreadRouteView() {
           environmentId={threadRef.environmentId}
           threadId={threadRef.threadId}
           onDiffPanelOpen={markDiffOpened}
+          onPreviewFile={openPreview}
+          markdownPreviewOpen={previewOpen}
+          markdownPreviewAvailable={markdownPreviewAvailable}
+          onToggleMarkdownPreview={toggleMarkdownPreview}
           routeKind="server"
         />
       </SidebarInset>
       <RightPanelSheet open={diffOpen} onClose={closeDiff}>
         {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
       </RightPanelSheet>
-      <RightPanelSheet open={docsOpen && !diffOpen} onClose={closeDocs}>
+      <RightPanelSheet open={docsOpen && !diffOpen && !previewOpen} onClose={closeDocs}>
         <LazyDocsPanel mode="sheet" />
+      </RightPanelSheet>
+      <RightPanelSheet open={previewOpen && !diffOpen} onClose={closePreview}>
+        {previewPath && activeCwd ? (
+          <LazyDocPreviewPanel
+            relativePath={previewPath}
+            cwd={activeCwd}
+            environmentId={threadRef.environmentId}
+            mode="sheet"
+            onClose={closePreview}
+            {...(previewTouchedPathsForActivePath
+              ? { touchedPaths: previewTouchedPathsForActivePath }
+              : {})}
+          />
+        ) : null}
       </RightPanelSheet>
     </>
   );
@@ -391,9 +578,16 @@ export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
   validateSearch: (search) => ({
     ...parseDiffRouteSearch(search),
     ...parseDocsRouteSearch(search),
+    ...parsePreviewRouteSearch(search),
   }),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch & DocsRouteSearch>(["diff", "docs"])],
+    middlewares: [
+      retainSearchParams<DiffRouteSearch & DocsRouteSearch & PreviewRouteSearch>([
+        "diff",
+        "docs",
+        "preview",
+      ]),
+    ],
   },
   component: ChatThreadRouteView,
 });

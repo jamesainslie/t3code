@@ -1,4 +1,10 @@
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
+import {
+  T3FileAdapter,
+  T3NullMessagingAdapter,
+  T3StorageAdapter,
+  type MdreviewAdapters,
+} from "@t3tools/mdreview-host";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -11,6 +17,7 @@ import { useFileContents } from "../hooks/useFileContents";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { readEnvironmentConnection } from "../environments/runtime";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
+import { createFileRpcClientAdapter } from "../rpc/FileRpcClientAdapter";
 import type { WsRpcClient } from "../rpc/wsRpcClient";
 
 function useFirstProjectRpcClient(): {
@@ -42,18 +49,40 @@ function formatReadFileError(tag: string, relativePath: string): string {
   }
 }
 
+function useMarkdownAdapters(
+  rpcClient: WsRpcClient | null,
+  cwd: string | null,
+): MdreviewAdapters | undefined {
+  return useMemo(() => {
+    if (!rpcClient || !cwd || typeof localStorage === "undefined") {
+      return undefined;
+    }
+
+    return {
+      file: new T3FileAdapter({
+        client: createFileRpcClientAdapter(rpcClient),
+        cwd,
+        defaultWatchGlobs: ["**/*.md", "**/*.markdown"],
+      }),
+      storage: new T3StorageAdapter({ backing: localStorage }),
+      messaging: new T3NullMessagingAdapter(),
+    };
+  }, [cwd, rpcClient]);
+}
+
 function FilesRouteView() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const selectedFile = search.file ?? null;
 
   const { cwd, rpcClient } = useFirstProjectRpcClient();
+  const markdownAdapters = useMarkdownAdapters(rpcClient, cwd);
   const { tree, isLoading: treeLoading } = useProjectFileTree(rpcClient, cwd);
-  const { data: fileData, isLoading: fileLoading, error: fileError } = useFileContents(
-    rpcClient,
-    cwd,
-    selectedFile,
-  );
+  const {
+    data: fileData,
+    isLoading: fileLoading,
+    error: fileError,
+  } = useFileContents(rpcClient, cwd, selectedFile);
 
   const handleSelectFile = useCallback(
     (relativePath: string) => {
@@ -97,11 +126,7 @@ function FilesRouteView() {
                 <p className="text-xs text-muted-foreground">No files found</p>
               </div>
             ) : (
-              <FileTree
-                files={tree}
-                selectedPath={selectedFile}
-                onSelectFile={handleSelectFile}
-              />
+              <FileTree files={tree} selectedPath={selectedFile} onSelectFile={handleSelectFile} />
             )}
           </div>
         </div>
@@ -127,6 +152,7 @@ function FilesRouteView() {
                   size={fileData.size}
                   mtimeMs={fileData.mtimeMs}
                   cwd={cwd}
+                  markdownAdapters={markdownAdapters}
                   className="h-full rounded-none border-0"
                 />
               </div>

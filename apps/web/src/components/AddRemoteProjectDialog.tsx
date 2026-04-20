@@ -80,6 +80,9 @@ export function AddRemoteProjectDialog({ open, onClose }: AddRemoteProjectDialog
 
       // Phase 3: Create project on the remote server
       setStatus("creating-project");
+      if (!record.environmentId) {
+        throw new Error("Remote environment registration did not return an environment id.");
+      }
       const remoteApi = readEnvironmentApi(record.environmentId);
       if (!remoteApi) {
         throw new Error("Failed to connect to the remote environment after registration.");

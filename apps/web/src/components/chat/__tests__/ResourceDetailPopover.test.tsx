@@ -2,18 +2,12 @@ import type { HostResourceSnapshot } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import {
-  formatBytes,
-  formatPercent,
-  ResourceDetailContent,
-} from "../ResourceDetailPopover";
+import { formatBytes, formatPercent, ResourceDetailContent } from "../ResourceDetailPopover";
 import { ResourceMetricRow } from "../ResourceMetricRow";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function makeSnapshot(
-  overrides: Partial<HostResourceSnapshot> = {},
-): HostResourceSnapshot {
+function makeSnapshot(overrides: Partial<HostResourceSnapshot> = {}): HostResourceSnapshot {
   return {
     ram: {
       state: "normal",
@@ -51,9 +45,7 @@ function makeSnapshot(
 }
 
 function renderContent(snapshot: HostResourceSnapshot): string {
-  return renderToStaticMarkup(
-    <ResourceDetailContent snapshot={snapshot} />,
-  );
+  return renderToStaticMarkup(<ResourceDetailContent snapshot={snapshot} />);
 }
 
 // ─── Formatting Helpers ─────────────────────────────────────────────
@@ -91,11 +83,7 @@ describe("formatPercent", () => {
 describe("ResourceMetricRow", () => {
   it("renders label and summary", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="RAM"
-        state="normal"
-        summary="14.2 GB free"
-      />,
+      <ResourceMetricRow label="RAM" state="normal" summary="14.2 GB free" />,
     );
     expect(html).toContain("RAM");
     expect(html).toContain("14.2 GB free");
@@ -103,12 +91,7 @@ describe("ResourceMetricRow", () => {
 
   it("renders a progress bar when usagePercent is provided", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="RAM"
-        state="normal"
-        summary="14.2 GB free"
-        usagePercent={55}
-      />,
+      <ResourceMetricRow label="RAM" state="normal" summary="14.2 GB free" usagePercent={55} />,
     );
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="55"');
@@ -116,11 +99,7 @@ describe("ResourceMetricRow", () => {
 
   it("does not render a progress bar when usagePercent is omitted", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="Host"
-        state="normal"
-        summary="macbook.local"
-      />,
+      <ResourceMetricRow label="Host" state="normal" summary="macbook.local" />,
     );
     expect(html).not.toContain('role="progressbar"');
   });
@@ -157,36 +136,21 @@ describe("ResourceMetricRow", () => {
 
   it("applies warn color to the state dot for warn state", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="RAM"
-        state="warn"
-        summary="5.0 GB free"
-        usagePercent={84}
-      />,
+      <ResourceMetricRow label="RAM" state="warn" summary="5.0 GB free" usagePercent={84} />,
     );
     expect(html).toContain("bg-amber-500");
   });
 
   it("applies critical color to the state dot for critical state", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="CPU"
-        state="critical"
-        summary="97%"
-        usagePercent={97}
-      />,
+      <ResourceMetricRow label="CPU" state="critical" summary="97%" usagePercent={97} />,
     );
     expect(html).toContain("bg-red-500");
   });
 
   it("applies normal color to the state dot for normal state", () => {
     const html = renderToStaticMarkup(
-      <ResourceMetricRow
-        label="Disk"
-        state="normal"
-        summary="550.0 GB free"
-        usagePercent={45}
-      />,
+      <ResourceMetricRow label="Disk" state="normal" summary="550.0 GB free" usagePercent={45} />,
     );
     expect(html).toContain("bg-emerald-500");
   });

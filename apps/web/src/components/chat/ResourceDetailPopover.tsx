@@ -39,11 +39,7 @@ function DangerBanner({ message }: { message: string }) {
 
 // ─── Popover Body (testable without Portal) ────────────────────────
 
-export function ResourceDetailContent({
-  snapshot,
-}: {
-  snapshot: HostResourceSnapshot;
-}) {
+export function ResourceDetailContent({ snapshot }: { snapshot: HostResourceSnapshot }) {
   const { ram, cpu, disk, containers, kubecontext, remote } = snapshot;
 
   const kubeDanger = kubecontext?.isDanger ?? false;
@@ -66,10 +62,7 @@ export function ResourceDetailContent({
       >
         <DetailKV label="Total" value={formatBytes(ram.totalBytes)} />
         <DetailKV label="Used" value={formatBytes(ram.usedBytes)} />
-        <DetailKV
-          label="Available"
-          value={formatBytes(ram.availableBytes)}
-        />
+        <DetailKV label="Available" value={formatBytes(ram.availableBytes)} />
         <DetailKV
           label="Swap"
           value={`${formatBytes(ram.swapUsedBytes)} / ${formatBytes(ram.swapTotalBytes)}`}
@@ -86,10 +79,7 @@ export function ResourceDetailContent({
         defaultExpanded={cpu.state === "critical"}
       >
         <DetailKV label="Usage" value={formatPercent(cpu.usagePercent)} />
-        <DetailKV
-          label="Sustained"
-          value={formatPercent(cpu.sustainedPercent)}
-        />
+        <DetailKV label="Sustained" value={formatPercent(cpu.sustainedPercent)} />
         <DetailKV label="Cores" value={String(cpu.coreCount)} />
       </ResourceMetricRow>
 
@@ -104,10 +94,7 @@ export function ResourceDetailContent({
       >
         <DetailKV label="Total" value={formatBytes(disk.totalBytes)} />
         <DetailKV label="Used" value={formatBytes(disk.usedBytes)} />
-        <DetailKV
-          label="Available"
-          value={formatBytes(disk.availableBytes)}
-        />
+        <DetailKV label="Available" value={formatBytes(disk.availableBytes)} />
         <DetailKV label="Mount" value={disk.mountPath} />
       </ResourceMetricRow>
 

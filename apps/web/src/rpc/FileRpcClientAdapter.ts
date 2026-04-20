@@ -14,6 +14,8 @@ export function createFileRpcClientAdapter(wsRpcClient: WsRpcClient): RpcClient 
       switch (method) {
         case "projects.readFile":
           return (await wsRpcClient.projects.readFile(input as any)) as O;
+        case "projects.writeFile":
+          return (await wsRpcClient.projects.writeFile(input as any)) as O;
         case "projects.updateFrontmatter":
           return (await wsRpcClient.projects.updateFrontmatter(input as any)) as O;
         default:
@@ -27,10 +29,7 @@ export function createFileRpcClientAdapter(wsRpcClient: WsRpcClient): RpcClient 
     ): (() => void) => {
       switch (method) {
         case "subscribeProjectFileChanges":
-          return wsRpcClient.projects.onFileChanges(
-            input as any,
-            handler as any,
-          );
+          return wsRpcClient.projects.onFileChanges(input as any, handler as any);
         default:
           throw new Error(`FileRpcClientAdapter: unknown stream method "${method}"`);
       }

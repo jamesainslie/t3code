@@ -1,30 +1,22 @@
 /**
- * FileDocsServiceLive - docs-browser file operations backed by node:fs and
- * chokidar.
+ * FileDocsServiceLive - docs-browser file operations backed by node:fs.
  *
  * - `readFile` - one-shot safe read with size cap and error mapping.
- * - `watch` - chokidar-backed stream of file-change events with snapshot
+ * - `watch` - markdown snapshot stream with lightweight polling, snapshot
  *   replay on subscribe, debounced per-path changes, and ref-counted
- *   per-cwd watchers.
+ *   per-cwd pollers.
  * - `updateFrontmatter` - atomic frontmatter rewrite with mtime guard.
  * - `recordTurnWrite` / `flushTurnWrites` - orchestration hooks for emitting
  *   `turnTouchedDoc` events when a turn writes a .md file.
  */
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
-import chokidar from "chokidar";
 import ignoreFactory from "ignore";
 import * as YAML from "yaml";
-import {
-  Effect,
-  Exit,
-  Layer,
-  PubSub,
-  Scope,
-  Stream,
-  SynchronizedRef,
-} from "effect";
+import { Effect, Layer, PubSub, Stream, SynchronizedRef } from "effect";
 import type {
   ProjectFileChangeEvent,
   ProjectFileEntry,
@@ -41,15 +33,9 @@ import {
   type TurnWriteRecord,
 } from "../Services/FileDocsService.ts";
 
-const HARD_CODED_IGNORES = [
-  "node_modules",
-  ".git",
-  "dist",
-  "out",
-  ".turbo",
-  ".next",
-  "target",
-];
+const HARD_CODED_IGNORES = ["node_modules", ".git", "dist", "out", ".turbo", ".next", "target"];
+const FILE_DOCS_POLL_INTERVAL_MS = 750;
+const execFileAsync = promisify(execFile);
 
 function noop(): void {
   /* no-op placeholder until the snapshot-ready promise resolver is assigned. */
@@ -75,8 +61,8 @@ interface FileMeta {
 interface WatcherHandle {
   readonly pubsub: PubSub.PubSub<ProjectFileChangeEvent>;
   readonly files: Map<string, FileMeta>;
+  pollTimer?: NodeJS.Timeout;
   subscriberCount: number;
-  readonly scope: Scope.Scope;
   readonly snapshotReady: Promise<void>;
   snapshot: ReadonlyArray<ProjectFileEntry>;
 }
@@ -96,12 +82,105 @@ function loadGitignore(cwd: string): Promise<ReturnType<typeof ignoreFactory>> {
     .catch(() => ig);
 }
 
-function sanitizeRelative(cwd: string, absolutePath: string): string | null {
-  const rel = nodePath.relative(cwd, absolutePath);
-  if (rel.length === 0 || rel === "." || rel.startsWith("..") || nodePath.isAbsolute(rel)) {
-    return null;
+function shouldIgnoreRelativePath(
+  ig: ReturnType<typeof ignoreFactory>,
+  relativePath: string,
+): boolean {
+  const posix = toPosix(relativePath);
+  if (!posix || posix.startsWith("../")) return false;
+  const segments = posix.split("/");
+  for (const segment of segments) {
+    if (HARD_CODED_IGNORES.includes(segment)) return true;
   }
-  return toPosix(rel);
+  return ig.ignores(posix);
+}
+
+function toSnapshotEntries(files: ReadonlyMap<string, FileMeta>): ProjectFileEntry[] {
+  return Array.from(files, ([relativePath, meta]) => ({
+    relativePath,
+    size: meta.size,
+    mtimeMs: meta.mtimeMs,
+    oversized: meta.oversized,
+  })).toSorted((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+async function listMarkdownFilesWithRg(
+  cwd: string,
+  ig: ReturnType<typeof ignoreFactory>,
+): Promise<string[]> {
+  const { stdout } = await execFileAsync(
+    "rg",
+    [
+      "--files",
+      "--hidden",
+      "--color",
+      "never",
+      "--glob",
+      "*.md",
+      "--glob",
+      "*.markdown",
+      ...HARD_CODED_IGNORES.flatMap((segment) => ["--glob", `!${segment}/**`]),
+    ],
+    { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (relativePath) => relativePath.length > 0 && !shouldIgnoreRelativePath(ig, relativePath),
+    )
+    .map(toPosix);
+}
+
+async function listMarkdownFilesWithReaddir(
+  cwd: string,
+  ig: ReturnType<typeof ignoreFactory>,
+): Promise<string[]> {
+  const files: string[] = [];
+
+  async function walk(relativeDir: string): Promise<void> {
+    const absoluteDir = nodePath.join(cwd, relativeDir);
+    const entries = await fsPromises.readdir(absoluteDir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const relativePath = toPosix(nodePath.join(relativeDir, entry.name));
+      if (shouldIgnoreRelativePath(ig, relativePath)) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(relativePath);
+      } else if (entry.isFile() && isMarkdown(relativePath)) {
+        files.push(relativePath);
+      }
+    }
+  }
+
+  await walk("");
+  return files.toSorted((a, b) => a.localeCompare(b));
+}
+
+async function collectMarkdownSnapshot(
+  cwd: string,
+  ig: ReturnType<typeof ignoreFactory>,
+): Promise<Map<string, FileMeta>> {
+  const relativePaths = await listMarkdownFilesWithRg(cwd, ig).catch(() =>
+    listMarkdownFilesWithReaddir(cwd, ig),
+  );
+  const files = new Map<string, FileMeta>();
+
+  for (const relativePath of relativePaths) {
+    const absolutePath = nodePath.join(cwd, relativePath);
+    const stat = await fsPromises.stat(absolutePath).catch(() => null);
+    if (!stat?.isFile()) {
+      continue;
+    }
+    files.set(relativePath, {
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      oversized: stat.size > FILE_DOCS_SIZE_CAP_BYTES,
+    });
+  }
+
+  return files;
 }
 
 /**
@@ -143,11 +222,10 @@ function rewriteFrontmatter(params: {
 
     const doc = yield* Effect.try({
       try: () => YAML.parse(yamlBody) as unknown,
-      catch: () =>
-        ({
-          _tag: "FrontmatterInvalid" as const,
-          relativePath,
-        }),
+      catch: () => ({
+        _tag: "FrontmatterInvalid" as const,
+        relativePath,
+      }),
     });
     let parsed: Record<string, unknown>;
     if (doc === null || doc === undefined) {
@@ -226,8 +304,9 @@ export const FileDocsServiceLive = Layer.effect(
 
     /**
      * Build or retrieve the watcher for a given cwd, bumping its reference count.
-     * Returns a release effect that decrements the count and tears down the
-     * watcher when the last subscriber disconnects.
+     * Returns a release effect that decrements the count and stops idle polling.
+     * This intentionally avoids chokidar/FSEvents for docs: on macOS, closing
+     * large FSEvents trees can block the Electron-hosted server event loop.
      */
     const acquireWatcher = (cwd: string) =>
       SynchronizedRef.modifyEffect(watchers, (map) =>
@@ -238,7 +317,6 @@ export const FileDocsServiceLive = Layer.effect(
             return [existing, map] as const;
           }
           const pubsub = yield* PubSub.unbounded<ProjectFileChangeEvent>();
-          const scope = yield* Scope.make();
           const files = new Map<string, FileMeta>();
           let ready = false;
           let resolveReady: () => void = noop;
@@ -249,7 +327,6 @@ export const FileDocsServiceLive = Layer.effect(
             pubsub,
             files,
             subscriberCount: 1,
-            scope,
             snapshotReady,
             snapshot: [],
           };
@@ -257,51 +334,38 @@ export const FileDocsServiceLive = Layer.effect(
           const publishEvent = (event: ProjectFileChangeEvent) =>
             runFork(PubSub.publish(pubsub, event).pipe(Effect.asVoid));
 
-          const processPathEvent = async (
-            absolutePath: string,
+          const processFileDiff = async (
+            relativePath: string,
             kind: "add" | "change" | "unlink",
-            stat: { size: number; mtimeMs: number } | null,
+            meta: FileMeta | null,
           ) => {
-            if (!isMarkdown(absolutePath)) return;
-            const relativePath = sanitizeRelative(cwd, absolutePath);
-            if (!relativePath) return;
+            const absolutePath = nodePath.join(cwd, relativePath);
 
             // Self-echo suppression
-            const suppressed = await runPromise(isSuppressed(absolutePath)).catch(
-              () => false,
-            );
-            if (suppressed) return;
+            const suppressed = await runPromise(isSuppressed(absolutePath)).catch(() => false);
 
             if (kind === "unlink") {
               clearDebounce(`${cwd}:${relativePath}`);
               files.delete(relativePath);
-              if (ready) {
+              handle.snapshot = toSnapshotEntries(files);
+              if (ready && !suppressed) {
                 publishEvent({ _tag: "removed", relativePath });
               }
               return;
             }
 
             const previous = files.get(relativePath);
-            const meta: FileMeta = stat
-              ? {
-                  size: stat.size,
-                  mtimeMs: stat.mtimeMs,
-                  oversized: stat.size > FILE_DOCS_SIZE_CAP_BYTES,
-                }
-              : { size: 0, mtimeMs: 0, oversized: false };
+            if (!meta) return;
             files.set(relativePath, meta);
+            handle.snapshot = toSnapshotEntries(files);
 
-            if (!ready) {
+            if (!ready || suppressed) {
               return;
             }
 
             // Sticky oversized flag: once a file has been observed oversized,
-            // treat intermediate events as oversized too. Chokidar fires
-            // `change` events mid-write with partial sizes (size=0 right after
-            // `open(O_TRUNC)`); without this guard an oversized file would
-            // slip through its debounce window during every write.
-            const isCurrentlyOversized =
-              meta.oversized || previous?.oversized === true;
+            // treat intermediate events as oversized too.
+            const isCurrentlyOversized = meta.oversized || previous?.oversized === true;
 
             const debounceKey = `${cwd}:${relativePath}`;
             clearDebounce(debounceKey);
@@ -311,8 +375,6 @@ export const FileDocsServiceLive = Layer.effect(
             }
 
             if (kind === "add") {
-              // Added events fire immediately so the UI can render the new tree
-              // entry without waiting on debounce.
               publishEvent({
                 _tag: "added",
                 relativePath,
@@ -324,9 +386,6 @@ export const FileDocsServiceLive = Layer.effect(
             // change
             const timer = setTimeout(() => {
               debounceTimers.delete(debounceKey);
-              // Re-stat at emission so we reflect the final write size rather
-              // than a partial mid-flush value (chokidar fires change events
-              // as soon as bytes arrive).
               void (async () => {
                 try {
                   const freshStat = await fsPromises.stat(absolutePath);
@@ -336,6 +395,7 @@ export const FileDocsServiceLive = Layer.effect(
                     oversized: freshStat.size > FILE_DOCS_SIZE_CAP_BYTES,
                   };
                   files.set(relativePath, finalMeta);
+                  handle.snapshot = toSnapshotEntries(files);
                   if (finalMeta.oversized) return;
                   publishEvent({
                     _tag: "changed",
@@ -344,7 +404,7 @@ export const FileDocsServiceLive = Layer.effect(
                     mtimeMs: finalMeta.mtimeMs,
                   });
                 } catch {
-                  // File was removed before emission — unlink handler will emit
+                  // File was removed before emission — the next poll will emit
                   // the `removed` event.
                 }
               })();
@@ -352,61 +412,39 @@ export const FileDocsServiceLive = Layer.effect(
             debounceTimers.set(debounceKey, timer);
           };
 
-          const ig = yield* Effect.promise(() => loadGitignore(cwd));
+          const diffAndPublish = async (nextFiles: Map<string, FileMeta>) => {
+            const previousFiles = new Map(files);
 
-          const watcher = chokidar.watch(cwd, {
-            persistent: true,
-            ignoreInitial: false,
-            ignorePermissionErrors: true,
-            ignored: (targetPath: string) => {
-              if (targetPath === cwd) return false;
-              const rel = nodePath.relative(cwd, targetPath);
-              if (!rel || rel.startsWith("..")) return false;
-              const posix = toPosix(rel);
-              // Fast-path hard ignores by segment.
-              const segments = posix.split("/");
-              for (const segment of segments) {
-                if (HARD_CODED_IGNORES.includes(segment)) return true;
+            for (const relativePath of previousFiles.keys()) {
+              if (!nextFiles.has(relativePath)) {
+                await processFileDiff(relativePath, "unlink", null);
               }
-              return ig.ignores(posix);
-            },
-          });
+            }
 
-          watcher.on("add", (absolutePath, stat) => {
-            if (!stat) return;
-            void processPathEvent(absolutePath, "add", stat);
-          });
-          watcher.on("change", (absolutePath, stat) => {
-            if (!stat) return;
-            void processPathEvent(absolutePath, "change", stat);
-          });
-          watcher.on("unlink", (absolutePath) => {
-            void processPathEvent(absolutePath, "unlink", null);
-          });
-          watcher.on("error", (error) => {
-            runFork(
-              Effect.logWarning("FileDocsService chokidar error", {
-                cwd,
-                detail: error instanceof Error ? error.message : String(error),
-              }),
-            );
-          });
+            for (const [relativePath, nextMeta] of nextFiles) {
+              const previousMeta = previousFiles.get(relativePath);
+              if (!previousMeta) {
+                await processFileDiff(relativePath, "add", nextMeta);
+                continue;
+              }
+              if (
+                previousMeta.size !== nextMeta.size ||
+                previousMeta.mtimeMs !== nextMeta.mtimeMs ||
+                previousMeta.oversized !== nextMeta.oversized
+              ) {
+                await processFileDiff(relativePath, "change", nextMeta);
+              }
+            }
+          };
 
-          const onReady = new Promise<void>((resolveChokidar) => {
-            watcher.once("ready", resolveChokidar);
-          });
-          yield* Effect.promise(() => onReady);
-
-          const snapshotEntries: ProjectFileEntry[] = [];
-          for (const [relativePath, meta] of files) {
-            snapshotEntries.push({
-              relativePath,
-              size: meta.size,
-              mtimeMs: meta.mtimeMs,
-              oversized: meta.oversized,
-            });
+          const ig = yield* Effect.promise(() => loadGitignore(cwd));
+          const initialFiles = yield* Effect.promise(() => collectMarkdownSnapshot(cwd, ig));
+          files.clear();
+          for (const [relativePath, meta] of initialFiles) {
+            files.set(relativePath, meta);
           }
-          snapshotEntries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
+          const snapshotEntries = toSnapshotEntries(files);
           handle.snapshot = snapshotEntries;
           ready = true;
           resolveReady();
@@ -415,20 +453,27 @@ export const FileDocsServiceLive = Layer.effect(
             files: snapshotEntries,
           });
 
-          // Attach cleanup into the handle's scope.
-          yield* Scope.addFinalizer(
-            scope,
-            Effect.gen(function* () {
-              yield* Effect.promise(() => watcher.close()).pipe(Effect.ignore);
-              for (const [key, timer] of debounceTimers) {
-                if (key.startsWith(`${cwd}:`)) {
-                  clearTimeout(timer);
-                  debounceTimers.delete(key);
-                }
-              }
-              yield* PubSub.shutdown(pubsub);
-            }),
-          );
+          let pollInFlight = false;
+          const pollTimer = setInterval(() => {
+            if (!ready || pollInFlight || handle.subscriberCount === 0) {
+              return;
+            }
+            pollInFlight = true;
+            void collectMarkdownSnapshot(cwd, ig)
+              .then(diffAndPublish)
+              .catch((error: unknown) => {
+                runFork(
+                  Effect.logWarning("FileDocsService poll error", {
+                    cwd,
+                    detail: error instanceof Error ? error.message : String(error),
+                  }),
+                );
+              })
+              .finally(() => {
+                pollInFlight = false;
+              });
+          }, FILE_DOCS_POLL_INTERVAL_MS);
+          handle.pollTimer = pollTimer;
 
           const nextMap = new Map(map);
           nextMap.set(cwd, handle);
@@ -437,21 +482,25 @@ export const FileDocsServiceLive = Layer.effect(
       );
 
     const releaseWatcher = (cwd: string) =>
-      SynchronizedRef.modify(watchers, (map) => {
+      SynchronizedRef.update(watchers, (map) => {
         const existing = map.get(cwd);
         if (!existing) {
-          return [null as Scope.Scope | null, map] as const;
+          return map;
         }
         if (existing.subscriberCount > 1) {
           existing.subscriberCount -= 1;
-          return [null as Scope.Scope | null, map] as const;
+          return map;
         }
-        const nextMap = new Map(map);
-        nextMap.delete(cwd);
-        return [existing.scope, nextMap] as const;
-      }).pipe(
-        Effect.flatMap((scope) => (scope ? Scope.close(scope, Exit.void) : Effect.void)),
-      );
+        if (existing.pollTimer) {
+          clearInterval(existing.pollTimer);
+        }
+        for (const relativePath of existing.files.keys()) {
+          clearDebounce(`${cwd}:${relativePath}`);
+        }
+        const next = new Map(map);
+        next.delete(cwd);
+        return next;
+      });
 
     const readFile: FileDocsServiceShape["readFile"] = (input) =>
       Effect.gen(function* () {
@@ -461,22 +510,18 @@ export const FileDocsServiceLive = Layer.effect(
             relativePath: input.relativePath,
           })
           .pipe(
-            Effect.mapError(
-              () =>
-                ({
-                  _tag: "PathOutsideRoot" as const,
-                  relativePath: input.relativePath,
-                }),
-            ),
+            Effect.mapError(() => ({
+              _tag: "PathOutsideRoot" as const,
+              relativePath: input.relativePath,
+            })),
           );
 
         const stat = yield* Effect.tryPromise({
           try: () => fsPromises.stat(resolved.absolutePath),
-          catch: () =>
-            ({
-              _tag: "NotFound" as const,
-              relativePath: resolved.relativePath,
-            }),
+          catch: () => ({
+            _tag: "NotFound" as const,
+            relativePath: resolved.relativePath,
+          }),
         });
 
         if (stat.size > FILE_DOCS_SIZE_CAP_BYTES) {
@@ -488,11 +533,10 @@ export const FileDocsServiceLive = Layer.effect(
 
         const contents = yield* Effect.tryPromise({
           try: () => fsPromises.readFile(resolved.absolutePath, "utf8"),
-          catch: () =>
-            ({
-              _tag: "NotReadable" as const,
-              relativePath: resolved.relativePath,
-            }),
+          catch: () => ({
+            _tag: "NotReadable" as const,
+            relativePath: resolved.relativePath,
+          }),
         });
 
         return {
@@ -542,37 +586,32 @@ export const FileDocsServiceLive = Layer.effect(
             relativePath: input.relativePath,
           })
           .pipe(
-            Effect.mapError(
-              () =>
-                ({
-                  _tag: "PathOutsideRoot" as const,
-                  relativePath: input.relativePath,
-                }),
-            ),
+            Effect.mapError(() => ({
+              _tag: "PathOutsideRoot" as const,
+              relativePath: input.relativePath,
+            })),
           );
 
         // Prime the self-echo suppression *before* the write so concurrently
-        // delivered chokidar events for this path are dropped.
+        // delivered poll diffs for this path are dropped.
         yield* markSelfEcho(resolved.absolutePath);
 
         const existing = yield* Effect.tryPromise({
           try: () => fsPromises.readFile(resolved.absolutePath, "utf8"),
-          catch: () =>
-            ({
-              _tag: "NotFound" as const,
-              relativePath: resolved.relativePath,
-            }),
+          catch: () => ({
+            _tag: "NotFound" as const,
+            relativePath: resolved.relativePath,
+          }),
         });
 
         const expectedMtimeMs = input.expectedMtimeMs;
         if (expectedMtimeMs !== undefined) {
           const stat = yield* Effect.tryPromise({
             try: () => fsPromises.stat(resolved.absolutePath),
-            catch: () =>
-              ({
-                _tag: "NotFound" as const,
-                relativePath: resolved.relativePath,
-              }),
+            catch: () => ({
+              _tag: "NotFound" as const,
+              relativePath: resolved.relativePath,
+            }),
           });
           if (Math.floor(stat.mtimeMs) !== Math.floor(expectedMtimeMs)) {
             return yield* Effect.fail({
@@ -594,24 +633,34 @@ export const FileDocsServiceLive = Layer.effect(
             await fsPromises.writeFile(tempPath, rewritten, "utf8");
             await fsPromises.rename(tempPath, resolved.absolutePath);
           },
-          catch: () =>
-            ({
-              _tag: "NotFound" as const,
-              relativePath: resolved.relativePath,
-            }),
+          catch: () => ({
+            _tag: "NotFound" as const,
+            relativePath: resolved.relativePath,
+          }),
         });
 
         // Re-mark self-echo after write to extend the suppression window over
-        // chokidar's post-rename change delivery.
+        // post-rename poll delivery.
         yield* markSelfEcho(resolved.absolutePath);
 
         const afterStat = yield* Effect.tryPromise({
           try: () => fsPromises.stat(resolved.absolutePath),
-          catch: () =>
-            ({
-              _tag: "NotFound" as const,
-              relativePath: resolved.relativePath,
-            }),
+          catch: () => ({
+            _tag: "NotFound" as const,
+            relativePath: resolved.relativePath,
+          }),
+        });
+
+        yield* SynchronizedRef.update(watchers, (map) => {
+          const handle = map.get(input.cwd);
+          if (!handle) return map;
+          handle.files.set(resolved.relativePath, {
+            size: afterStat.size,
+            mtimeMs: afterStat.mtimeMs,
+            oversized: afterStat.size > FILE_DOCS_SIZE_CAP_BYTES,
+          });
+          handle.snapshot = toSnapshotEntries(handle.files);
+          return map;
         });
 
         return { mtimeMs: afterStat.mtimeMs };

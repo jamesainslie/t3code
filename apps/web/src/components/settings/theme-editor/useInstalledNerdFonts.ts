@@ -114,7 +114,7 @@ export function useInstalledNerdFonts(): InstalledNerdFontsState {
         }
 
         const presets = Array.from(byBase.values())
-          .sort((a, b) => a.localeCompare(b))
+          .toSorted((a, b) => a.localeCompare(b))
           .map(toPreset);
 
         setState({ status: "ready", fonts: presets });

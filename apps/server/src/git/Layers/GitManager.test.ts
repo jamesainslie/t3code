@@ -2124,24 +2124,26 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       }),
   );
 
-  it.effect("creates cross-repo PRs with the fork owner selector and default base branch", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      const forkDir = yield* createBareRemote();
-      yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
-      yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
-      fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
-      yield* runGit(repoDir, ["add", "changes.txt"]);
-      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
-      yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-      yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-91/statemachine"]);
-      yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
-      yield* runGit(repoDir, [
-        "config",
-        "remote.fork-seed.url",
-        "https://github.com/octocat/codething-mvp.git",
-      ]);
+  it.effect(
+    "creates cross-repo PRs with the fork owner selector and default base branch",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        const forkDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
+        yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
+        fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+        yield* runGit(repoDir, ["add", "changes.txt"]);
+        yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+        yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-91/statemachine"]);
+        yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
+        yield* runGit(repoDir, [
+          "config",
+          "remote.fork-seed.url",
+          "https://github.com/octocat/codething-mvp.git",
+        ]);
 
         const { manager, ghCalls } = yield* makeManager({
           ghScenario: {
@@ -2177,17 +2179,19 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           action: "commit_push_pr",
         });
 
-      expect(result.pr.status).toBe("created");
-      expect(result.pr.number).toBe(188);
-      expect(
-        ghCalls.some((call) => call.includes("pr create --base main --head octocat:statemachine")),
-      ).toBe(true);
-      expect(
-        ghCalls.some((call) =>
-          call.includes("pr create --base statemachine --head octocat:statemachine"),
-        ),
-      ).toBe(false);
-    }),
+        expect(result.pr.status).toBe("created");
+        expect(result.pr.number).toBe(188);
+        expect(
+          ghCalls.some((call) =>
+            call.includes("pr create --base main --head octocat:statemachine"),
+          ),
+        ).toBe(true);
+        expect(
+          ghCalls.some((call) =>
+            call.includes("pr create --base statemachine --head octocat:statemachine"),
+          ),
+        ).toBe(false);
+      }),
     30_000,
   );
 

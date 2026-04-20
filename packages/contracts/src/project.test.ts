@@ -174,9 +174,7 @@ describe("ProjectFileChangeEvent", () => {
       "snapshot",
       {
         _tag: "snapshot",
-        files: [
-          { relativePath: "a.md", size: 1, mtimeMs: 1, oversized: false },
-        ],
+        files: [{ relativePath: "a.md", size: 1, mtimeMs: 1, oversized: false }],
       },
     ],
     ["added", { _tag: "added", relativePath: "a.md", size: 1, mtimeMs: 1 }],
@@ -207,16 +205,13 @@ describe("ProjectFileChangeEvent", () => {
 });
 
 describe("ProjectFileMonitorError", () => {
-  it.each(["PathOutsideRoot", "MonitorFailed"] as const)(
-    "accepts tag %s",
-    (tag) => {
-      const err = Schema.decodeUnknownSync(ProjectFileMonitorError)({
-        _tag: tag,
-        detail: "nope",
-      });
-      expect(err._tag).toBe(tag);
-    },
-  );
+  it.each(["PathOutsideRoot", "MonitorFailed"] as const)("accepts tag %s", (tag) => {
+    const err = Schema.decodeUnknownSync(ProjectFileMonitorError)({
+      _tag: tag,
+      detail: "nope",
+    });
+    expect(err._tag).toBe(tag);
+  });
 });
 
 describe("ProjectUpdateFrontmatterInput", () => {
@@ -272,18 +267,16 @@ describe("ProjectUpdateFrontmatterResult", () => {
 });
 
 describe("ProjectUpdateFrontmatterError", () => {
-  it.each([
-    "FrontmatterInvalid",
-    "ConcurrentModification",
-    "PathOutsideRoot",
-    "NotFound",
-  ] as const)("accepts tag %s", (tag) => {
-    const err = Schema.decodeUnknownSync(ProjectUpdateFrontmatterError)({
-      _tag: tag,
-      relativePath: "docs/a.md",
-    });
-    expect(err._tag).toBe(tag);
-  });
+  it.each(["FrontmatterInvalid", "ConcurrentModification", "PathOutsideRoot", "NotFound"] as const)(
+    "accepts tag %s",
+    (tag) => {
+      const err = Schema.decodeUnknownSync(ProjectUpdateFrontmatterError)({
+        _tag: tag,
+        relativePath: "docs/a.md",
+      });
+      expect(err._tag).toBe(tag);
+    },
+  );
 
   it("rejects unknown tag", () => {
     expect(() =>

@@ -33,7 +33,6 @@ const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
 const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
-const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
 const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
 const SSH_STATUS_CHANNEL = "desktop:ssh-status";

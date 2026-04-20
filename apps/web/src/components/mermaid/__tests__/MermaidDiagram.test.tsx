@@ -25,17 +25,13 @@ afterEach(() => {
 describe("MermaidDiagram", () => {
   it("renders null initially before the async render completes", () => {
     // In SSR, useEffect does not run, so svg stays null -> component returns null.
-    const html = renderToStaticMarkup(
-      <MermaidDiagram source="graph TD; A-->B" theme="light" />,
-    );
+    const html = renderToStaticMarkup(<MermaidDiagram source="graph TD; A-->B" theme="light" />);
     expect(html).toBe("");
   });
 
   it("returns empty markup for invalid source (initial state is null)", () => {
     mockRender.mockRejectedValue(new Error("Parse error"));
-    const html = renderToStaticMarkup(
-      <MermaidDiagram source="invalid %%% source" theme="dark" />,
-    );
+    const html = renderToStaticMarkup(<MermaidDiagram source="invalid %%% source" theme="dark" />);
     expect(html).toBe("");
   });
 
@@ -43,9 +39,7 @@ describe("MermaidDiagram", () => {
     // We can verify the theme mapping logic by testing the useMemo derivation.
     // Since SSR doesn't run effects, we test the initialize call indirectly
     // by verifying the component's theme derivation.
-    const html = renderToStaticMarkup(
-      <MermaidDiagram source="graph TD; A-->B" theme="light" />,
-    );
+    const html = renderToStaticMarkup(<MermaidDiagram source="graph TD; A-->B" theme="light" />);
     // The component should produce empty output in SSR (no effects).
     expect(html).toBe("");
     // Verify the mermaid theme mapping: light -> "default", dark -> "dark".
@@ -54,9 +48,7 @@ describe("MermaidDiagram", () => {
   });
 
   it("configures mermaid with 'dark' theme for dark mode", () => {
-    const html = renderToStaticMarkup(
-      <MermaidDiagram source="graph TD; A-->B" theme="dark" />,
-    );
+    const html = renderToStaticMarkup(<MermaidDiagram source="graph TD; A-->B" theme="dark" />);
     expect(html).toBe("");
   });
 
@@ -84,9 +76,7 @@ describe("MermaidDiagram", () => {
     // by testing the non-null branch exists through the module's export type.
     // The component uses dangerouslySetInnerHTML and an overflow-x-auto wrapper.
     // Integration behavior (async render -> svg display) is covered by browser tests.
-    const html = renderToStaticMarkup(
-      <MermaidDiagram source="graph TD; A-->B" theme="light" />,
-    );
+    const html = renderToStaticMarkup(<MermaidDiagram source="graph TD; A-->B" theme="light" />);
     // Initial render is empty (effect hasn't fired).
     expect(html).toBe("");
   });

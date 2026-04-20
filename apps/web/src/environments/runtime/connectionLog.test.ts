@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  connectionLog,
-  resetConnectionLogForTests,
-  useConnectionLogStore,
-} from "./connectionLog";
+import { connectionLog, resetConnectionLogForTests, useConnectionLogStore } from "./connectionLog";
 
 afterEach(() => {
   resetConnectionLogForTests();

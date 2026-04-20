@@ -60,14 +60,15 @@ export function buildFileTree(files: readonly ProjectFileEntry[]): FileTreeNode[
     const name = slashIdx === -1 ? file.relativePath : file.relativePath.slice(slashIdx + 1);
 
     const parentChildren = ensureDir(dirPath);
-    parentChildren.push({
+    const node: FileTreeNode = {
       name,
       relativePath: file.relativePath,
       kind: "file",
       size: file.size,
       mtimeMs: file.mtimeMs,
-      oversized: file.oversized || undefined,
-    });
+      ...(file.oversized ? { oversized: true } : {}),
+    };
+    parentChildren.push(node);
   }
 
   // Sort all levels recursively
@@ -97,12 +98,12 @@ function insertFile(
   if (segments.length === 1) {
     // Insert the file at this level
     const newNode: FileTreeNode = {
-      name: segments[0],
+      name: segments[0]!,
       relativePath: fullPath,
       kind: "file",
       size: fileProps.size,
       mtimeMs: fileProps.mtimeMs,
-      oversized: fileProps.oversized || undefined,
+      ...(fileProps.oversized ? { oversized: true } : {}),
     };
     const result = [...tree, newNode];
     result.sort(sortNodes);
@@ -110,13 +111,13 @@ function insertFile(
   }
 
   // Need to descend into or create a directory
-  const dirName = segments[0];
+  const dirName = segments[0]!;
   const rest = segments.slice(1);
   const dirPath = fullPath.slice(0, fullPath.length - rest.join("/").length - 1);
 
   const existingIdx = tree.findIndex((n) => n.kind === "directory" && n.name === dirName);
   if (existingIdx !== -1) {
-    const existing = tree[existingIdx];
+    const existing = tree[existingIdx]!;
     const newChildren = insertFile(existing.children ?? [], rest, fullPath, fileProps);
     const result = [...tree];
     result[existingIdx] = { ...existing, children: newChildren };
@@ -126,7 +127,7 @@ function insertFile(
   // Create new directory
   const newDirChildren = insertFile([], rest, fullPath, fileProps);
   const newDir: FileTreeNode = {
-    name: dirName,
+    name: dirName!,
     relativePath: dirPath,
     kind: "directory",
     children: newDirChildren,
@@ -149,7 +150,7 @@ function removeFile(
     return filtered.length > 0 ? filtered : null;
   }
 
-  const dirName = segments[0];
+  const dirName = segments[0]!;
   const rest = segments.slice(1);
 
   const result = tree.reduce<FileTreeNode[]>((acc, node) => {
@@ -185,7 +186,7 @@ function updateFile(
     });
   }
 
-  const dirName = segments[0];
+  const dirName = segments[0]!;
   const rest = segments.slice(1);
 
   return tree.map((node) => {

@@ -1,5 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { EnvironmentId } from "@t3tools/contracts";
+import {
+  T3FileAdapter,
+  T3NullMessagingAdapter,
+  T3StorageAdapter,
+  type MdreviewAdapters,
+} from "@t3tools/mdreview-host";
 import { ExternalLinkIcon, FileTextIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -7,6 +13,7 @@ import { openInPreferredEditor } from "../../editorPreferences";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { readEnvironmentConnection } from "../../environments/runtime";
+import { createFileRpcClientAdapter } from "../../rpc/FileRpcClientAdapter";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { FileViewer } from "./FileViewer";
@@ -70,6 +77,26 @@ export function DocPreviewPanel({
   const [activeTab, setActiveTab] = useState<string>(firstPath ?? initialRelativePath);
   const activePath = firstPath != null ? activeTab : initialRelativePath;
   const [fileState, setFileState] = useState<FileState>(INITIAL_FILE_STATE);
+  const markdownAdapters = useMemo<MdreviewAdapters | undefined>(() => {
+    if (typeof localStorage === "undefined") {
+      return undefined;
+    }
+
+    const connection = readEnvironmentConnection(environmentId);
+    if (!connection) {
+      return undefined;
+    }
+
+    return {
+      file: new T3FileAdapter({
+        client: createFileRpcClientAdapter(connection.client),
+        cwd,
+        defaultWatchGlobs: ["**/*.md", "**/*.markdown"],
+      }),
+      storage: new T3StorageAdapter({ backing: localStorage }),
+      messaging: new T3NullMessagingAdapter(),
+    };
+  }, [cwd, environmentId]);
 
   // Reset active tab when touchedPaths or initial path changes
   useEffect(() => {
@@ -267,6 +294,7 @@ export function DocPreviewPanel({
           size={fileState.size}
           mtimeMs={fileState.mtimeMs}
           cwd={cwd}
+          markdownAdapters={markdownAdapters}
           className="h-full rounded-none border-0"
         />
       )}

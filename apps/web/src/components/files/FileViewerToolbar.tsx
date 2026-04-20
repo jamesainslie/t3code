@@ -24,11 +24,7 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FileViewerToolbar({
-  relativePath,
-  size,
-  cwd,
-}: FileViewerToolbarProps) {
+export function FileViewerToolbar({ relativePath, size, cwd }: FileViewerToolbarProps) {
   const handleOpenInEditor = useCallback(() => {
     const api = readLocalApi();
     if (!api) {
@@ -39,25 +35,19 @@ export function FileViewerToolbar({
       return;
     }
 
-    const fullPath = cwd.endsWith("/")
-      ? `${cwd}${relativePath}`
-      : `${cwd}/${relativePath}`;
+    const fullPath = cwd.endsWith("/") ? `${cwd}${relativePath}` : `${cwd}/${relativePath}`;
 
     void openInPreferredEditor(api, fullPath).catch((error) => {
       toastManager.add({
         type: "error",
         title: "Unable to open file",
-        description:
-          error instanceof Error ? error.message : "An error occurred.",
+        description: error instanceof Error ? error.message : "An error occurred.",
       });
     });
   }, [cwd, relativePath]);
 
   const handleCopyPath = useCallback(() => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.clipboard?.writeText
-    ) {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
       toastManager.add({
         type: "error",
         title: "Failed to copy path",
@@ -78,8 +68,7 @@ export function FileViewerToolbar({
         toastManager.add({
           type: "error",
           title: "Failed to copy path",
-          description:
-            error instanceof Error ? error.message : "An error occurred.",
+          description: error instanceof Error ? error.message : "An error occurred.",
         });
       },
     );
@@ -87,10 +76,7 @@ export function FileViewerToolbar({
 
   return (
     <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
-      <span
-        className="min-w-0 flex-1 truncate font-mono"
-        title={relativePath}
-      >
+      <span className="min-w-0 flex-1 truncate font-mono" title={relativePath}>
         {relativePath}
       </span>
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { EnvironmentId, RemoteIdentityKey, SavedRemoteEnvironment } from "@t3tools/contracts";
 import {
   AlertTriangleIcon,
@@ -168,9 +168,7 @@ function RemoteEnvironmentRow({
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
   const [debugOpen, setDebugOpen] = useState(false);
-  const runtimeState = useSavedEnvironmentRuntimeStore(
-    (state) => state.byId[environmentId],
-  );
+  const runtimeState = useSavedEnvironmentRuntimeStore((state) => state.byId[environmentId]);
 
   return (
     <div className={ROW_CLASSNAME}>
@@ -258,7 +256,7 @@ export function ConnectionLogViewer() {
 
   const filtered = useMemo(() => {
     const base = filter === "errors" ? entries.filter((e) => e.level === "error") : entries;
-    return [...base].reverse();
+    return base.toReversed();
   }, [entries, filter]);
 
   const handleCopy = useCallback(() => {
@@ -313,7 +311,10 @@ export function ConnectionLogViewer() {
               const style = LOG_LEVEL_STYLES[entry.level];
               const Icon = style.icon;
               return (
-                <div key={entry.id} className={`flex items-start gap-1.5 text-[11px] ${style.className}`}>
+                <div
+                  key={entry.id}
+                  className={`flex items-start gap-1.5 text-[11px] ${style.className}`}
+                >
                   <Icon className="mt-0.5 size-3 shrink-0" />
                   <span className="shrink-0 font-mono text-muted-foreground/60">
                     {formatLogTime(entry.timestamp)}
@@ -387,7 +388,6 @@ export function RemoteEnvironmentsSectionView({
           identityKey={record.identityKey}
           connectionState={connectionState}
           runtimeState={runtimeState}
-          record={record}
           onReconnect={onReconnect}
           onDisconnect={onDisconnect}
           onRemove={onRemove}
@@ -501,10 +501,3 @@ export function RemoteEnvironmentsSection() {
 }
 
 // ---------- Helpers ----------
-
-const LOG_LEVEL_COLORS: Record<ConnectionLogEntry["level"], string> = {
-  info: "text-muted-foreground",
-  warn: "text-yellow-500",
-  error: "text-red-500",
-};
-

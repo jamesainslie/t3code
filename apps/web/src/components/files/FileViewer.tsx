@@ -1,23 +1,8 @@
-import {
-  DiffsHighlighter,
-  getSharedHighlighter,
-  SupportedLanguages,
-} from "@pierre/diffs";
-import { MdreviewRenderer } from "@t3tools/mdreview-host";
-import type { MdreviewAdapters } from "@t3tools/mdreview-host";
-import React, {
-  Suspense,
-  memo,
-  use,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { DiffsHighlighter, getSharedHighlighter, SupportedLanguages } from "@pierre/diffs";
+import { MdreviewRenderer, type MdreviewAdapters } from "@t3tools/mdreview-host";
+import React, { Suspense, memo, use, useEffect, useMemo, useRef } from "react";
 
-import {
-  resolveDiffThemeName,
-  type DiffThemeName,
-} from "../../lib/diffRendering";
+import { resolveDiffThemeName, type DiffThemeName } from "../../lib/diffRendering";
 import { fnv1a32 } from "../../lib/diffRendering";
 import { LRUCache } from "../../lib/lruCache";
 import { useTheme } from "../../hooks/useTheme";
@@ -108,11 +93,7 @@ const highlightedCodeCache = new LRUCache<string>(
 );
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
-function createCacheKey(
-  code: string,
-  language: string,
-  theme: DiffThemeName,
-): string {
+function createCacheKey(code: string, language: string, theme: DiffThemeName): string {
   return `fv:${fnv1a32(code).toString(36)}:${code.length}:${language}:${theme}`;
 }
 
@@ -120,9 +101,7 @@ function estimateSize(html: string, code: string): number {
   return Math.max(html.length * 2, code.length * 3);
 }
 
-function getHighlighterPromise(
-  language: string,
-): Promise<DiffsHighlighter> {
+function getHighlighterPromise(language: string): Promise<DiffsHighlighter> {
   const cached = highlighterPromiseCache.get(language);
   if (cached) return cached;
 
@@ -149,11 +128,7 @@ interface ShikiCodeViewProps {
   themeName: DiffThemeName;
 }
 
-function SuspenseShikiCodeView({
-  code,
-  language,
-  themeName,
-}: ShikiCodeViewProps) {
+function SuspenseShikiCodeView({ code, language, themeName }: ShikiCodeViewProps) {
   const cacheKey = createCacheKey(code, language, themeName);
   const cachedHtml = highlightedCodeCache.get(cacheKey);
 
@@ -204,10 +179,7 @@ class CodeHighlightErrorBoundary extends React.Component<
   { fallback: React.ReactNode; children: React.ReactNode },
   { hasError: boolean }
 > {
-  constructor(props: {
-    fallback: React.ReactNode;
-    children: React.ReactNode;
-  }) {
+  constructor(props: { fallback: React.ReactNode; children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -242,11 +214,7 @@ function CodeFileViewer({
   return (
     <CodeHighlightErrorBoundary fallback={plainFallback}>
       <Suspense fallback={plainFallback}>
-        <SuspenseShikiCodeView
-          code={contents}
-          language={language}
-          themeName={themeName}
-        />
+        <SuspenseShikiCodeView code={contents} language={language} themeName={themeName} />
       </Suspense>
     </CodeHighlightErrorBoundary>
   );
@@ -256,11 +224,6 @@ function CodeFileViewer({
 // Markdown viewer
 // ---------------------------------------------------------------------------
 
-/**
- * Noop adapters for the MdreviewRenderer. The file viewer only needs the
- * synchronous markdown-to-HTML conversion path; the adapter hooks are unused
- * but required by the component's type contract.
- */
 const noopAdapters: MdreviewAdapters = {
   file: {
     writeFile: async () => ({ success: false, error: "noop" }),
@@ -280,19 +243,19 @@ const noopAdapters: MdreviewAdapters = {
 };
 
 function MarkdownFileViewer({
+  adapters,
   contents,
+  filePath,
   theme,
 }: {
+  adapters: MdreviewAdapters;
   contents: string;
+  filePath?: string | undefined;
   theme: "light" | "dark";
 }) {
   return (
     <div className="overflow-auto p-4">
-      <MdreviewRenderer
-        source={contents}
-        adapters={noopAdapters}
-        theme={theme}
-      />
+      <MdreviewRenderer source={contents} adapters={adapters} filePath={filePath} theme={theme} />
     </div>
   );
 }
@@ -312,6 +275,8 @@ export interface FileViewerProps {
   mtimeMs: number;
   /** Current project cwd (for "Open in Editor") */
   cwd: string;
+  /** Optional MD Review adapters for interactive markdown features. */
+  markdownAdapters?: MdreviewAdapters | undefined;
   /** Optional className for outer container */
   className?: string;
 }
@@ -322,14 +287,12 @@ function FileViewerImpl({
   size,
   mtimeMs,
   cwd,
+  markdownAdapters,
   className,
 }: FileViewerProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
-  const language = useMemo(
-    () => detectLanguage(relativePath),
-    [relativePath],
-  );
+  const language = useMemo(() => detectLanguage(relativePath), [relativePath]);
   const markdown = isMarkdownFile(relativePath);
 
   return (
@@ -339,25 +302,18 @@ function FileViewerImpl({
         className,
       )}
     >
-      <FileViewerToolbar
-        relativePath={relativePath}
-        size={size}
-        mtimeMs={mtimeMs}
-        cwd={cwd}
-      />
+      <FileViewerToolbar relativePath={relativePath} size={size} mtimeMs={mtimeMs} cwd={cwd} />
 
       <div className="min-h-0 flex-1 overflow-auto">
         {markdown ? (
           <MarkdownFileViewer
+            adapters={markdownAdapters ?? noopAdapters}
             contents={contents}
+            filePath={markdownAdapters ? relativePath : undefined}
             theme={resolvedTheme}
           />
         ) : (
-          <CodeFileViewer
-            contents={contents}
-            language={language}
-            themeName={diffThemeName}
-          />
+          <CodeFileViewer contents={contents} language={language} themeName={diffThemeName} />
         )}
       </div>
     </div>

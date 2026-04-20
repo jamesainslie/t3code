@@ -13,10 +13,7 @@ function makeStateAtom<A>(label: string, initialValue: A) {
   return Atom.make(initialValue).pipe(Atom.keepAlive, Atom.withLabel(label));
 }
 
-export const hostResourceAtom = makeStateAtom<HostResourceSnapshot | null>(
-  "host-resource",
-  null,
-);
+export const hostResourceAtom = makeStateAtom<HostResourceSnapshot | null>("host-resource", null);
 
 /** Apply a stream event to produce the latest snapshot. */
 export function applyHostResourceStreamEvent(
@@ -33,11 +30,7 @@ export function applyHostResourceStreamEvent(
 
 /** Get the worst metric state across all metrics in a snapshot. */
 export function worstState(snapshot: HostResourceSnapshot): MetricState {
-  const states: MetricState[] = [
-    snapshot.ram.state,
-    snapshot.cpu.state,
-    snapshot.disk.state,
-  ];
+  const states: MetricState[] = [snapshot.ram.state, snapshot.cpu.state, snapshot.disk.state];
   if (snapshot.containers) states.push(snapshot.containers.state);
   if (snapshot.kubecontext) states.push(snapshot.kubecontext.state);
   if (snapshot.remote.isRoot) states.push("critical");
@@ -59,14 +52,11 @@ export function startHostResourceSync(
   client: HostResourceClient,
   projectId: ProjectId,
 ): () => void {
-  return client.onResourceEvent(
-    { projectId },
-    (event: HostResourceStreamEvent) => {
-      const current = appAtomRegistry.get(hostResourceAtom);
-      const next = applyHostResourceStreamEvent(current, event);
-      if (next) {
-        appAtomRegistry.set(hostResourceAtom, next);
-      }
-    },
-  );
+  return client.onResourceEvent({ projectId }, (event: HostResourceStreamEvent) => {
+    const current = appAtomRegistry.get(hostResourceAtom);
+    const next = applyHostResourceStreamEvent(current, event);
+    if (next) {
+      appAtomRegistry.set(hostResourceAtom, next);
+    }
+  });
 }

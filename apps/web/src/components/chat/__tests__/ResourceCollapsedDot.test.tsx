@@ -65,27 +65,21 @@ function makeSnapshot(
 
 describe("ResourceCollapsedDot", () => {
   it("renders with normal state color when all metrics normal", () => {
-    const html = renderToStaticMarkup(
-      <ResourceCollapsedDot snapshot={makeSnapshot()} />,
-    );
+    const html = renderToStaticMarkup(<ResourceCollapsedDot snapshot={makeSnapshot()} />);
     expect(html).toContain('aria-label="System resources"');
     expect(html).toContain("text-muted-foreground/50");
   });
 
   it("renders amber when worst state is warn", () => {
     const html = renderToStaticMarkup(
-      <ResourceCollapsedDot
-        snapshot={makeSnapshot({ ram: { ...BASE_RAM, state: "warn" } })}
-      />,
+      <ResourceCollapsedDot snapshot={makeSnapshot({ ram: { ...BASE_RAM, state: "warn" } })} />,
     );
     expect(html).toContain("text-amber-500");
   });
 
   it("renders red with pulse when worst state is critical", () => {
     const html = renderToStaticMarkup(
-      <ResourceCollapsedDot
-        snapshot={makeSnapshot({ cpu: { ...BASE_CPU, state: "critical" } })}
-      />,
+      <ResourceCollapsedDot snapshot={makeSnapshot({ cpu: { ...BASE_CPU, state: "critical" } })} />,
     );
     expect(html).toContain("text-red-500");
     expect(html).toContain("animate-pulse-slow");

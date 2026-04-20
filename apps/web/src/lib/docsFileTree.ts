@@ -4,9 +4,7 @@ export type DocsTreeNode =
   | { kind: "file"; name: string; path: string; oversized: boolean }
   | { kind: "directory"; name: string; path: string; children: DocsTreeNode[] };
 
-export function buildDocsFileTree(
-  files: readonly ProjectFileEntry[],
-): DocsTreeNode[] {
+export function buildDocsFileTree(files: readonly ProjectFileEntry[]): DocsTreeNode[] {
   const root = new Map<string, DocsTreeNode>();
 
   for (const file of files) {
@@ -64,7 +62,7 @@ function insertIntoMap(
 }
 
 function sortNodes(nodes: DocsTreeNode[]): DocsTreeNode[] {
-  return nodes.sort((a, b) => {
+  return nodes.toSorted((a, b) => {
     if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
     return a.name.localeCompare(b.name);
   });

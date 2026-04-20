@@ -4,7 +4,7 @@ This document describes the conventions **unique to the `jamesainslie/t3code` fo
 
 ## Why this exists
 
-Upstream `pingdotgg/t3code` churns heavily in three hotspots — `Sidebar.tsx`, `packages/contracts/src/orchestration.ts`, and `apps/server/src/ws.ts`. Our fork adds SSH remote environment support, deleted-project soft-delete, and related features that originally landed *inside* those files. Every upstream sync produced hand-edited merge conflicts in each of them.
+Upstream `pingdotgg/t3code` churns heavily in three hotspots — `Sidebar.tsx`, `packages/contracts/src/orchestration.ts`, and `apps/server/src/ws.ts`. Our fork adds SSH remote environment support, deleted-project soft-delete, and related features that originally landed _inside_ those files. Every upstream sync produced hand-edited merge conflicts in each of them.
 
 The fork-isolation plan (see `docs/plans/reduce-upstream-merge-conflict-surface.md`) extracted the fork-only code into sibling modules so upstream edits and fork edits no longer collide.
 
@@ -71,13 +71,13 @@ Prefer pure functions exported alongside the React hook so behavior can be teste
 
 Measured against upstream `pingdotgg/t3code@main` (merge-base at the time of Phase 4):
 
-| File | Fork diff before | Fork diff after | Reduction |
-|---|---:|---:|---:|
-| `packages/contracts/src/orchestration.ts` | ~320 lines | 88 lines | **~72%** |
-| `apps/server/src/ws.ts` | ~1020 lines | 1087 lines* | ~0%** |
-| `apps/web/src/components/Sidebar.tsx` | 518 lines | 272 lines | **~47%** |
+| File                                      | Fork diff before | Fork diff after | Reduction |
+| ----------------------------------------- | ---------------: | --------------: | --------: |
+| `packages/contracts/src/orchestration.ts` |       ~320 lines |        88 lines |  **~72%** |
+| `apps/server/src/ws.ts`                   |      ~1020 lines |    1087 lines\* |   ~0%\*\* |
+| `apps/web/src/components/Sidebar.tsx`     |        518 lines |       272 lines |  **~47%** |
 
-*ws.ts line count went up slightly because the registry abstraction added scaffolding, but the fork-only logic no longer lives in that file — it is in `handlers/fork.ts`. Conflict frequency, not raw lines, is what matters here. See Phase 2 in the plan doc.
+\*ws.ts line count went up slightly because the registry abstraction added scaffolding, but the fork-only logic no longer lives in that file — it is in `handlers/fork.ts`. Conflict frequency, not raw lines, is what matters here. See Phase 2 in the plan doc.
 
 **Synthetic sync validation:** cherry-picking upstream `ce94feee feat: add opencode provider support` (which touches `packages/contracts/src/orchestration.ts`) onto fork main produced **zero merge conflicts**. Before Phase 1, the same operation required manual resolution of the `remoteHost`/`deletedAt` fork fields in four struct bodies.
 

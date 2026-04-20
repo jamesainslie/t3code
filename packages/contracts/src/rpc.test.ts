@@ -8,15 +8,11 @@ describe("WS_METHODS", () => {
   });
 
   it("exposes subscribeProjectFileChanges", () => {
-    expect(WS_METHODS.subscribeProjectFileChanges).toBe(
-      "subscribeProjectFileChanges",
-    );
+    expect(WS_METHODS.subscribeProjectFileChanges).toBe("subscribeProjectFileChanges");
   });
 
   it("exposes projectsUpdateFrontmatter", () => {
-    expect(WS_METHODS.projectsUpdateFrontmatter).toBe(
-      "projects.updateFrontmatter",
-    );
+    expect(WS_METHODS.projectsUpdateFrontmatter).toBe("projects.updateFrontmatter");
   });
 });
 

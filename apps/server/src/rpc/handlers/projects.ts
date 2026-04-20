@@ -1,11 +1,7 @@
 // Projects / workspace WS RPC handlers.
 
 import { Effect, Schema, Stream } from "effect";
-import {
-  ProjectSearchEntriesError,
-  ProjectWriteFileError,
-  WS_METHODS,
-} from "@t3tools/contracts";
+import { ProjectSearchEntriesError, ProjectWriteFileError, WS_METHODS } from "@t3tools/contracts";
 
 import { observeRpcEffect, observeRpcStream } from "../../observability/RpcInstrumentation.ts";
 import { WorkspacePathOutsideRootError } from "../../workspace/Services/WorkspacePaths.ts";
@@ -66,19 +62,13 @@ export function projectsHandlers(deps: HandlerDeps) {
         "rpc.aggregate": "workspace",
       }),
     [WS_METHODS.projectsUpdateFrontmatter]: (input) =>
-      observeRpcEffect(
-        WS_METHODS.projectsUpdateFrontmatter,
-        fileDocs.updateFrontmatter(input),
-        {
-          "rpc.aggregate": "workspace",
-        },
-      ),
+      observeRpcEffect(WS_METHODS.projectsUpdateFrontmatter, fileDocs.updateFrontmatter(input), {
+        "rpc.aggregate": "workspace",
+      }),
     [WS_METHODS.subscribeProjectFileChanges]: (input) =>
-      observeRpcStream(
-        WS_METHODS.subscribeProjectFileChanges,
-        fileDocs.watch(input),
-        { "rpc.aggregate": "workspace" },
-      ),
+      observeRpcStream(WS_METHODS.subscribeProjectFileChanges, fileDocs.watch(input), {
+        "rpc.aggregate": "workspace",
+      }),
   } satisfies WsMethodRegistry;
 }
 

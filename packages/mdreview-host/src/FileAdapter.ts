@@ -11,6 +11,8 @@ import type {
   ProjectReadFileError,
   ProjectReadFileInput,
   ProjectReadFileResult,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
 } from "@t3tools/contracts";
 
 /**
@@ -60,6 +62,7 @@ export class FileNotFoundError extends Error {
 }
 
 const WS_METHOD_READ_FILE = "projects.readFile";
+const WS_METHOD_WRITE_FILE = "projects.writeFile";
 const WS_METHOD_WATCH = "subscribeProjectFileChanges";
 
 const isNotFoundError = (
@@ -110,10 +113,10 @@ export class T3FileAdapter implements CoreFileAdapter {
       relativePath,
     };
     try {
-      const result = await this.client.call<
-        ProjectReadFileInput,
-        ProjectReadFileResult
-      >(WS_METHOD_READ_FILE, input);
+      const result = await this.client.call<ProjectReadFileInput, ProjectReadFileResult>(
+        WS_METHOD_READ_FILE,
+        input,
+      );
       return result.contents;
     } catch (err) {
       if (isNotFoundError(err)) {
@@ -123,21 +126,27 @@ export class T3FileAdapter implements CoreFileAdapter {
     }
   }
 
-  async writeFile(
-    _path: string,
-    _content: string,
-  ): Promise<FileWriteResult> {
-    return {
-      success: false,
-      error:
-        "writeFile not supported on T3FileAdapter; use the dedicated frontmatter RPC",
+  async writeFile(relativePath: string, content: string): Promise<FileWriteResult> {
+    const input: ProjectWriteFileInput = {
+      cwd: this.cwd,
+      relativePath,
+      contents: content,
     };
+    try {
+      await this.client.call<ProjectWriteFileInput, ProjectWriteFileResult>(
+        WS_METHOD_WRITE_FILE,
+        input,
+      );
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
-  async checkChanged(
-    _url: string,
-    _lastHash: string,
-  ): Promise<FileChangeInfo> {
+  async checkChanged(_url: string, _lastHash: string): Promise<FileChangeInfo> {
     // t3code uses the push-based watch stream instead of pull-based hashing.
     return { changed: false };
   }
@@ -148,19 +157,18 @@ export class T3FileAdapter implements CoreFileAdapter {
       globs: this.defaultGlobs,
       ignoreGlobs: [],
     };
-    const unsubscribe = this.client.stream<
-      ProjectFileWatchInput,
-      ProjectFileChangeEvent
-    >(WS_METHOD_WATCH, input, (event) => {
-      if (
-        (event._tag === "changed" ||
-          event._tag === "added" ||
-          event._tag === "removed") &&
-        event.relativePath === relativePath
-      ) {
-        callback();
-      }
-    });
+    const unsubscribe = this.client.stream<ProjectFileWatchInput, ProjectFileChangeEvent>(
+      WS_METHOD_WATCH,
+      input,
+      (event) => {
+        if (
+          (event._tag === "changed" || event._tag === "added" || event._tag === "removed") &&
+          event.relativePath === relativePath
+        ) {
+          callback();
+        }
+      },
+    );
     return unsubscribe;
   }
 
@@ -181,24 +189,25 @@ export class T3FileAdapter implements CoreFileAdapter {
       };
 
       try {
-        unsubscribe = this.client.stream<
-          ProjectFileWatchInput,
-          ProjectFileChangeEvent
-        >(WS_METHOD_WATCH, watchInput, (event) => {
-          if (settled) {
-            return;
-          }
-          if (event._tag === "snapshot") {
-            settled = true;
-            const files = event.files;
-            try {
-              unsubscribe?.();
-            } catch {
-              // ignore unsubscribe errors — we already have the snapshot
+        unsubscribe = this.client.stream<ProjectFileWatchInput, ProjectFileChangeEvent>(
+          WS_METHOD_WATCH,
+          watchInput,
+          (event) => {
+            if (settled) {
+              return;
             }
-            resolve(files);
-          }
-        });
+            if (event._tag === "snapshot") {
+              settled = true;
+              const files = event.files;
+              try {
+                unsubscribe?.();
+              } catch {
+                // ignore unsubscribe errors — we already have the snapshot
+              }
+              resolve(files);
+            }
+          },
+        );
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)));
       }

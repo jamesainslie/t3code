@@ -21,10 +21,7 @@ function MermaidDiagramInner({ source, theme, onError }: MermaidDiagramProps) {
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
-  const mermaidTheme = useMemo(
-    () => (theme === "dark" ? "dark" : "default"),
-    [theme],
-  );
+  const mermaidTheme = useMemo(() => (theme === "dark" ? "dark" : "default"), [theme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,12 +60,7 @@ function MermaidDiagramInner({ source, theme, onError }: MermaidDiagramProps) {
     return null;
   }
 
-  return (
-    <div
-      className="overflow-x-auto"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
+  return <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 export const MermaidDiagram = memo(

@@ -142,16 +142,14 @@ it.layer(TestLayer)("FileDocsService", (it) => {
 
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) =>
-                event._tag === "snapshot"
-                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
-                  : Effect.void,
-              ),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) =>
+              event._tag === "snapshot"
+                ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                : Effect.void,
+            ),
+            Effect.forkScoped,
+          );
 
           const snapshot = yield* Deferred.await(snapshotDeferred);
 
@@ -180,20 +178,18 @@ it.layer(TestLayer)("FileDocsService", (it) => {
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
           const turnEventDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) => {
-                if (event._tag === "snapshot") {
-                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
-                }
-                if (event._tag === "turnTouchedDoc") {
-                  return Deferred.succeed(turnEventDeferred, event).pipe(Effect.ignore);
-                }
-                return Effect.void;
-              }),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) => {
+              if (event._tag === "snapshot") {
+                return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+              }
+              if (event._tag === "turnTouchedDoc") {
+                return Deferred.succeed(turnEventDeferred, event).pipe(Effect.ignore);
+              }
+              return Effect.void;
+            }),
+            Effect.forkScoped,
+          );
 
           yield* Deferred.await(snapshotDeferred);
 
@@ -345,21 +341,19 @@ it.layer(TestLayer)("FileDocsService", (it) => {
           const aChangedCount = { value: 0 };
           const bChangedCount = { value: 0 };
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) => {
-                if (event._tag === "snapshot") {
-                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
-                }
-                if (event._tag === "changed") {
-                  if (event.relativePath === "a.md") aChangedCount.value += 1;
-                  if (event.relativePath === "b.md") bChangedCount.value += 1;
-                }
-                return Effect.void;
-              }),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) => {
+              if (event._tag === "snapshot") {
+                return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+              }
+              if (event._tag === "changed") {
+                if (event.relativePath === "a.md") aChangedCount.value += 1;
+                if (event.relativePath === "b.md") bChangedCount.value += 1;
+              }
+              return Effect.void;
+            }),
+            Effect.forkScoped,
+          );
 
           yield* Deferred.await(snapshotDeferred);
 
@@ -377,9 +371,7 @@ it.layer(TestLayer)("FileDocsService", (it) => {
             await fs.writeFile(path.join(cwd, "b.md"), "# b updated\n");
           });
 
-          yield* Effect.promise(
-            () => new Promise((resolve) => setTimeout(resolve, 400)),
-          );
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1_500)));
 
           expect(aChangedCount.value).toBe(0);
           expect(bChangedCount.value).toBe(1);
@@ -399,16 +391,14 @@ it.layer(TestLayer)("FileDocsService", (it) => {
 
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) =>
-                event._tag === "snapshot"
-                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
-                  : Effect.void,
-              ),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) =>
+              event._tag === "snapshot"
+                ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                : Effect.void,
+            ),
+            Effect.forkScoped,
+          );
 
           const snapshot = yield* Deferred.await(snapshotDeferred);
           if (snapshot._tag !== "snapshot") {
@@ -433,16 +423,14 @@ it.layer(TestLayer)("FileDocsService", (it) => {
 
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) =>
-                event._tag === "snapshot"
-                  ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
-                  : Effect.void,
-              ),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) =>
+              event._tag === "snapshot"
+                ? Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore)
+                : Effect.void,
+            ),
+            Effect.forkScoped,
+          );
 
           const snapshot = yield* Deferred.await(snapshotDeferred);
           if (snapshot._tag !== "snapshot") {
@@ -470,20 +458,18 @@ it.layer(TestLayer)("FileDocsService", (it) => {
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
           const changedCount = { value: 0 };
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) => {
-                if (event._tag === "snapshot") {
-                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
-                }
-                if (event._tag === "changed") {
-                  changedCount.value += 1;
-                }
-                return Effect.void;
-              }),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) => {
+              if (event._tag === "snapshot") {
+                return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+              }
+              if (event._tag === "changed") {
+                changedCount.value += 1;
+              }
+              return Effect.void;
+            }),
+            Effect.forkScoped,
+          );
 
           const snapshot = yield* Deferred.await(snapshotDeferred);
           if (snapshot._tag !== "snapshot") {
@@ -499,9 +485,7 @@ it.layer(TestLayer)("FileDocsService", (it) => {
             const fs = await import("node:fs/promises");
             await fs.writeFile(absolutePath, body + "x");
           });
-          yield* Effect.promise(
-            () => new Promise((resolve) => setTimeout(resolve, 400)),
-          );
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1_500)));
 
           expect(changedCount.value).toBe(0);
         }),
@@ -519,20 +503,18 @@ it.layer(TestLayer)("FileDocsService", (it) => {
           const snapshotDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
           const changedCount = { value: 0 };
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) => {
-                if (event._tag === "snapshot") {
-                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
-                }
-                if (event._tag === "changed") {
-                  changedCount.value += 1;
-                }
-                return Effect.void;
-              }),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) => {
+              if (event._tag === "snapshot") {
+                return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+              }
+              if (event._tag === "changed") {
+                changedCount.value += 1;
+              }
+              return Effect.void;
+            }),
+            Effect.forkScoped,
+          );
 
           yield* Deferred.await(snapshotDeferred);
 
@@ -546,11 +528,9 @@ it.layer(TestLayer)("FileDocsService", (it) => {
             }
           });
 
-          // Wait 400ms — longer than debounce window (150ms) and chokidar
-          // settle delay — to be sure the coalesced event has fired.
-          yield* Effect.promise(
-            () => new Promise((resolve) => setTimeout(resolve, 400)),
-          );
+          // Wait longer than the poll + debounce windows to be sure the
+          // coalesced event has fired.
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1_500)));
 
           expect(changedCount.value).toBe(1);
         }),
@@ -570,25 +550,23 @@ it.layer(TestLayer)("FileDocsService", (it) => {
           const changedDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
           const removedDeferred = yield* Deferred.make<ProjectFileChangeEvent>();
 
-          yield* service
-            .watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] })
-            .pipe(
-              Stream.runForEach((event) => {
-                switch (event._tag) {
-                  case "snapshot":
-                    return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
-                  case "added":
-                    return Deferred.succeed(addedDeferred, event).pipe(Effect.ignore);
-                  case "changed":
-                    return Deferred.succeed(changedDeferred, event).pipe(Effect.ignore);
-                  case "removed":
-                    return Deferred.succeed(removedDeferred, event).pipe(Effect.ignore);
-                  default:
-                    return Effect.void;
-                }
-              }),
-              Effect.forkScoped,
-            );
+          yield* service.watch({ cwd, globs: ["**/*.md"], ignoreGlobs: [] }).pipe(
+            Stream.runForEach((event) => {
+              switch (event._tag) {
+                case "snapshot":
+                  return Deferred.succeed(snapshotDeferred, event).pipe(Effect.ignore);
+                case "added":
+                  return Deferred.succeed(addedDeferred, event).pipe(Effect.ignore);
+                case "changed":
+                  return Deferred.succeed(changedDeferred, event).pipe(Effect.ignore);
+                case "removed":
+                  return Deferred.succeed(removedDeferred, event).pipe(Effect.ignore);
+                default:
+                  return Effect.void;
+              }
+            }),
+            Effect.forkScoped,
+          );
 
           // Wait until the watcher is ready (first event is always snapshot).
           yield* Deferred.await(snapshotDeferred);

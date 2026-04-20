@@ -144,13 +144,6 @@ export interface WsRpcClient {
       options?: StreamSubscriptionOptions,
     ) => () => void;
   };
-  readonly hostResource: {
-    readonly onResourceEvent: (
-      input: RpcInput<typeof WS_METHODS.subscribeHostResources>,
-      listener: (event: HostResourceStreamEvent) => void,
-      options?: StreamSubscriptionOptions,
-    ) => () => void;
-  };
 }
 
 export function createWsRpcClient(transport: WsTransport): WsRpcClient {
@@ -192,18 +185,28 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     },
     projectFiles: {
       readFile: (input) =>
-        transport.request((client) =>
-          // Tagged-struct errors aren't Error subclasses; cast for transport compatibility
-          client[WS_METHODS.projectsReadFile](input) as Effect.Effect<any, Error, never>,
+        transport.request(
+          (client) =>
+            // Tagged-struct errors aren't Error subclasses; cast for transport compatibility
+            client[WS_METHODS.projectsReadFile](input) as unknown as Effect.Effect<
+              any,
+              Error,
+              never
+            >,
         ),
       updateFrontmatter: (input) =>
-        transport.request((client) =>
-          client[WS_METHODS.projectsUpdateFrontmatter](input) as Effect.Effect<any, Error, never>,
+        transport.request(
+          (client) =>
+            client[WS_METHODS.projectsUpdateFrontmatter](input) as unknown as Effect.Effect<
+              any,
+              Error,
+              never
+            >,
         ),
       onFileChange: (input, listener, options) =>
         transport.subscribe(
           (client) =>
-            client[WS_METHODS.subscribeProjectFileChanges](input) as Stream.Stream<
+            client[WS_METHODS.subscribeProjectFileChanges](input) as unknown as Stream.Stream<
               any,
               Error,
               never
@@ -312,14 +315,6 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       subscribeThread: (input, listener, options) =>
         transport.subscribe(
           (client) => client[ORCHESTRATION_WS_METHODS.subscribeThread](input),
-          listener,
-          options,
-        ),
-    },
-    hostResource: {
-      onResourceEvent: (input, listener, options) =>
-        transport.subscribe(
-          (client) => client[WS_METHODS.subscribeHostResources](input),
           listener,
           options,
         ),

@@ -109,6 +109,20 @@ export function buildCancelForwardArgs(spec: PortForwardSpec): string[] {
   ]);
 }
 
+// ── Version normalization ─────────────────────────────────────────────
+
+/**
+ * Normalize a version string for comparison.
+ * Remote `t3 --version` outputs "t3 v0.0.17", while the local version from
+ * package.json is "0.0.17". Strip the command prefix and leading v.
+ */
+export function normalizeVersion(version: string): string {
+  return version
+    .replace(/^t3\s+/i, "")
+    .replace(/^v/, "")
+    .trim();
+}
+
 // ── Remote probe script ───────────────────────────────────────────────
 
 // Probe script sent to the remote. Detects OS, arch, libc flavor (Linux only),
@@ -140,9 +154,7 @@ export function parseProbeOutput(output: string): ProbeResult | null {
   // (e.g. "t3 v0.0.15") so it stays last and absorbs the remainder. The LIBC
   // group is optional so the parser stays tolerant of very old probes that
   // didn't report it — we just treat those as "libc unknown" downstream.
-  const withLibc = output
-    .trim()
-    .match(/^OS:(\S+)\s+ARCH:(\S+)\s+LIBC:(\S*)\s+VERSION:(.*)$/);
+  const withLibc = output.trim().match(/^OS:(\S+)\s+ARCH:(\S+)\s+LIBC:(\S*)\s+VERSION:(.*)$/);
   if (withLibc) {
     const libcRaw = withLibc[3]!;
     const libc: LinuxLibc | undefined =

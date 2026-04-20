@@ -65,16 +65,12 @@ function makeSnapshot(
 
 describe("ResourceIndicatorStrip", () => {
   it("renders nothing when snapshot is null", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceIndicatorStrip snapshot={null} />,
-    );
+    const markup = renderToStaticMarkup(<ResourceIndicatorStrip snapshot={null} />);
     expect(markup).toBe("");
   });
 
   it("renders RAM, CPU, Disk, and Host icons for basic snapshot", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceIndicatorStrip snapshot={makeSnapshot()} />,
-    );
+    const markup = renderToStaticMarkup(<ResourceIndicatorStrip snapshot={makeSnapshot()} />);
     expect(markup).toContain('aria-label="RAM"');
     expect(markup).toContain('aria-label="CPU"');
     expect(markup).toContain('aria-label="Disk"');
@@ -84,9 +80,7 @@ describe("ResourceIndicatorStrip", () => {
   });
 
   it("renders the pill container with correct role and label", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceIndicatorStrip snapshot={makeSnapshot()} />,
-    );
+    const markup = renderToStaticMarkup(<ResourceIndicatorStrip snapshot={makeSnapshot()} />);
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-label="System resources"');
   });
@@ -133,9 +127,7 @@ describe("ResourceIndicatorStrip", () => {
         })}
       />,
     );
-    const ramMatch = markup.match(
-      /aria-label="RAM"[^>]*class="([^"]*)"/,
-    );
+    const ramMatch = markup.match(/aria-label="RAM"[^>]*class="([^"]*)"/);
     expect(ramMatch).not.toBeNull();
     expect(ramMatch![1]).toContain("text-amber-500");
   });
@@ -148,20 +140,14 @@ describe("ResourceIndicatorStrip", () => {
         })}
       />,
     );
-    const cpuMatch = markup.match(
-      /aria-label="CPU"[^>]*class="([^"]*)"/,
-    );
+    const cpuMatch = markup.match(/aria-label="CPU"[^>]*class="([^"]*)"/);
     expect(cpuMatch).not.toBeNull();
     expect(cpuMatch![1]).toContain("text-red-500");
   });
 
   it("applies normal color class for normal state", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceIndicatorStrip snapshot={makeSnapshot()} />,
-    );
-    const ramMatch = markup.match(
-      /aria-label="RAM"[^>]*class="([^"]*)"/,
-    );
+    const markup = renderToStaticMarkup(<ResourceIndicatorStrip snapshot={makeSnapshot()} />);
+    const ramMatch = markup.match(/aria-label="RAM"[^>]*class="([^"]*)"/);
     expect(ramMatch).not.toBeNull();
     expect(ramMatch![1]).toContain("text-muted-foreground/50");
   });
@@ -174,9 +160,7 @@ describe("ResourceIndicatorStrip", () => {
         })}
       />,
     );
-    const hostMatch = markup.match(
-      /aria-label="Host"[^>]*class="([^"]*)"/,
-    );
+    const hostMatch = markup.match(/aria-label="Host"[^>]*class="([^"]*)"/);
     expect(hostMatch).not.toBeNull();
     expect(hostMatch![1]).toContain("text-red-500");
   });
@@ -196,9 +180,7 @@ describe("ResourceIndicatorStrip", () => {
         })}
       />,
     );
-    const kubeMatch = markup.match(
-      /aria-label="Kubernetes"[^>]*class="([^"]*)"/,
-    );
+    const kubeMatch = markup.match(/aria-label="Kubernetes"[^>]*class="([^"]*)"/);
     expect(kubeMatch).not.toBeNull();
     expect(kubeMatch![1]).toContain("text-red-500");
   });

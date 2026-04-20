@@ -14,20 +14,23 @@ function makeMockWsRpcClient() {
     relativePath: "docs/a.md",
     success: true,
   });
+  const writeFile = vi.fn<any>().mockResolvedValue({
+    relativePath: "docs/a.md",
+  });
   const unsubscribe = vi.fn();
   const onFileChanges = vi.fn<any>().mockReturnValue(unsubscribe);
 
   const client = {
     projects: {
       searchEntries: vi.fn(),
-      writeFile: vi.fn(),
+      writeFile,
       readFile,
       updateFrontmatter,
       onFileChanges,
     },
   } as unknown as WsRpcClient;
 
-  return { client, readFile, updateFrontmatter, onFileChanges, unsubscribe };
+  return { client, readFile, updateFrontmatter, writeFile, onFileChanges, unsubscribe };
 }
 
 describe("createFileRpcClientAdapter", () => {
@@ -65,6 +68,24 @@ describe("createFileRpcClientAdapter", () => {
       expect(result).toEqual({
         relativePath: "docs/a.md",
         success: true,
+      });
+    });
+
+    it("routes projects.writeFile to wsRpcClient.projects.writeFile", async () => {
+      const { client, writeFile } = makeMockWsRpcClient();
+      const adapter = createFileRpcClientAdapter(client);
+
+      const input = {
+        cwd: "/repo",
+        relativePath: "docs/a.md",
+        contents: "# Hello",
+      };
+      const result = await adapter.call("projects.writeFile", input);
+
+      expect(writeFile).toHaveBeenCalledOnce();
+      expect(writeFile).toHaveBeenCalledWith(input);
+      expect(result).toEqual({
+        relativePath: "docs/a.md",
       });
     });
 

@@ -10,7 +10,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { DiffIcon, FileTextIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -37,6 +37,8 @@ interface ChatHeaderProps {
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
+  markdownPreviewOpen: boolean;
+  markdownPreviewAvailable: boolean;
   hostResourceSnapshot: HostResourceSnapshot | null;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
@@ -44,6 +46,7 @@ interface ChatHeaderProps {
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
+  onToggleMarkdownPreview: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -64,6 +67,8 @@ export const ChatHeader = memo(function ChatHeader({
   diffToggleShortcutLabel,
   gitCwd,
   diffOpen,
+  markdownPreviewOpen,
+  markdownPreviewAvailable,
   hostResourceSnapshot,
   onRunProjectScript,
   onAddProjectScript,
@@ -71,7 +76,12 @@ export const ChatHeader = memo(function ChatHeader({
   onDeleteProjectScript,
   onToggleTerminal,
   onToggleDiff,
+  onToggleMarkdownPreview,
 }: ChatHeaderProps) {
+  const markdownPreviewLabel = markdownPreviewOpen
+    ? "Close markdown preview"
+    : "Open markdown preview";
+
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
@@ -120,6 +130,28 @@ export const ChatHeader = memo(function ChatHeader({
             {...(draftId ? { draftId } : {})}
           />
         )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={markdownPreviewOpen}
+                onPressedChange={onToggleMarkdownPreview}
+                aria-label={markdownPreviewLabel}
+                variant="outline"
+                size="xs"
+                disabled={!markdownPreviewAvailable}
+              >
+                <FileTextIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {markdownPreviewAvailable
+              ? markdownPreviewLabel
+              : "Markdown preview is available after this thread mentions or creates a markdown file."}
+          </TooltipPopup>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={

@@ -27,11 +27,7 @@ describe("DocsFileTree", () => {
 
   it("marks oversized files with data attribute", () => {
     const html = renderToStaticMarkup(
-      <DocsFileTree
-        files={[entry("big.md", true)]}
-        selectedPath={null}
-        onSelectFile={() => {}}
-      />,
+      <DocsFileTree files={[entry("big.md", true)]} selectedPath={null} onSelectFile={() => {}} />,
     );
     expect(html).toContain('data-oversized="true"');
   });
@@ -49,11 +45,7 @@ describe("DocsFileTree", () => {
 
   it("shows empty state when no files", () => {
     const html = renderToStaticMarkup(
-      <DocsFileTree
-        files={[]}
-        selectedPath={null}
-        onSelectFile={() => {}}
-      />,
+      <DocsFileTree files={[]} selectedPath={null} onSelectFile={() => {}} />,
     );
     expect(html).toContain("No markdown files found");
   });

@@ -31,8 +31,8 @@ import { resolveMarkdownFileLinkMeta, rewriteMarkdownFileUriHref } from "../mark
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
 
-const LazyMermaidCodeBlock = lazy(
-  () => import("./mermaid/MermaidCodeBlock").then((m) => ({ default: m.MermaidCodeBlock })),
+const LazyMermaidCodeBlock = lazy(() =>
+  import("./mermaid/MermaidCodeBlock").then((m) => ({ default: m.MermaidCodeBlock })),
 );
 
 class CodeHighlightErrorBoundary extends React.Component<

@@ -353,7 +353,9 @@ export function deriveActivePlanState(
   // so that TodoWrite tasks persist across follow-up messages.
   const latest =
     (latestTurnId
-      ? allPlanActivities.filter((activity) => activity.turnId === latestTurnId).at(-1)
+      ? ordered.findLast(
+          (activity) => activity.kind === "turn.plan.updated" && activity.turnId === latestTurnId,
+        )
       : undefined) ??
     allPlanActivities.at(-1) ??
     null;

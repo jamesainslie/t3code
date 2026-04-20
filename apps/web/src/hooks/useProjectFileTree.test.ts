@@ -43,9 +43,7 @@ function createMockOnFileChanges(): MockOnFileChanges {
   return mock;
 }
 
-function createMockRpcClient(
-  onFileChangesMock: MockOnFileChanges,
-): WsRpcClient {
+function createMockRpcClient(onFileChangesMock: MockOnFileChanges): WsRpcClient {
   return {
     projects: {
       onFileChanges: onFileChangesMock.fn,
@@ -107,12 +105,9 @@ describe("useProjectFileTree subscription wiring", () => {
     const client = createMockRpcClient(mock);
 
     let receivedEvent: ProjectFileChangeEvent | null = null;
-    client.projects.onFileChanges(
-      { cwd: "/cwd", globs: ["**/*"], ignoreGlobs: [] },
-      (event) => {
-        receivedEvent = event;
-      },
-    );
+    client.projects.onFileChanges({ cwd: "/cwd", globs: ["**/*"], ignoreGlobs: [] }, (event) => {
+      receivedEvent = event;
+    });
 
     const snapshot: ProjectFileChangeEvent = {
       _tag: "snapshot",
@@ -134,12 +129,9 @@ describe("useProjectFileTree subscription wiring", () => {
     const client = createMockRpcClient(mock);
 
     const events: ProjectFileChangeEvent[] = [];
-    client.projects.onFileChanges(
-      { cwd: "/cwd", globs: ["**/*"], ignoreGlobs: [] },
-      (event) => {
-        events.push(event);
-      },
-    );
+    client.projects.onFileChanges({ cwd: "/cwd", globs: ["**/*"], ignoreGlobs: [] }, (event) => {
+      events.push(event);
+    });
 
     // First: snapshot
     const snapshot: ProjectFileChangeEvent = {
@@ -158,8 +150,8 @@ describe("useProjectFileTree subscription wiring", () => {
     mock.capturedListener!(addedEvent);
 
     expect(events).toHaveLength(2);
-    expect(events[0]._tag).toBe("snapshot");
-    expect(events[1]._tag).toBe("added");
+    expect(events[0]!._tag).toBe("snapshot");
+    expect(events[1]!._tag).toBe("added");
 
     // Verify the tree operations work correctly
     let tree = buildFileTree(

@@ -118,13 +118,12 @@ export function writeSavedEnvironmentRegistry(
   records: readonly PersistedSavedEnvironmentRecord[],
 ): void {
   const currentDocument = readSavedEnvironmentRegistryDocument(registryPath);
-  const encryptedBearerTokenById = new Map(
-    currentDocument.records.flatMap((record) =>
-      record.encryptedBearerToken
-        ? [[record.environmentId, record.encryptedBearerToken] as const]
-        : [],
-    ),
-  );
+  const encryptedBearerTokenById = new Map<string, string>();
+  for (const record of currentDocument.records) {
+    if (record.encryptedBearerToken) {
+      encryptedBearerTokenById.set(record.environmentId, record.encryptedBearerToken);
+    }
+  }
   writeJsonFile(registryPath, {
     records: records.map((record) => {
       const encryptedBearerToken = encryptedBearerTokenById.get(record.environmentId);
@@ -212,10 +211,9 @@ export function writeSavedEnvironmentSecret(input: {
       const encryptedBearerToken = input.secretStorage
         .encryptString(input.secret)
         .toString("base64");
-      return {
-        ...record,
+      return Object.assign({}, record, {
         encryptedBearerToken,
-      } satisfies PersistedSavedEnvironmentStorageRecord;
+      }) satisfies PersistedSavedEnvironmentStorageRecord;
     }),
   } satisfies SavedEnvironmentRegistryDocument);
   return found;

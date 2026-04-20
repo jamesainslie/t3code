@@ -25,6 +25,7 @@ import {
   buildTmuxKillCommand,
   buildTmuxStartCommand,
   controlSocketPath,
+  normalizeVersion,
   parseProbeOutput,
   remoteAuthTokenFile,
   remoteEnvFile,
@@ -47,6 +48,19 @@ export interface ServerState {
   pairingUrl?: string;
 }
 
+export type ProvisionEventType = "phase-start" | "phase-complete" | "log" | "error";
+
+export interface ProvisionEvent {
+  type: ProvisionEventType;
+  /** Phase number (1-5) */
+  phase?: number;
+  /** Human-readable label for the phase */
+  label?: string;
+  /** Detail message (log line, error message) */
+  message?: string;
+  timestamp: number;
+}
+
 export interface ProvisionOptions {
   target: SshTarget;
   projectId: string;
@@ -59,7 +73,11 @@ export interface ProvisionOptions {
    * callers can select a libc-correct Bun-compiled binary; `undefined` on
    * macOS where libc isn't meaningful.
    */
-  serverBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string;
+  serverBinaryPath: (
+    platform: "linux" | "darwin",
+    arch: "x64" | "arm64",
+    libc?: LinuxLibc,
+  ) => string;
   /**
    * Returns the local path to the tmux binary, or `null` if the remote is
    * expected to provide tmux itself (e.g. Darwin remotes where tmux comes
@@ -69,12 +87,18 @@ export interface ProvisionOptions {
    * (from pythops/tmux-linux-binary) are libc-agnostic, so callers can ignore
    * the `libc` argument for tmux selection.
    */
-  tmuxBinaryPath: (platform: "linux" | "darwin", arch: "x64" | "arm64", libc?: LinuxLibc) => string | null;
+  tmuxBinaryPath: (
+    platform: "linux" | "darwin",
+    arch: "x64" | "arm64",
+    libc?: LinuxLibc,
+  ) => string | null;
   sshManager: SshConnectionManager;
   /** Optional progress callback */
   onStatus?: (phase: "provisioning" | "starting" | "connected") => void;
   /** Optional callback for real-time remote server log lines */
   onLog?: (line: string) => void;
+  /** Optional granular provisioning event callback */
+  onProvisionEvent?: (event: ProvisionEvent) => void;
 }
 
 export interface ProvisionResult {
@@ -134,8 +158,12 @@ export function buildStartServerCommand(projectId: string, workspaceRoot: string
 // ── Provisioner ───────────────────────────────────────────────────────
 
 export async function provision(opts: ProvisionOptions): Promise<ProvisionResult> {
-  const { target, projectId, workspaceRoot, localVersion, onStatus } = opts;
+  const { target, projectId, workspaceRoot, localVersion, onStatus, onProvisionEvent } = opts;
   const log = (msg: string) => console.log(`[ssh-provision] ${target.user}@${target.host}: ${msg}`);
+
+  const emit = (event: Omit<ProvisionEvent, "timestamp">) => {
+    onProvisionEvent?.({ ...event, timestamp: Date.now() });
+  };
 
   onStatus?.("provisioning");
 
@@ -316,9 +344,33 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
 
   // Phase 5: Set up SSH port forward
   log("phase 5: setting up port forward...");
-  const localPort = await findFreeLocalPort();
-  await setupPortForward(target, localPort, remotePort);
-  log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
+  emit({ type: "phase-start", phase: 5, label: "Setting up secure tunnel" });
+  let localPort: number;
+  try {
+    localPort = await findFreeLocalPort();
+    await setupPortForward(target, localPort, remotePort);
+    log(`phase 5: tunnel established — localhost:${localPort} → remote:${remotePort}`);
+    emit({
+      type: "log",
+      phase: 5,
+      message: `Tunnel: localhost:${localPort} -> remote:${remotePort}`,
+    });
+    try {
+      await verifyTunnel(localPort);
+    } catch (verifyErr) {
+      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+      log(`phase 5: tunnel verification failed (${msg}), cancelling forward`);
+      await cancelPortForward(target, localPort, remotePort);
+      throw new Error(
+        `Tunnel at localhost:${localPort} is not reachable (remote port ${remotePort}). ${msg}`,
+        { cause: verifyErr },
+      );
+    }
+    emit({ type: "phase-complete", phase: 5, label: "Setting up secure tunnel" });
+  } catch (err) {
+    emit({ type: "error", phase: 5, message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
 
   if (pairingUrl) {
     log(`provisioning complete — pairing URL available`);
@@ -381,6 +433,7 @@ async function coldStart(
       : "\n\n(No remote server log available)";
     throw new Error(
       `Timed out waiting for remote T3 server to start (projectId=${projectId})${logSnippet}`,
+      { cause: err },
     );
   } finally {
     logTailer?.kill();
@@ -652,6 +705,48 @@ async function cancelPortForward(
 ): Promise<void> {
   const args = buildCancelForwardArgs({ ...target, localPort, remotePort });
   await execFileAsync("ssh", args, { timeout: 5_000 }).catch(() => {});
+}
+
+/**
+ * Verify that a local SSH tunnel is actually forwarding to a live remote
+ * listener. Any response bytes count as healthy because auth failures are
+ * still proof that the HTTP server is reachable through the tunnel.
+ */
+export async function verifyTunnel(localPort: number, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const socket = netConnect(localPort, "127.0.0.1");
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(new Error(`Tunnel probe timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    const done = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (err) reject(err);
+      else resolve();
+    };
+    socket.on("connect", () => {
+      socket.write(
+        "GET /api/auth/session HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+      );
+    });
+    socket.on("data", () => done());
+    socket.on("error", (err) => done(new Error(`Tunnel probe failed: ${err.message}`)));
+    socket.on("close", (hadErr) => {
+      if (!settled) {
+        done(
+          new Error(
+            `Tunnel probe closed without receiving any response${hadErr ? " (socket error)" : " (remote RST)"}`,
+          ),
+        );
+      }
+    });
+  });
 }
 
 async function findFreeLocalPort(): Promise<number> {

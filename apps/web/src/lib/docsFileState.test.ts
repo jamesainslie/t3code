@@ -1,17 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { ProjectFileEntry, ProjectFileChangeEvent } from "@t3tools/contracts";
-import {
-  applyFileChangeEvent,
-  type DocsFileState,
-  INITIAL_DOCS_FILE_STATE,
-} from "./docsFileState";
+import { applyFileChangeEvent, type DocsFileState, INITIAL_DOCS_FILE_STATE } from "./docsFileState";
 
-const entry = (path: string, size = 100, oversized = false): ProjectFileEntry => ({
-  relativePath: path,
-  size,
-  mtimeMs: Date.now(),
-  oversized,
-} as ProjectFileEntry);
+const entry = (path: string, size = 100, oversized = false): ProjectFileEntry =>
+  ({
+    relativePath: path,
+    size,
+    mtimeMs: Date.now(),
+    oversized,
+  }) as ProjectFileEntry;
 
 describe("applyFileChangeEvent", () => {
   it("replaces files on snapshot", () => {

@@ -57,7 +57,7 @@ export function useDocsAutoSurface({
         if (previewOpenRef.current) return;
         if (event.paths.length === 0) return;
 
-        onAutoSurfaceRef.current(event.paths[0], event.paths);
+        onAutoSurfaceRef.current(event.paths[0]!, event.paths);
       },
     );
 

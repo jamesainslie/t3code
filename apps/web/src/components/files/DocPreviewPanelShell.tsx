@@ -28,10 +28,8 @@ export function DocPreviewPanelShell(props: {
   return (
     <div
       className={cn(
-        "flex h-full min-w-0 flex-col bg-background",
-        props.mode === "sidebar"
-          ? "w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
-          : "w-full",
+        "flex h-full min-w-0 flex-col bg-background w-full",
+        props.mode === "sidebar" ? "shrink-0 border-l border-border" : null,
       )}
     >
       {shouldUseDragRegion ? (
@@ -42,9 +40,7 @@ export function DocPreviewPanelShell(props: {
         </div>
       )}
       {props.tabs ? (
-        <div className="flex items-center gap-1 border-b border-border px-3 py-1">
-          {props.tabs}
-        </div>
+        <div className="flex items-center gap-1 border-b border-border px-3 py-1">{props.tabs}</div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">{props.children}</div>
     </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDocsFileTree, type DocsTreeNode } from "./docsFileTree";
+import { buildDocsFileTree } from "./docsFileTree";
 import type { ProjectFileEntry } from "@t3tools/contracts";
 
 const entry = (path: string, oversized = false): ProjectFileEntry =>
@@ -19,9 +19,7 @@ describe("buildDocsFileTree", () => {
       entry("docs/api/ref.md"),
     ]);
     expect(tree).toHaveLength(2); // README.md + docs/
-    const docsDir = tree.find(
-      (n) => n.kind === "directory" && n.name === "docs",
-    );
+    const docsDir = tree.find((n) => n.kind === "directory" && n.name === "docs");
     expect(docsDir).toBeDefined();
     if (docsDir?.kind === "directory") {
       expect(docsDir.children).toHaveLength(2); // guide.md + api/
@@ -29,11 +27,7 @@ describe("buildDocsFileTree", () => {
   });
 
   it("sorts directories before files, then alphabetically", () => {
-    const tree = buildDocsFileTree([
-      entry("z.md"),
-      entry("a/b.md"),
-      entry("a.md"),
-    ]);
+    const tree = buildDocsFileTree([entry("z.md"), entry("a/b.md"), entry("a.md")]);
     expect(tree[0]!.name).toBe("a");
     expect(tree[1]!.name).toBe("a.md");
     expect(tree[2]!.name).toBe("z.md");

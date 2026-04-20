@@ -194,14 +194,11 @@ export const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
   error: ProjectReadFileError,
 });
 
-export const WsProjectsUpdateFrontmatterRpc = Rpc.make(
-  WS_METHODS.projectsUpdateFrontmatter,
-  {
-    payload: ProjectUpdateFrontmatterInput,
-    success: ProjectUpdateFrontmatterResult,
-    error: ProjectUpdateFrontmatterError,
-  },
-);
+export const WsProjectsUpdateFrontmatterRpc = Rpc.make(WS_METHODS.projectsUpdateFrontmatter, {
+  payload: ProjectUpdateFrontmatterInput,
+  success: ProjectUpdateFrontmatterResult,
+  error: ProjectUpdateFrontmatterError,
+});
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
@@ -408,15 +405,12 @@ export const WsServerSubscribeLogStreamRpc = Rpc.make(WS_METHODS.serverSubscribe
   stream: true,
 });
 
-export const WsSubscribeProjectFileChangesRpc = Rpc.make(
-  WS_METHODS.subscribeProjectFileChanges,
-  {
-    payload: ProjectFileWatchInput,
-    success: ProjectFileChangeEvent,
-    error: ProjectFileMonitorError,
-    stream: true,
-  },
-);
+export const WsSubscribeProjectFileChangesRpc = Rpc.make(WS_METHODS.subscribeProjectFileChanges, {
+  payload: ProjectFileWatchInput,
+  success: ProjectFileChangeEvent,
+  error: ProjectFileMonitorError,
+  stream: true,
+});
 
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,

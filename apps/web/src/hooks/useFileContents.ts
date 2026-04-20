@@ -83,8 +83,7 @@ function parseReadFileError(err: unknown, fallbackPath: string): FileContentsErr
     if (typeof record._tag === "string") {
       return {
         tag: record._tag,
-        relativePath:
-          typeof record.relativePath === "string" ? record.relativePath : fallbackPath,
+        relativePath: typeof record.relativePath === "string" ? record.relativePath : fallbackPath,
       };
     }
   }

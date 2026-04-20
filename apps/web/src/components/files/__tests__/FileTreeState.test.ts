@@ -59,8 +59,8 @@ describe("buildFileTree", () => {
   it("handles flat files at the root level", () => {
     const tree = buildFileTree([makeEntry("README.md"), makeEntry("package.json")]);
     expect(tree).toHaveLength(2);
-    expect(tree[0].name).toBe("package.json");
-    expect(tree[1].name).toBe("README.md");
+    expect(tree[0]!.name).toBe("package.json");
+    expect(tree[1]!.name).toBe("README.md");
     expect(tree.every((n) => n.kind === "file")).toBe(true);
   });
 
@@ -68,21 +68,21 @@ describe("buildFileTree", () => {
     const tree = buildFileTree([makeEntry("src/components/App.tsx"), makeEntry("src/main.ts")]);
 
     expect(tree).toHaveLength(1);
-    expect(tree[0].name).toBe("src");
-    expect(tree[0].kind).toBe("directory");
+    expect(tree[0]!.name).toBe("src");
+    expect(tree[0]!.kind).toBe("directory");
 
-    const srcChildren = tree[0].children!;
+    const srcChildren = tree[0]!.children!;
     // "components" dir + "main.ts" file
     expect(srcChildren).toHaveLength(2);
-    expect(srcChildren[0].kind).toBe("directory");
-    expect(srcChildren[0].name).toBe("components");
-    expect(srcChildren[1].kind).toBe("file");
-    expect(srcChildren[1].name).toBe("main.ts");
+    expect(srcChildren[0]!.kind).toBe("directory");
+    expect(srcChildren[0]!.name).toBe("components");
+    expect(srcChildren[1]!.kind).toBe("file");
+    expect(srcChildren[1]!.name).toBe("main.ts");
 
-    const compChildren = srcChildren[0].children!;
+    const compChildren = srcChildren[0]!.children!;
     expect(compChildren).toHaveLength(1);
-    expect(compChildren[0].name).toBe("App.tsx");
-    expect(compChildren[0].relativePath).toBe("src/components/App.tsx");
+    expect(compChildren[0]!.name).toBe("App.tsx");
+    expect(compChildren[0]!.relativePath).toBe("src/components/App.tsx");
   });
 
   it("sorts directories before files, alphabetical within each group", () => {
@@ -100,7 +100,7 @@ describe("buildFileTree", () => {
   it("handles deep nesting", () => {
     const tree = buildFileTree([makeEntry("a/b/c/d/e.ts")]);
     expect(tree).toHaveLength(1);
-    expect(tree[0].name).toBe("a");
+    expect(tree[0]!.name).toBe("a");
 
     const e = findNode(tree, "a/b/c/d/e.ts");
     expect(e).toBeDefined();
@@ -113,14 +113,14 @@ describe("buildFileTree", () => {
       makeEntry("big.bin", { size: 10_000_000, mtimeMs: 5555, oversized: true }),
     ]);
 
-    expect(tree[0].size).toBe(10_000_000);
-    expect(tree[0].mtimeMs).toBe(5555);
-    expect(tree[0].oversized).toBe(true);
+    expect(tree[0]!.size).toBe(10_000_000);
+    expect(tree[0]!.mtimeMs).toBe(5555);
+    expect(tree[0]!.oversized).toBe(true);
   });
 
   it("does not set oversized when false", () => {
     const tree = buildFileTree([makeEntry("small.txt", { oversized: false })]);
-    expect(tree[0].oversized).toBeUndefined();
+    expect(tree[0]!.oversized).toBeUndefined();
   });
 });
 
@@ -240,7 +240,7 @@ describe("applyFileTreeEvent", () => {
 
       const result = applyFileTreeEvent(baseTree, event);
       expect(result).toHaveLength(1);
-      expect(result[0].name).toBe("new");
+      expect(result[0]!.name).toBe("new");
       const file = findNode(result, "new/file.ts");
       expect(file).toBeDefined();
       expect(file!.size).toBe(42);
@@ -291,14 +291,14 @@ describe("filterFileTree", () => {
   it("keeps parent directories of matching files", () => {
     const result = filterFileTree(tree, "helpers");
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("src");
-    expect(result[0].kind).toBe("directory");
-    const utils = result[0].children!;
+    expect(result[0]!.name).toBe("src");
+    expect(result[0]!.kind).toBe("directory");
+    const utils = result[0]!.children!;
     expect(utils).toHaveLength(1);
-    expect(utils[0].name).toBe("utils");
-    const files = utils[0].children!;
+    expect(utils[0]!.name).toBe("utils");
+    const files = utils[0]!.children!;
     expect(files).toHaveLength(1);
-    expect(files[0].name).toBe("helpers.ts");
+    expect(files[0]!.name).toBe("helpers.ts");
   });
 
   it("returns empty array when nothing matches", () => {
@@ -340,8 +340,8 @@ describe("flattenVisiblePaths", () => {
     const result = flattenVisiblePaths(tree, new Set());
     // Root: src/ (dir) and README.md (file)
     expect(result).toHaveLength(2);
-    expect(result[0].name).toBe("src");
-    expect(result[1].name).toBe("README.md");
+    expect(result[0]!.name).toBe("src");
+    expect(result[1]!.name).toBe("README.md");
   });
 
   it("shows children of an expanded directory", () => {

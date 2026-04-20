@@ -86,7 +86,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
       expiresAt: DateTime.add(now, {
         milliseconds: Duration.toMillis(DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES),
       }),
-      remainingUses: 1,
+      remainingUses: "unbounded",
     });
   }
 

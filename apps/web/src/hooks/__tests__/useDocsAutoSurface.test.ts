@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import type { ProjectFileChangeEvent } from "@t3tools/contracts";
+import { ThreadId, TurnId, type ProjectFileChangeEvent } from "@t3tools/contracts";
 import type { WsRpcClient } from "~/rpc/wsRpcClient";
 
 /**
@@ -60,10 +60,10 @@ function makeTurnTouchedDoc(
 ): ProjectFileChangeEvent {
   return {
     _tag: "turnTouchedDoc",
-    threadId,
-    turnId,
+    threadId: ThreadId.make(threadId),
+    turnId: TurnId.make(turnId),
     paths,
-  } as ProjectFileChangeEvent;
+  };
 }
 
 /**
@@ -82,7 +82,7 @@ function createAutoSurfaceHandler(opts: {
     if (event.threadId !== opts.threadId) return;
     if (opts.previewOpenRef.current) return;
     if (event.paths.length === 0) return;
-    opts.onAutoSurface(event.paths[0], event.paths);
+    opts.onAutoSurface(event.paths[0]!, event.paths);
   };
 }
 
@@ -306,9 +306,7 @@ describe("useDocsAutoSurface", () => {
       );
 
       // Simulate the server emitting a turnTouchedDoc event
-      mock.capturedListener!(
-        makeTurnTouchedDoc("thread-1", "turn-1", ["docs/readme.md"]),
-      );
+      mock.capturedListener!(makeTurnTouchedDoc("thread-1", "turn-1", ["docs/readme.md"]));
 
       expect(onAutoSurface).toHaveBeenCalledOnce();
       expect(onAutoSurface).toHaveBeenCalledWith("docs/readme.md", ["docs/readme.md"]);

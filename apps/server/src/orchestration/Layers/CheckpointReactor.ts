@@ -1,3 +1,6 @@
+import * as fsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
+
 import {
   CommandId,
   EventId,
@@ -64,6 +67,24 @@ function checkpointStatusFromRuntime(status: string | undefined): "ready" | "mis
 
 const serverCommandId = (tag: string): CommandId =>
   CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
+
+const MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+
+function isMarkdownRelativePath(relativePath: string): boolean {
+  const lower = relativePath.toLowerCase();
+  return MARKDOWN_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
+function safeRelativePath(relativePath: string): string | null {
+  if (relativePath.length === 0 || nodePath.isAbsolute(relativePath)) {
+    return null;
+  }
+  const normalized = nodePath.normalize(relativePath);
+  if (normalized === "." || normalized.startsWith("..") || nodePath.isAbsolute(normalized)) {
+    return null;
+  }
+  return relativePath;
+}
 
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -266,6 +287,33 @@ const make = Effect.gen(function* () {
           }).pipe(Effect.as([])),
         ),
       );
+
+    const touchedMarkdownPaths = yield* Effect.promise(async () => {
+      const paths: string[] = [];
+      for (const file of files) {
+        const relativePath = safeRelativePath(file.path);
+        if (!relativePath || !isMarkdownRelativePath(relativePath)) {
+          continue;
+        }
+        const stat = await fsPromises
+          .stat(nodePath.join(input.cwd, relativePath))
+          .catch(() => null);
+        if (stat?.isFile()) {
+          paths.push(relativePath);
+        }
+      }
+      return paths;
+    });
+    for (const relativePath of touchedMarkdownPaths) {
+      yield* fileDocs.recordTurnWrite({ cwd: input.cwd, relativePath });
+    }
+    if (touchedMarkdownPaths.length > 0) {
+      yield* fileDocs.flushTurnWrites({
+        threadId: input.threadId,
+        turnId: input.turnId,
+        cwd: input.cwd,
+      });
+    }
 
     const assistantMessageId =
       input.assistantMessageId ??
@@ -522,25 +570,25 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const flushDocsTurnWritesForTurnCompletion = Effect.fn(
-    "flushDocsTurnWritesForTurnCompletion",
-  )(function* (
-    event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>,
-    turnId: TurnId | null,
-  ) {
-    if (turnId === null) {
-      return;
-    }
-    const sessionRuntime = yield* resolveSessionRuntimeForThread(event.threadId);
-    if (Option.isNone(sessionRuntime)) {
-      return;
-    }
-    yield* fileDocs.flushTurnWrites({
-      threadId: event.threadId,
-      turnId,
-      cwd: sessionRuntime.value.cwd,
-    });
-  });
+  const flushDocsTurnWritesForTurnCompletion = Effect.fn("flushDocsTurnWritesForTurnCompletion")(
+    function* (
+      event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>,
+      turnId: TurnId | null,
+    ) {
+      if (turnId === null) {
+        return;
+      }
+      const sessionRuntime = yield* resolveSessionRuntimeForThread(event.threadId);
+      if (Option.isNone(sessionRuntime)) {
+        return;
+      }
+      yield* fileDocs.flushTurnWrites({
+        threadId: event.threadId,
+        turnId,
+        cwd: sessionRuntime.value.cwd,
+      });
+    },
+  );
 
   const ensurePreTurnBaselineFromDomainTurnStart = Effect.fn(
     "ensurePreTurnBaselineFromDomainTurnStart",

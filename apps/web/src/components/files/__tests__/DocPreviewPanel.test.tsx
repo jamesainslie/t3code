@@ -11,6 +11,18 @@ const mockReadFile = vi.fn();
 const mockNavigate = vi.fn();
 const mockReadEnvironmentConnection = vi.fn();
 
+function T3FileAdapter() {
+  return {};
+}
+
+function T3StorageAdapter() {
+  return {};
+}
+
+function T3NullMessagingAdapter() {
+  return {};
+}
+
 vi.mock("../../../environments/runtime", () => ({
   readEnvironmentConnection: (...args: unknown[]) => mockReadEnvironmentConnection(...args),
 }));
@@ -46,21 +58,14 @@ vi.mock("@pierre/diffs", () => ({
 }));
 
 vi.mock("@t3tools/mdreview-host", () => ({
-  MdreviewRenderer: ({
-    source,
-    theme,
-  }: {
-    source: string;
-    theme?: string;
-  }) => (
-    <div
-      className="mdreview-host-root"
-      data-theme={theme}
-      data-testid="mdreview-renderer"
-    >
+  MdreviewRenderer: ({ source, theme }: { source: string; theme?: string }) => (
+    <div className="mdreview-host-root" data-theme={theme} data-testid="mdreview-renderer">
       {source}
     </div>
   ),
+  T3FileAdapter,
+  T3StorageAdapter,
+  T3NullMessagingAdapter,
 }));
 
 vi.mock("../../../env", () => ({
@@ -117,6 +122,16 @@ describe("DocPreviewPanel", () => {
 
     // Sidebar mode uses border-l styling
     expect(html).toContain("border-l");
+  });
+
+  it("lets the surrounding sidebar control preview width", () => {
+    mockReadFile.mockReturnValue(new Promise(() => {}));
+    const props = makeProps({ mode: "sidebar" });
+
+    const html = renderToStaticMarkup(<DocPreviewPanel {...props} />);
+
+    expect(html).toContain("w-full");
+    expect(html).not.toContain("max-w-[560px]");
   });
 
   it("renders the panel shell with sheet mode (full width)", () => {
