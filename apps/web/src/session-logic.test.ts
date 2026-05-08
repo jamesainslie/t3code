@@ -690,6 +690,37 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-complete"]);
   });
 
+  it("includes 'Stopped by user' entries from turn.aborted activities", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "tool-complete",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.completed",
+        summary: "Ran command",
+        tone: "tool",
+        turnId: "turn-1",
+      }),
+      makeActivity({
+        id: "stopped",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.aborted",
+        summary: "Stopped by user",
+        tone: "info",
+        turnId: "turn-1",
+        payload: { reason: "Stop confirmed by provider." },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, TurnId.make("turn-1"));
+    const stopped = entries.find((entry) => entry.id === "stopped");
+    expect(stopped).toBeDefined();
+    expect(stopped?.label).toBe("Stopped by user");
+    expect(stopped?.tone).toBe("info");
+    // The activity kind must survive the strip step so the renderer can pick
+    // a stop-shaped icon instead of the generic info checkmark.
+    expect(stopped?.kind).toBe("turn.aborted");
+  });
+
   it("omits ExitPlanMode lifecycle entries once the plan card is shown", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

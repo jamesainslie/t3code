@@ -162,6 +162,16 @@ interface ClaudeSessionContext {
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
+  // True between interruptTurn() and the next sendTurn(). While set, the SDK
+  // result message that eventually arrives in response to query.interrupt() is
+  // ignored so we don't double-emit turn.completed (we already synthesized one
+  // from interruptTurn). Cleared at the start of the next sendTurn.
+  aborting: boolean;
+  // The turnId that was active when interruptTurn ran. Used to bind the
+  // eventual SDK acknowledgment back to the cancelled turn so we can emit a
+  // turn.aborted event for the timeline. Cleared once the acknowledgment is
+  // observed, or at the start of the next sendTurn.
+  interruptedTurnId: TurnId | undefined;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
@@ -2006,6 +2016,35 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       return;
     }
 
+    // The user already cancelled this turn via interruptTurn; we synthesized
+    // turn.completed locally. The SDK eventually acknowledges the abort via a
+    // result message — typically subtype="error_during_execution" with an
+    // "aborted" error. When that happens we have positive evidence that the
+    // agent honored the cancellation, so we emit a turn.aborted event bound
+    // to the originally-cancelled turn. The projector translates this into a
+    // "Stopped by user" timeline activity. Either way we suppress the normal
+    // completeTurn() so the user doesn't see a duplicate turn.completed.
+    if (context.aborting) {
+      const interruptedTurnId = context.interruptedTurnId;
+      if (interruptedTurnId !== undefined && isInterruptedResult(message)) {
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "turn.aborted",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          turnId: interruptedTurnId,
+          payload: {
+            reason: "Stop confirmed by provider.",
+          },
+          providerRefs: nativeProviderRefs(context),
+        });
+      }
+      context.interruptedTurnId = undefined;
+      return;
+    }
+
     const status = turnStatusFromResult(message);
     const errorMessage = message.subtype === "success" ? undefined : message.errors[0];
 
@@ -2948,6 +2987,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
         stopped: false,
+        aborting: false,
+        interruptedTurnId: undefined,
       };
       yield* Ref.set(contextRef, context);
       sessions.set(threadId, context);
@@ -3026,6 +3067,11 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const context = yield* requireSession(input.threadId);
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
+
+    // Clear any lingering aborting state from a previous interruptTurn before
+    // we start emitting events for the new turn.
+    context.aborting = false;
+    context.interruptedTurnId = undefined;
 
     if (context.turnState) {
       // Auto-close a stale synthetic turn (from background agent responses
@@ -3118,10 +3164,61 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
     function* (threadId, _turnId) {
       const context = yield* requireSession(threadId);
-      yield* Effect.tryPromise({
-        try: () => context.query.interrupt(),
-        catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-      });
+
+      // Mark the session as aborting BEFORE we synthesize the turn.completed.
+      // Any subsequent SDK result message (the eventual response to interrupt())
+      // must be dropped to avoid emitting a duplicate turn.completed.
+      context.aborting = true;
+      // Capture the cancelled turnId so we can bind the SDK's eventual
+      // acknowledgment back to it (for an evidence-based turn.aborted event).
+      context.interruptedTurnId = context.turnState?.turnId;
+
+      // Settle in-flight UI requests that would otherwise hang waiting for an
+      // answer the user is no longer going to give.
+      for (const [requestId, pending] of context.pendingApprovals) {
+        yield* Deferred.succeed(pending.decision, "cancel");
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "request.resolved",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+          requestId: asRuntimeRequestId(requestId),
+          payload: {
+            requestType: pending.requestType,
+            decision: "cancel",
+          },
+          providerRefs: nativeProviderRefs(context),
+        });
+      }
+      context.pendingApprovals.clear();
+
+      for (const [, pending] of context.pendingUserInputs) {
+        yield* Deferred.succeed(pending.answers, {});
+      }
+      context.pendingUserInputs.clear();
+
+      // Synthesize the turn.completed locally so the orchestration projector
+      // flips session.status back to "ready" and the UI's Stop button hides,
+      // even if the Claude SDK's iterable does not honor interrupt() promptly.
+      // completeTurn() also clears context.turnState so any further SDK content
+      // events that arrive before the iterable closes are no-ops.
+      if (context.turnState) {
+        yield* completeTurn(context, "cancelled", "Interrupted by user.");
+      }
+
+      // Best-effort signal to the SDK so it can short-circuit upstream work.
+      // We do NOT propagate failures: the local cancellation above is what the
+      // user actually cares about; an SDK that ignores interrupt() must not
+      // make the Stop button look broken.
+      yield* Effect.ignore(
+        Effect.tryPromise({
+          try: () => context.query.interrupt(),
+          catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
+        }),
+      );
     },
   );
 

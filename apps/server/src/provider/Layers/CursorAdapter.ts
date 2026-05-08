@@ -108,6 +108,16 @@ interface CursorSessionContext {
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
   stopped: boolean;
+  // True between interruptTurn() and the moment the in-flight ctx.acp.prompt
+  // call resolves. While set, sendTurn skips emitting its natural turn.completed
+  // event because interruptTurn already synthesized one with state="cancelled".
+  // Cleared inside sendTurn when the prompt resolves.
+  aborting: boolean;
+  // The turnId that was active when interruptTurn ran. Used to bind the
+  // eventual prompt response back to the cancelled turn so we can emit a
+  // turn.aborted event for the timeline if the agent honors the cancel.
+  // Cleared inside sendTurn when the prompt resolves.
+  interruptedTurnId: TurnId | undefined;
 }
 
 function settlePendingApprovalsAsCancelled(
@@ -691,6 +701,8 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
             stopped: false,
+            aborting: false,
+            interruptedTurnId: undefined,
           };
 
           const nf = yield* Stream.runDrain(
@@ -904,9 +916,44 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           );
 
         ctx.turns.push({ id: turnId, items: [{ prompt: promptParts, result }] });
+
+        // If interruptTurn ran while we were awaiting the prompt response, it
+        // already synthesized turn.completed (state="cancelled") and cleared
+        // ctx.activeTurnId. Skip the natural emission so the UI doesn't see a
+        // duplicate event flipping session.status away from the cancellation.
+        if (ctx.aborting) {
+          // Positive evidence path: the agent honored session/cancel and
+          // returned stopReason="cancelled". Emit turn.aborted bound to the
+          // originally-cancelled turn so the projector can append a
+          // "Stopped by user" timeline activity. If the agent ignored cancel
+          // (stopReason !== "cancelled") we have no evidence and skip the
+          // event — the user's optimistic stop already flipped session.status.
+          const interruptedTurnId = ctx.interruptedTurnId;
+          if (interruptedTurnId !== undefined && result.stopReason === "cancelled") {
+            yield* offerRuntimeEvent({
+              type: "turn.aborted",
+              ...(yield* makeEventStamp()),
+              provider: PROVIDER,
+              threadId: input.threadId,
+              turnId: interruptedTurnId,
+              payload: {
+                reason: "Stop confirmed by provider.",
+              },
+            });
+          }
+          ctx.aborting = false;
+          ctx.interruptedTurnId = undefined;
+          return {
+            threadId: input.threadId,
+            turnId,
+            resumeCursor: ctx.session.resumeCursor,
+          };
+        }
+
+        ctx.activeTurnId = undefined;
         ctx.session = {
           ...ctx.session,
-          activeTurnId: turnId,
+          activeTurnId: undefined,
           updatedAt: yield* nowIso,
           model: resolvedModel,
         };
@@ -933,8 +980,15 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
     const interruptTurn: CursorAdapterShape["interruptTurn"] = (threadId) =>
       Effect.gen(function* () {
         const ctx = yield* requireSession(threadId);
+
+        // Settle in-flight UI requests so the user isn't waiting on a prompt
+        // they no longer care about.
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
+
+        // session/cancel is a fire-and-forget JSON-RPC notification — the agent
+        // is free to ignore it and many do while blocked mid-stream. Send it as
+        // a hint, but do not depend on it for correctness.
         yield* Effect.ignore(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
@@ -942,6 +996,37 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
             ),
           ),
         );
+
+        // Locally enforce the cancellation. This is what the user actually sees:
+        // turn.completed flips session.status back to "ready" and the Stop button
+        // hides immediately, regardless of whether the agent honors the cancel.
+        // sendTurn checks `aborting` after its prompt resolves and skips its own
+        // turn.completed emission so we don't double-fire.
+        if (ctx.activeTurnId !== undefined) {
+          ctx.aborting = true;
+          const activeTurnId = ctx.activeTurnId;
+          // Remember the cancelled turnId so sendTurn can bind the agent's
+          // eventual response back to it (for an evidence-based turn.aborted
+          // event when the agent confirms with stopReason="cancelled").
+          ctx.interruptedTurnId = activeTurnId;
+          ctx.activeTurnId = undefined;
+          ctx.session = {
+            ...ctx.session,
+            activeTurnId: undefined,
+            updatedAt: yield* nowIso,
+          };
+          yield* offerRuntimeEvent({
+            type: "turn.completed",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            threadId,
+            turnId: activeTurnId,
+            payload: {
+              state: "cancelled",
+              stopReason: "cancelled",
+            },
+          });
+        }
       });
 
     const respondToRequest: CursorAdapterShape["respondToRequest"] = (
