@@ -69,6 +69,10 @@ function makePersistedStub(): LocalApi["persistence"] {
     removeSavedEnvironmentSecret: async () => undefined,
     getSavedProjectRegistry: async () => [],
     setSavedProjectRegistry: async () => undefined,
+    getThemePreferences: async () => null,
+    setThemePreferences: async () => undefined,
+    getMarkdownPreferences: async () => null,
+    setMarkdownPreferences: async () => undefined,
   };
 }
 

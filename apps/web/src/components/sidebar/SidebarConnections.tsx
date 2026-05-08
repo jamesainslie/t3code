@@ -17,8 +17,8 @@ import { toastManager } from "~/components/ui/toast";
 import { SidebarConnectionRow } from "./SidebarConnectionRow";
 import { SidebarConnectionDetail } from "./SidebarConnectionDetail";
 
-function isRemoteEnvironment(record: SavedRemoteEnvironment): boolean {
-  return record.host !== "" && record.user !== "unknown";
+function isKnownRemote(record: SavedRemoteEnvironment): boolean {
+  return record.environmentId !== null;
 }
 
 function buildLabel(record: SavedRemoteEnvironment): string {
@@ -69,19 +69,16 @@ export const SidebarConnections = memo(function SidebarConnections() {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
-  const remotes = useMemo(() => records.filter(isRemoteEnvironment), [records]);
+  const remotes = useMemo(() => records.filter(isKnownRemote), [records]);
 
   const badgeCounts = useMemo(
     () => computeBadgeCounts(remotes, runtimeById),
     [remotes, runtimeById],
   );
 
-  const handleToggleExpand = useCallback(
-    (identityKey: string) => {
-      setExpandedRowId((prev) => (prev === identityKey ? null : identityKey));
-    },
-    [],
-  );
+  const handleToggleExpand = useCallback((identityKey: string) => {
+    setExpandedRowId((prev) => (prev === identityKey ? null : identityKey));
+  }, []);
 
   const handleReconnect = useCallback(async (environmentId: EnvironmentId) => {
     try {

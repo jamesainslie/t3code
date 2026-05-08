@@ -10,7 +10,10 @@ export interface ClassifiedConnectionError {
   readonly guidance: string;
 }
 
-const CLASSIFICATIONS: Record<ConnectionErrorCategory, Omit<ClassifiedConnectionError, "category">> = {
+const CLASSIFICATIONS: Record<
+  ConnectionErrorCategory,
+  Omit<ClassifiedConnectionError, "category">
+> = {
   "tunnel-closed": {
     headline: "Connection lost",
     guidance: "Reconnect will re-establish the SSH tunnel.",
@@ -96,9 +99,7 @@ export interface RetryConfig {
   readonly delaysMs: readonly number[];
 }
 
-export function getRetryConfig(
-  category: ConnectionErrorCategory,
-): RetryConfig | null {
+export function getRetryConfig(category: ConnectionErrorCategory): RetryConfig | null {
   switch (category) {
     case "tunnel-closed":
       return { maxAttempts: 3, delaysMs: [2000, 4000, 8000] };

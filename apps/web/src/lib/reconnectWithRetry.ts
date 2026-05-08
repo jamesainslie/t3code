@@ -1,8 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import {
-  classifyConnectionError,
-  getRetryConfig,
-} from "./connectionErrorClassifier";
+import { classifyConnectionError, getRetryConfig } from "./connectionErrorClassifier";
 import { toastManager } from "~/components/ui/toast";
 
 function sleep(ms: number): Promise<void> {

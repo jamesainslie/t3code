@@ -6,20 +6,14 @@ import {
 
 describe("classifyConnectionError", () => {
   it("classifies fetch TypeError on SSH env as tunnel-closed", () => {
-    const result = classifyConnectionError(
-      new TypeError("Failed to fetch"),
-      { isSsh: true },
-    );
+    const result = classifyConnectionError(new TypeError("Failed to fetch"), { isSsh: true });
     expect(result.category).toBe("tunnel-closed");
     expect(result.headline).toBe("Connection lost");
     expect(result.guidance).toMatch(/SSH tunnel/);
   });
 
   it("classifies fetch TypeError on non-SSH env as server-unreachable", () => {
-    const result = classifyConnectionError(
-      new TypeError("Failed to fetch"),
-      { isSsh: false },
-    );
+    const result = classifyConnectionError(new TypeError("Failed to fetch"), { isSsh: false });
     expect(result.category).toBe("server-unreachable");
     expect(result.headline).toBe("Server unreachable");
   });
@@ -63,20 +57,16 @@ describe("classifyConnectionError", () => {
   });
 
   it("classifies DNS/timeout errors as network-error", () => {
-    const result = classifyConnectionError(
-      new TypeError("net::ERR_NAME_NOT_RESOLVED"),
-      { isSsh: false },
-    );
+    const result = classifyConnectionError(new TypeError("net::ERR_NAME_NOT_RESOLVED"), {
+      isSsh: false,
+    });
     expect(result.category).toBe("network-error");
     expect(result.headline).toBe("Network error");
     expect(result.guidance).toMatch(/online/);
   });
 
   it("classifies unknown errors as network-error fallback", () => {
-    const result = classifyConnectionError(
-      new Error("Something unexpected"),
-      { isSsh: false },
-    );
+    const result = classifyConnectionError(new Error("Something unexpected"), { isSsh: false });
     expect(result.category).toBe("network-error");
   });
 

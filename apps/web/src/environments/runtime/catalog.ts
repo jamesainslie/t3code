@@ -11,7 +11,7 @@ import type { ConnectionErrorCategory } from "../../lib/connectionErrorClassifie
 import { type RemoteIdentityKey, makeRemoteIdentityKey } from "@t3tools/contracts";
 import { create } from "zustand";
 
-import { ensureLocalApi } from "../../localApi";
+import { resolveLocalApi as ensureLocalApi } from "./localApiBridge";
 import { getPrimaryKnownEnvironment } from "../primary";
 
 export type SavedEnvironmentRecord = SavedRemoteEnvironment;

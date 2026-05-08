@@ -29,7 +29,15 @@ export function buildConnectionContextMenuItems(
   const items: Array<ContextMenuItem<string>> = [];
   const actionHandlers = new Map<string, () => void | Promise<void>>();
 
-  const { label, sshCommand, connectionState, onReconnect, onDisconnect, onRemove, onOpenSettings } = input;
+  const {
+    label,
+    sshCommand,
+    connectionState,
+    onReconnect,
+    onDisconnect,
+    onRemove,
+    onOpenSettings,
+  } = input;
 
   // Reconnect — shown when error or disconnected
   if (connectionState === "error" || connectionState === "disconnected") {

@@ -78,12 +78,7 @@ const ConnectedView = memo(function ConnectedView({
           </p>
         )}
       </div>
-      <Button
-        data-testid="disconnect-button"
-        variant="outline"
-        size="xs"
-        onClick={onDisconnect}
-      >
+      <Button data-testid="disconnect-button" variant="outline" size="xs" onClick={onDisconnect}>
         Disconnect
       </Button>
     </div>
@@ -100,13 +95,7 @@ const ErrorView = memo(function ErrorView({
   onReconnect,
 }: Pick<
   SidebarConnectionDetailProps,
-  | "user"
-  | "host"
-  | "errorCategory"
-  | "errorGuidance"
-  | "lastError"
-  | "lastErrorAt"
-  | "onReconnect"
+  "user" | "host" | "errorCategory" | "errorGuidance" | "lastError" | "lastErrorAt" | "onReconnect"
 >) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -122,13 +111,9 @@ const ErrorView = memo(function ErrorView({
           <p className="font-mono text-xs text-muted-foreground">
             {user}@{host}
           </p>
-          {errorGuidance && (
-            <p className="text-xs text-muted-foreground">{errorGuidance}</p>
-          )}
+          {errorGuidance && <p className="text-xs text-muted-foreground">{errorGuidance}</p>}
           {lastErrorAt && (
-            <p className="text-xs text-muted-foreground">
-              {formatRelativeTime(lastErrorAt)}
-            </p>
+            <p className="text-xs text-muted-foreground">{formatRelativeTime(lastErrorAt)}</p>
           )}
         </div>
       </div>
@@ -153,12 +138,7 @@ const ErrorView = memo(function ErrorView({
         </div>
       )}
 
-      <Button
-        data-testid="action-button"
-        variant="outline"
-        size="xs"
-        onClick={onReconnect}
-      >
+      <Button data-testid="action-button" variant="outline" size="xs" onClick={onReconnect}>
         {actionLabel}
       </Button>
     </div>
@@ -170,10 +150,7 @@ const DisconnectedView = memo(function DisconnectedView({
   host,
   workspaceRoot,
   onReconnect,
-}: Pick<
-  SidebarConnectionDetailProps,
-  "user" | "host" | "workspaceRoot" | "onReconnect"
->) {
+}: Pick<SidebarConnectionDetailProps, "user" | "host" | "workspaceRoot" | "onReconnect">) {
   return (
     <div className="space-y-2 rounded-md bg-accent/30 px-3 py-2.5">
       <div className="space-y-0.5">
@@ -182,12 +159,7 @@ const DisconnectedView = memo(function DisconnectedView({
         </p>
         <p className="truncate text-xs text-muted-foreground">{workspaceRoot}</p>
       </div>
-      <Button
-        data-testid="action-button"
-        variant="outline"
-        size="xs"
-        onClick={onReconnect}
-      >
+      <Button data-testid="action-button" variant="outline" size="xs" onClick={onReconnect}>
         Connect
       </Button>
     </div>

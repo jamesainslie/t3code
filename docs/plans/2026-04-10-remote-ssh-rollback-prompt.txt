@@ -1,0 +1,57 @@
+You are helping me roll back a broken T3 Code installation.
+T3 Code is my development environment and it is currently broken.
+I cannot use T3 Code — use the terminal only.
+
+DO NOT launch T3 Code or any GUI application.
+DO NOT run bun dev or npm start.
+Work entirely in the terminal.
+
+Context:
+- T3 Code runs in dev mode from source at /Volumes/Code/t3code
+- State database: ~/.t3/dev/state.sqlite
+- I have a backup at: ~/.t3/dev/state.sqlite.backup-* (find the most recent one)
+- I have a safety branch: pre-remote-ssh-backup
+- The broken branch is: test-remote-ssh
+
+Steps to execute:
+
+1. Stop all T3 Code processes:
+   pkill -f "bun run src/bin.ts" 2>/dev/null
+   pkill -f "T3 Code" 2>/dev/null
+   pkill -f "vite" 2>/dev/null
+   sleep 3
+   echo "Processes stopped"
+
+2. Find and restore the most recent state backup:
+   BACKUP=$(ls -t ~/.t3/dev/state.sqlite.backup-* 2>/dev/null | head -1)
+   if [ -z "$BACKUP" ]; then
+     echo "ERROR: No backup found at ~/.t3/dev/state.sqlite.backup-*"
+     echo "State database may be unrecoverable. Proceeding with code-only rollback."
+   else
+     echo "Restoring backup: $BACKUP"
+     cp "$BACKUP" ~/.t3/dev/state.sqlite
+     echo "Database restored."
+   fi
+
+3. Checkout the known-good code:
+   cd /Volumes/Code/t3code
+   git status
+   git stash 2>/dev/null || true
+   git checkout pre-remote-ssh-backup
+   echo "Code rolled back to: $(git rev-parse --short HEAD)"
+
+4. Reinstall dependencies:
+   bun install 2>&1 | tail -3
+
+5. Verify the rollback looks correct:
+   git log --oneline -5
+   ls ~/.t3/dev/state.sqlite
+   echo "Rollback complete. You can now reopen T3 Code manually."
+
+6. Remind the user:
+   - To open T3 Code, double-click: /Volumes/Code/t3code/apps/desktop/.electron-runtime/T3 Code (Dev).app
+   - Or run: bun dev (in /Volumes/Code/t3code) then open the Electron app
+   - Verify threads are visible and AI responds before closing this terminal
+
+If any step fails, report the exact error message and stop.
+Do not attempt to fix errors silently — surface everything.

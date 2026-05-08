@@ -4,9 +4,7 @@ import { SidebarConnectionDetail } from "../SidebarConnectionDetail";
 
 const noop = () => {};
 
-function renderDetail(
-  props?: Partial<Parameters<typeof SidebarConnectionDetail>[0]>,
-) {
+function renderDetail(props?: Partial<Parameters<typeof SidebarConnectionDetail>[0]>) {
   return renderToStaticMarkup(
     <SidebarConnectionDetail
       connectionState="connected"

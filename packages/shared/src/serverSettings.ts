@@ -60,22 +60,29 @@ const withModelSelectionOptions = <Options>(options: Options | undefined) =>
  * Applies a server settings patch while treating textGenerationModelSelection as
  * replace-on-provider/model updates. This prevents stale nested options from
  * surviving a reset patch that intentionally omits options.
+ *
+ * `projectColors` is also treated as a whole-record replacement (when present
+ * in the patch). Without that, `deepMerge` accumulates entries forever and
+ * removing a project color would be impossible without a sentinel value.
  */
 export function applyServerSettingsPatch(
   current: ServerSettings,
   patch: ServerSettingsPatch,
 ): ServerSettings {
   const selectionPatch = patch.textGenerationModelSelection;
+  const projectColorsPatch = patch.projectColors;
   const next = deepMerge(current, patch);
+  const withProjectColors =
+    projectColorsPatch !== undefined ? { ...next, projectColors: projectColorsPatch } : next;
   if (!selectionPatch || !shouldReplaceTextGenerationModelSelection(selectionPatch)) {
-    return next;
+    return withProjectColors;
   }
 
   const provider = selectionPatch.provider ?? current.textGenerationModelSelection.provider;
   const model = selectionPatch.model ?? current.textGenerationModelSelection.model;
 
   return {
-    ...next,
+    ...withProjectColors,
     textGenerationModelSelection:
       provider === "codex"
         ? {

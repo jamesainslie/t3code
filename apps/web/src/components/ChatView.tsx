@@ -175,7 +175,7 @@ import {
 } from "~/rpc/serverState";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { useHostResource, startHostResourceSync } from "~/rpc/hostResourceState";
-import { readEnvironmentConnection } from "~/environments/runtime";
+import { readEnvironmentConnection, subscribeEnvironmentConnections } from "~/environments/runtime";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -853,12 +853,37 @@ export default function ChatView(props: ChatViewProps) {
 
   // Host resource monitoring — subscribe to the server-side resource stream
   // for the active project's environment so the header pill stays up to date.
+  // The connection may not be registered yet when this effect first runs (the
+  // startup optimisation defers connection registration), so we also listen
+  // for connection-registry changes and retry when one appears.
   const hostResourceSnapshot = useHostResource();
   useEffect(() => {
     if (!activeProject?.id || !environmentId) return;
-    const connection = readEnvironmentConnection(environmentId);
-    if (!connection) return;
-    return startHostResourceSync(connection.client.hostResource, activeProject.id);
+
+    // Two unsubscribes manage two stages: the registry watcher waits for the
+    // env connection to appear; once it does, we swap to the host-resource
+    // sync subscription. Both refs are declared up-front so the registry
+    // callback can disarm itself even if the store fires synchronously on
+    // subscribe (some Zustand-style stores notify immediately) — without
+    // the lexical pre-declaration that path would TDZ.
+    let unsubscribeRegistry: (() => void) | null = null;
+    let unsubscribeSync: (() => void) | null = null;
+
+    const trySync = () => {
+      const connection = readEnvironmentConnection(environmentId);
+      if (!connection) return;
+      unsubscribeRegistry?.();
+      unsubscribeRegistry = null;
+      unsubscribeSync = startHostResourceSync(connection.client.hostResource, activeProject.id);
+    };
+
+    unsubscribeRegistry = subscribeEnvironmentConnections(trySync);
+    trySync();
+
+    return () => {
+      unsubscribeRegistry?.();
+      unsubscribeSync?.();
+    };
   }, [activeProject?.id, environmentId]);
 
   // Compute the list of environments this logical project spans, used to
