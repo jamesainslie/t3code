@@ -249,3 +249,84 @@ export function writeBrowserSavedProjectRegistry(
     BrowserSavedProjectRegistryDocumentSchema,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Theme preferences (browser-only fallback for non-desktop environments)
+// ---------------------------------------------------------------------------
+
+const THEME_PREFERENCE_KEY = "t3code:theme";
+const CUSTOM_THEMES_KEY = "t3code:custom-themes:v1";
+const ACTIVE_THEME_KEY = "t3code:active-theme-id:v1";
+
+export interface BrowserThemePreferences {
+  preference: "light" | "dark" | "system";
+  activeThemeId: string | null;
+  savedThemes: readonly unknown[];
+}
+
+export function readBrowserThemePreferences(): BrowserThemePreferences | null {
+  if (!hasWindow()) return null;
+  try {
+    const preference = localStorage.getItem(THEME_PREFERENCE_KEY);
+    if (preference !== "light" && preference !== "dark" && preference !== "system") {
+      return null;
+    }
+    const rawThemes = localStorage.getItem(CUSTOM_THEMES_KEY);
+    const savedThemes = rawThemes ? JSON.parse(rawThemes) : [];
+    const activeThemeId = localStorage.getItem(ACTIVE_THEME_KEY);
+    return {
+      preference,
+      activeThemeId,
+      savedThemes: Array.isArray(savedThemes) ? savedThemes : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeBrowserThemePreferences(prefs: BrowserThemePreferences): void {
+  if (!hasWindow()) return;
+  try {
+    localStorage.setItem(THEME_PREFERENCE_KEY, prefs.preference);
+    localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(prefs.savedThemes));
+    if (prefs.activeThemeId) {
+      localStorage.setItem(ACTIVE_THEME_KEY, prefs.activeThemeId);
+    } else {
+      localStorage.removeItem(ACTIVE_THEME_KEY);
+    }
+  } catch {
+    // localStorage unavailable
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Markdown preferences (browser-only fallback for non-desktop environments)
+// ---------------------------------------------------------------------------
+
+// MUST match the key the T3StorageAdapter uses for `setSync({ preferences })`
+// — namespace `t3code:mdreview:` + the inner key `preferences`. Drifting from
+// this single source of truth silently breaks markdown settings persistence:
+// the renderer reads the namespaced key, the fallback writes a different one,
+// and the two halves of the system never see each other's writes.
+export const MARKDOWN_PREFERENCES_STORAGE_KEY = "t3code:mdreview:preferences";
+
+export function readBrowserMarkdownPreferences(): Record<string, unknown> | null {
+  if (!hasWindow()) return null;
+  try {
+    const raw = localStorage.getItem(MARKDOWN_PREFERENCES_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeBrowserMarkdownPreferences(prefs: Record<string, unknown>): void {
+  if (!hasWindow()) return;
+  try {
+    localStorage.setItem(MARKDOWN_PREFERENCES_STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // localStorage unavailable
+  }
+}

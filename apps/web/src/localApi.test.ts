@@ -176,6 +176,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     removeSavedEnvironmentSecret: async () => undefined,
     getSavedProjectRegistry: async () => [],
     setSavedProjectRegistry: async () => undefined,
+    getThemePreferences: async () => null,
+    setThemePreferences: async () => undefined,
+    getMarkdownPreferences: async () => null,
+    setMarkdownPreferences: async () => undefined,
     getServerExposureState: async () => ({
       mode: "local-only",
       endpointUrl: null,
@@ -297,9 +301,17 @@ beforeEach(() => {
   gitStatusListeners.clear();
   const testWindow = getWindowForTest();
   Reflect.deleteProperty(testWindow, "desktopBridge");
+  const stubStorage = createLocalStorageStub();
   Object.defineProperty(testWindow, "localStorage", {
     configurable: true,
-    value: createLocalStorageStub(),
+    value: stubStorage,
+  });
+  // Mirror to the global identifier as well, since the browser-fallback
+  // helpers in clientPersistenceStorage reference bare `localStorage` (it's a
+  // window-scoped global in the browser).
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: stubStorage,
   });
 });
 
@@ -656,5 +668,70 @@ describe("wsApi", () => {
     await expect(
       api.persistence.getSavedEnvironmentSecret(EnvironmentId.make("environment-local")),
     ).resolves.toBeNull();
+  });
+
+  it("routes theme and markdown preferences through the desktop bridge when present", async () => {
+    const themePrefs = {
+      preference: "dark" as const,
+      activeThemeId: "monokai",
+      savedThemes: [{ id: "monokai", name: "Monokai", base: "dark" }],
+    };
+    const markdownPrefs = {
+      theme: "github-dark",
+      lineNumbers: true,
+      tocPosition: "right",
+    };
+    const getThemePreferences = vi.fn().mockResolvedValue(themePrefs);
+    const setThemePreferences = vi.fn().mockResolvedValue(undefined);
+    const getMarkdownPreferences = vi.fn().mockResolvedValue(markdownPrefs);
+    const setMarkdownPreferences = vi.fn().mockResolvedValue(undefined);
+    getWindowForTest().desktopBridge = makeDesktopBridge({
+      getThemePreferences,
+      setThemePreferences,
+      getMarkdownPreferences,
+      setMarkdownPreferences,
+    });
+
+    const { createLocalApi } = await import("./localApi");
+    const api = createLocalApi(rpcClientMock as never);
+
+    await expect(api.persistence.getThemePreferences()).resolves.toEqual(themePrefs);
+    await api.persistence.setThemePreferences(themePrefs);
+    await expect(api.persistence.getMarkdownPreferences()).resolves.toEqual(markdownPrefs);
+    await api.persistence.setMarkdownPreferences(markdownPrefs);
+
+    expect(getThemePreferences).toHaveBeenCalledTimes(1);
+    expect(setThemePreferences).toHaveBeenCalledWith(themePrefs);
+    expect(getMarkdownPreferences).toHaveBeenCalledTimes(1);
+    expect(setMarkdownPreferences).toHaveBeenCalledWith(markdownPrefs);
+  });
+
+  it("falls back to browser storage for theme preferences when the desktop bridge is missing", async () => {
+    const { createLocalApi } = await import("./localApi");
+    const api = createLocalApi(rpcClientMock as never);
+    const themePrefs = {
+      preference: "dark" as const,
+      activeThemeId: "custom-1",
+      savedThemes: [{ id: "custom-1", name: "Mine" }],
+    };
+
+    await api.persistence.setThemePreferences(themePrefs);
+
+    await expect(api.persistence.getThemePreferences()).resolves.toEqual(themePrefs);
+  });
+
+  it("falls back to browser storage for markdown preferences when the desktop bridge is missing", async () => {
+    const { createLocalApi } = await import("./localApi");
+    const api = createLocalApi(rpcClientMock as never);
+    const markdownPrefs = {
+      theme: "github-dark",
+      lineNumbers: true,
+      enableHtml: false,
+      tocPosition: "right",
+    };
+
+    await api.persistence.setMarkdownPreferences(markdownPrefs);
+
+    await expect(api.persistence.getMarkdownPreferences()).resolves.toEqual(markdownPrefs);
   });
 });

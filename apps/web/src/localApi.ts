@@ -4,15 +4,16 @@ import { resetGitStatusStateForTests } from "./lib/gitStatusState";
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { resetServerStateForTests } from "./rpc/serverState";
 import { resetWsConnectionStateForTests } from "./rpc/wsConnectionState";
-import {
-  resetSavedEnvironmentRegistryStoreForTests,
-  resetSavedEnvironmentRuntimeStoreForTests,
-  resetSavedProjectRegistryStoreForTests,
-} from "./environments/runtime";
-import {
-  getPrimaryEnvironmentConnection,
-  resetEnvironmentServiceForTests,
-} from "./environments/runtime";
+import { getPrimaryEnvironmentConnection } from "./environments/runtime/service";
+import { registerLocalApiResolver } from "./environments/runtime/localApiBridge";
+
+// `localApi` is widely consumed and the runtime barrel re-exports a number of
+// stores that themselves need to call back into `ensureLocalApi`. Importing
+// the runtime barrel here would form a load-time cycle that Vite's browser
+// ESM loader rejects with a TDZ "does not provide an export named ..."
+// SyntaxError. We therefore import the specific files we need directly and
+// register `ensureLocalApi` with the bridge so the stores can resolve it
+// without re-importing this module.
 import { type WsRpcClient } from "./rpc/wsRpcClient";
 import { showContextMenuFallback } from "./contextMenuFallback";
 import {
@@ -25,6 +26,10 @@ import {
   writeBrowserSavedEnvironmentRegistry,
   writeBrowserSavedEnvironmentSecret,
   writeBrowserSavedProjectRegistry,
+  readBrowserThemePreferences,
+  writeBrowserThemePreferences,
+  readBrowserMarkdownPreferences,
+  writeBrowserMarkdownPreferences,
 } from "./clientPersistenceStorage";
 
 let cachedApi: LocalApi | undefined;
@@ -123,6 +128,32 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
         }
         writeBrowserSavedProjectRegistry(records);
       },
+      getThemePreferences: async () => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.getThemePreferences();
+        }
+        return readBrowserThemePreferences();
+      },
+      setThemePreferences: async (prefs) => {
+        if (window.desktopBridge) {
+          await window.desktopBridge.setThemePreferences(prefs);
+          return;
+        }
+        writeBrowserThemePreferences(prefs);
+      },
+      getMarkdownPreferences: async () => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.getMarkdownPreferences();
+        }
+        return readBrowserMarkdownPreferences();
+      },
+      setMarkdownPreferences: async (prefs) => {
+        if (window.desktopBridge) {
+          await window.desktopBridge.setMarkdownPreferences(prefs);
+          return;
+        }
+        writeBrowserMarkdownPreferences(prefs);
+      },
     },
     server: {
       getConfig: rpcClient.server.getConfig,
@@ -155,16 +186,32 @@ export function ensureLocalApi(): LocalApi {
   return api;
 }
 
+// Register the synchronous resolver with the runtime bridge once this module
+// has finished evaluating. Stores defined under `environments/runtime` call
+// `resolveLocalApi()` from the bridge so they don't need to re-import this
+// module (which would reintroduce the load-time cycle).
+registerLocalApiResolver(ensureLocalApi);
+
 export async function __resetLocalApiForTests() {
   cachedApi = undefined;
   const { __resetClientSettingsPersistenceForTests } = await import("./hooks/useSettings");
   __resetClientSettingsPersistenceForTests();
-  await resetEnvironmentServiceForTests();
+  // Resolve the runtime modules directly (not via the barrel) so this
+  // test-only entry point doesn't recreate the load-time cycle that
+  // `localApi` is otherwise carefully avoiding. The barrel re-exports these
+  // symbols, but importing it here would pull every other runtime file in
+  // through the same Vite ESM evaluation that's still running.
+  const [serviceMod, catalogMod, projectsCatalogMod] = await Promise.all([
+    import("./environments/runtime/service"),
+    import("./environments/runtime/catalog"),
+    import("./environments/runtime/projectsCatalog"),
+  ]);
+  await serviceMod.resetEnvironmentServiceForTests();
   resetGitStatusStateForTests();
   resetRequestLatencyStateForTests();
-  resetSavedEnvironmentRegistryStoreForTests();
-  resetSavedEnvironmentRuntimeStoreForTests();
-  resetSavedProjectRegistryStoreForTests();
+  catalogMod.resetSavedEnvironmentRegistryStoreForTests();
+  catalogMod.resetSavedEnvironmentRuntimeStoreForTests();
+  projectsCatalogMod.resetSavedProjectRegistryStoreForTests();
   resetServerStateForTests();
   resetWsConnectionStateForTests();
 }

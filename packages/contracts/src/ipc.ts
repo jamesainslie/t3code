@@ -63,7 +63,13 @@ import type { EnvironmentId } from "./baseSchemas.ts";
 import type { RemoteIdentityKey } from "./remoteIdentity.ts";
 import type { PersistedSavedProjectRecord } from "./savedProjectKey.ts";
 import { EditorId } from "./editor.ts";
-import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
+import {
+  ServerSettings,
+  type ClientSettings,
+  type MarkdownPreferencesDocument,
+  type ServerSettingsPatch,
+  type ThemePreferencesDocument,
+} from "./settings.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -212,6 +218,10 @@ export interface DesktopBridge {
   removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
   getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
   setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
+  getThemePreferences: () => Promise<ThemePreferencesDocument | null>;
+  setThemePreferences: (prefs: ThemePreferencesDocument) => Promise<void>;
+  getMarkdownPreferences: () => Promise<MarkdownPreferencesDocument | null>;
+  setMarkdownPreferences: (prefs: MarkdownPreferencesDocument) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
@@ -283,6 +293,10 @@ export interface LocalApi {
     removeSavedEnvironmentSecret: (key: EnvironmentId | RemoteIdentityKey) => Promise<void>;
     getSavedProjectRegistry: () => Promise<readonly PersistedSavedProjectRecord[]>;
     setSavedProjectRegistry: (records: readonly PersistedSavedProjectRecord[]) => Promise<void>;
+    getThemePreferences: () => Promise<ThemePreferencesDocument | null>;
+    setThemePreferences: (prefs: ThemePreferencesDocument) => Promise<void>;
+    getMarkdownPreferences: () => Promise<MarkdownPreferencesDocument | null>;
+    setMarkdownPreferences: (prefs: MarkdownPreferencesDocument) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

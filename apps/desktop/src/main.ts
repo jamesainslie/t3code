@@ -58,7 +58,11 @@ import type {
 } from "@t3tools/contracts";
 import { autoUpdater } from "electron-updater";
 
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type {
+  ContextMenuItem,
+  MarkdownPreferencesDocument,
+  ThemePreferencesDocument,
+} from "@t3tools/contracts";
 import { RotatingFileSink } from "@t3tools/shared/logging";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backendPort.ts";
@@ -77,6 +81,10 @@ import {
   writeClientSettings,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
+  readThemePreferences,
+  writeThemePreferences,
+  readMarkdownPreferences,
+  writeMarkdownPreferences,
 } from "./clientPersistence.ts";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness.ts";
 import { showDesktopConfirmDialog } from "./confirmDialog.ts";
@@ -137,6 +145,10 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
 const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
+const GET_THEME_PREFERENCES_CHANNEL = "desktop:get-theme-preferences";
+const SET_THEME_PREFERENCES_CHANNEL = "desktop:set-theme-preferences";
+const GET_MARKDOWN_PREFERENCES_CHANNEL = "desktop:get-markdown-preferences";
+const SET_MARKDOWN_PREFERENCES_CHANNEL = "desktop:set-markdown-preferences";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
@@ -151,6 +163,8 @@ const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
 const SAVED_ENVIRONMENT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-environments.json");
 const SAVED_PROJECT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-projects.json");
+const THEME_PREFERENCES_PATH = Path.join(STATE_DIR, "theme-preferences.json");
+const MARKDOWN_PREFERENCES_PATH = Path.join(STATE_DIR, "markdown-preferences.json");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -1753,6 +1767,37 @@ function registerIpcHandlers(): void {
       SAVED_PROJECT_REGISTRY_PATH,
       rawRecords as readonly PersistedSavedProjectRecord[],
     );
+  });
+
+  ipcMain.removeHandler(GET_THEME_PREFERENCES_CHANNEL);
+  ipcMain.handle(GET_THEME_PREFERENCES_CHANNEL, async () =>
+    readThemePreferences(THEME_PREFERENCES_PATH),
+  );
+
+  ipcMain.removeHandler(SET_THEME_PREFERENCES_CHANNEL);
+  ipcMain.handle(SET_THEME_PREFERENCES_CHANNEL, async (_event, rawPrefs: unknown) => {
+    if (typeof rawPrefs !== "object" || rawPrefs === null) {
+      throw new Error("Invalid theme preferences payload.");
+    }
+    // Cast at the IPC boundary: the renderer passes a value typed against
+    // ThemePreferencesDocument via the contracts package, but Electron's IPC
+    // serialization erases that. Defer strict validation to the consumer
+    // (ThemeStore.hydrateFromDesktop re-decodes every saved theme through
+    // ThemeSchema) so we don't reject docs containing legacy theme shapes.
+    writeThemePreferences(THEME_PREFERENCES_PATH, rawPrefs as ThemePreferencesDocument);
+  });
+
+  ipcMain.removeHandler(GET_MARKDOWN_PREFERENCES_CHANNEL);
+  ipcMain.handle(GET_MARKDOWN_PREFERENCES_CHANNEL, async () =>
+    readMarkdownPreferences(MARKDOWN_PREFERENCES_PATH),
+  );
+
+  ipcMain.removeHandler(SET_MARKDOWN_PREFERENCES_CHANNEL);
+  ipcMain.handle(SET_MARKDOWN_PREFERENCES_CHANNEL, async (_event, rawPrefs: unknown) => {
+    if (typeof rawPrefs !== "object" || rawPrefs === null) {
+      throw new Error("Invalid markdown preferences payload.");
+    }
+    writeMarkdownPreferences(MARKDOWN_PREFERENCES_PATH, rawPrefs as MarkdownPreferencesDocument);
   });
 
   ipcMain.removeHandler(GET_SERVER_EXPOSURE_STATE_CHANNEL);

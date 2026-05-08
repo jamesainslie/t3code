@@ -20,7 +20,11 @@ export default mergeConfig(
       strictPort: false,
     },
     test: {
-      include: ["src/components/**/*.browser.tsx"],
+      // Include any *.browser.tsx file under src/. Browser-mode tests aren't
+      // strictly tied to React components — services and stores with
+      // window/localStorage dependencies (e.g. theme persistence) belong here
+      // too, so the glob spans the whole src tree.
+      include: ["src/**/*.browser.tsx"],
       browser: {
         enabled: true,
         provider: playwright(),

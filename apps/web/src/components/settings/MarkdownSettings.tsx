@@ -1,11 +1,13 @@
 import { DEFAULT_PREFERENCES, ThemeEngine, type Preferences, type ThemeName } from "@mdreview/core";
+import type { MarkdownPreferencesDocument } from "@t3tools/contracts";
 import {
   T3StorageAdapter,
   normalizeMdreviewPreferences,
   readMdreviewPreferences,
   writeMdreviewPreferences,
 } from "@t3tools/mdreview-host";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readLocalApi } from "~/localApi";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -119,28 +121,80 @@ function themeSelectControl(props: {
   );
 }
 
+// Debounce window for the desktop-bridge mirror write. The localStorage write
+// (via T3StorageAdapter) still happens synchronously per change so the
+// renderer reflects updates immediately; only the IPC + temp+rename round-trip
+// to the on-disk file is coalesced. 300ms matches the ThemeStore's
+// `schedulePersist` cadence so both panels feel equally responsive.
+const DESKTOP_PERSIST_DEBOUNCE_MS = 300;
+
 export function MarkdownSettings() {
   const storage = useMemo(() => createBrowserStorage(), []);
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_MDREVIEW_PREFERENCES);
   const [isSaving, setIsSaving] = useState(false);
+  const desktopPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDesktopDoc = useRef<MarkdownPreferencesDocument | null>(null);
+
+  // Cancel any pending desktop write on unmount. Without this, a fast
+  // navigation away from the panel can leak a setTimeout that fires after
+  // unmount and writes a stale document.
+  useEffect(() => {
+    return () => {
+      if (desktopPersistTimer.current) {
+        clearTimeout(desktopPersistTimer.current);
+        desktopPersistTimer.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!storage) return;
     let cancelled = false;
-    void readMdreviewPreferences(storage)
-      .then((storedPreferences) => {
+
+    // Sequence the two reads so the desktop bridge value (when present) is
+    // the final authority. Running them in parallel would race: a slow
+    // T3StorageAdapter read settling AFTER the bridge `setPreferences` would
+    // overwrite the persisted document with stale localStorage state.
+    //
+    // We deliberately do NOT round-trip through localStorage with a
+    // hand-rolled key during hydration. T3StorageAdapter namespaces under
+    // `t3code:mdreview:<key>` (e.g. `t3code:mdreview:preferences`) and any
+    // stand-in key would silently de-sync the renderer from the settings
+    // panel. Instead, normalize the bridge document directly into local
+    // state and let `writeMdreviewPreferences` mirror it back through the
+    // adapter so other in-page consumers (the renderer, etc.) see the
+    // hydrated value.
+    void (async () => {
+      try {
+        const stored = await readMdreviewPreferences(storage);
         if (!cancelled) {
-          setPreferences(storedPreferences);
+          setPreferences(stored);
         }
-      })
-      .catch((error: unknown) => {
-        toastManager.add({
-          type: "error",
-          title: "Could not load markdown settings",
-          description:
-            error instanceof Error ? error.message : "Stored MD Review settings failed to load.",
-        });
-      });
+      } catch (error) {
+        if (!cancelled) {
+          toastManager.add({
+            type: "error",
+            title: "Could not load markdown settings",
+            description:
+              error instanceof Error ? error.message : "Stored MD Review settings failed to load.",
+          });
+        }
+      }
+
+      const api = readLocalApi();
+      if (!api || cancelled) return;
+      try {
+        const persisted = await api.persistence.getMarkdownPreferences();
+        if (cancelled || !persisted) return;
+        const normalized = normalizeMdreviewPreferences(persisted);
+        setPreferences(normalized);
+        await writeMdreviewPreferences(storage, normalized);
+      } catch {
+        // Bridge unavailable / read failed — fall back to the localStorage
+        // copy already applied above.
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -152,6 +206,18 @@ export function MarkdownSettings() {
       setPreferences(normalized);
       if (!storage) return;
 
+      // Boundary cast: `Preferences` is owned by `@mdreview/core` and
+      // structurally compatible with our storage document, but its
+      // declaration evolves outside this repo. The
+      // `MarkdownPreferencesDocument` schema is intentionally permissive
+      // (`Schema.Record(string, unknown)`) so this single cast at the
+      // panel-to-bridge boundary is the only place the two type universes
+      // touch.
+      const desktopDoc = normalized as unknown as MarkdownPreferencesDocument;
+
+      // Always write the in-memory copy through the T3StorageAdapter so the
+      // renderer (which reads the same namespaced key) sees changes
+      // immediately. The desktop mirror is debounced separately below.
       setIsSaving(true);
       void writeMdreviewPreferences(storage, normalized)
         .catch((error: unknown) => {
@@ -163,6 +229,31 @@ export function MarkdownSettings() {
           });
         })
         .finally(() => setIsSaving(false));
+
+      // Coalesce free-text typing (commentAuthor, etc.) into a single
+      // file-level write. Boolean toggles still feel instant because the
+      // localStorage write above is synchronous; only the IPC + temp+rename
+      // disk write is debounced.
+      pendingDesktopDoc.current = desktopDoc;
+      if (desktopPersistTimer.current) {
+        clearTimeout(desktopPersistTimer.current);
+      }
+      desktopPersistTimer.current = setTimeout(() => {
+        desktopPersistTimer.current = null;
+        const docToPersist = pendingDesktopDoc.current;
+        pendingDesktopDoc.current = null;
+        if (!docToPersist) return;
+        const api = readLocalApi();
+        if (!api) return;
+        void api.persistence.setMarkdownPreferences(docToPersist).catch((error: unknown) => {
+          toastManager.add({
+            type: "error",
+            title: "Could not save markdown settings",
+            description:
+              error instanceof Error ? error.message : "MD Review settings were not persisted.",
+          });
+        });
+      }, DESKTOP_PERSIST_DEBOUNCE_MS);
     },
     [storage],
   );

@@ -12,13 +12,18 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   readClientSettings,
+  readMarkdownPreferences,
   readSavedEnvironmentRegistry,
   readSavedEnvironmentSecret,
+  readThemePreferences,
   removeSavedEnvironmentSecret,
   writeClientSettings,
+  writeMarkdownPreferences,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
+  writeThemePreferences,
   type DesktopSecretStorage,
+  type ThemePreferencesDocument,
 } from "./clientPersistence.ts";
 
 const tempDirectories: string[] = [];
@@ -332,6 +337,99 @@ describe("clientPersistence", () => {
       const reloaded = readSavedEnvironmentRegistry(registryPath);
       expect(reloaded).toEqual([sshRecord]);
       expect(reloaded[0]?.sshConfig).toEqual(sshConfig);
+    });
+  });
+
+  describe("theme preferences", () => {
+    it("returns null when file does not exist", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      expect(readThemePreferences(filePath)).toBeNull();
+    });
+
+    it("round-trips theme preferences", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      const prefs: ThemePreferencesDocument = {
+        preference: "dark",
+        activeThemeId: "monokai",
+        savedThemes: [{ id: "monokai", name: "Monokai" }],
+      };
+
+      writeThemePreferences(filePath, prefs);
+
+      expect(readThemePreferences(filePath)).toEqual(prefs);
+    });
+
+    it("returns null for corrupt JSON", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      fs.writeFileSync(filePath, "not json at all", "utf8");
+
+      expect(readThemePreferences(filePath)).toBeNull();
+    });
+
+    it("returns null when preference field is invalid", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({ preference: "rainbow", activeThemeId: null, savedThemes: [] }),
+        "utf8",
+      );
+
+      expect(readThemePreferences(filePath)).toBeNull();
+    });
+
+    it("normalizes missing activeThemeId to null", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({ preference: "system", savedThemes: [{ id: "a" }] }),
+        "utf8",
+      );
+
+      const result = readThemePreferences(filePath);
+      expect(result).toEqual({
+        preference: "system",
+        activeThemeId: null,
+        savedThemes: [{ id: "a" }],
+      });
+    });
+
+    it("normalizes missing savedThemes to empty array", () => {
+      const filePath = makeTempPath("theme-preferences.json");
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({ preference: "light", activeThemeId: "solarized" }),
+        "utf8",
+      );
+
+      const result = readThemePreferences(filePath);
+      expect(result).toEqual({
+        preference: "light",
+        activeThemeId: "solarized",
+        savedThemes: [],
+      });
+    });
+  });
+
+  describe("markdown preferences", () => {
+    it("returns null when file does not exist", () => {
+      const filePath = makeTempPath("markdown-preferences.json");
+      expect(readMarkdownPreferences(filePath)).toBeNull();
+    });
+
+    it("round-trips markdown preferences", () => {
+      const filePath = makeTempPath("markdown-preferences.json");
+      const prefs = { codeBlockTheme: "github-dark", fontSize: 14 };
+
+      writeMarkdownPreferences(filePath, prefs);
+
+      expect(readMarkdownPreferences(filePath)).toEqual(prefs);
+    });
+
+    it("returns null for corrupt JSON", () => {
+      const filePath = makeTempPath("markdown-preferences.json");
+      fs.writeFileSync(filePath, "{{broken", "utf8");
+
+      expect(readMarkdownPreferences(filePath)).toBeNull();
     });
   });
 });

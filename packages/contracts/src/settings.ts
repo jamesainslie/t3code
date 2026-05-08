@@ -33,6 +33,66 @@ export const SidebarProjectGroupingMode = Schema.Literals([
 export type SidebarProjectGroupingMode = typeof SidebarProjectGroupingMode.Type;
 export const DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE: SidebarProjectGroupingMode = "repository";
 
+// Curated palette of project colors. Keys map to Tailwind color families on
+// the web side; values are user-facing labels in the picker.
+export const ProjectColorKey = Schema.Literals([
+  "slate",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "fuchsia",
+  "pink",
+  "rose",
+]);
+export type ProjectColorKey = typeof ProjectColorKey.Type;
+
+// ── Client persistence documents ─────────────────────────────────
+//
+// These are the on-disk / localStorage shapes produced by the desktop bridge
+// (`get/set ThemePreferences` / `get/set MarkdownPreferences`) and the
+// browser fallback. Defining them as schemas in one place keeps the
+// IPC contract, the desktop file format, and the browser-storage fallback
+// from drifting — every layer decodes/encodes through the same source of
+// truth.
+
+// Tuple kept as a `const` so callers can iterate the values at runtime
+// (e.g. building a `Set<string>` for membership checks at the storage
+// boundary) without depending on schema-private accessors.
+export const THEME_PREFERENCE_MODES = ["light", "dark", "system"] as const;
+export const ThemePreferenceMode = Schema.Literals(THEME_PREFERENCE_MODES);
+export type ThemePreferenceMode = typeof ThemePreferenceMode.Type;
+
+export const ThemePreferencesDocument = Schema.Struct({
+  preference: ThemePreferenceMode,
+  activeThemeId: Schema.NullOr(Schema.String),
+  // `savedThemes` is intentionally `unknown[]` at the wire/storage boundary:
+  // older documents on disk may contain themes whose shape predates the
+  // current `ThemeSchema`, and rejecting the whole document because of one
+  // stale entry would lose every other saved theme too. The consumer
+  // (ThemeStore.hydrateFromDesktop) re-validates each entry through
+  // ThemeSchema and filters survivors. The strict shape lives there, the
+  // permissive shape lives here.
+  savedThemes: Schema.Array(Schema.Unknown),
+});
+export type ThemePreferencesDocument = typeof ThemePreferencesDocument.Type;
+
+// Markdown preferences originate in `@mdreview/core`'s `Preferences` type,
+// which evolves outside this repo. Keep the wire-shape permissive (an opaque
+// JSON object) but expose the document wrapper so the IPC and storage
+// contracts share a single named type.
+export const MarkdownPreferencesDocument = Schema.Record(Schema.String, Schema.Unknown);
+export type MarkdownPreferencesDocument = typeof MarkdownPreferencesDocument.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -132,6 +192,13 @@ export const ServerSettings = Schema.Struct({
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
       }),
     ),
+  ),
+
+  // Per-project sidebar tint, keyed by logical project key
+  // (repositoryCanonicalKey when available, physical-key fallback otherwise).
+  // Lives in server settings so colors sync across paired clients.
+  projectColors: Schema.Record(TrimmedNonEmptyString, ProjectColorKey).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
   ),
 
   // Provider specific settings
@@ -252,6 +319,8 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   addProjectBaseDirectory: Schema.optionalKey(Schema.String),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  // Whole-record replacement when present (see applyServerSettingsPatch).
+  projectColors: Schema.optionalKey(Schema.Record(TrimmedNonEmptyString, ProjectColorKey)),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(Schema.String),

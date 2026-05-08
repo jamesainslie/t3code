@@ -33,6 +33,10 @@ const GET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:get-saved-project-registry";
 const SET_SAVED_PROJECT_REGISTRY_CHANNEL = "desktop:set-saved-project-registry";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
+const GET_THEME_PREFERENCES_CHANNEL = "desktop:get-theme-preferences";
+const SET_THEME_PREFERENCES_CHANNEL = "desktop:set-theme-preferences";
+const GET_MARKDOWN_PREFERENCES_CHANNEL = "desktop:get-markdown-preferences";
+const SET_MARKDOWN_PREFERENCES_CHANNEL = "desktop:set-markdown-preferences";
 const SSH_CONNECT_CHANNEL = "desktop:ssh-connect";
 const SSH_DISCONNECT_CHANNEL = "desktop:ssh-disconnect";
 const SSH_STATUS_CHANNEL = "desktop:ssh-status";
@@ -68,6 +72,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getSavedProjectRegistry: () => ipcRenderer.invoke(GET_SAVED_PROJECT_REGISTRY_CHANNEL),
   setSavedProjectRegistry: (records) =>
     ipcRenderer.invoke(SET_SAVED_PROJECT_REGISTRY_CHANNEL, records),
+  getThemePreferences: () => ipcRenderer.invoke(GET_THEME_PREFERENCES_CHANNEL),
+  setThemePreferences: (prefs) => ipcRenderer.invoke(SET_THEME_PREFERENCES_CHANNEL, prefs),
+  getMarkdownPreferences: () => ipcRenderer.invoke(GET_MARKDOWN_PREFERENCES_CHANNEL),
+  setMarkdownPreferences: (prefs) => ipcRenderer.invoke(SET_MARKDOWN_PREFERENCES_CHANNEL, prefs),
   getServerExposureState: () => ipcRenderer.invoke(GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) => ipcRenderer.invoke(SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),
   pickFolder: (options) => ipcRenderer.invoke(PICK_FOLDER_CHANNEL, options),
