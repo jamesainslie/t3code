@@ -40,6 +40,8 @@ function makeRuntime(
     authState: "authenticated",
     lastError: null,
     lastErrorAt: null,
+    errorCategory: null,
+    errorGuidance: null,
     role: null,
     descriptor: null,
     serverConfig: null,

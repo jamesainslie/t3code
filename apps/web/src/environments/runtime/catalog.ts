@@ -7,6 +7,7 @@ import type {
   SavedRemoteEnvironment,
   ServerConfig,
 } from "@t3tools/contracts";
+import type { ConnectionErrorCategory } from "../../lib/connectionErrorClassifier";
 import { type RemoteIdentityKey, makeRemoteIdentityKey } from "@t3tools/contracts";
 import { create } from "zustand";
 
@@ -391,6 +392,8 @@ export interface SavedEnvironmentRuntimeState {
   readonly authState: SavedEnvironmentAuthState;
   readonly lastError: string | null;
   readonly lastErrorAt: string | null;
+  readonly errorCategory: ConnectionErrorCategory | null;
+  readonly errorGuidance: string | null;
   readonly role: AuthSessionRole | null;
   readonly descriptor: ExecutionEnvironmentDescriptor | null;
   readonly serverConfig: ServerConfig | null;
@@ -414,6 +417,8 @@ const DEFAULT_SAVED_ENVIRONMENT_RUNTIME_STATE: SavedEnvironmentRuntimeState = Ob
   authState: "unknown",
   lastError: null,
   lastErrorAt: null,
+  errorCategory: null,
+  errorGuidance: null,
   role: null,
   descriptor: null,
   serverConfig: null,

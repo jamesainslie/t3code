@@ -24,6 +24,7 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime";
 
+import { classifyConnectionError } from "../../lib/connectionErrorClassifier";
 import {
   markPromotedDraftThreadByRef,
   markPromotedDraftThreadsByRef,
@@ -414,6 +415,8 @@ function setRuntimeConnecting(environmentId: EnvironmentId) {
     connectionState: "connecting",
     lastError: null,
     lastErrorAt: null,
+    errorCategory: null,
+    errorGuidance: null,
   });
 }
 
@@ -448,9 +451,15 @@ function setRuntimeDisconnected(environmentId: EnvironmentId, reason?: string | 
 }
 
 function setRuntimeError(environmentId: EnvironmentId, error: unknown) {
+  const record = getSavedEnvironmentRecord(environmentId);
+  const isSsh = record ? isSshSavedEnvironmentRecord(record) : false;
+  const classified = classifyConnectionError(error, { isSsh });
+
   useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
     connectionState: "error",
     ...getRuntimeErrorFields(error),
+    errorCategory: classified.category,
+    errorGuidance: classified.guidance,
   });
 }
 
