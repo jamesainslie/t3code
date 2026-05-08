@@ -1065,6 +1065,95 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       }),
   );
 
+  // Negative-evidence path: when the agent ignores session/cancel and finishes
+  // the prompt naturally (stopReason !== "cancelled"), the adapter must still
+  // emit a turn.aborted event so the projector can render a "Stop signal not
+  // acknowledged" warning. The acknowledged=false flag distinguishes it from
+  // the confirmed-cancellation path which produces a "Stopped by user" entry.
+  it.effect(
+    "emits turn.aborted with acknowledged=false when the agent ignores session/cancel",
+    () =>
+      Effect.gen(function* () {
+        const adapter = yield* CursorAdapter;
+        const serverSettings = yield* ServerSettingsService;
+        const threadId = ThreadId.make("cursor-cancel-unack");
+        const tempDir = yield* Effect.promise(() =>
+          mkdtemp(path.join(os.tmpdir(), "cursor-acp-unack-cancel-")),
+        );
+        const requestLogPath = path.join(tempDir, "requests.ndjson");
+        const argvLogPath = path.join(tempDir, "argv.txt");
+        yield* Effect.promise(() => writeFile(requestLogPath, "", "utf8"));
+
+        const wrapperPath = yield* Effect.promise(() =>
+          makeProbeWrapper(requestLogPath, argvLogPath, {
+            T3_ACP_IGNORE_CANCEL: "1",
+            T3_ACP_PROMPT_DELAY_MS: "200",
+          }),
+        );
+        yield* serverSettings.updateSettings({
+          providers: { cursor: { binaryPath: wrapperPath } },
+        });
+
+        const turnStartedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+        const turnAbortedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+
+        const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.gen(function* () {
+            if (String(event.threadId) !== String(threadId)) {
+              return;
+            }
+            if (event.type === "turn.started") {
+              yield* Deferred.succeed(turnStartedReady, event).pipe(Effect.ignore);
+              return;
+            }
+            if (event.type === "turn.aborted") {
+              yield* Deferred.succeed(turnAbortedReady, event).pipe(Effect.ignore);
+            }
+          }),
+        ).pipe(Effect.forkChild);
+
+        yield* adapter.startSession({
+          threadId,
+          provider: "cursor",
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+          modelSelection: { provider: "cursor", model: "default" },
+        });
+
+        const sendTurnFiber = yield* adapter
+          .sendTurn({
+            threadId,
+            input: "stream a quick reply",
+            attachments: [],
+          })
+          .pipe(Effect.forkChild);
+
+        const turnStarted = yield* Deferred.await(turnStartedReady);
+
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        yield* adapter.interruptTurn(threadId);
+
+        const turnAborted = yield* Deferred.await(turnAbortedReady);
+        yield* Fiber.join(sendTurnFiber);
+        yield* Fiber.interrupt(runtimeEventsFiber);
+
+        assert.equal(turnAborted.type, "turn.aborted");
+        assert.equal(String(turnAborted.turnId), String(turnStarted.turnId));
+        if (turnAborted.type === "turn.aborted") {
+          assert.strictEqual(
+            turnAborted.payload.acknowledged,
+            false,
+            "Unacknowledged path must explicitly flag acknowledged=false so the " +
+              "projector can branch to the warning entry.",
+          );
+          assert.match(turnAborted.payload.reason, /not acknowledge/i);
+        }
+
+        yield* adapter.stopSession(threadId);
+      }),
+  );
+
   it.effect("stopping a session settles pending approval waits", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;

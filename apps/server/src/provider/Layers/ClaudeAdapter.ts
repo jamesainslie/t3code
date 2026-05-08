@@ -2026,7 +2026,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // completeTurn() so the user doesn't see a duplicate turn.completed.
     if (context.aborting) {
       const interruptedTurnId = context.interruptedTurnId;
-      if (interruptedTurnId !== undefined && isInterruptedResult(message)) {
+      if (interruptedTurnId !== undefined) {
+        const acknowledged = isInterruptedResult(message);
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent({
           type: "turn.aborted",
@@ -2035,9 +2036,12 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           createdAt: stamp.createdAt,
           threadId: context.session.threadId,
           turnId: interruptedTurnId,
-          payload: {
-            reason: "Stop confirmed by provider.",
-          },
+          payload: acknowledged
+            ? { reason: "Stop confirmed by provider." }
+            : {
+                reason: "Provider did not acknowledge stop signal.",
+                acknowledged: false,
+              },
           providerRefs: nativeProviderRefs(context),
         });
       }

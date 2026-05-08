@@ -278,15 +278,17 @@ function runtimeEventToActivities(
     }
 
     case "turn.aborted": {
+      const acknowledged = event.payload.acknowledged !== false;
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "info",
-          kind: "turn.aborted",
-          summary: "Stopped by user",
+          tone: acknowledged ? "info" : "error",
+          kind: acknowledged ? "turn.aborted" : "turn.interrupt-unacknowledged",
+          summary: acknowledged ? "Stopped by user" : "Stop signal not acknowledged",
           payload: {
             reason: event.payload.reason,
+            acknowledged,
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

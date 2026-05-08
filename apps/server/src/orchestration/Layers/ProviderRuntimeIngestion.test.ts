@@ -377,6 +377,65 @@ describe("ProviderRuntimeIngestion", () => {
         ? (activity.payload as Record<string, unknown>)
         : undefined;
     expect(payload?.reason).toBe("Stop confirmed by provider.");
+    expect(payload?.acknowledged).toBe(true);
+  });
+
+  // When the provider explicitly flags the cancellation as not acknowledged
+  // (e.g. Cursor agent finished naturally despite session/cancel), the
+  // projector must emit a distinct WARNING-toned activity so the user can
+  // see that the stop signal was not honored — instead of silently rendering
+  // "Stopped by user" which would be misleading.
+  it("appends a 'Stop signal not acknowledged' warning when acknowledged=false", async () => {
+    const harness = await createHarness();
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-unack"),
+      provider: "cursor",
+      threadId: asThreadId("thread-1"),
+      createdAt: new Date().toISOString(),
+      turnId: asTurnId("turn-1"),
+    });
+
+    await waitForThread(
+      harness.engine,
+      (thread) => thread.session?.status === "running" && thread.session?.activeTurnId === "turn-1",
+    );
+
+    harness.emit({
+      type: "turn.aborted",
+      eventId: asEventId("evt-turn-aborted-unack"),
+      provider: "cursor",
+      threadId: asThreadId("thread-1"),
+      createdAt: new Date().toISOString(),
+      turnId: asTurnId("turn-1"),
+      payload: {
+        reason: "Provider did not acknowledge stop signal.",
+        acknowledged: false,
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) =>
+          activity.kind === "turn.interrupt-unacknowledged",
+      ),
+    );
+    const activity = thread.activities.find(
+      (entry: ProviderRuntimeTestActivity) => entry.kind === "turn.interrupt-unacknowledged",
+    );
+    expect(activity?.tone).toBe("error");
+    expect(activity?.summary).toBe("Stop signal not acknowledged");
+    expect(activity?.turnId).toBe("turn-1");
+    const payload =
+      activity?.payload && typeof activity.payload === "object"
+        ? (activity.payload as Record<string, unknown>)
+        : undefined;
+    expect(payload?.acknowledged).toBe(false);
+    // Even when the stop is not acknowledged, the session must still flip to
+    // ready so the UI doesn't get stuck on a stale spinner.
+    expect(thread.session?.status).toBe("ready");
+    expect(thread.session?.activeTurnId).toBeNull();
   });
 
   // Characterization test for the user-visible "Stop button does nothing" symptom

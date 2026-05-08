@@ -1421,6 +1421,94 @@ describe("ClaudeAdapterLive", () => {
       );
       if (turnAborted) {
         assert.match(turnAborted.payload.reason, /confirmed/i);
+        assert.notStrictEqual(
+          turnAborted.payload.acknowledged,
+          false,
+          "Confirmed-cancellation path must not flag acknowledged=false.",
+        );
+      }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  // Negative-evidence path: when interruptTurn() runs but the SDK eventually
+  // returns a NON-interrupted result (e.g. the agent ignored interrupt() and
+  // ran the turn to completion), the adapter must still emit turn.aborted so
+  // the projector can render a "Stop signal not acknowledged" warning entry.
+  // Without this signal, the optimistic stop is silent — the user has no way
+  // to tell the provider failed to honor the interrupt.
+  it.effect("emits turn.aborted with acknowledged=false when the SDK ignores the interrupt", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
+      const runFork = Effect.runForkWith(context);
+
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+      const runtimeEventsFiber = runFork(
+        Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => {
+            runtimeEvents.push(event);
+          }),
+        ),
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      const turn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "hello",
+        attachments: [],
+      });
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+      yield* adapter.interruptTurn(THREAD_ID);
+
+      // Agent ignored interrupt() — returns a normal success result instead
+      // of an "aborted" error result.
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        stop_reason: "end_turn",
+        session_id: "sdk-session-ignored",
+        uuid: "result-ignored",
+      } as unknown as SDKMessage);
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      runtimeEventsFiber.interruptUnsafe();
+
+      const turnAborted = runtimeEvents.find(
+        (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
+          event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
+      );
+      assert.isDefined(
+        turnAborted,
+        "Adapter must still emit turn.aborted (acknowledged=false) when the SDK fails " +
+          "to honor interrupt(), so the projector can render a warning timeline entry.",
+      );
+      if (turnAborted) {
+        assert.strictEqual(
+          turnAborted.payload.acknowledged,
+          false,
+          "Unacknowledged path must explicitly flag acknowledged=false.",
+        );
+        assert.match(turnAborted.payload.reason, /not acknowledge/i);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

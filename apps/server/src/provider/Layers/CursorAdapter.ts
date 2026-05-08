@@ -926,19 +926,23 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           // returned stopReason="cancelled". Emit turn.aborted bound to the
           // originally-cancelled turn so the projector can append a
           // "Stopped by user" timeline activity. If the agent ignored cancel
-          // (stopReason !== "cancelled") we have no evidence and skip the
-          // event — the user's optimistic stop already flipped session.status.
+          // (stopReason !== "cancelled") we still emit turn.aborted but mark
+          // it acknowledged=false so the projector renders a warning entry.
           const interruptedTurnId = ctx.interruptedTurnId;
-          if (interruptedTurnId !== undefined && result.stopReason === "cancelled") {
+          if (interruptedTurnId !== undefined) {
+            const acknowledged = result.stopReason === "cancelled";
             yield* offerRuntimeEvent({
               type: "turn.aborted",
               ...(yield* makeEventStamp()),
               provider: PROVIDER,
               threadId: input.threadId,
               turnId: interruptedTurnId,
-              payload: {
-                reason: "Stop confirmed by provider.",
-              },
+              payload: acknowledged
+                ? { reason: "Stop confirmed by provider." }
+                : {
+                    reason: "Provider did not acknowledge stop signal.",
+                    acknowledged: false,
+                  },
             });
           }
           ctx.aborting = false;

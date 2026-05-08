@@ -16,6 +16,7 @@ import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
+  BanIcon,
   BotIcon,
   CheckIcon,
   CircleAlertIcon,
@@ -901,6 +902,7 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
   // Kind-specific icons take precedence over tone/itemType so the timeline
   // can convey the meaning of lifecycle events (e.g. stop) at a glance.
   if (workEntry.kind === "turn.aborted") return CircleStopIcon;
+  if (workEntry.kind === "turn.interrupt-unacknowledged") return BanIcon;
 
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
