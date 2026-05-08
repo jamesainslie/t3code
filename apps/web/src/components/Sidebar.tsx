@@ -93,7 +93,7 @@ import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { LocalPresenceIcon } from "./LocalPresenceIcon";
 import { RemoteConnectionIcon } from "./RemoteConnectionIcon";
-import { SidebarRemoteReconnectPill } from "./SidebarRemoteReconnectPill";
+import { SidebarConnections } from "./sidebar/SidebarConnections";
 import { StaleSavedProjectsList } from "./StaleSavedProjectsList";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 
@@ -2500,9 +2500,6 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter className="p-2">
       <SidebarUpdatePill />
-      <div className="flex justify-center px-1 pb-1 pt-0.5">
-        <SidebarRemoteReconnectPill />
-      </div>
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -2654,6 +2651,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroup>
+      <SidebarConnections />
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup className="px-2 pt-2 pb-0">
           <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
