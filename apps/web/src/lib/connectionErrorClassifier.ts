@@ -90,3 +90,22 @@ export function classifyConnectionError(
   // Fallback
   return { category: "network-error", ...CLASSIFICATIONS["network-error"] };
 }
+
+export interface RetryConfig {
+  readonly maxAttempts: number;
+  readonly delaysMs: readonly number[];
+}
+
+export function getRetryConfig(
+  category: ConnectionErrorCategory,
+): RetryConfig | null {
+  switch (category) {
+    case "tunnel-closed":
+      return { maxAttempts: 3, delaysMs: [2000, 4000, 8000] };
+    case "server-unreachable":
+    case "network-error":
+      return { maxAttempts: 2, delaysMs: [5000, 10000] };
+    case "auth-expired":
+      return null;
+  }
+}
