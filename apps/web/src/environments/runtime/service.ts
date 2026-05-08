@@ -1164,6 +1164,24 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
     throw new Error("Saved environment not found.");
   }
 
+  const isSsh = isSshSavedEnvironmentRecord(record);
+
+  // For SSH environments, tear down the existing connection entirely
+  // and rebuild through a fresh tunnel. The old port forward is likely
+  // stale, so reconnecting through it will just fail.
+  if (isSsh) {
+    setRuntimeConnecting(environmentId);
+    try {
+      await removeConnection(environmentId).catch(() => false);
+      await ensureSavedEnvironmentConnection(record);
+    } catch (error) {
+      setRuntimeError(environmentId, error);
+      throw error;
+    }
+    return;
+  }
+
+  // Non-SSH: use existing reconnect path
   const connection = environmentConnections.get(environmentId);
   if (!connection) {
     await ensureSavedEnvironmentConnection(record);
