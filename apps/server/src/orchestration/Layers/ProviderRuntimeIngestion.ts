@@ -278,17 +278,22 @@ function runtimeEventToActivities(
     }
 
     case "turn.aborted": {
-      const acknowledged = event.payload.acknowledged !== false;
+      // All providers funnel through a single canonical "Stopped by user"
+      // entry. The contract still carries an optional `acknowledged` flag
+      // for forward compatibility, but we no longer branch on it: the
+      // post-hoc "did the agent honor the cancel?" signal varied per
+      // provider and produced inconsistent false-positive warnings, so the
+      // adapter no longer emits acknowledged=false. The discard filter
+      // suppresses any post-stop work-log noise instead.
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: acknowledged ? "info" : "error",
-          kind: acknowledged ? "turn.aborted" : "turn.interrupt-unacknowledged",
-          summary: acknowledged ? "Stopped by user" : "Stop signal not acknowledged",
+          tone: "info",
+          kind: "turn.aborted",
+          summary: "Stopped by user",
           payload: {
             reason: event.payload.reason,
-            acknowledged,
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

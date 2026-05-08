@@ -377,15 +377,15 @@ describe("ProviderRuntimeIngestion", () => {
         ? (activity.payload as Record<string, unknown>)
         : undefined;
     expect(payload?.reason).toBe("Stop confirmed by provider.");
-    expect(payload?.acknowledged).toBe(true);
   });
 
-  // When the provider explicitly flags the cancellation as not acknowledged
-  // (e.g. Cursor agent finished naturally despite session/cancel), the
-  // projector must emit a distinct WARNING-toned activity so the user can
-  // see that the stop signal was not honored — instead of silently rendering
-  // "Stopped by user" which would be misleading.
-  it("appends a 'Stop signal not acknowledged' warning when acknowledged=false", async () => {
+  // Even when an upstream emitter sets acknowledged=false on a turn.aborted
+  // event, the projector now uniformly renders a single "Stopped by user"
+  // entry. The post-hoc "did the agent honor the cancel?" warning was
+  // removed because the underlying signal varies per provider and produced
+  // inconsistent false positives. The discard filter handles post-stop
+  // noise suppression instead.
+  it("renders a single 'Stopped by user' entry even when acknowledged=false", async () => {
     const harness = await createHarness();
 
     harness.emit({
@@ -417,23 +417,21 @@ describe("ProviderRuntimeIngestion", () => {
 
     const thread = await waitForThread(harness.engine, (entry) =>
       entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) =>
-          activity.kind === "turn.interrupt-unacknowledged",
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "turn.aborted",
       ),
     );
     const activity = thread.activities.find(
+      (entry: ProviderRuntimeTestActivity) => entry.kind === "turn.aborted",
+    );
+    expect(activity?.tone).toBe("info");
+    expect(activity?.summary).toBe("Stopped by user");
+    expect(activity?.turnId).toBe("turn-1");
+    // The interrupt-unacknowledged warning kind must NOT appear — we removed
+    // the post-hoc warning entirely because it was inconsistent across providers.
+    const warning = thread.activities.find(
       (entry: ProviderRuntimeTestActivity) => entry.kind === "turn.interrupt-unacknowledged",
     );
-    expect(activity?.tone).toBe("error");
-    expect(activity?.summary).toBe("Stop signal not acknowledged");
-    expect(activity?.turnId).toBe("turn-1");
-    const payload =
-      activity?.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : undefined;
-    expect(payload?.acknowledged).toBe(false);
-    // Even when the stop is not acknowledged, the session must still flip to
-    // ready so the UI doesn't get stuck on a stale spinner.
+    expect(warning).toBeUndefined();
     expect(thread.session?.status).toBe("ready");
     expect(thread.session?.activeTurnId).toBeNull();
   });

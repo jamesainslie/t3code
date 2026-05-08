@@ -1353,12 +1353,12 @@ describe("ClaudeAdapterLive", () => {
     },
   );
 
-  // Evidence-based timeline event: when the Claude SDK eventually responds to
-  // query.interrupt() with a "Request was aborted" result, the adapter must
-  // emit a turn.aborted runtime event for the originally-cancelled turn so the
-  // projector can append a "Stopped by user" activity to the chat timeline.
-  // This is the "positive evidence" path — the agent confirmed the cancellation.
-  it.effect("emits turn.aborted with the cancelled turnId when the SDK confirms the abort", () => {
+  // Immediate positive feedback: interruptTurn() must emit a turn.aborted
+  // runtime event for the in-flight turn the moment the user clicks Stop —
+  // not when the SDK eventually acknowledges. The projector renders this as
+  // a "Stopped by user" timeline activity so the user sees instant feedback
+  // even if the SDK ignores interrupt() and keeps streaming for a while.
+  it.effect("emits turn.aborted immediately when interruptTurn is called", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const context = yield* Effect.context<never>();
@@ -1393,6 +1393,12 @@ describe("ClaudeAdapterLive", () => {
 
       yield* adapter.interruptTurn(THREAD_ID);
 
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+      // Confirmed-cancellation result arrives AFTER the immediate emission;
+      // the adapter must NOT emit a duplicate turn.aborted in this case.
       harness.query.emit({
         type: "result",
         subtype: "error_during_execution",
@@ -1410,21 +1416,24 @@ describe("ClaudeAdapterLive", () => {
 
       runtimeEventsFiber.interruptUnsafe();
 
-      const turnAborted = runtimeEvents.find(
+      const turnAbortedEvents = runtimeEvents.filter(
         (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
           event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
       );
-      assert.isDefined(
-        turnAborted,
-        "Adapter must emit turn.aborted for the cancelled turn when the SDK acknowledges " +
-          "the interrupt, so the projector can record an audit-trail timeline activity.",
+      assert.lengthOf(
+        turnAbortedEvents,
+        1,
+        "Adapter must emit exactly one turn.aborted: the immediate one from " +
+          "interruptTurn. The confirmed-cancellation natural-completion path " +
+          "must not emit a duplicate.",
       );
+      const turnAborted = turnAbortedEvents[0];
       if (turnAborted) {
-        assert.match(turnAborted.payload.reason, /confirmed/i);
+        assert.match(turnAborted.payload.reason, /stopped by user/i);
         assert.notStrictEqual(
           turnAborted.payload.acknowledged,
           false,
-          "Confirmed-cancellation path must not flag acknowledged=false.",
+          "Immediate-emission path must not flag acknowledged=false.",
         );
       }
     }).pipe(
@@ -1433,88 +1442,83 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  // Negative-evidence path: when interruptTurn() runs but the SDK eventually
-  // returns a NON-interrupted result (e.g. the agent ignored interrupt() and
-  // ran the turn to completion), the adapter must still emit turn.aborted so
-  // the projector can render a "Stop signal not acknowledged" warning entry.
-  // Without this signal, the optimistic stop is silent — the user has no way
-  // to tell the provider failed to honor the interrupt.
-  it.effect("emits turn.aborted with acknowledged=false when the SDK ignores the interrupt", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const context = yield* Effect.context<never>();
-      const runFork = Effect.runForkWith(context);
+  // No-double-fire invariant: regardless of what the SDK's eventual result
+  // message looks like (success, error_during_execution, ignored interrupt,
+  // etc.), the adapter must NOT emit a second turn.aborted from the natural
+  // completion path. The single immediate "Stopped by user" entry from
+  // interruptTurn is the canonical UX feedback; the post-hoc unack warning
+  // was removed because the underlying signal varies per provider and per
+  // result-message shape, producing inconsistent false positives.
+  it.effect(
+    "emits exactly one turn.aborted even when the SDK ignores interrupt() and returns a success result",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const runFork = Effect.runForkWith(context);
 
-      const adapter = yield* ClaudeAdapter;
+        const adapter = yield* ClaudeAdapter;
 
-      const runtimeEvents: Array<ProviderRuntimeEvent> = [];
-      const runtimeEventsFiber = runFork(
-        Stream.runForEach(adapter.streamEvents, (event) =>
-          Effect.sync(() => {
-            runtimeEvents.push(event);
-          }),
-        ),
-      );
-
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-
-      const turn = yield* adapter.sendTurn({
-        threadId: THREAD_ID,
-        input: "hello",
-        attachments: [],
-      });
-
-      yield* Effect.yieldNow;
-      yield* Effect.yieldNow;
-      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
-
-      yield* adapter.interruptTurn(THREAD_ID);
-
-      // Agent ignored interrupt() — returns a normal success result instead
-      // of an "aborted" error result.
-      harness.query.emit({
-        type: "result",
-        subtype: "success",
-        is_error: false,
-        errors: [],
-        stop_reason: "end_turn",
-        session_id: "sdk-session-ignored",
-        uuid: "result-ignored",
-      } as unknown as SDKMessage);
-
-      yield* Effect.yieldNow;
-      yield* Effect.yieldNow;
-      yield* Effect.yieldNow;
-      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
-
-      runtimeEventsFiber.interruptUnsafe();
-
-      const turnAborted = runtimeEvents.find(
-        (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
-          event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
-      );
-      assert.isDefined(
-        turnAborted,
-        "Adapter must still emit turn.aborted (acknowledged=false) when the SDK fails " +
-          "to honor interrupt(), so the projector can render a warning timeline entry.",
-      );
-      if (turnAborted) {
-        assert.strictEqual(
-          turnAborted.payload.acknowledged,
-          false,
-          "Unacknowledged path must explicitly flag acknowledged=false.",
+        const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+        const runtimeEventsFiber = runFork(
+          Stream.runForEach(adapter.streamEvents, (event) =>
+            Effect.sync(() => {
+              runtimeEvents.push(event);
+            }),
+          ),
         );
-        assert.match(turnAborted.payload.reason, /not acknowledge/i);
-      }
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
+
+        yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "full-access",
+        });
+
+        const turn = yield* adapter.sendTurn({
+          threadId: THREAD_ID,
+          input: "hello",
+          attachments: [],
+        });
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+        yield* adapter.interruptTurn(THREAD_ID);
+
+        harness.query.emit({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          errors: [],
+          stop_reason: "end_turn",
+          session_id: "sdk-session-ignored",
+          uuid: "result-ignored",
+        } as unknown as SDKMessage);
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        runtimeEventsFiber.interruptUnsafe();
+
+        const turnAbortedEvents = runtimeEvents.filter(
+          (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
+            event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
+        );
+        assert.lengthOf(
+          turnAbortedEvents,
+          1,
+          "Adapter must emit exactly one turn.aborted (the immediate 'Stopped by user'). " +
+            "The unack warning must NOT fire when no post-stop events were suppressed.",
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
 
   // Companion characterization test: even if the SDK's iterable never terminates,
   // interruptTurn must still synthesize a turn.completed (interrupted/cancelled)

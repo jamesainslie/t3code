@@ -679,6 +679,13 @@ const make = Effect.gen(function* () {
       });
     }
 
+    // The single user-facing "Stopped by user" timeline activity is emitted
+    // by the provider's interruptTurn (synthesized by Claude/Cursor adapters,
+    // emitted natively by Codex via turn/aborted). The reactor used to also
+    // append a duplicate "Stop requested by user" entry here, but with the
+    // adapters now emitting their turn.aborted optimistically the reactor
+    // entry was redundant — two timeline rows for one click.
+
     // Orchestration turn ids are not provider turn ids, so interrupt by session.
     yield* providerService.interruptTurn({ threadId: event.payload.threadId });
   });

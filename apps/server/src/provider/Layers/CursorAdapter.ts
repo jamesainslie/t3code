@@ -78,6 +78,50 @@ import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogg
 
 const PROVIDER = "cursor" as const;
 const CURSOR_RESUME_VERSION = 1 as const;
+
+// Event types that represent user-visible streaming work-log entries — these
+// are what the projector renders into the chat timeline and what the user is
+// explicitly asking to suppress when they click Stop. Everything else
+// (lifecycle, request resolution, errors, account/auth/state transitions)
+// must always reach the projector so bookkeeping completes correctly. In
+// particular, request.resolved MUST flow even for cancelled turns or the
+// pending approval row in the UI never closes.
+const DISCARDABLE_AFTER_INTERRUPT: ReadonlySet<ProviderRuntimeEvent["type"]> = new Set([
+  "item.started",
+  "item.updated",
+  "item.completed",
+  "content.delta",
+  "turn.plan.updated",
+  "turn.proposed.delta",
+  "turn.proposed.completed",
+  "turn.diff.updated",
+  "task.started",
+  "task.progress",
+  "task.completed",
+  "hook.started",
+  "hook.progress",
+  "hook.completed",
+  "tool.progress",
+  "tool.summary",
+]);
+
+function shouldDiscardEvent(
+  event: ProviderRuntimeEvent,
+  discardingTurnIds: ReadonlySet<string>,
+): boolean {
+  if (!DISCARDABLE_AFTER_INTERRUPT.has(event.type)) {
+    return false;
+  }
+  if (!("turnId" in event)) {
+    return false;
+  }
+  const turnId = event.turnId;
+  if (turnId === undefined || turnId === null) {
+    return false;
+  }
+  return discardingTurnIds.has(String(turnId));
+}
+
 const ACP_PLAN_MODE_ALIASES = ["plan", "architect"];
 const ACP_IMPLEMENT_MODE_ALIASES = ["code", "agent", "default", "chat", "implement"];
 const ACP_APPROVAL_MODE_ALIASES = ["ask"];
@@ -314,8 +358,18 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
     const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.make(id));
     const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
 
-    const offerRuntimeEvent = (event: ProviderRuntimeEvent) =>
-      PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
+    // Turns whose content/item deltas should be suppressed because the user
+    // clicked Stop. Lifecycle, request resolution, errors, and other state
+    // transitions still flow so the projector can finish bookkeeping; only
+    // the user-visible streaming work-log entries are muted.
+    const discardingTurnIds = new Set<string>();
+
+    const offerRuntimeEvent = (event: ProviderRuntimeEvent) => {
+      if (shouldDiscardEvent(event, discardingTurnIds)) {
+        return Effect.void;
+      }
+      return PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
+    };
 
     const getThreadSemaphore = (threadId: string) =>
       SynchronizedRef.modifyEffect(threadLocksRef, (current) => {
@@ -917,34 +971,24 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
         ctx.turns.push({ id: turnId, items: [{ prompt: promptParts, result }] });
 
-        // If interruptTurn ran while we were awaiting the prompt response, it
-        // already synthesized turn.completed (state="cancelled") and cleared
-        // ctx.activeTurnId. Skip the natural emission so the UI doesn't see a
-        // duplicate event flipping session.status away from the cancellation.
+        // If interruptTurn ran while we were awaiting the prompt response,
+        // turn.completed (state="cancelled") and turn.aborted ("Stopped by
+        // user") were already emitted synchronously and the UI has long
+        // since rendered them. Skip the natural emissions so we don't
+        // double-fire and avoid surfacing a misleading post-hoc "did the
+        // agent acknowledge?" warning — those signals vary by provider and
+        // were causing false positives. The discard filter already
+        // suppressed any post-stop work-log entries.
         if (ctx.aborting) {
-          // Positive evidence path: the agent honored session/cancel and
-          // returned stopReason="cancelled". Emit turn.aborted bound to the
-          // originally-cancelled turn so the projector can append a
-          // "Stopped by user" timeline activity. If the agent ignored cancel
-          // (stopReason !== "cancelled") we still emit turn.aborted but mark
-          // it acknowledged=false so the projector renders a warning entry.
           const interruptedTurnId = ctx.interruptedTurnId;
           if (interruptedTurnId !== undefined) {
-            const acknowledged = result.stopReason === "cancelled";
-            yield* offerRuntimeEvent({
-              type: "turn.aborted",
-              ...(yield* makeEventStamp()),
-              provider: PROVIDER,
-              threadId: input.threadId,
-              turnId: interruptedTurnId,
-              payload: acknowledged
-                ? { reason: "Stop confirmed by provider." }
-                : {
-                    reason: "Provider did not acknowledge stop signal.",
-                    acknowledged: false,
-                  },
-            });
+            discardingTurnIds.delete(String(interruptedTurnId));
           }
+          // Clear ctx.activeTurnId now that the cancelled turn has fully
+          // unwound. interruptTurn deliberately left it set so subsequent
+          // session/update events would still bind to the cancelled turnId
+          // and be caught by the discard filter.
+          ctx.activeTurnId = undefined;
           ctx.aborting = false;
           ctx.interruptedTurnId = undefined;
           return {
@@ -1006,14 +1050,19 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
         // hides immediately, regardless of whether the agent honors the cancel.
         // sendTurn checks `aborting` after its prompt resolves and skips its own
         // turn.completed emission so we don't double-fire.
+        //
+        // IMPORTANT: we deliberately do NOT clear ctx.activeTurnId here. Subsequent
+        // session/update events (item.started, ToolCallUpdated, etc.) bind their
+        // turnId to ctx.activeTurnId — if we clear it those events would slip past
+        // the discardingTurnIds filter (turnId=undefined → not discardable) and
+        // keep populating the chat after Stop. ctx.activeTurnId is cleared in the
+        // sendTurn natural-completion handler instead.
         if (ctx.activeTurnId !== undefined) {
           ctx.aborting = true;
           const activeTurnId = ctx.activeTurnId;
-          // Remember the cancelled turnId so sendTurn can bind the agent's
-          // eventual response back to it (for an evidence-based turn.aborted
-          // event when the agent confirms with stopReason="cancelled").
+          // Remember the cancelled turnId so sendTurn can correlate the agent's
+          // eventual response back to it.
           ctx.interruptedTurnId = activeTurnId;
-          ctx.activeTurnId = undefined;
           ctx.session = {
             ...ctx.session,
             activeTurnId: undefined,
@@ -1030,6 +1079,26 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
               stopReason: "cancelled",
             },
           });
+          // Immediate positive feedback: surface a "Stopped by user" timeline
+          // activity right away so the user can see the click landed without
+          // waiting for the provider to confirm. The natural-completion path
+          // skips its own turn.aborted emission for the confirmed case; the
+          // negative-evidence path still fires later if the agent kept emitting
+          // events after Stop.
+          yield* offerRuntimeEvent({
+            type: "turn.aborted",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            threadId,
+            turnId: activeTurnId,
+            payload: {
+              reason: "Stopped by user.",
+            },
+          });
+          // Suppress further content/item/task events for the cancelled turn
+          // so the chat freezes the moment Stop is clicked, even when the
+          // provider ignores session/cancel and keeps streaming.
+          discardingTurnIds.add(String(activeTurnId));
         }
       });
 
