@@ -11,8 +11,8 @@ import {
 } from "@t3tools/contracts";
 import { create } from "zustand";
 
-import { ensureLocalApi } from "../../localApi";
 import { useSavedEnvironmentRegistryStore } from "./catalog";
+import { resolveLocalApi as ensureLocalApi } from "./localApiBridge";
 
 interface SavedProjectRegistryState {
   readonly byKey: Record<SavedProjectKey, SavedRemoteProject>;

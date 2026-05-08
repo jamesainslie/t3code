@@ -23,6 +23,26 @@ import { applyCssTokens, applyTypographyCssTokens } from "./applicator";
 // Singleton store instance — initialized once on module load
 export const themeStore = new ThemeStore();
 
+// Hydrate from desktop persistence (async, won't block initial render).
+//
+// Only the desktop path is hydrated here on purpose. In a pure browser
+// deployment, localStorage IS the source of truth — `ThemeStore`'s
+// constructor reads it synchronously via `loadStoredPreference` /
+// `loadSavedThemes` / `loadActiveThemeId`, so the equivalent
+// `readBrowserThemePreferences` path in `clientPersistenceStorage.ts` would
+// be reading the same store the constructor already drained. Adding a
+// browser-side hydrate would double-apply or race against the constructor.
+//
+// `clientPersistenceStorage.readBrowserThemePreferences` exists so other
+// surfaces (settings export/import, diagnostics) can read the document
+// shape uniformly — it is intentionally not wired up here.
+if (
+  typeof window !== "undefined" &&
+  (window as unknown as { desktopBridge?: unknown }).desktopBridge
+) {
+  themeStore.hydrateFromDesktop();
+}
+
 function applyThemeToDom(): void {
   const { resolved, resolvedTheme } = themeStore.getSnapshot();
   const root = document.documentElement;

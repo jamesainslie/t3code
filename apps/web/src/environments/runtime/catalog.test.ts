@@ -68,6 +68,10 @@ describe("environment runtime catalog stores", () => {
           removeSavedEnvironmentSecret: async () => undefined,
           getSavedProjectRegistry: async () => [],
           setSavedProjectRegistry: async () => undefined,
+          getThemePreferences: async () => null,
+          setThemePreferences: async () => undefined,
+          getMarkdownPreferences: async () => null,
+          setMarkdownPreferences: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -146,6 +150,10 @@ describe("environment runtime catalog stores", () => {
           removeSavedEnvironmentSecret: async () => undefined,
           getSavedProjectRegistry: async () => [],
           setSavedProjectRegistry: async () => undefined,
+          getThemePreferences: async () => null,
+          setThemePreferences: async () => undefined,
+          getMarkdownPreferences: async () => null,
+          setMarkdownPreferences: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -225,6 +233,10 @@ describe("saved environment bearer token: identity-keyed storage with environmen
           removeSavedEnvironmentSecret: removeSpy,
           getSavedProjectRegistry: async () => [],
           setSavedProjectRegistry: async () => undefined,
+          getThemePreferences: async () => null,
+          setThemePreferences: async () => undefined,
+          getMarkdownPreferences: async () => null,
+          setMarkdownPreferences: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });

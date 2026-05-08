@@ -1241,6 +1241,357 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  // Characterization test for the user-reported bug: clicking Stop while Claude is
+  // generating does not actually stop generation. interruptTurn() invokes
+  // context.query.interrupt() on the SDK, but the SDK's interrupt() is a soft signal
+  // that does not necessarily close the AsyncIterable. The adapter's consumer loop
+  // (runSdkStream) uses Stream.takeWhile(() => !context.stopped), and `context.stopped`
+  // is only ever set by stopSessionInternal (full session shutdown). Therefore any
+  // SDK messages that arrive after interruptTurn() — which is the realistic case for
+  // a long-running turn — are still processed and emitted as runtime events.
+  it.effect(
+    "interruptTurn stops the consumer loop from processing further SDK messages (BUG)",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const runFork = Effect.runForkWith(context);
+
+        const adapter = yield* ClaudeAdapter;
+
+        const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+        const runtimeEventsFiber = runFork(
+          Stream.runForEach(adapter.streamEvents, (event) =>
+            Effect.sync(() => {
+              runtimeEvents.push(event);
+            }),
+          ),
+        );
+
+        yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "full-access",
+        });
+
+        yield* adapter.sendTurn({
+          threadId: THREAD_ID,
+          input: "hello",
+          attachments: [],
+        });
+
+        harness.query.emit({
+          type: "stream_event",
+          session_id: "sdk-session-interrupt",
+          uuid: "stream-pre-start",
+          parent_tool_use_id: null,
+          event: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+        } as unknown as SDKMessage);
+
+        harness.query.emit({
+          type: "stream_event",
+          session_id: "sdk-session-interrupt",
+          uuid: "stream-pre-delta",
+          parent_tool_use_id: null,
+          event: {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "before-interrupt" },
+          },
+        } as unknown as SDKMessage);
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        yield* adapter.interruptTurn(THREAD_ID);
+
+        harness.query.emit({
+          type: "stream_event",
+          session_id: "sdk-session-interrupt",
+          uuid: "stream-post-delta",
+          parent_tool_use_id: null,
+          event: {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "after-interrupt" },
+          },
+        } as unknown as SDKMessage);
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        runtimeEventsFiber.interruptUnsafe();
+
+        assert.equal(harness.query.interruptCalls.length, 1);
+
+        const deltaTexts = runtimeEvents
+          .filter(
+            (event): event is Extract<ProviderRuntimeEvent, { type: "content.delta" }> =>
+              event.type === "content.delta",
+          )
+          .map((event) => event.payload.delta);
+
+        assert.deepEqual(
+          deltaTexts,
+          ["before-interrupt"],
+          "After interruptTurn(), the adapter should ignore further SDK messages. " +
+            "Currently it processes them because Stream.takeWhile only checks " +
+            "context.stopped, which interruptTurn never sets.",
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
+  // Immediate positive feedback: interruptTurn() must emit a turn.aborted
+  // runtime event for the in-flight turn the moment the user clicks Stop —
+  // not when the SDK eventually acknowledges. The projector renders this as
+  // a "Stopped by user" timeline activity so the user sees instant feedback
+  // even if the SDK ignores interrupt() and keeps streaming for a while.
+  it.effect("emits turn.aborted immediately when interruptTurn is called", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
+      const runFork = Effect.runForkWith(context);
+
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+      const runtimeEventsFiber = runFork(
+        Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => {
+            runtimeEvents.push(event);
+          }),
+        ),
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      const turn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "hello",
+        attachments: [],
+      });
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+      yield* adapter.interruptTurn(THREAD_ID);
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+      // Confirmed-cancellation result arrives AFTER the immediate emission;
+      // the adapter must NOT emit a duplicate turn.aborted in this case.
+      harness.query.emit({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: false,
+        errors: ["Error: Request was aborted."],
+        stop_reason: null,
+        session_id: "sdk-session-confirm",
+        uuid: "result-confirmed",
+      } as unknown as SDKMessage);
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      runtimeEventsFiber.interruptUnsafe();
+
+      const turnAbortedEvents = runtimeEvents.filter(
+        (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
+          event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
+      );
+      assert.lengthOf(
+        turnAbortedEvents,
+        1,
+        "Adapter must emit exactly one turn.aborted: the immediate one from " +
+          "interruptTurn. The confirmed-cancellation natural-completion path " +
+          "must not emit a duplicate.",
+      );
+      const turnAborted = turnAbortedEvents[0];
+      if (turnAborted) {
+        assert.match(turnAborted.payload.reason, /stopped by user/i);
+        assert.notStrictEqual(
+          turnAborted.payload.acknowledged,
+          false,
+          "Immediate-emission path must not flag acknowledged=false.",
+        );
+      }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  // No-double-fire invariant: regardless of what the SDK's eventual result
+  // message looks like (success, error_during_execution, ignored interrupt,
+  // etc.), the adapter must NOT emit a second turn.aborted from the natural
+  // completion path. The single immediate "Stopped by user" entry from
+  // interruptTurn is the canonical UX feedback; the post-hoc unack warning
+  // was removed because the underlying signal varies per provider and per
+  // result-message shape, producing inconsistent false positives.
+  it.effect(
+    "emits exactly one turn.aborted even when the SDK ignores interrupt() and returns a success result",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const runFork = Effect.runForkWith(context);
+
+        const adapter = yield* ClaudeAdapter;
+
+        const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+        const runtimeEventsFiber = runFork(
+          Stream.runForEach(adapter.streamEvents, (event) =>
+            Effect.sync(() => {
+              runtimeEvents.push(event);
+            }),
+          ),
+        );
+
+        yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "full-access",
+        });
+
+        const turn = yield* adapter.sendTurn({
+          threadId: THREAD_ID,
+          input: "hello",
+          attachments: [],
+        });
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+        yield* adapter.interruptTurn(THREAD_ID);
+
+        harness.query.emit({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          errors: [],
+          stop_reason: "end_turn",
+          session_id: "sdk-session-ignored",
+          uuid: "result-ignored",
+        } as unknown as SDKMessage);
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        runtimeEventsFiber.interruptUnsafe();
+
+        const turnAbortedEvents = runtimeEvents.filter(
+          (event): event is Extract<ProviderRuntimeEvent, { type: "turn.aborted" }> =>
+            event.type === "turn.aborted" && String(event.turnId) === String(turn.turnId),
+        );
+        assert.lengthOf(
+          turnAbortedEvents,
+          1,
+          "Adapter must emit exactly one turn.aborted (the immediate 'Stopped by user'). " +
+            "The unack warning must NOT fire when no post-stop events were suppressed.",
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
+  // Companion characterization test: even if the SDK's iterable never terminates,
+  // interruptTurn must still synthesize a turn.completed (interrupted/cancelled)
+  // event so the orchestration projector can flip session.status back to "ready"
+  // and the UI's Stop button can disappear. Currently it does not.
+  it.effect(
+    "interruptTurn synthesizes a turn.completed event when the SDK iterable does not terminate (BUG)",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const runFork = Effect.runForkWith(context);
+
+        const adapter = yield* ClaudeAdapter;
+
+        const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+        const runtimeEventsFiber = runFork(
+          Stream.runForEach(adapter.streamEvents, (event) =>
+            Effect.sync(() => {
+              runtimeEvents.push(event);
+            }),
+          ),
+        );
+
+        yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "full-access",
+        });
+
+        const turn = yield* adapter.sendTurn({
+          threadId: THREAD_ID,
+          input: "hello",
+          attachments: [],
+        });
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+
+        yield* adapter.interruptTurn(THREAD_ID);
+
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        runtimeEventsFiber.interruptUnsafe();
+
+        assert.equal(harness.query.interruptCalls.length, 1);
+
+        const turnCompleted = runtimeEvents.find(
+          (event): event is Extract<ProviderRuntimeEvent, { type: "turn.completed" }> =>
+            event.type === "turn.completed" && String(event.turnId) === String(turn.turnId),
+        );
+
+        assert.isDefined(
+          turnCompleted,
+          "interruptTurn must emit a turn.completed event so the read model flips " +
+            "session.status back to 'ready'. Currently it only calls query.interrupt() " +
+            "and waits for the SDK to send a result message — which never arrives if the " +
+            "SDK does not honor the interrupt promptly.",
+        );
+        if (turnCompleted) {
+          assert.oneOf(turnCompleted.payload.state, ["interrupted", "cancelled"]);
+        }
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
   it.effect("closes the session when the Claude stream aborts after a turn starts", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

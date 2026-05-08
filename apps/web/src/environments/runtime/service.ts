@@ -24,12 +24,13 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime";
 
+import { classifyConnectionError } from "../../lib/connectionErrorClassifier";
 import {
   markPromotedDraftThreadByRef,
   markPromotedDraftThreadsByRef,
   useComposerDraftStore,
 } from "~/composerDraftStore";
-import { ensureLocalApi } from "~/localApi";
+import { resolveLocalApi as ensureLocalApi } from "./localApiBridge";
 import { collectActiveTerminalThreadIds } from "~/lib/terminalStateCleanup";
 import { deriveOrchestrationBatchEffects } from "~/orchestrationEventEffects";
 import { projectQueryKeys } from "~/lib/projectReactQuery";
@@ -414,6 +415,8 @@ function setRuntimeConnecting(environmentId: EnvironmentId) {
     connectionState: "connecting",
     lastError: null,
     lastErrorAt: null,
+    errorCategory: null,
+    errorGuidance: null,
   });
 }
 
@@ -448,9 +451,15 @@ function setRuntimeDisconnected(environmentId: EnvironmentId, reason?: string | 
 }
 
 function setRuntimeError(environmentId: EnvironmentId, error: unknown) {
+  const record = getSavedEnvironmentRecord(environmentId);
+  const isSsh = record ? isSshSavedEnvironmentRecord(record) : false;
+  const classified = classifyConnectionError(error, { isSsh });
+
   useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
     connectionState: "error",
     ...getRuntimeErrorFields(error),
+    errorCategory: classified.category,
+    errorGuidance: classified.guidance,
   });
 }
 
@@ -1155,6 +1164,24 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
     throw new Error("Saved environment not found.");
   }
 
+  const isSsh = isSshSavedEnvironmentRecord(record);
+
+  // For SSH environments, tear down the existing connection entirely
+  // and rebuild through a fresh tunnel. The old port forward is likely
+  // stale, so reconnecting through it will just fail.
+  if (isSsh) {
+    setRuntimeConnecting(environmentId);
+    try {
+      await removeConnection(environmentId).catch(() => false);
+      await ensureSavedEnvironmentConnection(record);
+    } catch (error) {
+      setRuntimeError(environmentId, error);
+      throw error;
+    }
+    return;
+  }
+
+  // Non-SSH: use existing reconnect path
   const connection = environmentConnections.get(environmentId);
   if (!connection) {
     await ensureSavedEnvironmentConnection(record);

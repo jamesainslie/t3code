@@ -888,6 +888,291 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* adapter.stopSession(threadId);
     }),
   );
+
+  // Immediate positive feedback: interruptTurn() must emit a turn.aborted
+  // runtime event for the in-flight turn the moment the user clicks Stop.
+  // The projector renders this as a "Stopped by user" timeline activity so
+  // the user sees instant confirmation regardless of what the agent does
+  // with the session/cancel notification afterward.
+  it.effect("emits turn.aborted immediately when interruptTurn is called", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const serverSettings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-cancel-confirmed");
+      const tempDir = yield* Effect.promise(() =>
+        mkdtemp(path.join(os.tmpdir(), "cursor-acp-confirm-cancel-")),
+      );
+      const requestLogPath = path.join(tempDir, "requests.ndjson");
+      const argvLogPath = path.join(tempDir, "argv.txt");
+      yield* Effect.promise(() => writeFile(requestLogPath, "", "utf8"));
+
+      const wrapperPath = yield* Effect.promise(() =>
+        makeProbeWrapper(requestLogPath, argvLogPath, {
+          T3_ACP_PROMPT_DELAY_MS: "200",
+        }),
+      );
+      yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+
+      const turnStartedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+      const turnAbortedEvents: Array<ProviderRuntimeEvent> = [];
+
+      const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+        Effect.gen(function* () {
+          if (String(event.threadId) !== String(threadId)) {
+            return;
+          }
+          if (event.type === "turn.started") {
+            yield* Deferred.succeed(turnStartedReady, event).pipe(Effect.ignore);
+            return;
+          }
+          if (event.type === "turn.aborted") {
+            turnAbortedEvents.push(event);
+          }
+        }),
+      ).pipe(Effect.forkChild);
+
+      yield* adapter.startSession({
+        threadId,
+        provider: "cursor",
+        cwd: process.cwd(),
+        runtimeMode: "approval-required",
+        modelSelection: { provider: "cursor", model: "default" },
+      });
+
+      const sendTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "stream a quick reply",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+
+      const turnStarted = yield* Deferred.await(turnStartedReady);
+
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      yield* adapter.interruptTurn(threadId);
+      yield* Fiber.join(sendTurnFiber);
+      yield* Fiber.interrupt(runtimeEventsFiber);
+
+      // Exactly one turn.aborted: the immediate "Stopped by user." entry
+      // emitted synchronously from interruptTurn. The natural-completion
+      // path no longer emits a duplicate (the post-hoc unack warning was
+      // removed for cross-provider consistency).
+      assert.lengthOf(
+        turnAbortedEvents,
+        1,
+        "Adapter must emit exactly one turn.aborted: the immediate one from interruptTurn.",
+      );
+      const turnAborted = turnAbortedEvents[0];
+      if (turnAborted && turnAborted.type === "turn.aborted") {
+        assert.equal(String(turnAborted.turnId), String(turnStarted.turnId));
+        assert.match(turnAborted.payload.reason, /stopped by user/i);
+        assert.notStrictEqual(
+          turnAborted.payload.acknowledged,
+          false,
+          "Immediate-emission path must not flag acknowledged=false.",
+        );
+      }
+
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  // Characterization test for the user-reported bug: clicking Stop while Cursor is
+  // generating does not actually stop the agent. CursorAdapter.interruptTurn sends
+  // a session/cancel JSON-RPC notification (fire-and-forget) and wraps the call in
+  // Effect.ignore. If the agent does not honor the notification — because it is
+  // mid-stream, doesn't implement cancel, or is blocked on an upstream LLM call —
+  // the prompt finishes naturally and the adapter emits turn.completed with
+  // state="completed" instead of "cancelled". The user keeps waiting until the
+  // model finishes on its own.
+  it.effect(
+    "interruptTurn does not stop the turn when the agent ignores session/cancel (BUG)",
+    () =>
+      Effect.gen(function* () {
+        const adapter = yield* CursorAdapter;
+        const serverSettings = yield* ServerSettingsService;
+        const threadId = ThreadId.make("cursor-cancel-ignored");
+        const tempDir = yield* Effect.promise(() =>
+          mkdtemp(path.join(os.tmpdir(), "cursor-acp-ignore-cancel-")),
+        );
+        const requestLogPath = path.join(tempDir, "requests.ndjson");
+        const argvLogPath = path.join(tempDir, "argv.txt");
+        yield* Effect.promise(() => writeFile(requestLogPath, "", "utf8"));
+
+        const wrapperPath = yield* Effect.promise(() =>
+          makeProbeWrapper(requestLogPath, argvLogPath, {
+            T3_ACP_IGNORE_CANCEL: "1",
+            T3_ACP_PROMPT_DELAY_MS: "200",
+          }),
+        );
+        yield* serverSettings.updateSettings({
+          providers: { cursor: { binaryPath: wrapperPath } },
+        });
+
+        const turnStartedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+        const turnCompletedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+
+        const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.gen(function* () {
+            if (String(event.threadId) !== String(threadId)) {
+              return;
+            }
+            if (event.type === "turn.started") {
+              yield* Deferred.succeed(turnStartedReady, event).pipe(Effect.ignore);
+              return;
+            }
+            if (event.type === "turn.completed") {
+              yield* Deferred.succeed(turnCompletedReady, event).pipe(Effect.ignore);
+            }
+          }),
+        ).pipe(Effect.forkChild);
+
+        yield* adapter.startSession({
+          threadId,
+          provider: "cursor",
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+          modelSelection: { provider: "cursor", model: "default" },
+        });
+
+        const sendTurnFiber = yield* adapter
+          .sendTurn({
+            threadId,
+            input: "stream a quick reply",
+            attachments: [],
+          })
+          .pipe(Effect.forkChild);
+
+        yield* Deferred.await(turnStartedReady);
+
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+        yield* adapter.interruptTurn(threadId);
+
+        const turnCompleted = yield* Deferred.await(turnCompletedReady);
+        yield* Fiber.join(sendTurnFiber);
+        yield* Fiber.interrupt(runtimeEventsFiber);
+
+        const requests = yield* Effect.promise(() => readJsonLines(requestLogPath));
+        assert.isTrue(
+          requests.some((entry) => entry.method === "session/cancel"),
+          "Adapter should send session/cancel even though the agent ignores it.",
+        );
+
+        assert.equal(turnCompleted.type, "turn.completed");
+        if (turnCompleted.type === "turn.completed") {
+          assert.equal(
+            turnCompleted.payload.state,
+            "cancelled",
+            "When the agent ignores session/cancel the adapter must enforce a " +
+              "cancellation locally (settle the turn as cancelled). Currently the " +
+              "turn finishes normally because session/cancel is fire-and-forget and " +
+              "Effect.ignore swallows any signal that nothing happened.",
+          );
+        }
+
+        yield* adapter.stopSession(threadId);
+      }),
+  );
+
+  // Even when the agent ignores session/cancel and finishes the prompt
+  // naturally (stopReason !== "cancelled"), the adapter must NOT emit a
+  // second turn.aborted event. The post-hoc "did the agent acknowledge?"
+  // signal is unreliable across providers (Claude's stream-handler guards
+  // suppress events upstream so droppedCount stays at 0; Cursor's session/
+  // update flows through and would always count) and the resulting warning
+  // produced inconsistent false positives. The single immediate "Stopped
+  // by user" entry from interruptTurn is the canonical UX feedback; the
+  // discard filter handles post-stop work-log noise suppression.
+  it.effect("emits exactly one turn.aborted even when the agent ignores session/cancel", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const serverSettings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-cancel-unack");
+      const tempDir = yield* Effect.promise(() =>
+        mkdtemp(path.join(os.tmpdir(), "cursor-acp-unack-cancel-")),
+      );
+      const requestLogPath = path.join(tempDir, "requests.ndjson");
+      const argvLogPath = path.join(tempDir, "argv.txt");
+      yield* Effect.promise(() => writeFile(requestLogPath, "", "utf8"));
+
+      const wrapperPath = yield* Effect.promise(() =>
+        makeProbeWrapper(requestLogPath, argvLogPath, {
+          T3_ACP_IGNORE_CANCEL: "1",
+          T3_ACP_PROMPT_DELAY_MS: "200",
+        }),
+      );
+      yield* serverSettings.updateSettings({
+        providers: { cursor: { binaryPath: wrapperPath } },
+      });
+
+      const turnStartedReady = yield* Deferred.make<ProviderRuntimeEvent>();
+      const turnAbortedEvents: Array<ProviderRuntimeEvent> = [];
+
+      const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+        Effect.gen(function* () {
+          if (String(event.threadId) !== String(threadId)) {
+            return;
+          }
+          if (event.type === "turn.started") {
+            yield* Deferred.succeed(turnStartedReady, event).pipe(Effect.ignore);
+            return;
+          }
+          if (event.type === "turn.aborted") {
+            turnAbortedEvents.push(event);
+          }
+        }),
+      ).pipe(Effect.forkChild);
+
+      yield* adapter.startSession({
+        threadId,
+        provider: "cursor",
+        cwd: process.cwd(),
+        runtimeMode: "approval-required",
+        modelSelection: { provider: "cursor", model: "default" },
+      });
+
+      const sendTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "stream a quick reply",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+
+      const turnStarted = yield* Deferred.await(turnStartedReady);
+
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      yield* adapter.interruptTurn(threadId);
+
+      yield* Fiber.join(sendTurnFiber);
+      yield* Fiber.interrupt(runtimeEventsFiber);
+
+      assert.lengthOf(
+        turnAbortedEvents,
+        1,
+        "Adapter must emit exactly one turn.aborted ('Stopped by user') from " +
+          "interruptTurn. The post-hoc unack warning was removed because the " +
+          "underlying signal varies per provider and produced false positives.",
+      );
+      const turnAborted = turnAbortedEvents[0];
+      if (turnAborted && turnAborted.type === "turn.aborted") {
+        assert.equal(String(turnAborted.turnId), String(turnStarted.turnId));
+        assert.match(turnAborted.payload.reason, /stopped by user/i);
+        assert.notStrictEqual(
+          turnAborted.payload.acknowledged,
+          false,
+          "Adapter must not flag acknowledged=false on the immediate turn.aborted.",
+        );
+      }
+
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
   it.effect("stopping a session settles pending approval waits", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;

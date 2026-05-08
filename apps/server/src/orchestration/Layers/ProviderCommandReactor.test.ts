@@ -1273,6 +1273,17 @@ describe("ProviderCommandReactor", () => {
     expect(harness.interruptTurn.mock.calls[0]?.[0]).toEqual({
       threadId: "thread-1",
     });
+
+    // The reactor must NOT append its own "Stop requested by user" entry —
+    // the adapter-side turn.aborted ("Stopped by user") provides the single
+    // canonical user-facing activity for a stop click. Duplicating here
+    // produced two timeline rows for one action.
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    const interruptRequested = thread?.activities.find(
+      (activity) => activity.kind === "turn.interrupt-requested",
+    );
+    expect(interruptRequested).toBeUndefined();
   });
 
   it("starts a fresh session when only projected session state exists", async () => {

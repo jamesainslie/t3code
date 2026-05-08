@@ -15,8 +15,6 @@ import {
   type SavedEnvironmentRuntimeState,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
-  disconnectSavedEnvironment,
-  reconnectSavedEnvironment,
   removeSavedEnvironment,
   useConnectionLogStore,
   type ConnectionLogEntry,
@@ -74,8 +72,6 @@ interface RemoteEnvironmentRowProps {
   readonly identityKey: RemoteIdentityKey;
   readonly connectionState: SavedEnvironmentConnectionState;
   readonly runtimeState: SavedEnvironmentRuntimeState | null;
-  readonly onReconnect: (environmentId: EnvironmentId) => void;
-  readonly onDisconnect: (environmentId: EnvironmentId) => void;
   readonly onRemove: (environmentId: EnvironmentId) => void;
   readonly isActing: boolean;
 }
@@ -160,13 +156,9 @@ function RemoteEnvironmentRow({
   workspaceRoot,
   lastConnectedAt,
   connectionState,
-  onReconnect,
-  onDisconnect,
   onRemove,
   isActing,
 }: RemoteEnvironmentRowProps) {
-  const isConnected = connectionState === "connected";
-  const isConnecting = connectionState === "connecting";
   const [debugOpen, setDebugOpen] = useState(false);
   const runtimeState = useSavedEnvironmentRuntimeStore((state) => state.byId[environmentId]);
 
@@ -202,25 +194,6 @@ function RemoteEnvironmentRow({
             )}
             Debug
           </Button>
-          {isConnected ? (
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={isActing}
-              onClick={() => onDisconnect(environmentId)}
-            >
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={isActing || isConnecting}
-              onClick={() => onReconnect(environmentId)}
-            >
-              Reconnect
-            </Button>
-          )}
           <Button
             size="xs"
             variant="destructive-outline"
@@ -344,8 +317,6 @@ export interface RemoteEnvironmentEntry {
 export interface RemoteEnvironmentsSectionViewProps {
   readonly entries: ReadonlyArray<RemoteEnvironmentEntry>;
   readonly actingEnvironmentId: EnvironmentId | null;
-  readonly onReconnect: (environmentId: EnvironmentId) => void;
-  readonly onDisconnect: (environmentId: EnvironmentId) => void;
   readonly onRemove: (environmentId: EnvironmentId) => void;
   readonly onRemoveAllDisconnected: () => void;
 }
@@ -353,8 +324,6 @@ export interface RemoteEnvironmentsSectionViewProps {
 export function RemoteEnvironmentsSectionView({
   entries,
   actingEnvironmentId,
-  onReconnect,
-  onDisconnect,
   onRemove,
   onRemoveAllDisconnected,
 }: RemoteEnvironmentsSectionViewProps) {
@@ -388,8 +357,6 @@ export function RemoteEnvironmentsSectionView({
           identityKey={record.identityKey}
           connectionState={connectionState}
           runtimeState={runtimeState}
-          onReconnect={onReconnect}
-          onDisconnect={onDisconnect}
           onRemove={onRemove}
           isActing={actingEnvironmentId === record.environmentId}
         />
@@ -430,36 +397,6 @@ export function RemoteEnvironmentsSection() {
     [byIdentityKey, runtimeById],
   );
 
-  const handleReconnect = useCallback(async (environmentId: EnvironmentId) => {
-    setActingEnvironmentId(environmentId);
-    try {
-      await reconnectSavedEnvironment(environmentId);
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "Reconnect failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-    } finally {
-      setActingEnvironmentId(null);
-    }
-  }, []);
-
-  const handleDisconnect = useCallback(async (environmentId: EnvironmentId) => {
-    setActingEnvironmentId(environmentId);
-    try {
-      await disconnectSavedEnvironment(environmentId);
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "Disconnect failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-    } finally {
-      setActingEnvironmentId(null);
-    }
-  }, []);
-
   const handleRemove = useCallback(async (environmentId: EnvironmentId) => {
     setActingEnvironmentId(environmentId);
     try {
@@ -492,8 +429,6 @@ export function RemoteEnvironmentsSection() {
     <RemoteEnvironmentsSectionView
       entries={entries}
       actingEnvironmentId={actingEnvironmentId}
-      onReconnect={(id) => void handleReconnect(id)}
-      onDisconnect={(id) => void handleDisconnect(id)}
       onRemove={(id) => void handleRemove(id)}
       onRemoveAllDisconnected={() => void handleRemoveAllDisconnected()}
     />

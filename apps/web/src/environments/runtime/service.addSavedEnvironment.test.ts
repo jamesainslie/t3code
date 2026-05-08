@@ -21,12 +21,25 @@ vi.mock("../remote/api", () => ({
   resolveRemoteWebSocketConnectionUrl: vi.fn(),
 }));
 
+// `service.ts` now resolves the LocalApi via `./localApiBridge` (a small
+// shim introduced to break a load-time ESM cycle between localApi.ts and the
+// runtime stores). The previous `vi.mock("~/localApi", ...)` no longer
+// intercepts the call site, so we mock the bridge directly. Both mocks are
+// kept so any indirect consumer of `~/localApi` still sees a stub.
+const mockLocalApi = {
+  persistence: {
+    setSavedEnvironmentRegistry: mockSetSavedEnvironmentRegistry,
+  },
+};
+
+vi.mock("./localApiBridge", () => ({
+  registerLocalApiResolver: vi.fn(),
+  resolveLocalApi: () => mockLocalApi,
+  __resetLocalApiResolverForTests: vi.fn(),
+}));
+
 vi.mock("~/localApi", () => ({
-  ensureLocalApi: () => ({
-    persistence: {
-      setSavedEnvironmentRegistry: mockSetSavedEnvironmentRegistry,
-    },
-  }),
+  ensureLocalApi: () => mockLocalApi,
 }));
 
 vi.mock("./catalog", () => ({

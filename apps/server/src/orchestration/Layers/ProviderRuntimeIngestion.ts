@@ -277,6 +277,30 @@ function runtimeEventToActivities(
       ];
     }
 
+    case "turn.aborted": {
+      // All providers funnel through a single canonical "Stopped by user"
+      // entry. The contract still carries an optional `acknowledged` flag
+      // for forward compatibility, but we no longer branch on it: the
+      // post-hoc "did the agent honor the cancel?" signal varied per
+      // provider and produced inconsistent false-positive warnings, so the
+      // adapter no longer emits acknowledged=false. The discard filter
+      // suppresses any post-stop work-log noise instead.
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "turn.aborted",
+          summary: "Stopped by user",
+          payload: {
+            reason: event.payload.reason,
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
     case "turn.plan.updated": {
       return [
         {
@@ -1121,6 +1145,7 @@ const make = Effect.gen(function* () {
           case "turn.started":
             return !conflictsWithActiveTurn;
           case "turn.completed":
+          case "turn.aborted":
             if (conflictsWithActiveTurn || missingTurnForActiveTurn) {
               return false;
             }
@@ -1128,7 +1153,7 @@ const make = Effect.gen(function* () {
             if (activeTurnId !== null && eventTurnId !== undefined) {
               return sameId(activeTurnId, eventTurnId);
             }
-            // If no active turn is tracked, accept completion scoped to this thread.
+            // If no active turn is tracked, accept the close event scoped to this thread.
             return true;
           default:
             return true;
@@ -1145,12 +1170,15 @@ const make = Effect.gen(function* () {
         event.type === "session.exited" ||
         event.type === "thread.started" ||
         event.type === "turn.started" ||
-        event.type === "turn.completed"
+        event.type === "turn.completed" ||
+        event.type === "turn.aborted"
       ) {
         const nextActiveTurnId =
           event.type === "turn.started"
             ? (eventTurnId ?? null)
-            : event.type === "turn.completed" || event.type === "session.exited"
+            : event.type === "turn.completed" ||
+                event.type === "turn.aborted" ||
+                event.type === "session.exited"
               ? null
               : activeTurnId;
         const status = (() => {
@@ -1165,6 +1193,10 @@ const make = Effect.gen(function* () {
               return normalizeRuntimeTurnState(event.payload.state) === "failed"
                 ? "error"
                 : "ready";
+            case "turn.aborted":
+              // A provider-side abort (Codex turn/aborted, OpenCode session.abort,
+              // Cursor session/cancel) cleanly ends the turn — flip back to ready.
+              return "ready";
             case "session.started":
             case "thread.started":
               // Provider thread/session start notifications can arrive during an

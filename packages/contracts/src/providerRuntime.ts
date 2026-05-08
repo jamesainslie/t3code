@@ -365,6 +365,10 @@ export type TurnCompletedPayload = typeof TurnCompletedPayload.Type;
 
 const TurnAbortedPayload = Schema.Struct({
   reason: TrimmedNonEmptyStringSchema,
+  // True (or omitted, default true) when the provider explicitly confirmed
+  // the cancellation. False when the adapter inferred from a non-cancelled
+  // natural completion that the provider ignored the stop signal.
+  acknowledged: Schema.optional(Schema.Boolean),
 });
 export type TurnAbortedPayload = typeof TurnAbortedPayload.Type;
 

@@ -45,8 +45,6 @@ function renderSection(
     <RemoteEnvironmentsSectionView
       entries={entries}
       actingEnvironmentId={actingEnvironmentId}
-      onReconnect={noop}
-      onDisconnect={noop}
       onRemove={noop}
       onRemoveAllDisconnected={noop}
     />,
@@ -110,16 +108,18 @@ describe("RemoteEnvironmentsSectionView", () => {
     expect(html).toContain("Never");
   });
 
-  it("renders Reconnect and Remove buttons for disconnected environments", () => {
+  it("renders Remove button for disconnected environments without Reconnect/Disconnect", () => {
     const html = renderSection([makeEntry({}, "disconnected")]);
-    expect(html).toContain("Reconnect");
     expect(html).toContain("Remove");
+    expect(html).not.toContain(">Reconnect<");
+    expect(html).not.toContain(">Disconnect<");
   });
 
-  it("renders Disconnect button for connected environments", () => {
+  it("renders Remove button for connected environments without Reconnect/Disconnect", () => {
     const html = renderSection([makeEntry({}, "connected")]);
-    expect(html).toContain("Disconnect");
-    expect(html).not.toContain("Reconnect");
+    expect(html).toContain("Remove");
+    expect(html).not.toContain(">Reconnect<");
+    expect(html).not.toContain(">Disconnect<");
   });
 
   it("renders Remove all disconnected button when there are disconnected environments", () => {

@@ -90,9 +90,38 @@ export function selectPendingTerminalEventEntries(
   return entries.filter((entry) => entry.id > lastAppliedTerminalEventId);
 }
 
-function terminalThemeFromApp(): ITheme {
+function readDrawerSurfaceColors(mount: HTMLElement | null): {
+  background?: string;
+  foreground?: string;
+} {
+  if (!mount || typeof window === "undefined") return {};
+  const drawer = mount.closest<HTMLElement>(".thread-terminal-drawer");
+  if (!drawer) return {};
+  const computed = window.getComputedStyle(drawer);
+  const background = computed.backgroundColor || "";
+  const foreground = computed.color || "";
+  // `getComputedStyle` returns "" for unset properties and
+  // "rgba(0, 0, 0, 0)" for transparent backgrounds — skip both so the
+  // baseline theme tokens win.
+  const result: { background?: string; foreground?: string } = {};
+  if (background.length > 0 && background !== "rgba(0, 0, 0, 0)") {
+    result.background = background;
+  }
+  if (foreground.length > 0) {
+    result.foreground = foreground;
+  }
+  return result;
+}
+
+function terminalThemeFromApp(mount: HTMLElement | null = null): ITheme {
   const { resolved } = themeStore.getSnapshot();
-  return buildTerminalTheme(resolved.colors);
+  const base = buildTerminalTheme(resolved.colors);
+  const surface = readDrawerSurfaceColors(mount);
+  return {
+    ...base,
+    ...(surface.background ? { background: surface.background } : {}),
+    ...(surface.foreground ? { foreground: surface.foreground } : {}),
+  };
 }
 
 const FALLBACK_TERMINAL_FONT_FAMILY =
@@ -262,7 +291,7 @@ export function TerminalViewport({
       fontSize: initialFont.fontSize,
       scrollback: 5_000,
       fontFamily: initialFont.fontFamily,
-      theme: terminalThemeFromApp(),
+      theme: terminalThemeFromApp(mount),
     });
     terminal.loadAddon(fitAddon);
     terminal.open(mount);
@@ -500,7 +529,7 @@ export function TerminalViewport({
     const themeObserver = new MutationObserver(() => {
       const activeTerminal = terminalRef.current;
       if (!activeTerminal) return;
-      activeTerminal.options.theme = terminalThemeFromApp();
+      activeTerminal.options.theme = terminalThemeFromApp(mount);
 
       // Re-apply font when theme changes. Only mutate options when the
       // values differ to avoid needlessly refitting on every theme tick.

@@ -75,6 +75,50 @@ import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogg
 import { RemoteEnv } from "../../remote/Services/RemoteEnv.ts";
 
 const PROVIDER = "claudeAgent" as const;
+
+// Event types that represent user-visible streaming work-log entries — these
+// are what the projector renders into the chat timeline and what the user is
+// explicitly asking to suppress when they click Stop. Everything else
+// (lifecycle, request resolution, errors, account/auth/state transitions)
+// must always reach the projector so bookkeeping completes correctly. In
+// particular, request.resolved MUST flow even for cancelled turns or the
+// pending approval row in the UI never closes.
+const DISCARDABLE_AFTER_INTERRUPT: ReadonlySet<ProviderRuntimeEvent["type"]> = new Set([
+  "item.started",
+  "item.updated",
+  "item.completed",
+  "content.delta",
+  "turn.plan.updated",
+  "turn.proposed.delta",
+  "turn.proposed.completed",
+  "turn.diff.updated",
+  "task.started",
+  "task.progress",
+  "task.completed",
+  "hook.started",
+  "hook.progress",
+  "hook.completed",
+  "tool.progress",
+  "tool.summary",
+]);
+
+function shouldDiscardEvent(
+  event: ProviderRuntimeEvent,
+  discardingTurnIds: ReadonlySet<string>,
+): boolean {
+  if (!DISCARDABLE_AFTER_INTERRUPT.has(event.type)) {
+    return false;
+  }
+  if (!("turnId" in event)) {
+    return false;
+  }
+  const turnId = event.turnId;
+  if (turnId === undefined || turnId === null) {
+    return false;
+  }
+  return discardingTurnIds.has(String(turnId));
+}
+
 type ClaudeTextStreamKind = Extract<RuntimeContentStreamKind, "assistant_text" | "reasoning_text">;
 type ClaudeToolResultStreamKind = Extract<
   RuntimeContentStreamKind,
@@ -162,6 +206,16 @@ interface ClaudeSessionContext {
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
+  // True between interruptTurn() and the next sendTurn(). While set, the SDK
+  // result message that eventually arrives in response to query.interrupt() is
+  // ignored so we don't double-emit turn.completed (we already synthesized one
+  // from interruptTurn). Cleared at the start of the next sendTurn.
+  aborting: boolean;
+  // The turnId that was active when interruptTurn ran. Used to bind the
+  // eventual SDK acknowledgment back to the cancelled turn so we can emit a
+  // turn.aborted event for the timeline. Cleared once the acknowledgment is
+  // observed, or at the start of the next sendTurn.
+  interruptedTurnId: TurnId | undefined;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
@@ -987,8 +1041,18 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.make(id));
   const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
 
-  const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+  // Turns whose content/item deltas should be suppressed because the user
+  // clicked Stop. Lifecycle, request resolution, errors, and other state
+  // transitions still flow so the projector can finish bookkeeping; only
+  // the user-visible streaming work-log entries are muted.
+  const discardingTurnIds = new Set<string>();
+
+  const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> => {
+    if (shouldDiscardEvent(event, discardingTurnIds)) {
+      return Effect.void;
+    }
+    return Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+  };
 
   const logNativeSdkMessage = Effect.fn("logNativeSdkMessage")(function* (
     context: ClaudeSessionContext,
@@ -2006,6 +2070,31 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       return;
     }
 
+    // The user already cancelled this turn via interruptTurn; we synthesized
+    // turn.completed locally. The SDK eventually acknowledges the abort via a
+    // result message — typically subtype="error_during_execution" with an
+    // "aborted" error. When that happens we have positive evidence that the
+    // agent honored the cancellation, so we emit a turn.aborted event bound
+    // to the originally-cancelled turn. The projector translates this into a
+    // "Stopped by user" timeline activity. Either way we suppress the normal
+    // completeTurn() so the user doesn't see a duplicate turn.completed.
+    if (context.aborting) {
+      // interruptTurn already emitted the immediate "Stopped by user"
+      // turn.aborted entry and synthesized turn.completed (state="cancelled")
+      // for the projector. The post-cancel result message from the SDK is
+      // bookkeeping only — clean up discard state and return without
+      // emitting anything else. We deliberately do NOT surface a "did the
+      // SDK acknowledge?" warning here because the signal varies per
+      // provider and per result-message shape, producing inconsistent
+      // false positives across Claude/Cursor.
+      const interruptedTurnId = context.interruptedTurnId;
+      if (interruptedTurnId !== undefined) {
+        discardingTurnIds.delete(String(interruptedTurnId));
+      }
+      context.interruptedTurnId = undefined;
+      return;
+    }
+
     const status = turnStatusFromResult(message);
     const errorMessage = message.subtype === "success" ? undefined : message.errors[0];
 
@@ -2948,6 +3037,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
         stopped: false,
+        aborting: false,
+        interruptedTurnId: undefined,
       };
       yield* Ref.set(contextRef, context);
       sessions.set(threadId, context);
@@ -3026,6 +3117,11 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const context = yield* requireSession(input.threadId);
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
+
+    // Clear any lingering aborting state from a previous interruptTurn before
+    // we start emitting events for the new turn.
+    context.aborting = false;
+    context.interruptedTurnId = undefined;
 
     if (context.turnState) {
       // Auto-close a stale synthetic turn (from background agent responses
@@ -3118,10 +3214,88 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
     function* (threadId, _turnId) {
       const context = yield* requireSession(threadId);
-      yield* Effect.tryPromise({
-        try: () => context.query.interrupt(),
-        catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-      });
+
+      // Mark the session as aborting BEFORE we synthesize the turn.completed.
+      // Any subsequent SDK result message (the eventual response to interrupt())
+      // must be dropped to avoid emitting a duplicate turn.completed.
+      context.aborting = true;
+      // Capture the cancelled turnId so we can bind the SDK's eventual
+      // acknowledgment back to it (for an evidence-based turn.aborted event).
+      context.interruptedTurnId = context.turnState?.turnId;
+
+      // Settle in-flight UI requests that would otherwise hang waiting for an
+      // answer the user is no longer going to give.
+      for (const [requestId, pending] of context.pendingApprovals) {
+        yield* Deferred.succeed(pending.decision, "cancel");
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "request.resolved",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+          requestId: asRuntimeRequestId(requestId),
+          payload: {
+            requestType: pending.requestType,
+            decision: "cancel",
+          },
+          providerRefs: nativeProviderRefs(context),
+        });
+      }
+      context.pendingApprovals.clear();
+
+      for (const [, pending] of context.pendingUserInputs) {
+        yield* Deferred.succeed(pending.answers, {});
+      }
+      context.pendingUserInputs.clear();
+
+      // Synthesize the turn.completed locally so the orchestration projector
+      // flips session.status back to "ready" and the UI's Stop button hides,
+      // even if the Claude SDK's iterable does not honor interrupt() promptly.
+      // completeTurn() also clears context.turnState so any further SDK content
+      // events that arrive before the iterable closes are no-ops.
+      const cancelledTurnId = context.interruptedTurnId;
+      if (context.turnState) {
+        yield* completeTurn(context, "cancelled", "Interrupted by user.");
+      }
+
+      // Immediate positive feedback: surface a "Stopped by user" timeline
+      // activity right away so the user can see the click landed without
+      // waiting for the SDK to honor interrupt(). The natural-completion
+      // path skips its own positive turn.aborted emission; the
+      // negative-evidence path still fires later if the SDK ignores
+      // interrupt() and finishes the turn anyway.
+      if (cancelledTurnId !== undefined) {
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "turn.aborted",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          turnId: cancelledTurnId,
+          payload: {
+            reason: "Stopped by user.",
+          },
+          providerRefs: nativeProviderRefs(context),
+        });
+        // Suppress further content/item/task events for the cancelled turn
+        // so the chat freezes the moment Stop is clicked, even when the SDK
+        // ignores interrupt() and keeps streaming.
+        discardingTurnIds.add(String(cancelledTurnId));
+      }
+
+      // Best-effort signal to the SDK so it can short-circuit upstream work.
+      // We do NOT propagate failures: the local cancellation above is what the
+      // user actually cares about; an SDK that ignores interrupt() must not
+      // make the Stop button look broken.
+      yield* Effect.ignore(
+        Effect.tryPromise({
+          try: () => context.query.interrupt(),
+          catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
+        }),
+      );
     },
   );
 

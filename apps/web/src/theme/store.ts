@@ -11,6 +11,14 @@ import { Schema } from "effect";
 import { ThemeSchema } from "@t3tools/contracts";
 import { resolveTheme } from "./engine";
 
+// Read directly from window.desktopBridge instead of going through readLocalApi(),
+// because readLocalApi() resolves the primary-environment rpc client, which is
+// not yet bootstrapped at module load time when the theme store is constructed.
+function readDesktopBridge(): Window["desktopBridge"] | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.desktopBridge ?? undefined;
+}
+
 const THEME_KEY = "t3code:theme";
 const CUSTOM_THEMES_KEY = "t3code:custom-themes:v1";
 const ACTIVE_THEME_KEY = "t3code:active-theme-id:v1";
@@ -136,6 +144,13 @@ export class ThemeStore {
   private preference: "light" | "dark" | "system";
   private lastSavedTheme: Theme;
   private persistTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Tracks whether the user (or any local mutation) has touched the store
+  // since construction. `hydrateFromDesktop` runs asynchronously after module
+  // load and races against early user input — without this guard the bridge's
+  // stored document silently overwrites a freshly-set preference. See the
+  // "survives a simulated reload" test in themeStore.persistence.browser.tsx
+  // for the read path; the race is on the write path.
+  private hasLocalMutation = false;
 
   constructor() {
     this.preference = loadStoredPreference();
@@ -221,6 +236,7 @@ export class ThemeStore {
       const theme = makeDefaultTheme(base);
       this.lastSavedTheme = structuredClone(theme);
       this.update(theme, false);
+      this.persistToDesktop();
     } else {
       // Custom theme: update base
       const theme = { ...this.snapshot.theme, base };
@@ -372,6 +388,7 @@ export class ThemeStore {
     saveActiveThemeId(theme.id);
     this.lastSavedTheme = structuredClone(theme);
     this.update(theme, false);
+    this.persistToDesktop();
   }
 
   duplicateTheme(name: string): void {
@@ -385,6 +402,7 @@ export class ThemeStore {
     saveActiveThemeId(current.id);
     this.lastSavedTheme = structuredClone(current);
     this.update(current, false);
+    this.persistToDesktop();
   }
 
   deleteTheme(): void {
@@ -397,6 +415,7 @@ export class ThemeStore {
     saveActiveThemeId(theme.id);
     this.lastSavedTheme = structuredClone(theme);
     this.update(theme, false);
+    this.persistToDesktop();
   }
 
   selectTheme(id: string): void {
@@ -406,6 +425,7 @@ export class ThemeStore {
       saveActiveThemeId(theme.id);
       this.lastSavedTheme = structuredClone(theme);
       this.update(theme, false);
+      this.persistToDesktop();
       return;
     }
     const found = this.savedThemes.find((t) => t.id === id);
@@ -413,6 +433,7 @@ export class ThemeStore {
       saveActiveThemeId(found.id);
       this.lastSavedTheme = structuredClone(found);
       this.update(found, false);
+      this.persistToDesktop();
     }
   }
 
@@ -436,6 +457,7 @@ export class ThemeStore {
     saveActiveThemeId(theme.id);
     this.lastSavedTheme = structuredClone(theme);
     this.update(theme, false);
+    this.persistToDesktop();
   }
 
   listThemes(): Array<{ id: string; name: string; base: ThemeBase }> {
@@ -446,7 +468,100 @@ export class ThemeStore {
     ];
   }
 
+  hydrateFromDesktop(): void {
+    const bridge = readDesktopBridge();
+    if (!bridge) return;
+
+    bridge
+      .getThemePreferences()
+      .then((data) => {
+        if (!data) return;
+
+        // Race guard: if the user mutated the store while the bridge round-trip
+        // was in flight, the in-memory state is the authority. Overwriting it
+        // with the bridge document would silently revert their just-made
+        // change. The pending `persistToDesktop` from that mutation will still
+        // win on disk because `setThemePreferences` is sequenced after this
+        // promise resolves anyway.
+        if (this.hasLocalMutation) return;
+
+        // Restore preference
+        if (
+          data.preference === "light" ||
+          data.preference === "dark" ||
+          data.preference === "system"
+        ) {
+          this.preference = data.preference;
+          try {
+            localStorage.setItem(THEME_KEY, data.preference);
+          } catch {
+            // localStorage unavailable
+          }
+        }
+
+        // Restore saved themes
+        if (Array.isArray(data.savedThemes) && data.savedThemes.length > 0) {
+          const decoded = data.savedThemes
+            .map((item: unknown) => {
+              try {
+                return Schema.decodeUnknownSync(ThemeSchema)(item);
+              } catch {
+                return null;
+              }
+            })
+            .filter((t: Theme | null): t is Theme => t !== null);
+          if (decoded.length > 0) {
+            this.savedThemes = decoded;
+            saveSavedThemes(this.savedThemes);
+          }
+        }
+
+        // Restore active theme
+        if (data.activeThemeId) {
+          const activeCustom = this.savedThemes.find((t) => t.id === data.activeThemeId);
+          if (activeCustom) {
+            saveActiveThemeId(activeCustom.id);
+            this.lastSavedTheme = structuredClone(activeCustom);
+            this.update(activeCustom, false);
+            return;
+          }
+        }
+
+        // No custom active theme — apply preference as default
+        const base = resolveBaseFromPreference(this.preference);
+        const theme = makeDefaultTheme(base);
+        if (data.activeThemeId) {
+          saveActiveThemeId(data.activeThemeId);
+        }
+        this.lastSavedTheme = structuredClone(theme);
+        this.update(theme, false);
+      })
+      .catch((err) => {
+        console.warn("[ThemeStore] Failed to hydrate from desktop:", err);
+      });
+  }
+
+  private persistToDesktop(): void {
+    // Any path that calls this is, by definition, a local mutation we want
+    // to win against a late hydrate response. Centralising the flag here
+    // means new mutating methods inherit the race guard for free.
+    this.hasLocalMutation = true;
+    const bridge = readDesktopBridge();
+    if (!bridge) return;
+
+    bridge
+      .setThemePreferences({
+        preference: this.preference,
+        activeThemeId: this.snapshot.theme.id,
+        savedThemes: this.savedThemes,
+      })
+      .catch((err) => {
+        console.warn("[ThemeStore] Failed to persist to desktop:", err);
+      });
+  }
+
   private schedulePersist(): void {
+    this.hasLocalMutation = true;
     if (this.persistTimeout) {
       clearTimeout(this.persistTimeout);
     }
@@ -457,7 +572,10 @@ export class ThemeStore {
 
   private persist(): void {
     const theme = this.snapshot.theme;
-    if (theme.id.startsWith("default-")) return;
+    if (theme.id.startsWith("default-")) {
+      this.persistToDesktop();
+      return;
+    }
 
     const idx = this.savedThemes.findIndex((t) => t.id === theme.id);
     if (idx >= 0) {
@@ -466,5 +584,6 @@ export class ThemeStore {
     saveSavedThemes(this.savedThemes);
     this.lastSavedTheme = structuredClone(theme);
     this.snapshot = this.buildSnapshot(theme, false);
+    this.persistToDesktop();
   }
 }

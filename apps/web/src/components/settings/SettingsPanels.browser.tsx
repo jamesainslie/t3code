@@ -170,6 +170,31 @@ vi.mock("../../environments/runtime", () => {
     useSavedEnvironmentRuntimeStore: (
       selector: (state: { byId: Record<string, never> }) => unknown,
     ) => selector({ byId: {} }),
+    // Connection log + project catalog exports must be present here too —
+    // RemoteEnvironmentsSettings.tsx and several sidebar components import
+    // them from this same barrel, and Vitest's mock replaces the entire
+    // module surface (named imports of missing symbols throw a SyntaxError
+    // at module link time).
+    connectionLog: () => undefined,
+    resetConnectionLogForTests: () => undefined,
+    useConnectionLogStore: (
+      selector: (state: { entries: ReadonlyArray<unknown>; clear: () => void }) => unknown,
+    ) => selector({ entries: [], clear: () => undefined }),
+    addOrReconnectSavedEnvironment: vi.fn(),
+    connectSavedEnvironment: vi.fn(),
+    reconnectSavedProject: vi.fn(),
+    hasSavedProjectRegistryHydrated: () => true,
+    listAllSavedProjectRecords: () => [],
+    listSavedProjectRecordsForEnvironment: () => [],
+    resetSavedProjectRegistryStoreForTests: () => undefined,
+    useSavedProjectRegistryStore: (
+      selector: (state: {
+        byKey: Record<string, never>;
+        keysByEnvironmentIdentityKey: Record<string, never>;
+      }) => unknown,
+    ) => selector({ byKey: {}, keysByEnvironmentIdentityKey: {} }),
+    waitForSavedProjectRegistryHydration: async () => undefined,
+    selectSidebarProjectEntries: () => [] as ReadonlyArray<unknown>,
   };
 });
 
@@ -342,6 +367,10 @@ const createDesktopBridgeStub = (overrides?: {
     sshStatus: vi.fn().mockResolvedValue({ connections: [] }),
     onSshStatusUpdate: vi.fn(),
     recordRemoteHost: vi.fn().mockResolvedValue(undefined),
+    getThemePreferences: vi.fn().mockResolvedValue(null),
+    setThemePreferences: vi.fn().mockResolvedValue(undefined),
+    getMarkdownPreferences: vi.fn().mockResolvedValue(null),
+    setMarkdownPreferences: vi.fn().mockResolvedValue(undefined),
   };
 };
 

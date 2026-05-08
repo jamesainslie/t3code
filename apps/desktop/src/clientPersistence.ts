@@ -1,14 +1,23 @@
+import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
 import * as Path from "node:path";
 
 import {
   ClientSettingsSchema,
+  THEME_PREFERENCE_MODES,
   makeRemoteIdentityKey,
   type ClientSettings,
+  type MarkdownPreferencesDocument,
   type PersistedSavedEnvironmentRecord,
+  type ThemePreferencesDocument,
 } from "@t3tools/contracts";
 import { Predicate } from "effect";
 import * as Schema from "effect/Schema";
+
+// Re-export the document types so callers (main.ts, tests) keep their existing
+// import sites — the runtime shape is unchanged, the source of truth simply
+// moved into the contracts package.
+export type { ThemePreferencesDocument, MarkdownPreferencesDocument };
 
 interface ClientSettingsDocument {
   readonly settings: ClientSettings;
@@ -41,7 +50,10 @@ function readJsonFile<T>(filePath: string): T | null {
 
 function writeJsonFile(filePath: string, value: unknown): void {
   const directory = Path.dirname(filePath);
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  // randomUUID avoids races between concurrent writers in the same millisecond
+  // (the previous `pid + Date.now()` suffix was not unique under burst writes
+  // and could collide if Electron ever spawned helper processes).
+  const tempPath = `${filePath}.${Crypto.randomUUID()}.tmp`;
   FS.mkdirSync(directory, { recursive: true });
   FS.writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   FS.renameSync(tempPath, filePath);
@@ -217,6 +229,60 @@ export function writeSavedEnvironmentSecret(input: {
     }),
   } satisfies SavedEnvironmentRegistryDocument);
   return found;
+}
+
+// ---------------------------------------------------------------------------
+// Theme preferences
+// ---------------------------------------------------------------------------
+
+const themePreferenceValues = new Set<string>(THEME_PREFERENCE_MODES);
+
+export function readThemePreferences(filePath: string): ThemePreferencesDocument | null {
+  const parsed = readJsonFile<Record<string, unknown>>(filePath);
+  if (!Predicate.isObject(parsed)) {
+    return null;
+  }
+
+  // The full Schema decode is intentionally NOT used here: older docs may
+  // contain custom themes that fail strict ThemeSchema decoding (e.g. shape
+  // drift between schema versions), but we still want the rest of the
+  // document to load. Validate the discriminating field, then preserve the
+  // rest of the object so the caller can re-decode opportunistically
+  // (ThemeStore.hydrateFromDesktop filters survivors via ThemeSchema).
+  if (typeof parsed.preference !== "string" || !themePreferenceValues.has(parsed.preference)) {
+    return null;
+  }
+
+  return {
+    preference: parsed.preference as ThemePreferencesDocument["preference"],
+    activeThemeId: typeof parsed.activeThemeId === "string" ? parsed.activeThemeId : null,
+    savedThemes: Array.isArray(parsed.savedThemes)
+      ? (parsed.savedThemes as ThemePreferencesDocument["savedThemes"])
+      : [],
+  };
+}
+
+export function writeThemePreferences(filePath: string, prefs: ThemePreferencesDocument): void {
+  writeJsonFile(filePath, prefs);
+}
+
+// ---------------------------------------------------------------------------
+// Markdown preferences
+// ---------------------------------------------------------------------------
+
+export function readMarkdownPreferences(filePath: string): MarkdownPreferencesDocument | null {
+  const parsed = readJsonFile<Record<string, unknown>>(filePath);
+  if (!Predicate.isObject(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+export function writeMarkdownPreferences(
+  filePath: string,
+  prefs: MarkdownPreferencesDocument,
+): void {
+  writeJsonFile(filePath, prefs);
 }
 
 export function removeSavedEnvironmentSecret(input: {

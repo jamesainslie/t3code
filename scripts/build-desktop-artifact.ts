@@ -4,7 +4,7 @@ import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
-import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
+import { BRAND_ASSET_PATHS, PUBLISH_ICON_OVERRIDES } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -602,11 +602,28 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   ];
 
   if (platform === "mac") {
-    buildConfig.mac = {
+    const macConfig: Record<string, unknown> = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      // Bun-compiled binaries produce Mach-O files that macOS codesign
+      // rejects with "invalid or unsupported format for signature". These
+      // SSH remote-session binaries are deployed to remote machines via SCP
+      // and never executed on the host, so skipping their signature is safe.
+      signIgnore: ["ssh-binaries"],
     };
+    // Unsigned builds: force ad-hoc signing ("-"). Without this, electron-builder
+    // emits a partial _CodeSignature that Finder rejects on copy with
+    // "CodeResources couldn't be copied to _CodeSignature". Ad-hoc signatures are
+    // also required for Apple Silicon to launch the app at all.
+    // timestamp=null skips Apple's TSA round-trip per signed file (~10 min on a
+    // full Electron bundle); cryptographic timestamps are only needed for
+    // notarization, which signed=false skips anyway.
+    if (!signed) {
+      macConfig.identity = "-";
+      macConfig.timestamp = null;
+    }
+    buildConfig.mac = macConfig;
   }
 
   if (platform === "linux") {
@@ -817,6 +834,28 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
+
+  // The server build (apps/server/scripts/cli.ts:applyDevelopmentIconOverrides)
+  // unconditionally bakes dev-blueprint icons into dist/client. For desktop
+  // artifacts we want production icons instead — otherwise the boot-shell
+  // splash and favicon both render the dev-branded icon, making a real release
+  // look like a dev build. Mirror what the publish flow does, but in-place
+  // against the staged client (no backup/restore needed).
+  const stageClientDir = path.join(stageAppDir, "apps/server/dist/client");
+  for (const override of PUBLISH_ICON_OVERRIDES) {
+    const sourcePath = path.join(repoRoot, override.sourceRelativePath);
+    const stageTargetPath = path.join(
+      stageClientDir,
+      override.targetRelativePath.replace(/^dist\/client\//, ""),
+    );
+    if (!(yield* fs.exists(sourcePath))) {
+      return yield* new BuildScriptError({
+        message: `Missing publish icon source: ${sourcePath}`,
+      });
+    }
+    yield* fs.copyFile(sourcePath, stageTargetPath);
+  }
+  yield* Effect.log("[desktop-artifact] Applied production icon overrides to staged client");
   // Referenced by the extraResources entry in createBuildConfig. electron-builder
   // resolves extraResources.from relative to the stage's package.json, so the
   // binaries must live at `<stageAppDir>/ssh-binaries/`.

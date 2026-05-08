@@ -24,3 +24,16 @@ __screenshots__/
 squashfs-root/
 .worktrees/
 dist/
+
+# Stray Vite chunks accidentally written to the repo root by misconfigured
+# build commands. The intended outputs live under apps/*/dist/ which is
+# already covered above.
+/index-*.js
+/assets/
+
+# Claude/agent worktree metadata (per-agent scratch directories created by
+# the worktrunk skill).
+.claude/worktrees/
+
+# Playwright MCP DOM snapshots — generated test artifacts, not source.
+.playwright-mcp/

@@ -20,6 +20,8 @@ const emitAskQuestion = process.env.T3_ACP_EMIT_ASK_QUESTION === "1";
 const failSetConfigOption = process.env.T3_ACP_FAIL_SET_CONFIG_OPTION === "1";
 const exitOnSetConfigOption = process.env.T3_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
 const promptResponseText = process.env.T3_ACP_PROMPT_RESPONSE_TEXT;
+const ignoreCancel = process.env.T3_ACP_IGNORE_CANCEL === "1";
+const promptDelayMs = Number.parseInt(process.env.T3_ACP_PROMPT_DELAY_MS ?? "0", 10);
 const sessionId = "mock-session-1";
 
 let currentModeId = "ask";
@@ -287,6 +289,9 @@ const program = Effect.gen(function* () {
 
   yield* agent.handleCancel(({ sessionId }) =>
     Effect.sync(() => {
+      if (ignoreCancel) {
+        return;
+      }
       cancelledSessions.add(String(sessionId ?? "mock-session-1"));
     }),
   );
@@ -294,6 +299,10 @@ const program = Effect.gen(function* () {
   yield* agent.handlePrompt((request) =>
     Effect.gen(function* () {
       const requestedSessionId = String(request.sessionId ?? sessionId);
+
+      if (promptDelayMs > 0) {
+        yield* Effect.sleep(`${promptDelayMs} millis`);
+      }
 
       if (emitInterleavedAssistantToolCalls) {
         const toolCallId = "tool-call-1";
@@ -511,7 +520,8 @@ const program = Effect.gen(function* () {
         },
       });
 
-      return { stopReason: "end_turn" };
+      const cancelled = cancelledSessions.delete(requestedSessionId);
+      return { stopReason: cancelled ? "cancelled" : "end_turn" };
     }),
   );
 

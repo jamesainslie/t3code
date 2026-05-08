@@ -77,4 +77,111 @@ describe("clientPersistenceStorage", () => {
       ],
     });
   });
+
+  describe("theme preferences (browser fallback)", () => {
+    it("returns null when no theme keys are set in localStorage", async () => {
+      getTestWindow();
+      const { readBrowserThemePreferences } = await import("./clientPersistenceStorage");
+
+      expect(readBrowserThemePreferences()).toBeNull();
+    });
+
+    it("returns null when stored preference is not a recognized value", async () => {
+      const testWindow = getTestWindow();
+      testWindow.localStorage.setItem("t3code:theme", "rainbow");
+
+      const { readBrowserThemePreferences } = await import("./clientPersistenceStorage");
+
+      expect(readBrowserThemePreferences()).toBeNull();
+    });
+
+    it("round-trips a theme preference document through browser localStorage", async () => {
+      const testWindow = getTestWindow();
+      const { readBrowserThemePreferences, writeBrowserThemePreferences } =
+        await import("./clientPersistenceStorage");
+
+      writeBrowserThemePreferences({
+        preference: "dark",
+        activeThemeId: "monokai",
+        savedThemes: [{ id: "monokai", name: "Monokai" }],
+      });
+
+      expect(readBrowserThemePreferences()).toEqual({
+        preference: "dark",
+        activeThemeId: "monokai",
+        savedThemes: [{ id: "monokai", name: "Monokai" }],
+      });
+      expect(testWindow.localStorage.getItem("t3code:theme")).toBe("dark");
+      expect(testWindow.localStorage.getItem("t3code:active-theme-id:v1")).toBe("monokai");
+      expect(testWindow.localStorage.getItem("t3code:custom-themes:v1")).toBe(
+        JSON.stringify([{ id: "monokai", name: "Monokai" }]),
+      );
+    });
+
+    it("clears the active theme key when activeThemeId is null", async () => {
+      const testWindow = getTestWindow();
+      testWindow.localStorage.setItem("t3code:active-theme-id:v1", "stale");
+      const { writeBrowserThemePreferences } = await import("./clientPersistenceStorage");
+
+      writeBrowserThemePreferences({
+        preference: "system",
+        activeThemeId: null,
+        savedThemes: [],
+      });
+
+      expect(testWindow.localStorage.getItem("t3code:active-theme-id:v1")).toBeNull();
+    });
+  });
+
+  describe("markdown preferences (browser fallback)", () => {
+    it("returns null when no markdown preferences are stored", async () => {
+      getTestWindow();
+      const { readBrowserMarkdownPreferences } = await import("./clientPersistenceStorage");
+
+      expect(readBrowserMarkdownPreferences()).toBeNull();
+    });
+
+    it("round-trips an arbitrary markdown preferences document under the canonical T3StorageAdapter key", async () => {
+      const testWindow = getTestWindow();
+      const {
+        MARKDOWN_PREFERENCES_STORAGE_KEY,
+        readBrowserMarkdownPreferences,
+        writeBrowserMarkdownPreferences,
+      } = await import("./clientPersistenceStorage");
+
+      writeBrowserMarkdownPreferences({
+        theme: "github-dark",
+        lineNumbers: true,
+        tocPosition: "right",
+      });
+
+      expect(readBrowserMarkdownPreferences()).toEqual({
+        theme: "github-dark",
+        lineNumbers: true,
+        tocPosition: "right",
+      });
+      // Renderer-side consumers (MdreviewRenderer, MarkdownSettings via
+      // T3StorageAdapter) read from `t3code:mdreview:preferences`. The
+      // browser fallback MUST write to that exact key or the two halves of
+      // the system will silently diverge — the failure mode is "settings
+      // vanish on reload" and is hard to spot without an integration test.
+      expect(MARKDOWN_PREFERENCES_STORAGE_KEY).toBe("t3code:mdreview:preferences");
+      expect(testWindow.localStorage.getItem("t3code:mdreview:preferences")).toBe(
+        JSON.stringify({
+          theme: "github-dark",
+          lineNumbers: true,
+          tocPosition: "right",
+        }),
+      );
+      expect(testWindow.localStorage.getItem("t3code:mdreview:")).toBeNull();
+    });
+
+    it("returns null when stored markdown preferences are corrupt JSON", async () => {
+      const testWindow = getTestWindow();
+      testWindow.localStorage.setItem("t3code:mdreview:preferences", "{not-json");
+      const { readBrowserMarkdownPreferences } = await import("./clientPersistenceStorage");
+
+      expect(readBrowserMarkdownPreferences()).toBeNull();
+    });
+  });
 });
