@@ -49,7 +49,16 @@ export function toPersistedSavedEnvironmentRecord(
     wsBaseUrl: record.wsBaseUrl ?? "",
     createdAt: record.createdAt,
     lastConnectedAt: record.lastConnectedAt,
-    ...(record.sshConfig ? { sshConfig: record.sshConfig } : {}),
+    // The flat host/user/port fields are canonical on SavedRemoteEnvironment;
+    // persisting them as sshConfig is what lets migratePersistedRecord restore
+    // the identity instead of falling back to unknown@host:22.
+    sshConfig: {
+      host: record.host,
+      user: record.user,
+      port: record.port,
+      projectId: record.projectId,
+      workspaceRoot: record.workspaceRoot,
+    },
   };
 }
 
