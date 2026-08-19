@@ -407,6 +407,11 @@ jobs:
   build-ssh-binaries:
     name: Build SSH server binaries
     needs: preflight
+    # The explicit condition matters: the default success() inspects the
+    # whole transitive needs chain, and check_changes is skipped on
+    # non-schedule events, which silently skips this job (and with it every
+    # build and the release publish) on workflow_dispatch and tag pushes.
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ubuntu-24.04
     # This job now gates the platform build matrix. It has intermittently
     # died to runner shutdown signals during bun install; a tight timeout
