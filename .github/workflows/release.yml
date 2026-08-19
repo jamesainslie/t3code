@@ -171,8 +171,8 @@ jobs:
 
   build:
     name: Build ${{ matrix.label }}
-    needs: preflight
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
+    needs: [preflight, build-ssh-binaries]
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build-ssh-binaries.result == 'success' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -243,6 +243,21 @@ jobs:
                Write-Error "Visual Studio Installer failed with exit code $code"
                exit $code
              }
+
+      # Reuse the Linux-built ssh binaries: bun's cross-target download is
+      # unreliable on Windows runners, and rebuilding per platform is wasted
+      # work. build-desktop-artifact.ts skips its own build when the full set
+      # is already present. upload-artifact drops permission bits, so restore
+      # the executable flags after download.
+      - name: Download prebuilt SSH binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: ssh-binaries
+          path: dist/ssh-binaries
+
+      - name: Restore SSH binary permissions
+        shell: bash
+        run: chmod +x dist/ssh-binaries/t3-server-* dist/ssh-binaries/tmux-*
 
       - name: Build desktop artifact
         shell: bash
@@ -393,6 +408,10 @@ jobs:
     name: Build SSH server binaries
     needs: preflight
     runs-on: ubuntu-24.04
+    # This job now gates the platform build matrix. It has intermittently
+    # died to runner shutdown signals during bun install; a tight timeout
+    # surfaces that quickly instead of hanging the whole release.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v6
