@@ -8,11 +8,16 @@ work laptop), without running from a source checkout.
 1. Open the fork's [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
 2. Download the DMG for your architecture from the newest release in your
    chosen channel (Apple Silicon: `*-arm64.dmg`).
-3. Drag the app to Applications and launch it. Builds are Developer ID signed
-   and notarized, so Gatekeeper accepts them without workarounds.
-4. Done. The app checks GitHub Releases for updates in the background; when
-   one is available a rocket button appears. Click once to download, again to
-   restart into the new version. No token is needed (the repo is public).
+3. Drag the app to Applications and launch it. Fork builds are ad-hoc signed
+   (no Apple secrets configured), so Gatekeeper blocks the first launch:
+   right-click the app, choose Open, and confirm; or clear quarantine with
+   `xattr -dc "/Applications/T3 Code.app"`. Configure the Apple signing
+   secrets from `docs/release.md` section 2 to get signed, notarized builds.
+4. Updates: the app checks GitHub Releases in the background and shows a
+   rocket button when one is available. No token is needed (the repo is
+   public). Caveat: macOS refuses to install updates into an ad-hoc signed
+   app, so until signing secrets are configured, update by downloading the
+   new DMG manually.
 
 ## Choosing a channel
 
@@ -35,6 +40,17 @@ git push origin v0.0.34
 `.github/workflows/release.yml` runs the quality gates, builds all platform
 artifacts, and publishes the release; installed apps on the stable channel
 pick it up on their next update check.
+
+Fork operational notes:
+
+- The fork runs on GitHub-hosted runners (the upstream workflow uses paid
+  Blacksmith runners the fork does not have; the labels are swapped in the
+  fork's workflow files with the originals kept as comments).
+- The npm CLI publish job is skipped on forks; only upstream owns the `t3`
+  package.
+- GitHub auto-disables scheduled workflows after roughly 60 days without
+  repo activity. If nightlies stop, re-enable with
+  `gh workflow enable release.yml`.
 
 ## Other platforms
 
