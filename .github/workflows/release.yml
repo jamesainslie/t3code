@@ -456,7 +456,10 @@ jobs:
     # non-schedule events, which silently skips this job (and with it every
     # build and the release publish) on workflow_dispatch and tag pushes.
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
-    runs-on: ubuntu-24.04
+    # ubuntu-22.04 deliberately: bun install has repeatedly taken down the
+    # 24.04 runner VM in this job (shutdown signal ~70s in); the older kernel
+    # sidesteps whatever io path triggers it.
+    runs-on: ubuntu-22.04
     # This job now gates the platform build matrix. It has intermittently
     # died to runner shutdown signals during bun install; a tight timeout
     # surfaces that quickly instead of hanging the whole release.
@@ -479,7 +482,7 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if timeout 240 bun install --frozen-lockfile --filter=t3; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
