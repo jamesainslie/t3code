@@ -799,14 +799,27 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         shell: process.platform === "win32",
       })`bun run build:desktop`,
     );
-    yield* Effect.log("[desktop-artifact] Building ssh remote-session binaries...");
-    yield* runCommand(
-      ChildProcess.make({
-        cwd: repoRoot,
-        ...commandOutputOptions(options.verbose),
-        shell: process.platform === "win32",
-      })`bash scripts/build-ssh-binaries.sh dist/ssh-binaries`,
+    // CI builds the ssh binaries once on Linux and provides them as an
+    // artifact; cross-compiling per platform is redundant and bun's
+    // cross-target download is unreliable on the Windows runners. Only build
+    // locally when the full set is not already present.
+    const sshBinaryPresence = yield* Effect.forEach(requiredSshBinaryFiles, (file) =>
+      fs.exists(path.join(distDirs.sshBinaries, file)),
     );
+    if (sshBinaryPresence.every(Boolean)) {
+      yield* Effect.log(
+        "[desktop-artifact] Reusing prebuilt ssh remote-session binaries in dist/ssh-binaries.",
+      );
+    } else {
+      yield* Effect.log("[desktop-artifact] Building ssh remote-session binaries...");
+      yield* runCommand(
+        ChildProcess.make({
+          cwd: repoRoot,
+          ...commandOutputOptions(options.verbose),
+          shell: process.platform === "win32",
+        })`bash scripts/build-ssh-binaries.sh dist/ssh-binaries`,
+      );
+    }
   }
 
   for (const [label, dir] of Object.entries(distDirs)) {
