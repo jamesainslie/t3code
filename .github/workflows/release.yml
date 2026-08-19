@@ -110,7 +110,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
@@ -210,7 +215,10 @@ jobs:
             target: dmg
             arch: x64
           - label: Linux x64
-            runner: ubuntu-24.04 # blacksmith-32vcpu-ubuntu-2404
+            # 22.04 deliberately: bun install repeatedly took down 24.04
+            # runner VMs (shutdown signal ~70s in); the older image avoids it
+            # and gives AppImages a broader glibc baseline.
+            runner: ubuntu-22.04 # blacksmith-32vcpu-ubuntu-2404
             platform: linux
             target: AppImage
             arch: x64
@@ -248,7 +256,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
@@ -431,7 +444,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
@@ -482,7 +500,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile --filter=t3; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile --filter=t3; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
@@ -544,7 +567,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
@@ -704,7 +732,12 @@ jobs:
         # of losing the whole run.
         run: |
           for attempt in 1 2 3; do
-            if timeout 240 bun install --frozen-lockfile; then
+            if command -v timeout >/dev/null 2>&1; then
+              bounded="timeout 240"
+            else
+              bounded=""
+            fi
+            if $bounded bun install --frozen-lockfile; then
               exit 0
             fi
             echo "bun install attempt ${attempt} failed or hung; retrying" >&2
