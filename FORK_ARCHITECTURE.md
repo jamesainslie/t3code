@@ -67,6 +67,12 @@ Extract the state machine or UI subtree into `apps/web/src/components/sidebar/<f
 
 Prefer pure functions exported alongside the React hook so behavior can be tested without `@testing-library/react`.
 
+### Adding fork-only database schema
+
+Fork schema changes must NEVER join the numbered migration chain in `apps/server/src/persistence/Migrations.ts`. The migrator only runs ids greater than the latest recorded id, so a fork-numbered migration either collides with an upstream id (databases previously touched by upstream record that id and silently skip the fork DDL, crashing later on missing columns; this bricked desktop startup on machines that had run upstream builds) or, if numbered above upstream, becomes the recorded maximum and permanently blocks future upstream migrations.
+
+Instead, add idempotent DDL to `apps/server/src/persistence/fork/ensureForkSchema.ts` (check `pragma_table_info` before altering). It runs after every full migration chain via a single composition point in `runMigrations`.
+
 ### Adding a fork-only chat rendering feature
 
 `apps/web/src/components/mermaid/` is the prior art: the whole chat mermaid renderer (client wrapper, streaming settle guard, zoom overlay, tests) lives in the fork-only module, and upstream-owned `ChatMarkdown.tsx` carries only a single lazy import. Pure decision logic sits in `*.logic.ts` files with colocated tests.
