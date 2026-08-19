@@ -1,10 +1,17 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, Maximize2Icon } from "lucide-react";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { MermaidZoomOverlay } from "./MermaidZoomOverlay";
+import {
+  MERMAID_STREAM_SETTLE_MS,
+  type MermaidTab,
+  resolveMermaidView,
+  summarizeMermaidError,
+} from "./mermaidCodeBlock.logic";
+import { useSettledValue } from "./useSettledValue";
+import "./mermaid.css";
 import type { DiffThemeName } from "../../lib/diffRendering";
 import { SuspenseShikiCodeBlock } from "../ChatMarkdown";
-
-type TabId = "preview" | "source";
 
 interface MermaidCodeBlockProps {
   code: string;
@@ -19,21 +26,27 @@ export function MermaidCodeBlock({
   diffThemeName,
   isStreaming,
 }: MermaidCodeBlockProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("preview");
-  const [diagramFailed, setDiagramFailed] = useState(false);
+  const [activeTab, setActiveTab] = useState<MermaidTab>("preview");
+  const [failure, setFailure] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // When diagram fails to render, auto-switch to source tab.
-  const handleDiagramError = useCallback(() => {
-    setDiagramFailed(true);
-    setActiveTab("source");
+  // While streaming, only a source that has stopped changing for a quiet
+  // period is handed to mermaid — a still-open fence keeps mutating every
+  // token, so truncated diagrams are never rendered.
+  const settledCode = useSettledValue(code, isStreaming ? MERMAID_STREAM_SETTLE_MS : 0);
+  const isSettled = settledCode === code;
+
+  const handleDiagramError = useCallback((message: string) => {
+    setFailure(summarizeMermaidError(message));
+    setExpanded(false);
   }, []);
 
-  // Reset error state when code changes (new code might be valid).
+  // New source may be valid again (streaming appended tokens, or the message
+  // was regenerated) — clear the failure and retry.
   useEffect(() => {
-    setDiagramFailed(false);
-    setActiveTab("preview");
+    setFailure(null);
   }, [code]);
 
   const handleCopy = useCallback(() => {
@@ -65,6 +78,10 @@ export function MermaidCodeBlock({
     [],
   );
 
+  const failed = failure != null;
+  const view = resolveMermaidView({ activeTab, failed, isSettled });
+  const displayTab: MermaidTab = view === "diagram" ? "preview" : "source";
+
   return (
     <div className="chat-markdown-codeblock leading-snug">
       <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
@@ -72,21 +89,22 @@ export function MermaidCodeBlock({
           <button
             type="button"
             className={`px-2 py-0.5 text-xs transition-colors ${
-              activeTab === "preview"
+              displayTab === "preview"
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground/70"
             }`}
             onClick={() => {
-              if (!diagramFailed) setActiveTab("preview");
+              if (!failed) setActiveTab("preview");
             }}
-            disabled={diagramFailed}
+            disabled={failed}
+            title={failed ? `Diagram failed: ${failure}` : undefined}
           >
             Preview
           </button>
           <button
             type="button"
             className={`px-2 py-0.5 text-xs transition-colors ${
-              activeTab === "source"
+              displayTab === "source"
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground/70"
             }`}
@@ -95,9 +113,20 @@ export function MermaidCodeBlock({
             Source
           </button>
         </div>
+        {view === "diagram" ? (
+          <button
+            type="button"
+            className="mermaid-toolbar-button"
+            onClick={() => setExpanded(true)}
+            title="Expand diagram"
+            aria-label="Expand diagram"
+          >
+            <Maximize2Icon className="size-3" />
+          </button>
+        ) : null}
         <button
           type="button"
-          className="chat-markdown-copy-button relative"
+          className="mermaid-toolbar-button"
           onClick={handleCopy}
           title={copied ? "Copied" : "Copy code"}
           aria-label={copied ? "Copied" : "Copy code"}
@@ -106,24 +135,35 @@ export function MermaidCodeBlock({
         </button>
       </div>
 
-      {activeTab === "preview" ? (
+      {view === "diagram" ? (
         <MermaidDiagram source={code} theme={theme} onError={handleDiagramError} />
       ) : (
-        <Suspense
-          fallback={
-            <pre>
-              <code>{code}</code>
-            </pre>
-          }
-        >
-          <SuspenseShikiCodeBlock
-            className="language-mermaid"
-            code={code}
-            themeName={diffThemeName}
-            isStreaming={isStreaming}
-          />
-        </Suspense>
+        <>
+          {failed ? (
+            <div className="px-3 pt-2 text-xs text-destructive">
+              Diagram failed to render: {failure}
+            </div>
+          ) : null}
+          <Suspense
+            fallback={
+              <pre>
+                <code>{code}</code>
+              </pre>
+            }
+          >
+            <SuspenseShikiCodeBlock
+              className="language-mermaid"
+              code={code}
+              themeName={diffThemeName}
+              isStreaming={isStreaming}
+            />
+          </Suspense>
+        </>
       )}
+
+      {expanded && view === "diagram" ? (
+        <MermaidZoomOverlay source={code} theme={theme} onClose={() => setExpanded(false)} />
+      ) : null}
     </div>
   );
 }

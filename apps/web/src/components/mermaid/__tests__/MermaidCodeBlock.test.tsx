@@ -32,20 +32,9 @@ const DEFAULT_PROPS = {
 describe("MermaidCodeBlock", () => {
   it("renders the Preview tab as active by default", () => {
     const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    // The Preview button should have the foreground text color (active state).
     expect(html).toContain("Preview");
     expect(html).toContain("Source");
-    // The wrapper should have the chat-markdown-codeblock class.
     expect(html).toContain("chat-markdown-codeblock");
-  });
-
-  it("renders both Preview and Source tab buttons", () => {
-    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    // Both tab buttons should be present.
-    const previewCount = (html.match(/Preview/g) ?? []).length;
-    const sourceCount = (html.match(/Source/g) ?? []).length;
-    expect(previewCount).toBeGreaterThanOrEqual(1);
-    expect(sourceCount).toBeGreaterThanOrEqual(1);
   });
 
   it("renders a copy button with 'Copy code' aria-label", () => {
@@ -53,37 +42,25 @@ describe("MermaidCodeBlock", () => {
     expect(html).toContain('aria-label="Copy code"');
   });
 
-  it("renders the copy button with the chat-markdown-copy-button class", () => {
+  it("renders the diagram pending frame in preview mode when not streaming", () => {
     const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    expect(html).toContain("chat-markdown-copy-button");
-  });
-
-  it("renders the MermaidDiagram in preview mode (initial SSR is empty)", () => {
-    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    // MermaidDiagram returns null in SSR (no effects), so no SVG content.
-    // But the wrapper structure and tabs should still be there.
-    expect(html).toContain("chat-markdown-codeblock");
-    expect(html).toContain("Preview");
-  });
-
-  it("does not render the Shiki source block in preview mode", () => {
-    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    // In preview mode, the SuspenseShikiCodeBlock mock should not be rendered.
+    // MermaidDiagram renders its pending frame in SSR (no effects).
+    expect(html).toContain("Rendering diagram");
     expect(html).not.toContain('data-testid="shiki-block"');
   });
 
-  it("does not render the preview button as disabled initially", () => {
+  it("offers an expand control while the diagram view is active", () => {
     const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    // The Preview button should not have the disabled attribute initially
-    // because the diagram hasn't failed yet.
-    // Check that the text-foreground class (active state) is applied to Preview.
-    expect(html).toContain("text-foreground");
+    expect(html).toContain('aria-label="Expand diagram"');
   });
 
-  it("uses the correct wrapper class from the codeblock pattern", () => {
-    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} />);
-    expect(html).toContain("chat-markdown-codeblock");
-    expect(html).toContain("leading-snug");
+  it("shows the source view while streaming until the code settles", () => {
+    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} isStreaming={true} />);
+    // A streamed source starts unsettled, so mermaid must not be attempted
+    // and the highlighted source is shown instead.
+    expect(html).toContain('data-testid="shiki-block"');
+    expect(html).not.toContain("Rendering diagram");
+    expect(html).not.toContain('aria-label="Expand diagram"');
   });
 
   it("renders with dark theme props without errors", () => {
@@ -92,10 +69,5 @@ describe("MermaidCodeBlock", () => {
     );
     expect(html).toContain("Preview");
     expect(html).toContain("Source");
-  });
-
-  it("renders with isStreaming=true without errors", () => {
-    const html = renderToStaticMarkup(<MermaidCodeBlock {...DEFAULT_PROPS} isStreaming={true} />);
-    expect(html).toContain("chat-markdown-codeblock");
   });
 });
