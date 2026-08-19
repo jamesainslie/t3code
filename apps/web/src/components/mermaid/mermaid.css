@@ -1,0 +1,60 @@
+/*
+ * Fork-only styles for the chat mermaid module.
+ *
+ * .chat-markdown-copy-button (index.css) is absolutely pinned to the
+ * codeblock's top-right corner, so two of them stack and intercept each
+ * other's clicks. These buttons mirror its look but participate in the
+ * toolbar flex row.
+ */
+.chat-markdown .chat-markdown-codeblock .mermaid-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.chat-markdown .chat-markdown-codeblock:hover .mermaid-toolbar-button,
+.chat-markdown .chat-markdown-codeblock:focus-within .mermaid-toolbar-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-markdown .chat-markdown-codeblock .mermaid-toolbar-button:hover {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
+}
+
+/* The fullscreen overlay lives outside .chat-markdown, so it needs its own
+ * always-visible variant of the same button. */
+.mermaid-overlay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.mermaid-overlay-button:hover {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
+}
