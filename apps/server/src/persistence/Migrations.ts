@@ -38,7 +38,7 @@ import Migration0022 from "./Migrations/022_AuthSessionLastConnectedAt.ts";
 import Migration0023 from "./Migrations/023_ProjectionThreadShellSummary.ts";
 import Migration0024 from "./Migrations/024_BackfillProjectionThreadShellSummary.ts";
 import Migration0025 from "./Migrations/025_CleanupInvalidProjectionPendingApprovals.ts";
-import Migration0026 from "./Migrations/026_ProjectionProjectsRemoteHost.ts";
+import { ensureForkSchema } from "./fork/ensureForkSchema.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -76,7 +76,6 @@ export const migrationEntries = [
   [23, "ProjectionThreadShellSummary", Migration0023],
   [24, "BackfillProjectionThreadShellSummary", Migration0024],
   [25, "CleanupInvalidProjectionPendingApprovals", Migration0025],
-  [26, "ProjectionProjectsRemoteHost", Migration0026],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>
@@ -117,6 +116,12 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       : `Running migrations 1 through ${toMigrationInclusive}...`,
   );
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
+  // Fork-only schema is applied outside the numbered chain (see
+  // fork/ensureForkSchema.ts for why), only on full-chain runs so partial
+  // replays in migration tests observe exact upstream schema.
+  if (toMigrationInclusive === undefined) {
+    yield* ensureForkSchema();
+  }
   yield* Effect.log("Migrations ran successfully").pipe(
     Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
   );
