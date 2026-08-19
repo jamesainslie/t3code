@@ -45,7 +45,7 @@ pick it up on their next update check.
 ## Remote workflows
 
 The desktop app on the laptop can also connect to a T3 Code server running
-elsewhere (see `REMOTE.md`) — deploying the desktop app and pointing it at a
+elsewhere (see `REMOTE.md`); deploying the desktop app and pointing it at a
 remote environment are independent choices.
 
 ## Corporate network note
@@ -58,5 +58,5 @@ checkout, not for the packaged app.
 
 ## Related docs
 
-- `docs/release.md` — the full release pipeline and signing setup
-- `docs/desktop-build-runbook.md` — building artifacts locally
+- `docs/release.md`: the full release pipeline and signing setup
+- `docs/desktop-build-runbook.md`: building artifacts locally

@@ -7,7 +7,8 @@ This document covers the unified release workflow for stable and nightly desktop
 - Workflow: `.github/workflows/release.yml`
 - Triggers:
   - push tag matching `v*.*.*` for stable releases
-  - scheduled nightly at `09:00 UTC`
+  - scheduled every 3 hours (skipped when `main` has not changed since the
+    previous nightly)
   - manual `workflow_dispatch` for either channel
 - Runs quality gates first: lint, typecheck, test.
 - Builds four artifacts in parallel for both channels:
@@ -30,11 +31,12 @@ This document covers the unified release workflow for stable and nightly desktop
 
 - Workflow: `.github/workflows/release.yml`
 - Triggers:
-  - scheduled every day at `09:00 UTC`
+  - scheduled every 3 hours (skipped when `main` has not changed since the
+    previous nightly)
   - manual `workflow_dispatch` with `channel=nightly`
 - Runs the same desktop quality gates and artifact matrix as the tagged release flow.
 - Publishes a GitHub prerelease only:
-  - tag format: `nightly-vX.Y.Z-nightly.YYYYMMDD.<run_number>`
+  - tag format: `vX.Y.Z-nightly.YYYYMMDD.<run_number>`
   - release name includes the short commit SHA
   - `make_latest` is always `false`
 - Uses the next stable patch version as the nightly base. For example, `0.0.17` produces nightlies on `0.0.18-nightly.*`.
@@ -53,7 +55,8 @@ This document covers the unified release workflow for stable and nightly desktop
 - Repository slug source:
   - `T3CODE_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
-- Temporary private-repo auth workaround:
+- Temporary private-repo auth workaround (not needed while the repo is
+  public; see `docs/deploying.md`):
   - set `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
   - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
 - Required release assets for updater:
