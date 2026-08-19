@@ -67,6 +67,12 @@ Extract the state machine or UI subtree into `apps/web/src/components/sidebar/<f
 
 Prefer pure functions exported alongside the React hook so behavior can be tested without `@testing-library/react`.
 
+### Adding a fork-only chat rendering feature
+
+`apps/web/src/components/mermaid/` is the prior art: the whole chat mermaid renderer (client wrapper, streaming settle guard, zoom overlay, tests) lives in the fork-only module, and upstream-owned `ChatMarkdown.tsx` carries only a single lazy import. Pure decision logic sits in `*.logic.ts` files with colocated tests.
+
+The same isolation applies to styling. Rules the feature needs go in a module-local stylesheet imported by the component (`components/mermaid/mermaid.css`), not into upstream `index.css`. Note that upstream `index.css` rules are unlayered and therefore beat Tailwind utility classes regardless of specificity, so overriding an upstream rule with a utility like `relative` silently fails; a fork-local class avoids the fight entirely.
+
 ## Conflict surface baseline
 
 Measured against upstream `pingdotgg/t3code@main` (merge-base at the time of Phase 4):
@@ -93,7 +99,7 @@ Some upstream edits genuinely belong in the upstream file — refactors, renames
 
 `.github/workflows/fork-boundary-check.yml` posts a reminder comment on any PR that modifies one of the upstream hotspots. It is a nudge, not a block — the edit may be legitimate. If the CI comment makes sense for the PR, link to the suggested extension file in the response.
 
-`.github/CODEOWNERS` routes fork-only paths (`fork/`, `handlers/fork.ts`, `components/sidebar/`) through the fork owner.
+`.github/CODEOWNERS` routes fork-only paths (`fork/`, `handlers/fork.ts`, `components/sidebar/`, `components/mermaid/`) through the fork owner.
 
 ## Maintenance
 

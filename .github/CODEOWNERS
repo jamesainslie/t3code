@@ -4,7 +4,7 @@
 # fork-only code paths. Upstream pingdotgg/t3code does not ship a CODEOWNERS,
 # so this file should rarely create merge conflicts during syncs.
 #
-# Fork architecture doc: docs/fork-architecture.md
+# Fork architecture doc: FORK_ARCHITECTURE.md (repo root)
 
 # Fork-only contract schemas — extend upstream types without editing them
 /packages/contracts/src/fork/                    @jamesainslie
@@ -14,6 +14,9 @@
 
 # Fork-only sidebar extractions — reduce Sidebar.tsx merge surface
 /apps/web/src/components/sidebar/                @jamesainslie
+
+# Fork-only chat mermaid renderer, lazy-imported from ChatMarkdown.tsx
+/apps/web/src/components/mermaid/                @jamesainslie
 
 # Fork infrastructure and docs
 /.github/workflows/fork-*.yml                    @jamesainslie
