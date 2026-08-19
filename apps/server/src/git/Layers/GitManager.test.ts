@@ -32,6 +32,17 @@ import {
   type ProjectSetupScriptRunnerShape,
 } from "../../project/Services/ProjectSetupScriptRunner.ts";
 
+// These tests set remote urls to github.com addresses so URL-shape parsing is
+// exercised, while real transfers target local bare repos via pushurl. Without
+// the transport allowlist, git happily contacts github.com for the fetch side
+// (or blocks on a credential prompt), which is why the suite intermittently
+// crawled or timed out both locally and in CI. Restricting git to the file
+// protocol makes any accidental network touch fail instantly into the code's
+// graceful fallback paths, and inherits into every git process the manager
+// spawns.
+process.env.GIT_ALLOW_PROTOCOL = "file";
+process.env.GIT_TERMINAL_PROMPT = "0";
+
 interface FakeGhScenario {
   prListSequence?: string[];
   prListByHeadSelector?: Record<string, string>;
