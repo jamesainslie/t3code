@@ -1312,13 +1312,38 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("rejects reusing the same bootstrap credential after it has been exchanged", () =>
+  // The desktop bootstrap credential became a reusable grant in c732aab17 so
+  // desktop reloads and extra windows can re-exchange it within its TTL.
+  it.effect("allows re-exchanging the desktop bootstrap credential", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 
       const first = yield* bootstrapBrowserSession();
       const second = yield* bootstrapBrowserSession();
 
+      assert.equal(first.response.status, 200);
+      assert.equal(second.response.status, 200);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects reusing a one-time pairing credential after it has been exchanged", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const ownerCookie = yield* getAuthenticatedSessionCookieHeader();
+      const pairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const pairingBody = (yield* pairingResponse.json) as {
+        readonly credential: string;
+      };
+
+      const first = yield* bootstrapBrowserSession(pairingBody.credential);
+      const second = yield* bootstrapBrowserSession(pairingBody.credential);
+
+      assert.equal(pairingResponse.status, 200);
       assert.equal(first.response.status, 200);
       assert.equal(second.response.status, 401);
       assert.equal(
