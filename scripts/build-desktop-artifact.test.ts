@@ -7,6 +7,7 @@ import {
   resolveDesktopBuildIconAssets,
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
+  resolveMacSignIgnore,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
 } from "./build-desktop-artifact.ts";
@@ -16,6 +17,37 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it("resolves the dedicated nightly updater channel from nightly versions", () => {
     assert.equal(resolveDesktopUpdateChannel("0.0.17-nightly.20260413.42"), "nightly");
     assert.equal(resolveDesktopUpdateChannel("0.0.17"), "latest");
+  });
+
+  it("signs darwin ssh binaries on signed builds but never the linux ELF files", () => {
+    // Notarization validates every Mach-O in the archive, so the darwin
+    // t3-server binaries must not be excluded from signing. codesign cannot
+    // process the linux ELF files at all, so those stay ignored.
+    const signedIgnore = resolveMacSignIgnore(true);
+    assert.isFalse(
+      signedIgnore.some((pattern) => "ssh-binaries/t3-server-darwin-arm64".match(pattern)),
+    );
+    assert.isFalse(
+      signedIgnore.some((pattern) => "ssh-binaries/t3-server-darwin-x64".match(pattern)),
+    );
+    assert.isTrue(
+      signedIgnore.some((pattern) => "ssh-binaries/t3-server-linux-x64".match(pattern)),
+    );
+    assert.isTrue(
+      signedIgnore.some((pattern) => "ssh-binaries/t3-server-linux-x64-musl".match(pattern)),
+    );
+    assert.isTrue(signedIgnore.some((pattern) => "ssh-binaries/tmux-linux-arm64".match(pattern)));
+  });
+
+  it("keeps every ssh binary unsigned on unsigned (ad-hoc) builds", () => {
+    const unsignedIgnore = resolveMacSignIgnore(false);
+    for (const file of [
+      "ssh-binaries/t3-server-darwin-arm64",
+      "ssh-binaries/t3-server-linux-x64",
+      "ssh-binaries/tmux-linux-x64",
+    ]) {
+      assert.isTrue(unsignedIgnore.some((pattern) => file.match(pattern)));
+    }
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
