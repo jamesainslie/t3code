@@ -558,6 +558,20 @@ export function resolveDesktopProductName(version: string): string {
     : (desktopPackageJson.productName ?? "T3 Code");
 }
 
+// osx-sign patterns for the bundled ssh-binaries. The linux ELF files can
+// never be signed: codesign rejects them with "invalid or unsupported
+// format", and they only ever execute on remote machines after SCP. The
+// darwin t3-server binaries are bun-compiled Mach-O files that MUST be
+// Developer ID signed on signed builds: notarytool validates every Mach-O
+// in the submitted archive, so leaving them ad-hoc fails notarization with
+// "The signature of the binary is invalid" / missing hardened runtime.
+export function resolveMacSignIgnore(signed: boolean): string[] {
+  if (signed) {
+    return ["ssh-binaries/t3-server-linux-", "ssh-binaries/tmux-linux-"];
+  }
+  return ["ssh-binaries"];
+}
+
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   platform: typeof BuildPlatform.Type,
   target: string,
@@ -606,11 +620,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
-      // Bun-compiled binaries produce Mach-O files that macOS codesign
-      // rejects with "invalid or unsupported format for signature". These
-      // SSH remote-session binaries are deployed to remote machines via SCP
-      // and never executed on the host, so skipping their signature is safe.
-      signIgnore: ["ssh-binaries"],
+      signIgnore: resolveMacSignIgnore(signed),
     };
     // Unsigned builds: force ad-hoc signing ("-"). Without this, electron-builder
     // emits a partial _CodeSignature that Finder rejects on copy with
