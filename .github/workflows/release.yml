@@ -38,7 +38,7 @@ jobs:
   check_changes:
     name: Check for changes since last nightly
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04 # 24.04 image repeatedly killed VMs during bun install
     outputs:
       has_changes: ${{ steps.check.outputs.has_changes }}
     steps:
@@ -74,7 +74,7 @@ jobs:
     if: |
       !failure() && !cancelled() &&
       (github.event_name != 'schedule' || needs.check_changes.outputs.has_changes == 'true')
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04 # 24.04 image repeatedly killed VMs during bun install # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       release_channel: ${{ steps.release_meta.outputs.release_channel }}
@@ -418,7 +418,7 @@ jobs:
     # npm package t3 belongs to upstream; forks skip the publish and the
     # release job accepts the skipped result.
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' && github.repository == 'pingdotgg/t3code' }}
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04 # 24.04 image repeatedly killed VMs during bun install # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -528,7 +528,7 @@ jobs:
     name: Publish GitHub Release
     needs: [preflight, build, publish_cli, build-ssh-binaries]
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.publish_cli.result) && needs.build-ssh-binaries.result == 'success' }}
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04 # 24.04 image repeatedly killed VMs during bun install # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     env:
       HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' }}
@@ -680,7 +680,7 @@ jobs:
     name: Finalize release
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.release.result == 'success' && needs.preflight.outputs.release_channel == 'stable' }}
     needs: [preflight, release]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04 # 24.04 image repeatedly killed VMs during bun install # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     env:
       HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' }}
