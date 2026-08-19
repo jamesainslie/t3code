@@ -448,12 +448,15 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.publish_cli.result) && needs.build-ssh-binaries.result == 'success' }}
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
+    env:
+      HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' }}
     steps:
       - id: app_token
         name: Mint release app token
         # Forks have no release GitHub App; fall back to the workflow token
-        # (the job has contents: write) when the app secrets are absent.
-        if: ${{ secrets.RELEASE_APP_ID != '' }}
+        # (the job has contents: write) when the app secrets are absent. The
+        # secrets context is not usable in step if, hence the env indirection.
+        if: ${{ env.HAS_RELEASE_APP == 'true' }}
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
@@ -580,12 +583,15 @@ jobs:
     needs: [preflight, release]
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
+    env:
+      HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' }}
     steps:
       - id: app_token
         name: Mint release app token
         # Forks have no release GitHub App; fall back to the workflow token
-        # (the job has contents: write) when the app secrets are absent.
-        if: ${{ secrets.RELEASE_APP_ID != '' }}
+        # (the job has contents: write) when the app secrets are absent. The
+        # secrets context is not usable in step if, hence the env indirection.
+        if: ${{ env.HAS_RELEASE_APP == 'true' }}
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
