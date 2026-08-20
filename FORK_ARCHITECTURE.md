@@ -107,6 +107,8 @@ Some upstream edits genuinely belong in the upstream file — refactors, renames
 
 `.github/CODEOWNERS` routes fork-only paths (`fork/`, `handlers/fork.ts`, `components/sidebar/`, `components/mermaid/`) through the fork owner.
 
+Local guardrails: `bun install` wires `core.hooksPath` to `.githooks/` (via the root `prepare` script), whose `pre-push` hook runs `fmt:check`, `lint`, and `typecheck` before any push. Full tests stay in CI and the release preflight. `main` carries branch protection requiring the CI checks on pull requests; direct pushes by the repo owner remain possible (`enforce_admins` off) with the pre-push hook as their gate.
+
 ## Maintenance
 
 When this architecture document drifts from reality — new extractions, removed modules, upstream file reshuffles — update it. The conflict baseline table in particular should be recomputed whenever a phase completes:
