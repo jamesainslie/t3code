@@ -1,10 +1,13 @@
 name: Auto retry
 
-# GitHub-hosted runner VMs intermittently die mid-job with a shutdown signal
-# (observed repeatedly during bun install on both 24.04 and 22.04 images).
-# Step-level retries cannot survive the VM dying, so failed runs of CI and
-# Release get their failed jobs re-run automatically, bounded to two retries.
-# Genuine failures still fail; they just fail up to two extra times.
+# GitHub-hosted runner VMs intermittently die mid-job (observed repeatedly
+# during bun install and browser tests, on both 24.04 and 22.04 images).
+# Depending on how the VM dies, GitHub reports the run as a failure
+# (shutdown signal, exit 143) or as cancelled (the operation was canceled),
+# so both conclusions are retried. Step-level retries cannot survive the VM
+# dying, so failed jobs are re-run at the workflow level, bounded to two
+# retries. Genuine failures still fail, and an intentionally cancelled run
+# is resurrected at most twice before staying dead.
 on:
   workflow_run:
     workflows: ["CI", "Release"]
@@ -17,7 +20,8 @@ jobs:
   retry:
     name: Rerun failed jobs
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'cancelled') &&
       github.event.workflow_run.run_attempt < 3
     runs-on: ubuntu-22.04
     steps:
