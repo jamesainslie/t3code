@@ -103,6 +103,14 @@ jobs:
         with:
           node-version-file: package.json
 
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
+
       - name: Install dependencies
         shell: bash
         # bun install intermittently hangs on hosted runners until the VM is
@@ -248,6 +256,14 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
 
       - name: Install dependencies
         shell: bash
@@ -437,6 +453,14 @@ jobs:
           node-version-file: package.json
           registry-url: https://registry.npmjs.org
 
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
+
       - name: Install dependencies
         shell: bash
         # bun install intermittently hangs on hosted runners until the VM is
@@ -492,6 +516,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
 
       - name: Install dependencies
         shell: bash
@@ -559,6 +591,14 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
 
       - name: Install dependencies
         shell: bash
@@ -724,6 +764,14 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+
+      - name: Cache bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-release-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-release-
 
       - name: Install dependencies
         shell: bash
