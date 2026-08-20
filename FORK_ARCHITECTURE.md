@@ -109,6 +109,8 @@ Some upstream edits genuinely belong in the upstream file — refactors, renames
 
 Local guardrails: `bun install` wires `core.hooksPath` to `.githooks/` (via the root `prepare` script), whose `pre-push` hook runs `fmt:check`, `lint`, and `typecheck` before any push. Full tests stay in CI and the release preflight. `main` carries branch protection requiring the CI checks on pull requests; direct pushes by the repo owner remain possible (`enforce_admins` off) with the pre-push hook as their gate.
 
+Runner-flake immunity: GitHub-hosted VMs intermittently die mid-job (shutdown signal during `bun install`, seen on both ubuntu images). `.github/workflows/auto-retry.yml` re-runs the failed jobs of any failed CI or Release run, bounded to two retries, so infra kills self-heal while genuine failures still surface.
+
 ## Maintenance
 
 When this architecture document drifts from reality — new extractions, removed modules, upstream file reshuffles — update it. The conflict baseline table in particular should be recomputed whenever a phase completes:
