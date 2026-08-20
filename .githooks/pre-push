@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Local gate mirroring the fast half of CI: formatting, lint, typecheck.
+# Full tests stay in CI and the release preflight; keeping this under a
+# minute is what makes it tolerable enough to never bypass.
+set -euo pipefail
+
+echo "[pre-push] bun fmt:check"
+bun run fmt:check
+
+echo "[pre-push] bun lint"
+bun run lint
+
+echo "[pre-push] bun typecheck"
+bun run typecheck
+
+echo "[pre-push] ok"
