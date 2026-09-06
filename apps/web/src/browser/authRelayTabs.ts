@@ -20,7 +20,7 @@ export type AuthRelayTag = {
 const tags = new Map<string, AuthRelayTag>();
 
 /** The loopback target the desktop should intercept for this tag. */
-export function authRelayTarget(tag: AuthRelayTag): DesktopPreviewAuthRelay {
+function authRelayTarget(tag: AuthRelayTag): DesktopPreviewAuthRelay {
   if (tag.redirectUri === null) return { origin: null, path: null };
   try {
     const url = new URL(tag.redirectUri);
