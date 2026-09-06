@@ -22,7 +22,14 @@ export const ProviderAuthState = Schema.Struct({
     "cancelled",
   ]),
   flowId: Schema.NullOr(SetupOperationId),
+  /** The page the owner must open. For device-code flows this is the verification page. */
   authorizationUrl: Schema.NullOr(Schema.String),
+  /**
+   * Device-code flows: the code the user enters on `authorizationUrl`. Such a
+   * flow has no loopback callback, so clients hide the return URL field while
+   * this is set. Only the owning client ever sees it.
+   */
+  userCode: Schema.optional(Schema.String),
   expiresAt: Schema.NullOr(IsoDateTime),
   message: Schema.NullOr(Schema.String),
 });
@@ -31,6 +38,11 @@ export type ProviderAuthState = typeof ProviderAuthState.Type;
 export const ProviderAuthCompleteInput = Schema.Struct({
   instanceId: ProviderInstanceId,
   flowId: SetupOperationId,
+  /**
+   * The full return URL from the final loopback page. Flows whose tool takes a
+   * pasted code instead of a callback request extract it from this URL on the
+   * environment, so every client keeps one field.
+   */
   callbackUrl: TrimmedNonEmptyString.check(Schema.isMaxLength(16_384)),
 });
 export type ProviderAuthCompleteInput = typeof ProviderAuthCompleteInput.Type;

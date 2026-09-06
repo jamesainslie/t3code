@@ -12,11 +12,14 @@ import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as AcpErrors from "effect-acp/errors";
 
-import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
+import {
+  buildBrowserLaunchCommand,
+  makeBrowserLaunchStderrHandler,
+  preflightBrowserLaunchCommand,
+} from "../auth-relay/browserLaunchCapture.ts";
 import type { AcpSpawnInput } from "./acp/AcpSessionRuntime.ts";
 import {
   antigravityUserSkillDirectories,
@@ -30,14 +33,9 @@ export const ANTIGRAVITY_SIGN_IN_REQUIRED_MESSAGE =
   "Sign in to Antigravity in Settings before you continue.";
 
 const maxAuthorizationUrlLength = 16_384;
-const maxBrowserHelperLineLength =
-  Math.max(ANTIGRAVITY_AUTH_BROWSER_MARKER.length, ANTIGRAVITY_AUTH_STDOUT_PREFIX.length) +
-  maxAuthorizationUrlLength +
-  2;
 const maxStdoutLineBytes = 16 * 1024 * 1024;
 const authPrefixBytes = new TextEncoder().encode(ANTIGRAVITY_AUTH_STDOUT_PREFIX);
 const decodeUrl = Schema.decodeUnknownEffect(Schema.URLFromString);
-const decodeBrowserHelperUrl = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String));
 const ProfileSettingsFile = Schema.Struct({
   auth: Schema.Struct({ type: Schema.String }),
   gcp: Schema.optional(
@@ -50,15 +48,6 @@ const ProfileSettingsFile = Schema.Struct({
 const encodeProfileSettings = Schema.encodeSync(Schema.fromJsonString(ProfileSettingsFile));
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
 const isAcpTransportError = Schema.is(AcpErrors.AcpTransportError);
-
-// Python splits BROWSER on the platform path separator before it parses quotes.
-// Keep this source free of both colons and semicolons. EPIPE must still exit 0
-// so Python does not fall back to an OS browser after cancellation.
-const browserHelperSource =
-  `process.stderr.on("error",()=>process.exit(0)).write(` +
-  `"${ANTIGRAVITY_AUTH_BROWSER_MARKER}"+JSON.stringify(process.argv[1])+"\\n",` +
-  `()=>process.exit(0))`;
-const browserPreflightUrl = "https://example.invalid/t3-antigravity-browser-preflight";
 
 const removedEnvironmentKeys = new Set([
   "GEMINI_API_KEY",
@@ -191,10 +180,6 @@ export function resolveAntigravityProfileDirectory(
   return NodePath.join(stateDir, "providers", "antigravity", directoryName);
 }
 
-function quoteBrowserArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
 function antigravityEnvironment(
   profile: AntigravityProfile,
   baseEnv: NodeJS.ProcessEnv,
@@ -288,26 +273,15 @@ export const prepareAntigravityProfile = Effect.fn("prepareAntigravityProfile")(
   const auth = input.auth ?? ANTIGRAVITY_PERSONAL_AUTH;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const platform = input.platform ?? (yield* HostProcessPlatform);
   const userHome =
     input.userHome ?? resolveAntigravityUserHome(platform, input.baseEnv ?? process.env);
   const runtimeExecutablePath = input.runtimeExecutablePath ?? (yield* HostProcessExecutablePath);
-  const helperExecutable =
-    platform === "win32" ? runtimeExecutablePath.replaceAll("\\", "/") : runtimeExecutablePath;
-  const browserArguments = [helperExecutable, "-e", browserHelperSource, "--", "%s"];
-  const browserCommand = browserArguments.map(quoteBrowserArgument).join(" ");
-  if (
-    browserCommand.includes(platform === "win32" ? ";" : ":") ||
-    helperExecutable.includes("\r") ||
-    helperExecutable.includes("\n") ||
-    helperExecutable.includes("\0") ||
-    helperExecutable.includes("%s")
-  ) {
-    return yield* authSupportError(
-      "The T3 runtime path cannot be used to suppress Antigravity browser launches.",
-    );
-  }
+  const browser = yield* buildBrowserLaunchCommand({
+    marker: ANTIGRAVITY_AUTH_BROWSER_MARKER,
+    runtimeExecutablePath,
+    platform,
+  }).pipe(Effect.mapError((error) => authSupportError(error.detail)));
 
   const geminiHome = path.resolve(input.profileDirectory);
   const acpDirectory = path.join(geminiHome, "antigravity-acp");
@@ -316,46 +290,11 @@ export const prepareAntigravityProfile = Effect.fn("prepareAntigravityProfile")(
     geminiHome,
     acpDirectory,
     tokenPath: path.join(acpDirectory, "acp_token.json"),
-    browserCommand,
+    browserCommand: browser.command,
   };
   const environment = antigravityEnvironment(profile, input.baseEnv ?? process.env, auth);
-  yield* Effect.gen(function* () {
-    const child = yield* spawner.spawn(
-      ChildProcess.make(helperExecutable, ["-e", browserHelperSource, "--", browserPreflightUrl], {
-        env: environment,
-        extendEnv: false,
-        shell: false,
-      }),
-    );
-    const [stdout, stderr, exitCode] = yield* Effect.all(
-      [
-        collectUint8StreamText({ stream: child.stdout, maxBytes: 4_096 }),
-        collectUint8StreamText({ stream: child.stderr, maxBytes: 4_096 }),
-        child.exitCode,
-      ],
-      { concurrency: "unbounded" },
-    );
-    if (
-      Number(exitCode) !== 0 ||
-      stdout.bytes !== 0 ||
-      stdout.truncated ||
-      stderr.truncated ||
-      stderr.text !== `${ANTIGRAVITY_AUTH_BROWSER_MARKER}"${browserPreflightUrl}"\n`
-    ) {
-      return yield* authSupportError("Antigravity browser suppression could not be verified.");
-    }
-  }).pipe(
-    Effect.scoped,
-    Effect.timeoutOrElse({
-      duration: "5 seconds",
-      orElse: () =>
-        Effect.fail(authSupportError("Antigravity browser suppression verification timed out.")),
-    }),
-    Effect.mapError((error) =>
-      error._tag === "AcpTransportError"
-        ? error
-        : authSupportError("Antigravity browser suppression could not be verified."),
-    ),
+  yield* preflightBrowserLaunchCommand(browser, environment).pipe(
+    Effect.mapError((error) => authSupportError(error.detail)),
   );
 
   for (const directory of [geminiHome, acpDirectory]) {
@@ -528,35 +467,24 @@ export function makeAntigravityStderrHandler(
       authorizationUrl: string,
     ) => Effect.Effect<void, AcpErrors.AcpError>;
   } = {},
-) {
-  let pending = "";
-  const handleLine = (line: string) => {
-    const message = line.endsWith("\r") ? line.slice(0, -1) : line;
-    if (message.length > maxBrowserHelperLineLength) {
-      return Effect.void;
-    }
-    const url = message.startsWith(ANTIGRAVITY_AUTH_STDOUT_PREFIX)
-      ? Effect.succeed(message.slice(ANTIGRAVITY_AUTH_STDOUT_PREFIX.length))
-      : message.startsWith(ANTIGRAVITY_AUTH_BROWSER_MARKER)
-        ? decodeBrowserHelperUrl(message.slice(ANTIGRAVITY_AUTH_BROWSER_MARKER.length))
-        : undefined;
-    if (url === undefined) return Effect.void;
-    return url.pipe(
-      Effect.flatMap(parseAntigravityAuthorizationUrl),
-      Effect.matchEffect({
-        onFailure: () => Effect.void,
-        onSuccess: (request) =>
-          input.onAuthorizationUrl
-            ? input.onAuthorizationUrl(request.authorizationUrl)
-            : Effect.fail(authSupportError(ANTIGRAVITY_SIGN_IN_REQUIRED_MESSAGE)),
-      }),
-    );
-  };
-
-  return Effect.fn("antigravityAuthSupport.handleStderr")(function* (text: string) {
-    const lines = `${pending}${text}`.split("\n");
-    pending = lines.pop() ?? "";
-    if (pending.length > maxBrowserHelperLineLength) pending = "";
-    yield* Effect.forEach(lines, handleLine, { discard: true });
+): (text: string) => Effect.Effect<void, AcpErrors.AcpError> {
+  return makeBrowserLaunchStderrHandler({
+    marker: ANTIGRAVITY_AUTH_BROWSER_MARKER,
+    readLine: (line) =>
+      line.startsWith(ANTIGRAVITY_AUTH_STDOUT_PREFIX)
+        ? line.slice(ANTIGRAVITY_AUTH_STDOUT_PREFIX.length)
+        : undefined,
+    // Only Google's own authorization request is a sign-in; anything else on
+    // stderr is dropped without being retained.
+    onUrl: (url) =>
+      parseAntigravityAuthorizationUrl(url).pipe(
+        Effect.matchEffect({
+          onFailure: () => Effect.void,
+          onSuccess: (request) =>
+            input.onAuthorizationUrl
+              ? input.onAuthorizationUrl(request.authorizationUrl)
+              : Effect.fail(authSupportError(ANTIGRAVITY_SIGN_IN_REQUIRED_MESSAGE)),
+        }),
+      ),
   });
 }
