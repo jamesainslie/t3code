@@ -1,7 +1,7 @@
 # Fork-local release pipeline for jamesainslie/t3code on GitHub-hosted runners.
 # Upstream .github/workflows/release.yml is left untouched and disabled in repo settings.
-# npm publish authenticates with NPM_TOKEN until trusted publishing is configured
-# for this workflow file.
+# npm publish uses OIDC trusted publishing configured on npmjs.com for this
+# workflow file (jamesainslie/t3code, release-fork.yml).
 name: Release (fork)
 
 on:
@@ -402,6 +402,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -411,12 +412,6 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
-
-      - name: Setup npm registry auth
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
-          registry-url: https://registry.npmjs.org
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
@@ -460,8 +455,6 @@ jobs:
           done
 
       - name: Publish CLI package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node apps/server/scripts/cli.ts publish --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --app-version "${{ needs.preflight.outputs.version }}" --verbose
 
   release:
