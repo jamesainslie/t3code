@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as NetService from "@t3tools/shared/Net";
 import {
   HostProcessEnvironment,
@@ -1288,7 +1289,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             cwd: root,
             ambientHome: "/home/user/.t3",
           });
-          assert.equal(home, path.join(path.resolve(root), ".t3"));
+          assert.equal(home, path.join(path.resolve(root), FORK_IDENTITY.baseDirName));
         }).pipe(Effect.scoped),
       );
 
@@ -1301,7 +1302,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             cwd: root,
             ambientHome: "/home/user/.t3",
           });
-          assert.equal(home, path.join(path.resolve(root), ".t3"));
+          assert.equal(home, path.join(path.resolve(root), FORK_IDENTITY.baseDirName));
         }).pipe(Effect.scoped),
       );
 

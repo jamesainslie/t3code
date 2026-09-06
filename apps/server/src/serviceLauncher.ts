@@ -27,6 +27,7 @@ import {
   SERVICE_STOP_MARKER_FILE,
 } from "./cloud/serviceProtocol.ts";
 import { isEntrypoint } from "./entrypoint.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 
 const HANDOFF_DELAY_MS = 2_000;
 const PREPARED_TIMEOUT_MS = 120_000;
@@ -45,7 +46,7 @@ const runtimePaths = (baseDir: string, version: string) => {
   const versionDir = NodePath.join(baseDir, "runtime", "versions", version);
   return {
     versionDir,
-    entryPath: NodePath.join(versionDir, "node_modules", "t3", "dist", "bin.mjs"),
+    entryPath: NodePath.join(versionDir, FORK_IDENTITY.installedBinRelativePath),
     sentinelPath: NodePath.join(versionDir, ".install-complete"),
   };
 };

@@ -8,6 +8,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 
@@ -22,9 +24,9 @@ const makeEnvironment = (overrides: Record<string, unknown> = {}) =>
     platform: "linux",
     isPackaged: true,
     isDevelopment: false,
-    displayName: "T3 Code (Alpha)",
-    linuxDesktopEntryName: "com.t3tools.T3Code.desktop",
-    linuxWmClass: "t3code",
+    displayName: `${FORK_IDENTITY.productBaseName} (Alpha)`,
+    linuxDesktopEntryName: FORK_IDENTITY.desktop.production.desktopEntryName,
+    linuxWmClass: FORK_IDENTITY.desktop.production.wmClass,
     linuxApplicationsDir: "/home/alice/.local/share/applications",
     appImagePath: Option.some("/home/alice/Applications/T3-Code.AppImage"),
     path: { join: (...parts: ReadonlyArray<string>) => parts.join("/") },
@@ -108,13 +110,13 @@ const emptyRecording = (): RecordedRegistration => ({
 describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-      displayName: "T3 Code (Nightly)",
+      displayName: `${FORK_IDENTITY.productBaseName} (Nightly)`,
       execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
-      scheme: "t3code",
+      scheme: FORK_IDENTITY.desktop.production.scheme,
     });
 
     assert.include(entry, "[Desktop Entry]");
-    assert.include(entry, "Name=T3 Code (Nightly)");
+    assert.include(entry, `Name=${FORK_IDENTITY.productBaseName} (Nightly)`);
     // Exec composes both escaping layers: a literal backslash becomes four
     // backslashes in the file, a quote three characters, a dollar sign two
     // backslashes plus the sign.
@@ -124,33 +126,33 @@ describe("DesktopLinuxUrlHandler", () => {
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
-    assert.include(entry, "MimeType=x-scheme-handler/t3code;");
+    assert.include(entry, `MimeType=x-scheme-handler/${FORK_IDENTITY.desktop.production.scheme};`);
   });
 
   it("carries structured context on registration errors", () => {
     const writeError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
       step: "write-desktop-entry",
-      scheme: "t3code",
-      desktopEntryPath: "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+      scheme: FORK_IDENTITY.desktop.production.scheme,
+      desktopEntryPath: `/home/alice/.local/share/applications/${FORK_IDENTITY.desktop.production.desktopEntryName}`,
       cause: new Error("boom"),
     });
     assert.equal(
       writeError.message,
-      "Failed to register the t3code:// URL handler (step: write-desktop-entry).",
+      `Failed to register the ${FORK_IDENTITY.desktop.production.scheme}:// URL handler (step: write-desktop-entry).`,
     );
     assert.equal(
       writeError.desktopEntryPath,
-      "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+      `/home/alice/.local/share/applications/${FORK_IDENTITY.desktop.production.desktopEntryName}`,
     );
 
     const exitError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
       step: "set-default-handler",
-      scheme: "t3code",
+      scheme: FORK_IDENTITY.desktop.production.scheme,
       exitCode: 4,
     });
     assert.equal(
       exitError.message,
-      "Failed to register the t3code:// URL handler (step: set-default-handler, xdg-mime exit code 4).",
+      `Failed to register the ${FORK_IDENTITY.desktop.production.scheme}:// URL handler (step: set-default-handler, xdg-mime exit code 4).`,
     );
   });
 
@@ -164,17 +166,24 @@ describe("DesktopLinuxUrlHandler", () => {
       assert.equal(recorded.files.length, 1);
       assert.equal(
         recorded.files[0]?.path,
-        "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+        `/home/alice/.local/share/applications/${FORK_IDENTITY.desktop.production.desktopEntryName}`,
       );
       assert.include(
         recorded.files[0]?.content,
         'Exec="/home/alice/Applications/T3-Code.AppImage" %U',
       );
-      assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/t3code;");
+      assert.include(
+        recorded.files[0]?.content,
+        `MimeType=x-scheme-handler/${FORK_IDENTITY.desktop.production.scheme};`,
+      );
       assert.deepEqual(recorded.commands, [
         {
           command: "xdg-mime",
-          args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/t3code"],
+          args: [
+            "default",
+            FORK_IDENTITY.desktop.production.desktopEntryName,
+            `x-scheme-handler/${FORK_IDENTITY.desktop.production.scheme}`,
+          ],
         },
       ]);
     });
@@ -245,7 +254,7 @@ describe("DesktopLinuxUrlHandler", () => {
           module: "FileSystem",
           method: "writeFileString",
           description: "read-only filesystem",
-          pathOrDescriptor: "/home/alice/.local/share/applications/com.t3tools.T3Code.desktop",
+          pathOrDescriptor: `/home/alice/.local/share/applications/${FORK_IDENTITY.desktop.production.desktopEntryName}`,
         }),
       });
 

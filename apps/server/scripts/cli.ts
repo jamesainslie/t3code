@@ -16,6 +16,7 @@ import {
   resolveWebIconOverrides,
 } from "../../../scripts/lib/brand-assets.ts";
 import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import { fromYaml } from "@t3tools/shared/schemaYaml";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -190,7 +191,7 @@ const createVpPmPublishArgs = (config: PublishCommandConfig): ReadonlyArray<stri
   const args = [
     "publish",
     "--filter",
-    "t3",
+    FORK_IDENTITY.npmPackageName,
     "--access",
     config.access,
     "--tag",
@@ -242,9 +243,9 @@ const publishCmd = Command.make(
           const workspaceCatalog = workspaceConfig.catalog ?? {};
           const workspaceOverrides = workspaceConfig.overrides ?? {};
           const pkg: PackageJson = {
-            name: serverPackageJson.name,
-            repository: serverPackageJson.repository,
-            bin: serverPackageJson.bin,
+            name: FORK_IDENTITY.npmPackageName,
+            repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
+            bin: { [FORK_IDENTITY.cliBin]: "./dist/bin.mjs" },
             type: serverPackageJson.type,
             version,
             engines: serverPackageJson.engines,

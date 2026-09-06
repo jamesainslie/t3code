@@ -16,8 +16,9 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 
-export const DEFAULT_PORT = 3773;
+export const DEFAULT_PORT = FORK_IDENTITY.defaultPort;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;

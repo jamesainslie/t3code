@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -158,7 +159,7 @@ if (args.includes("--package")) {
             "--",
             "sh",
             "-c",
-            "command -v t3",
+            `command -v ${FORK_IDENTITY.cliBin}`,
           ];
           assert.deepEqual(calls, [expectedCall, expectedCall]);
         }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
@@ -349,7 +350,8 @@ if (mode === "etarget" || mode === "failed-with-path") {
 `,
         );
         yield* fs.chmod(path.join(bin, packageManager), 0o700);
-        if (mode === "existing-cli") yield* fs.symlink(cliPath, path.join(bin, "t3"));
+        if (mode === "existing-cli")
+          yield* fs.symlink(cliPath, path.join(bin, FORK_IDENTITY.cliBin));
 
         const child = yield* spawner.spawn(
           ChildProcess.make("/bin/sh", ["-s", "--", ...args], {
@@ -409,7 +411,7 @@ if (mode === "etarget" || mode === "failed-with-path") {
           "--",
           "sh",
           "-c",
-          "command -v t3",
+          `command -v ${FORK_IDENTITY.cliBin}`,
         ];
         const usesInstaller = mode !== "existing-cli" && mode !== "node-override";
         const calls = yield* fs.readFileString(callsPath);
