@@ -1160,6 +1160,30 @@ export const DesktopPreviewSetAudioMutedInputSchema = Schema.Struct({
   audioMuted: Schema.Boolean,
 });
 
+/**
+ * A tab opened for a pending sign-in relay. When the page returns to the
+ * loopback listener on the environment, the desktop intercepts the navigation
+ * and hands the return URL to the renderer instead of letting it fail. With
+ * `origin` set the return must match that origin and path exactly; without it
+ * any unprivileged loopback origin is taken, as the server would.
+ */
+export const DesktopPreviewAuthRelaySchema = Schema.Struct({
+  origin: Schema.NullOr(Schema.String),
+  path: Schema.NullOr(Schema.String),
+});
+export type DesktopPreviewAuthRelay = typeof DesktopPreviewAuthRelaySchema.Type;
+
+export const DesktopPreviewSetAuthRelayInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  relay: Schema.NullOr(DesktopPreviewAuthRelaySchema),
+});
+
+/** The loopback return URL a relay tab was about to load. One per tagged tab. */
+export interface DesktopPreviewAuthRelayCallback {
+  readonly tabId: string;
+  readonly url: string;
+}
+
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
   theme: DesktopPreviewAnnotationThemeSchema,
 });
@@ -1362,6 +1386,13 @@ export interface DesktopPreviewBridge {
    * allowed; it simply takes effect once the page plays something.
    */
   setAudioMuted: (tabId: string, audioMuted: boolean) => Promise<void>;
+  /**
+   * Tag a tab as the browser for a pending sign-in relay, or clear the tag.
+   * The next main-frame navigation to the relay's loopback target is
+   * intercepted and reported through `onAuthRelayCallback` instead of
+   * loading; the tag is consumed by that one navigation.
+   */
+  setAuthRelay: (tabId: string, relay: DesktopPreviewAuthRelay | null) => Promise<void>;
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */
@@ -1425,6 +1456,7 @@ export interface DesktopPreviewBridge {
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
+  onAuthRelayCallback: (listener: (event: DesktopPreviewAuthRelayCallback) => void) => () => void;
 }
 
 export type ConfirmDialogVariant = "default" | "destructive";

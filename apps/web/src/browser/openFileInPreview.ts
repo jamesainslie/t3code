@@ -51,11 +51,12 @@ export type OpenPreviewMutation<E = unknown> = (input: {
   readonly input: PreviewOpenInput;
 }) => Promise<AtomCommandResult<PreviewSessionSnapshot, E>>;
 
+/** Resolves with the tab the URL opened in. */
 export async function openUrlInPreview<E>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly url: string;
   readonly openPreview: OpenPreviewMutation<E>;
-}): Promise<AtomCommandResult<void, E | BrowserSettingsReadError>> {
+}): Promise<AtomCommandResult<string, E | BrowserSettingsReadError>> {
   const defaults = await resolveBrowserDefaults().catch(
     (cause: unknown) => new BrowserSettingsReadError({ cause }),
   );
@@ -78,6 +79,7 @@ export async function openUrlInPreview<E>(input: {
     applyPreviewServerSnapshot(input.threadRef, snapshot);
     rememberPreviewUrl(input.threadRef, input.url);
     useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
+    return snapshot.tabId;
   });
 }
 
@@ -97,7 +99,7 @@ export async function openFileInPreview<AssetError, PreviewError>(input: {
   readonly openPreview: OpenPreviewMutation<PreviewError>;
 }): Promise<
   AtomCommandResult<
-    void,
+    string,
     AssetError | PreviewError | BrowserPreviewUnavailableError | BrowserSettingsReadError
   >
 > {

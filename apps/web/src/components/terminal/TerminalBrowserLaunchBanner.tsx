@@ -78,7 +78,16 @@ export function TerminalBrowserLaunchBanner({
           size="xs"
           variant="outline"
           onClick={() => {
-            void openLink(launch.url).catch(() => {
+            void openLink(launch.url, {
+              authRelay: {
+                kind: "terminal",
+                environmentId: threadRef.environmentId,
+                threadId: threadRef.threadId,
+                terminalId,
+                captureId: launch.captureId,
+                redirectUri: launch.redirectUri,
+              },
+            }).catch(() => {
               setError("Could not open the page. Copy the link and open it in your browser.");
             });
           }}

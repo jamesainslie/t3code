@@ -62,3 +62,12 @@ terminal environments, so the helper is a wrapper script that sets it itself; th
 inline `node -e` helper providers use would not run under an Electron runtime
 there. Clients opt into the capture events per attach stream so a client built
 before they existed keeps decoding the stream.
+
+The desktop in-app browser can close the loop without a paste. A tab opened for a
+capture is tagged with the capture's loopback target through the preview bridge;
+the [preview manager](../../apps/desktop/src/preview/Manager.ts) cancels the
+matching return navigation (a server-side redirect only `will-redirect` can
+cancel), hands the URL to the renderer, and loads a plain confirmation page. The
+tag is consumed by that one navigation and untagged tabs navigate normally. Web
+and mobile cannot intercept the OS browser, so the paste field stays the primary
+path there.

@@ -4331,3 +4331,107 @@ describe("Preview automation diagnostics", () => {
     expect("locator" in error).toBe(false);
   });
 });
+
+describe("matchesAuthRelay", () => {
+  it("takes the advertised listener exactly, or any unprivileged loopback origin", () => {
+    const exact = { origin: "http://127.0.0.1:4567", path: "/callback" };
+    expect(PreviewManager.matchesAuthRelay(exact, "http://127.0.0.1:4567/callback?code=x")).toBe(
+      true,
+    );
+    expect(PreviewManager.matchesAuthRelay(exact, "http://127.0.0.1:4568/callback?code=x")).toBe(
+      false,
+    );
+    expect(PreviewManager.matchesAuthRelay(exact, "http://127.0.0.1:4567/other?code=x")).toBe(
+      false,
+    );
+    expect(PreviewManager.matchesAuthRelay(exact, "http://localhost:4567/callback?code=x")).toBe(
+      false,
+    );
+    const any = { origin: null, path: null };
+    expect(PreviewManager.matchesAuthRelay(any, "http://localhost:8080/cb?code=x")).toBe(true);
+    expect(PreviewManager.matchesAuthRelay(any, "http://127.0.0.1:80/cb?code=x")).toBe(false);
+    expect(PreviewManager.matchesAuthRelay(any, "https://example.com/cb?code=x")).toBe(false);
+  });
+});
+
+describe("auth relay tabs", () => {
+  effectIt.effect("hands the loopback return to the renderer once and shows the return page", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const listeners = new Map<string, (...args: unknown[]) => void>();
+        const loadURL = vi.fn(async () => undefined);
+        fromId.mockReturnValue({
+          id: 42,
+          isDestroyed: () => false,
+          getType: () => "webview",
+          getURL: () => "https://accounts.example.com/authorize",
+          getTitle: () => "Sign in",
+          isLoading: () => false,
+          isFocused: () => true,
+          getZoomFactor: () => 1,
+          setZoomFactor: vi.fn(),
+          setAudioMuted: vi.fn(),
+          isCurrentlyAudible: () => false,
+          loadURL,
+          on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          }),
+          once: vi.fn(),
+          off: vi.fn(),
+          ipc: { on: vi.fn(), off: vi.fn(), removeListener: vi.fn() },
+          send: webviewSend,
+          navigationHistory: { canGoBack: () => false, canGoForward: () => false },
+          setIgnoreMenuShortcuts: vi.fn(),
+          setWindowOpenHandler: vi.fn(),
+          debugger: {
+            isAttached: () => false,
+            attach: vi.fn(),
+            sendCommand: vi.fn(async () => undefined),
+            on: vi.fn(),
+            off: vi.fn(),
+          },
+        } as never);
+        const callbacks: Array<{ tabId: string; url: string }> = [];
+        yield* manager.subscribeAuthRelayCallbacks((event) =>
+          Effect.sync(() => {
+            callbacks.push(event);
+          }),
+        );
+        yield* manager.createTab("tab_relay");
+        yield* manager.registerWebview("tab_relay", 42);
+        yield* manager.setAuthRelay("tab_relay", { origin: "http://127.0.0.1:4567", path: "/" });
+
+        const other = {
+          preventDefault: vi.fn(),
+          isMainFrame: true,
+          url: "https://accounts.example.com/next",
+        };
+        listeners.get("will-redirect")?.(other);
+        expect(other.preventDefault).not.toHaveBeenCalled();
+
+        const returning = {
+          preventDefault: vi.fn(),
+          isMainFrame: true,
+          url: "http://127.0.0.1:4567/?code=secret&state=s",
+        };
+        listeners.get("will-redirect")?.(returning);
+        expect(returning.preventDefault).toHaveBeenCalledOnce();
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        expect(callbacks).toEqual([{ tabId: "tab_relay", url: returning.url }]);
+        expect(loadURL).toHaveBeenCalledWith(PreviewManager.AUTH_RELAY_RETURN_PAGE_URL);
+
+        // The tag is consumed: a second return is an ordinary navigation.
+        const again = { preventDefault: vi.fn(), isMainFrame: true, url: returning.url };
+        listeners.get("will-navigate")?.(again);
+        expect(again.preventDefault).not.toHaveBeenCalled();
+        expect(callbacks).toHaveLength(1);
+
+        yield* manager.setAuthRelay("tab_relay", { origin: null, path: null });
+        yield* manager.setAuthRelay("tab_relay", null);
+        listeners.get("will-navigate")?.(again);
+        expect(again.preventDefault).not.toHaveBeenCalled();
+      }),
+    ),
+  );
+});
