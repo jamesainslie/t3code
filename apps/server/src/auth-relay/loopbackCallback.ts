@@ -17,6 +17,30 @@ export interface PendingLoopbackCallback {
 
 export type LoopbackCallbackForwarder = (callback: URL) => Effect.Effect<void, AuthRelayError>;
 
+/**
+ * How the client's pasted return value reaches the tool once the user has
+ * signed in on the page. Loopback: replay the return URL against the tool's
+ * listener. Code: the page shows a code (or lands on a hosted callback URL)
+ * that the tool takes on stdin. None: the tool finishes on its own, as with
+ * device codes.
+ */
+export type AuthorizationCompletion =
+  | { readonly kind: "loopback"; readonly callback: PendingLoopbackCallback }
+  | { readonly kind: "code"; readonly state: string | null }
+  | { readonly kind: "none" };
+
+export interface PendingAuthorization {
+  readonly authorizationUrl: string;
+  readonly completion: AuthorizationCompletion;
+}
+
+export interface PastedAuthorizationCode {
+  readonly code: string;
+  readonly state: string | null;
+}
+
+const MAX_PASTED_CODE_LENGTH = 2_048;
+
 export const MAX_CALLBACK_URL_LENGTH = 16_384;
 const MIN_UNPRIVILEGED_PORT = 1_024;
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost"]);
@@ -79,10 +103,7 @@ export function readAuthorizationRequestCallback(url: URL): {
  */
 export const parseLoopbackAuthorizationUrl = Effect.fn("parseLoopbackAuthorizationUrl")(function* (
   authorizationUrl: string,
-): Effect.fn.Return<
-  { readonly authorizationUrl: string; readonly callback: PendingLoopbackCallback },
-  AuthRelayError
-> {
+): Effect.fn.Return<PendingAuthorization, AuthRelayError> {
   const invalid = () =>
     new AuthRelayError({
       operation: "start",
@@ -102,7 +123,53 @@ export const parseLoopbackAuthorizationUrl = Effect.fn("parseLoopbackAuthorizati
   ) {
     return yield* invalid();
   }
-  return { authorizationUrl, callback: { redirectUri, ...(state ? { state } : {}) } };
+  return {
+    authorizationUrl,
+    completion: { kind: "loopback", callback: { redirectUri, ...(state ? { state } : {}) } },
+  };
+});
+
+/**
+ * Reads what the user pasted for a code completion: the hosted callback
+ * page's address (its query carries `code` and `state`), or the code the page
+ * shows, optionally as `code#state`. The registered state must match when it
+ * is present in either form. Failures never quote the value.
+ */
+export const readPastedAuthorizationCode = Effect.fn("readPastedAuthorizationCode")(function* (
+  expectedState: string | null,
+  value: string,
+): Effect.fn.Return<PastedAuthorizationCode, AuthRelayError> {
+  const invalid = (detail: string) => new AuthRelayError({ operation: "complete", detail });
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_CALLBACK_URL_LENGTH || /\s/.test(trimmed)) {
+    return yield* invalid("Paste the code from the final sign-in page, or that page's address.");
+  }
+  let code: string;
+  let state: string | null;
+  if (/^https?:\/\//i.test(trimmed)) {
+    const url = yield* Effect.try({
+      try: () => new URL(trimmed),
+      catch: () => invalid("Paste the complete address of the final sign-in page."),
+    });
+    const codes = url.searchParams.getAll("code");
+    const states = url.searchParams.getAll("state");
+    if (url.protocol !== "https:" || codes.length !== 1 || !codes[0] || states.length > 1) {
+      return yield* invalid("The address must be the final sign-in page with its code.");
+    }
+    code = codes[0];
+    state = states[0] ?? null;
+  } else {
+    const separator = trimmed.indexOf("#");
+    code = separator === -1 ? trimmed : trimmed.slice(0, separator);
+    state = separator === -1 ? null : trimmed.slice(separator + 1);
+  }
+  if (code.length === 0 || code.length > MAX_PASTED_CODE_LENGTH) {
+    return yield* invalid("Paste the code from the final sign-in page, or that page's address.");
+  }
+  if (expectedState !== null && state !== null && state !== expectedState) {
+    return yield* invalid("This code does not belong to the current sign-in.");
+  }
+  return { code, state: state ?? expectedState };
 });
 
 /**

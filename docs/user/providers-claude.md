@@ -4,6 +4,22 @@ T3 Code uses Claude Code's login and configuration. Start with the default provi
 for one account; [provider setup](./install.md#providers) covers installation and
 shared provider settings.
 
+## Sign in from T3 Code
+
+On web or desktop, open **Settings > Providers**, choose the environment that runs
+your project, open the Claude instance, and choose **Sign in**. T3 Code runs
+`claude auth login` on the environment and shows you its sign-in link. Open the
+link on the device you are using and sign in.
+
+Claude Code finishes on a page that shows a code. Paste that code, or the page's
+full address, into the return field in settings and choose **Continue**. T3 Code
+hands it to the waiting command, then checks the account. Only the T3 Code client
+that started the sign-in can finish it, and a link is valid for five minutes.
+
+Each Claude instance signs into its own config directory, so a second instance
+with its own `CLAUDE_CONFIG_DIR` path signs in separately. **Sign out** runs
+`claude auth logout` for that instance and stops its running threads.
+
 ## Separate accounts or configurations
 
 Use a separate Claude config directory for each account. This also works for named

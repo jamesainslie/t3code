@@ -8,7 +8,11 @@ import * as Scope from "effect/Scope";
 import * as AcpErrors from "effect-acp/errors";
 
 import { AuthRelayError } from "../auth-relay/AuthRelayError.ts";
-import { makeAuthRelayFlow, type AuthRelayFlow } from "../auth-relay/AuthRelayFlow.ts";
+import {
+  makeAuthRelayFlow,
+  type AuthRelayFlow,
+  type PendingAuthorization,
+} from "../auth-relay/AuthRelayFlow.ts";
 import type { AcpSessionRuntime, AcpSessionRuntimeStartResult } from "./acp/AcpSessionRuntime.ts";
 import { parseAntigravityAuthorizationUrl } from "./antigravityAuthSupport.ts";
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
@@ -101,9 +105,12 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
     },
     parseAuthorizationUrl: (url) =>
       parseAntigravityAuthorizationUrl(url).pipe(
-        Effect.map((authorization) => ({
+        Effect.map((authorization): PendingAuthorization => ({
           authorizationUrl: authorization.authorizationUrl,
-          callback: { redirectUri: authorization.redirectUri, state: authorization.state },
+          completion: {
+            kind: "loopback",
+            callback: { redirectUri: authorization.redirectUri, state: authorization.state },
+          },
         })),
         Effect.mapError(
           () =>

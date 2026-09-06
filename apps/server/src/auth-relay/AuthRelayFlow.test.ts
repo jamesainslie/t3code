@@ -86,7 +86,10 @@ const makeHarness = Effect.fn("makeHarness")(function* (
         }
         return {
           authorizationUrl: url,
-          callback: { redirectUri: redirect.href, state: parsed.searchParams.get("state") ?? "" },
+          completion: {
+            kind: "loopback",
+            callback: { redirectUri: redirect.href, state: parsed.searchParams.get("state") ?? "" },
+          },
         };
       }),
     signIn: (handle) =>

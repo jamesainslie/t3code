@@ -56,6 +56,9 @@ const CLAUDE_PRESENTATION = {
   displayName: "Claude",
   showInteractionModeToggle: true,
 } as const;
+
+/** Settings can drive `claude auth login`; installation stays with the user. */
+const CLAUDE_SETUP = { canAuthenticate: true, canInstall: false } as const;
 function toTitleCaseWords(value: string): string {
   const parts: Array<string> = [];
   for (const part of value.split(/[\s_-]+/g)) {
@@ -441,6 +444,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   if (!claudeSettings.enabled) {
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: false,
       checkedAt,
       models: allModels,
@@ -467,6 +471,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -485,6 +490,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   if (Option.isNone(versionProbe.success)) {
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -509,6 +515,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -539,6 +546,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   if (!capabilities) {
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: claudeSettings.enabled,
       checkedAt,
       models,
@@ -569,6 +577,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       : claudeUsageResponseToLimits({ response: capabilities.usage, checkedAt }).limits;
   return buildServerProvider({
     presentation: CLAUDE_PRESENTATION,
+    setup: CLAUDE_SETUP,
     enabled: claudeSettings.enabled,
     checkedAt,
     models,
@@ -606,6 +615,7 @@ export const makePendingClaudeProvider = (
     if (!claudeSettings.enabled) {
       return buildServerProvider({
         presentation: CLAUDE_PRESENTATION,
+        setup: CLAUDE_SETUP,
         enabled: false,
         checkedAt,
         models,
@@ -621,6 +631,7 @@ export const makePendingClaudeProvider = (
 
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
+      setup: CLAUDE_SETUP,
       enabled: true,
       checkedAt,
       models,
