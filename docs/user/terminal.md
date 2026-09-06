@@ -21,6 +21,11 @@ page's full address, including everything after `?`, into the banner's return
 URL field and choose **Continue**. T3 Code delivers it to the command waiting in
 the terminal. Watch the terminal output to confirm the command finished.
 
+In the desktop app, opening the link in the in-app browser skips that step: when
+the sign-in returns to the environment's address, T3 Code passes it to the
+command itself and shows a short confirmation page in the tab. The return URL
+field stays available if the sign-in was opened elsewhere.
+
 Device-code sign-ins finish on the provider's website and need nothing pasted.
 Dismissing the banner drops the link; run the command again to get a new one.
 A link is valid for five minutes.

@@ -15,6 +15,7 @@ import {
   DesktopPreviewRegisterWebviewInputSchema,
   DesktopPreviewScreenshotArtifactSchema,
   DesktopPreviewSetAudioMutedInputSchema,
+  DesktopPreviewSetAuthRelayInputSchema,
   DesktopPreviewSetColorSchemeInputSchema,
   BrowserImportResult,
   BrowserImportSource,
@@ -52,6 +53,9 @@ export const installPreviewEventForwarding = Effect.fn(
   );
   yield* manager.subscribePointerEvents((event) =>
     electronWindow.sendAll(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, event),
+  );
+  yield* manager.subscribeAuthRelayCallbacks((event) =>
+    electronWindow.sendAll(IpcChannels.PREVIEW_AUTH_RELAY_CALLBACK_CHANNEL, event),
   );
 });
 
@@ -168,6 +172,15 @@ export const setAudioMuted = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.preview.setAudioMuted")(function* ({ tabId, audioMuted }) {
     const manager = yield* PreviewManager.PreviewManager;
     yield* manager.setAudioMuted(tabId, audioMuted);
+  }),
+});
+export const setAuthRelay = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SET_AUTH_RELAY_CHANNEL,
+  payload: DesktopPreviewSetAuthRelayInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.setAuthRelay")(function* ({ tabId, relay }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.setAuthRelay(tabId, relay);
   }),
 });
 export const openDevTools = tabMethod(
@@ -481,6 +494,7 @@ export const methods = [
   hardReload,
   setColorScheme,
   setAudioMuted,
+  setAuthRelay,
   openDevTools,
   clearCookies,
   clearCache,
