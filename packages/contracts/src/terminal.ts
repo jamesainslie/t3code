@@ -57,8 +57,37 @@ export const TerminalAttachInput = Schema.Struct({
   env: Schema.optional(TerminalEnvSchema),
   providerInstanceId: Schema.optional(ProviderInstanceId),
   restartIfNotRunning: Schema.optional(Schema.Boolean),
+  /**
+   * The client renders browser-launch captures. The server keeps the two
+   * `browser-launch*` events out of streams that did not set this, so a
+   * client built before they existed keeps decoding its attach stream.
+   */
+  browserLaunchEvents: Schema.optional(Schema.Boolean),
 });
 export type TerminalAttachInput = typeof TerminalAttachInput.Type;
+
+const TerminalBrowserLaunchCaptureIdSchema = TrimmedNonEmptyStringSchema.check(
+  Schema.isMaxLength(128),
+);
+
+/**
+ * A command in the terminal asked to open a URL. The environment never opens a
+ * browser; the client that owns the terminal shows the link and, for a
+ * loopback sign-in, carries the return URL back through
+ * `terminal.browserLaunchComplete`.
+ */
+export const TerminalBrowserLaunchCompleteInput = Schema.Struct({
+  ...TerminalSessionInput.fields,
+  captureId: TerminalBrowserLaunchCaptureIdSchema,
+  callbackUrl: TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(16_384)),
+});
+export type TerminalBrowserLaunchCompleteInput = typeof TerminalBrowserLaunchCompleteInput.Type;
+
+export const TerminalBrowserLaunchCancelInput = Schema.Struct({
+  ...TerminalSessionInput.fields,
+  captureId: TerminalBrowserLaunchCaptureIdSchema,
+});
+export type TerminalBrowserLaunchCancelInput = typeof TerminalBrowserLaunchCancelInput.Type;
 
 export const TerminalWriteInput = Schema.Struct({
   ...TerminalSessionInput.fields,
@@ -207,6 +236,25 @@ const TerminalActivityEvent = Schema.Struct({
   label: Schema.String.check(Schema.isMaxLength(128)),
 });
 
+const TerminalBrowserLaunchEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("browser-launch"),
+  captureId: TerminalBrowserLaunchCaptureIdSchema,
+  url: Schema.String.check(Schema.isMaxLength(16_384)),
+  /** The loopback listener named in the URL, when it advertised one; the return URL must match it. */
+  redirectUri: Schema.NullOr(Schema.String),
+  expiresAt: Schema.String,
+});
+export type TerminalBrowserLaunchEvent = typeof TerminalBrowserLaunchEvent.Type;
+
+const TerminalBrowserLaunchSettledEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("browser-launch-settled"),
+  captureId: TerminalBrowserLaunchCaptureIdSchema,
+  outcome: Schema.Literals(["completed", "cancelled"]),
+});
+export type TerminalBrowserLaunchSettledEvent = typeof TerminalBrowserLaunchSettledEvent.Type;
+
 export const TerminalEvent = Schema.Union([
   TerminalStartedEvent,
   TerminalOutputEvent,
@@ -216,6 +264,8 @@ export const TerminalEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalBrowserLaunchEvent,
+  TerminalBrowserLaunchSettledEvent,
 ]);
 export type TerminalEvent = typeof TerminalEvent.Type;
 
@@ -233,8 +283,25 @@ export const TerminalAttachStreamEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalBrowserLaunchEvent,
+  TerminalBrowserLaunchSettledEvent,
 ]);
 export type TerminalAttachStreamEvent = typeof TerminalAttachStreamEvent.Type;
+
+/** Safe failure text for a browser-launch relay. Never carries the URL or its code. */
+export class TerminalBrowserLaunchError extends Schema.TaggedErrorClass<TerminalBrowserLaunchError>()(
+  "TerminalBrowserLaunchError",
+  {
+    threadId: Schema.String,
+    terminalId: Schema.String,
+    captureId: Schema.String,
+    detail: Schema.String,
+  },
+) {
+  override get message() {
+    return this.detail;
+  }
+}
 
 export class TerminalCwdNotFoundError extends Schema.TaggedErrorClass<TerminalCwdNotFoundError>()(
   "TerminalCwdNotFoundError",

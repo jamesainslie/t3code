@@ -2608,6 +2608,18 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.terminalClose, terminalManager.close(input), {
             "rpc.aggregate": "terminal",
           }),
+        [WS_METHODS.terminalBrowserLaunchComplete]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.terminalBrowserLaunchComplete,
+            terminalManager.completeBrowserLaunch(input),
+            { "rpc.aggregate": "terminal" },
+          ),
+        [WS_METHODS.terminalBrowserLaunchCancel]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.terminalBrowserLaunchCancel,
+            terminalManager.cancelBrowserLaunch(input),
+            { "rpc.aggregate": "terminal" },
+          ),
         [WS_METHODS.subscribeTerminalEvents]: (_input) =>
           observeRpcStream(
             WS_METHODS.subscribeTerminalEvents,

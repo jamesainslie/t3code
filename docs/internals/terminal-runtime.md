@@ -42,3 +42,23 @@ device queries can otherwise provoke fresh replies that appear as junk at the
 prompt. The server strips query/response traffic from retained history, and the
 [web renderer](../../apps/web/src/terminal/ghostty/core.ts) detaches its PTY writer
 during replay. Preserve both protections when changing retention or renderer code.
+
+## Browser launches are captured, never opened
+
+The user is at a client, never at the environment, so a browser opened by a
+terminal command is always wrong even when the environment has a display. Every
+T3 terminal gets `BROWSER` pointed at the
+[capture helper](../../apps/server/src/auth-relay/browserLaunchSocket.ts), overriding
+any value in the user's environment. The helper cannot report through the PTY: its
+stderr is the terminal, and ConPTY re-flows long lines. It connects to a private
+local socket the terminal manager owns and presents a token issued for that one
+process. The manager records the URL as a
+[pending capture](../../apps/server/src/terminal/browserLaunches.ts) and publishes it
+to attached clients, which show the link and relay a return URL back through the
+generic [loopback replay](../../apps/server/src/auth-relay/loopbackCallback.ts).
+
+Captures die with the process. The desktop strips `ELECTRON_RUN_AS_NODE` from
+terminal environments, so the helper is a wrapper script that sets it itself; the
+inline `node -e` helper providers use would not run under an Electron runtime
+there. Clients opt into the capture events per attach stream so a client built
+before they existed keeps decoding the stream.
