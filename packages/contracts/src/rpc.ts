@@ -153,6 +153,9 @@ import {
 import {
   TerminalAttachInput,
   TerminalAttachStreamEvent,
+  TerminalBrowserLaunchCancelInput,
+  TerminalBrowserLaunchCompleteInput,
+  TerminalBrowserLaunchError,
   TerminalClearInput,
   TerminalCloseInput,
   TerminalError,
@@ -297,6 +300,8 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
+  terminalBrowserLaunchComplete: "terminal.browserLaunchComplete",
+  terminalBrowserLaunchCancel: "terminal.browserLaunchCancel",
 
   // Preview methods
   previewOpen: "preview.open",
@@ -990,6 +995,16 @@ const WsTerminalCloseRpc = Rpc.make(WS_METHODS.terminalClose, {
   error: Schema.Union([TerminalError, EnvironmentAuthorizationError]),
 });
 
+const WsTerminalBrowserLaunchCompleteRpc = Rpc.make(WS_METHODS.terminalBrowserLaunchComplete, {
+  payload: TerminalBrowserLaunchCompleteInput,
+  error: Schema.Union([TerminalBrowserLaunchError, EnvironmentAuthorizationError]),
+});
+
+const WsTerminalBrowserLaunchCancelRpc = Rpc.make(WS_METHODS.terminalBrowserLaunchCancel, {
+  payload: TerminalBrowserLaunchCancelInput,
+  error: Schema.Union([TerminalBrowserLaunchError, EnvironmentAuthorizationError]),
+});
+
 const WsPreviewOpenRpc = Rpc.make(WS_METHODS.previewOpen, {
   payload: PreviewOpenInput,
   success: PreviewSessionSnapshot,
@@ -1276,6 +1291,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalClearRpc,
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
+  WsTerminalBrowserLaunchCompleteRpc,
+  WsTerminalBrowserLaunchCancelRpc,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
   WsPreviewOpenRpc,

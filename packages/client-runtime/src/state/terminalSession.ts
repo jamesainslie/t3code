@@ -1,6 +1,7 @@
 import type {
   EnvironmentId,
   TerminalAttachStreamEvent,
+  TerminalBrowserLaunchEvent,
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
@@ -24,12 +25,19 @@ export {
   type TerminalOutputUpdate,
 } from "./terminalOutput.ts";
 
+/** A URL a command in the terminal asked to open, waiting on the client to act. */
+export type TerminalBrowserLaunch = Pick<
+  TerminalBrowserLaunchEvent,
+  "captureId" | "url" | "redirectUri" | "expiresAt"
+>;
+
 export interface TerminalSessionState {
   readonly summary: TerminalSummary | null;
   readonly output: TerminalOutputState;
   readonly status: TerminalSessionSnapshot["status"] | "closed";
   readonly error: string | null;
   readonly hasRunningSubprocess: boolean;
+  readonly browserLaunches: ReadonlyArray<TerminalBrowserLaunch>;
   readonly updatedAt: string | null;
   readonly version: number;
   readonly lifecycleVersion: number;
@@ -39,10 +47,13 @@ export interface TerminalBufferState {
   readonly output: TerminalOutputState;
   readonly status: TerminalSessionSnapshot["status"] | "closed";
   readonly error: string | null;
+  readonly browserLaunches: ReadonlyArray<TerminalBrowserLaunch>;
   readonly updatedAt: string | null;
   readonly version: number;
   readonly lifecycleVersion: number;
 }
+
+const NO_BROWSER_LAUNCHES: ReadonlyArray<TerminalBrowserLaunch> = Object.freeze([]);
 
 export interface KnownTerminalSessionTarget {
   readonly environmentId: EnvironmentId;
@@ -67,6 +78,7 @@ export const EMPTY_TERMINAL_BUFFER_STATE = Object.freeze<TerminalBufferState>({
   output: EMPTY_TERMINAL_OUTPUT_STATE,
   status: "closed",
   error: null,
+  browserLaunches: NO_BROWSER_LAUNCHES,
   updatedAt: null,
   version: 0,
   lifecycleVersion: 0,
@@ -78,6 +90,7 @@ export const EMPTY_TERMINAL_SESSION_STATE = Object.freeze<TerminalSessionState>(
   status: "closed",
   error: null,
   hasRunningSubprocess: false,
+  browserLaunches: NO_BROWSER_LAUNCHES,
   updatedAt: null,
   version: 0,
   lifecycleVersion: 0,
@@ -105,6 +118,8 @@ function terminalBufferStateFromSnapshot(
     output: resetOutput(current.output, snapshot.history, maxBufferBytes),
     status: snapshot.status,
     error: null,
+    // The server replays still-pending captures right after the snapshot.
+    browserLaunches: NO_BROWSER_LAUNCHES,
     updatedAt: snapshot.updatedAt,
     version: current.version + 1,
     lifecycleVersion: current.lifecycleVersion,
@@ -127,6 +142,7 @@ export function combineTerminalSessionState(
     status: buffer.version > 0 ? buffer.status : (summary?.status ?? buffer.status),
     error: buffer.error,
     hasRunningSubprocess: summary?.hasRunningSubprocess ?? false,
+    browserLaunches: buffer.browserLaunches,
     updatedAt: latestTimestamp(summary?.updatedAt ?? null, buffer.updatedAt),
     version: buffer.version,
     lifecycleVersion: buffer.lifecycleVersion,
@@ -170,6 +186,7 @@ export function applyTerminalAttachStreamEvent(
         ...current,
         status: "exited",
         error: null,
+        browserLaunches: NO_BROWSER_LAUNCHES,
         version: current.version + 1,
       };
     case "closed":
@@ -177,6 +194,7 @@ export function applyTerminalAttachStreamEvent(
         ...current,
         status: "closed",
         error: null,
+        browserLaunches: NO_BROWSER_LAUNCHES,
         version: current.version + 1,
       };
     case "error":
@@ -188,6 +206,30 @@ export function applyTerminalAttachStreamEvent(
       };
     case "activity":
       return current;
+    case "browser-launch":
+      return current.browserLaunches.some((launch) => launch.captureId === event.captureId)
+        ? current
+        : {
+            ...current,
+            browserLaunches: [
+              ...current.browserLaunches,
+              {
+                captureId: event.captureId,
+                url: event.url,
+                redirectUri: event.redirectUri,
+                expiresAt: event.expiresAt,
+              },
+            ],
+            version: current.version + 1,
+          };
+    case "browser-launch-settled": {
+      const browserLaunches = current.browserLaunches.filter(
+        (launch) => launch.captureId !== event.captureId,
+      );
+      return browserLaunches.length === current.browserLaunches.length
+        ? current
+        : { ...current, browserLaunches, version: current.version + 1 };
+    }
   }
 }
 

@@ -62,6 +62,7 @@ function makeKnownSession(input: {
       status: input.status,
       error: null,
       hasRunningSubprocess: false,
+      browserLaunches: [],
       updatedAt: input.updatedAt ?? "2026-04-15T20:00:00.000Z",
       version: 1,
       lifecycleVersion: 1,

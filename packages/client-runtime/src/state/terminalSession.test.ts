@@ -492,3 +492,55 @@ describe("terminal session reducers", () => {
     });
   });
 });
+
+describe("terminal browser launches", () => {
+  const launch = {
+    type: "browser-launch" as const,
+    threadId: TARGET.threadId,
+    terminalId: TARGET.terminalId,
+    captureId: "capture-1",
+    url: "https://github.com/login/device",
+    redirectUri: null,
+    expiresAt: "2026-04-01T00:05:00.000Z",
+  };
+
+  it("keeps a captured launch until it settles or the process ends", () => {
+    const snapshot = applyTerminalAttachStreamEvent(EMPTY_TERMINAL_BUFFER_STATE, {
+      type: "snapshot",
+      snapshot: BASE_SNAPSHOT,
+    });
+    const captured = applyTerminalAttachStreamEvent(snapshot, launch);
+    expect(captured.browserLaunches).toEqual([
+      {
+        captureId: "capture-1",
+        url: launch.url,
+        redirectUri: null,
+        expiresAt: launch.expiresAt,
+      },
+    ]);
+    // A replayed capture after a reconnect is not a second banner.
+    expect(applyTerminalAttachStreamEvent(captured, launch)).toBe(captured);
+
+    const settled = applyTerminalAttachStreamEvent(captured, {
+      type: "browser-launch-settled",
+      threadId: TARGET.threadId,
+      terminalId: TARGET.terminalId,
+      captureId: "capture-1",
+      outcome: "completed",
+    });
+    expect(settled.browserLaunches).toEqual([]);
+    expect(settled.version).toBe(captured.version + 1);
+
+    const exited = applyTerminalAttachStreamEvent(captured, {
+      type: "exited",
+      threadId: TARGET.threadId,
+      terminalId: TARGET.terminalId,
+      exitCode: 0,
+      exitSignal: null,
+    });
+    expect(exited.browserLaunches).toEqual([]);
+    expect(combineTerminalSessionState(null, captured).browserLaunches).toBe(
+      captured.browserLaunches,
+    );
+  });
+});

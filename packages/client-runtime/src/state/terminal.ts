@@ -41,7 +41,8 @@ export function createTerminalEnvironmentAtoms<R, E>(
       label: "environment-data:terminal:attach",
       subscribe: (input: EnvironmentRpcInput<typeof WS_METHODS.terminalAttach>) =>
         Stream.suspend(() =>
-          subscribe(WS_METHODS.terminalAttach, input).pipe(
+          // Every client on this runtime renders captured browser launches.
+          subscribe(WS_METHODS.terminalAttach, { ...input, browserLaunchEvents: true }).pipe(
             Stream.scan(nextTerminalAttachSeedState(), applyTerminalAttachStreamEvent),
           ),
         ),
@@ -90,6 +91,14 @@ export function createTerminalEnvironmentAtoms<R, E>(
       tag: WS_METHODS.terminalClose,
       scheduler: lifecycleScheduler,
       concurrency: lifecycleConcurrency,
+    }),
+    completeBrowserLaunch: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:terminal:browser-launch-complete",
+      tag: WS_METHODS.terminalBrowserLaunchComplete,
+    }),
+    cancelBrowserLaunch: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:terminal:browser-launch-cancel",
+      tag: WS_METHODS.terminalBrowserLaunchCancel,
     }),
   };
 }

@@ -13,6 +13,7 @@ import {
   TerminalProviderInstanceNotFoundError,
 } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -233,6 +234,12 @@ interface CreateManagerOptions {
   resolveProviderInstanceEnvironment?: Parameters<
     typeof TerminalManager.makeWithOptions
   >[0]["resolveProviderInstanceEnvironment"];
+  browserLaunchSocket?: Parameters<
+    typeof TerminalManager.makeWithOptions
+  >[0]["browserLaunchSocket"];
+  forwardBrowserLaunchCallback?: Parameters<
+    typeof TerminalManager.makeWithOptions
+  >[0]["forwardBrowserLaunchCallback"];
 }
 
 interface ManagerFixture {
@@ -249,7 +256,7 @@ const createManager = (
 ): Effect.Effect<
   ManagerFixture,
   PlatformError.PlatformError,
-  FileSystem.FileSystem | Path.Path | Scope.Scope | ProcessRunner.ProcessRunner
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | Scope.Scope | ProcessRunner.ProcessRunner
 > =>
   Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
     Effect.gen(function* () {
@@ -280,6 +287,12 @@ const createManager = (
           : {}),
         ...(options.resolveProviderInstanceEnvironment !== undefined
           ? { resolveProviderInstanceEnvironment: options.resolveProviderInstanceEnvironment }
+          : {}),
+        ...(options.browserLaunchSocket !== undefined
+          ? { browserLaunchSocket: options.browserLaunchSocket }
+          : {}),
+        ...(options.forwardBrowserLaunchCallback !== undefined
+          ? { forwardBrowserLaunchCallback: options.forwardBrowserLaunchCallback }
           : {}),
       });
       const eventsRef = yield* Ref.make<ReadonlyArray<TerminalEvent>>([]);
@@ -2617,5 +2630,162 @@ it.layer(
       assert.equal(process.killSignals[0], "SIGTERM");
       expect(process.killSignals).toContain("SIGKILL");
     }).pipe(Effect.provide(TestClock.layer())),
+  );
+});
+
+it.layer(
+  Layer.merge(NodeServices.layer, ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer))),
+  { excludeTestServices: true },
+)("terminal browser launches", (it) => {
+  const authorizeUrl =
+    "https://auth.example.com/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A46353%2Fcallback&state=opaque";
+  const callbackUrl = "http://127.0.0.1:46353/callback?code=abc&state=opaque";
+
+  const fakeBrowserLaunchSocket = () => {
+    const handlers = new Map<string, (url: string) => Effect.Effect<void>>();
+    let nextToken = 0;
+    const socket: NonNullable<
+      Parameters<typeof TerminalManager.makeWithOptions>[0]["browserLaunchSocket"]
+    > = {
+      address: "/tmp/fake.sock",
+      register: (onLaunch) =>
+        Effect.sync(() => {
+          const token = `token-${++nextToken}`;
+          handlers.set(token, onLaunch);
+          return {
+            command: `'/state/auth-relay/browser-launch' '${token}'`,
+            release: Effect.sync(() => {
+              handlers.delete(token);
+            }),
+          };
+        }),
+    };
+    const launch = (command: string | undefined, url: string) => {
+      const token = command?.match(/'([^']+)'$/)?.[1];
+      const handler = token ? handlers.get(token) : undefined;
+      return handler ? handler(url) : Effect.die(new Error("no handler for BROWSER token"));
+    };
+    return { socket, launch, tokens: () => handlers.size };
+  };
+
+  it.effect("points BROWSER at the capture helper and reports launches to attached clients", () =>
+    Effect.gen(function* () {
+      const relay = fakeBrowserLaunchSocket();
+      const forwarded: string[] = [];
+      const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+        env: { BROWSER: "firefox", browser: "chromium" },
+        browserLaunchSocket: relay.socket,
+        forwardBrowserLaunchCallback: (callback) =>
+          Effect.sync(() => void forwarded.push(callback.href)),
+      });
+      const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* manager.attachStream(
+        { ...openInput(), browserLaunchEvents: true },
+        (event) => Ref.update(attachEvents, (events) => [...events, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      const spawnEnv = ptyAdapter.spawnInputs[0]?.env;
+      expect(spawnEnv?.BROWSER).toBe("'/state/auth-relay/browser-launch' 'token-1'");
+      expect(spawnEnv?.browser).toBeUndefined();
+
+      yield* relay.launch(spawnEnv?.BROWSER, authorizeUrl);
+      const captured = (yield* Ref.get(attachEvents)).find(
+        (event) => event.type === "browser-launch",
+      );
+      expect(captured).toBeDefined();
+      if (!captured || captured.type !== "browser-launch") return;
+      expect(captured.url).toBe(authorizeUrl);
+      expect(captured.redirectUri).toBe("http://127.0.0.1:46353/callback");
+
+      // A client that attaches later still sees the pending capture.
+      const lateEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribeLate = yield* manager.attachStream(
+        { ...openInput(), browserLaunchEvents: true },
+        (event) => Ref.update(lateEvents, (events) => [...events, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribeLate));
+      expect(
+        (yield* Ref.get(lateEvents)).filter((event) => event.type === "browser-launch"),
+      ).toHaveLength(1);
+
+      yield* manager.completeBrowserLaunch({
+        ...openInput(),
+        captureId: captured.captureId,
+        callbackUrl,
+      });
+      expect(forwarded).toEqual([callbackUrl]);
+      const settled = (yield* getEvents).find((event) => event.type === "browser-launch-settled");
+      expect(settled).toMatchObject({ captureId: captured.captureId, outcome: "completed" });
+      const second = yield* manager
+        .completeBrowserLaunch({ ...openInput(), captureId: captured.captureId, callbackUrl })
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(second)).toBe(true);
+    }),
+  );
+
+  it.effect("keeps browser-launch events away from clients that did not opt in", () =>
+    Effect.gen(function* () {
+      const relay = fakeBrowserLaunchSocket();
+      const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+        browserLaunchSocket: relay.socket,
+      });
+      const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* manager.attachStream(openInput(), (event) =>
+        Ref.update(attachEvents, (events) => [...events, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      yield* relay.launch(ptyAdapter.spawnInputs[0]?.env.BROWSER, authorizeUrl);
+      expect((yield* getEvents).some((event) => event.type === "browser-launch")).toBe(true);
+      const types = (yield* Ref.get(attachEvents)).map((event) => event.type);
+      expect(types).not.toContain("browser-launch");
+      expect(types).not.toContain("browser-launch-settled");
+    }),
+  );
+
+  it.effect("cancel forgets a capture, and process exit releases the token and captures", () =>
+    Effect.gen(function* () {
+      const relay = fakeBrowserLaunchSocket();
+      const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+        browserLaunchSocket: relay.socket,
+      });
+      yield* manager.open(openInput());
+      const command = ptyAdapter.spawnInputs[0]?.env.BROWSER;
+      yield* relay.launch(command, authorizeUrl);
+      yield* relay.launch(command, "https://github.com/login/device");
+      const captures = (yield* getEvents).filter((event) => event.type === "browser-launch");
+      expect(captures).toHaveLength(2);
+      const [first, second] = captures;
+      if (first?.type !== "browser-launch" || second?.type !== "browser-launch") return;
+
+      yield* manager.cancelBrowserLaunch({ ...openInput(), captureId: first.captureId });
+      expect((yield* getEvents).filter((event) => event.type === "browser-launch-settled")).toEqual(
+        [expect.objectContaining({ captureId: first.captureId, outcome: "cancelled" })],
+      );
+
+      expect(relay.tokens()).toBe(1);
+      ptyAdapter.processes[0]?.emitExit({ exitCode: 0, signal: 0 });
+      yield* waitFor(
+        Effect.map(getEvents, (events) => events.some((event) => event.type === "exited")),
+        "1200 millis",
+      );
+      expect(relay.tokens()).toBe(0);
+      const settledIds = (yield* getEvents)
+        .filter((event) => event.type === "browser-launch-settled")
+        .map((event) => (event.type === "browser-launch-settled" ? event.captureId : ""));
+      expect(settledIds).toEqual([first.captureId, second.captureId]);
+      // The dead process cannot receive a callback.
+      const late = yield* manager
+        .completeBrowserLaunch({ ...openInput(), captureId: second.captureId, callbackUrl })
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(late)).toBe(true);
+    }),
+  );
+
+  it.effect("leaves BROWSER alone when the environment cannot host the helper", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, { env: { BROWSER: "firefox" } });
+      yield* manager.open(openInput());
+      expect(ptyAdapter.spawnInputs[0]?.env.BROWSER).toBe("firefox");
+    }),
   );
 });

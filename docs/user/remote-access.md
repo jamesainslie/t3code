@@ -139,8 +139,10 @@ If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
-For Antigravity's Google callback on a remote host, see
-[remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
+Sign-ins started on a remote host finish from your device. See
+[remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device) for
+provider setup and [terminal sign-in](./terminal.md#sign-in-from-a-terminal) for
+commands you run yourself.
 
 ## Manage or revoke access
 

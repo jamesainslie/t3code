@@ -47,6 +47,7 @@ import { useSelectedThreadDetail } from "../../state/use-thread-detail";
 import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnectionNotice";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { TerminalSurface } from "./NativeTerminalSurface";
+import { TerminalBrowserLaunchBanner } from "./TerminalBrowserLaunchBanner";
 import { getMobileTerminalTheme } from "./terminalTheme";
 import { terminalDebugLog } from "./terminalDebugLog";
 import {
@@ -1261,6 +1262,22 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
         ) : (
           <>
             <View className="flex-1" style={{ paddingBottom: terminalBottomInset }}>
+              {routeEnvironmentId !== null
+                ? terminal.browserLaunches.map((launch) => (
+                    <TerminalBrowserLaunchBanner
+                      key={launch.captureId}
+                      environmentId={routeEnvironmentId}
+                      threadId={selectedThread.id}
+                      terminalId={terminalId}
+                      launch={launch}
+                      colors={{
+                        background: terminalTheme.background,
+                        foreground: terminalTheme.foreground,
+                        border: terminalTheme.border,
+                      }}
+                    />
+                  ))
+                : null}
               <TerminalSurface
                 autoFocus={!SHOWCASE_ENABLED}
                 buffer={terminalSurfaceBuffer}
