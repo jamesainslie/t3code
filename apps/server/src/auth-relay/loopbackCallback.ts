@@ -54,6 +54,58 @@ export function parseLoopbackRedirectUri(value: string): URL | null {
 }
 
 /**
+ * The listener an authorization request names in its own query, when it is
+ * one T3 can replay to. `state` rides along only with such a listener, since
+ * it is only checked against that listener's callback.
+ */
+export function readAuthorizationRequestCallback(url: URL): {
+  readonly redirectUri: string | null;
+  readonly state: string | null;
+} {
+  const redirectUris = url.searchParams.getAll("redirect_uri");
+  const redirect = redirectUris.length === 1 ? parseLoopbackRedirectUri(redirectUris[0]!) : null;
+  const states = url.searchParams.getAll("state");
+  const state =
+    states.length === 1 && states[0] && states[0].length <= 512 && !/\s/.test(states[0])
+      ? states[0]
+      : null;
+  return { redirectUri: redirect?.href ?? null, state: redirect ? state : null };
+}
+
+/**
+ * Reads an authorization URL a tool printed for a loopback sign-in: an
+ * `https` page that names a loopback `redirect_uri`. Anything else cannot be
+ * completed through the relay. Failures never quote the URL.
+ */
+export const parseLoopbackAuthorizationUrl = Effect.fn("parseLoopbackAuthorizationUrl")(function* (
+  authorizationUrl: string,
+): Effect.fn.Return<
+  { readonly authorizationUrl: string; readonly callback: PendingLoopbackCallback },
+  AuthRelayError
+> {
+  const invalid = () =>
+    new AuthRelayError({
+      operation: "start",
+      detail: "The sign-in link is not one T3 Code can finish from another device.",
+    });
+  if (authorizationUrl.length > MAX_CALLBACK_URL_LENGTH || /\s/.test(authorizationUrl)) {
+    return yield* invalid();
+  }
+  const url = yield* Effect.try({ try: () => new URL(authorizationUrl), catch: invalid });
+  const { redirectUri, state } = readAuthorizationRequestCallback(url);
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.hash !== "" ||
+    redirectUri === null
+  ) {
+    return yield* invalid();
+  }
+  return { authorizationUrl, callback: { redirectUri, ...(state ? { state } : {}) } };
+});
+
+/**
  * Accepts only the return URL for the registered listener: same origin and
  * path, the registered state when there is one, and exactly one OAuth
  * response (`code` or `error`). Failures never quote the URL.

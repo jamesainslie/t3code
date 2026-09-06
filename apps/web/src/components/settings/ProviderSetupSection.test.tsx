@@ -110,6 +110,7 @@ function renderSetup(
     provider?: ServerProvider;
     enabled?: boolean;
     binaryPath?: string;
+    driver?: ProviderDriverKind;
   } = {},
 ) {
   hooks.beginRender();
@@ -117,6 +118,8 @@ function renderSetup(
     environmentId,
     environmentLabel: "Remote Google device",
     instanceId,
+    driver: options.driver ?? ProviderDriverKind.make("antigravity"),
+    driverLabel: options.driver === "codex" ? "Codex" : "Antigravity",
     provider: options.provider ?? provider,
     binaryPath: options.binaryPath,
     enabled: options.enabled ?? true,
@@ -384,4 +387,42 @@ describe("Antigravity setup", () => {
       expect(setup.startAuth).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("provider-neutral setup", () => {
+  const codexProvider: ServerProvider = {
+    ...provider,
+    driver: ProviderDriverKind.make("codex"),
+    setup: { canAuthenticate: true, canInstall: false },
+  };
+
+  beforeEach(() => {
+    hooks.reset();
+    vi.clearAllMocks();
+    setup.installation = null;
+    for (const command of [setup.startAuth, setup.completeAuth, setup.cancelAuth]) {
+      command.mockReset().mockResolvedValue({ _tag: "Success", value: undefined });
+    }
+  });
+
+  it("shows the device code without a return URL field and never watches an installer", () => {
+    setup.auth = authState({
+      authorizationUrl: "https://auth.openai.com/codex/device",
+      userCode: "ABCD-EFGH",
+    });
+    const view = renderSetup({ driver: ProviderDriverKind.make("codex"), provider: codexProvider });
+    expect(visitElements(view, (element) => element.props.children === "ABCD-EFGH")).not.toBeNull();
+    expect(button(view, "Copy code")).not.toBeNull();
+    expect(visitElements(view, (element) => element.type === "form")).toBeNull();
+    expect(button(view, "Sign in with Google")).toBeNull();
+    expect(setup.installState).not.toHaveBeenCalled();
+  });
+
+  it("offers a plain sign-in for a signed-out account", () => {
+    setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
+    const view = renderSetup({ driver: ProviderDriverKind.make("codex"), provider: codexProvider });
+    expect(button(view, "Sign in")).not.toBeNull();
+    expect(button(view, "Sign out")).not.toBeNull();
+    expect(visitElements(view, (element) => element.props.children === "Runtime")).toBeNull();
+  });
 });

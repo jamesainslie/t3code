@@ -5,7 +5,8 @@ import * as Exit from "effect/Exit";
 import * as TestClock from "effect/testing/TestClock";
 
 import { AuthRelayError } from "../auth-relay/AuthRelayError.ts";
-import { makeTerminalBrowserLaunches, readBrowserLaunchCallback } from "./browserLaunches.ts";
+import { readAuthorizationRequestCallback } from "../auth-relay/loopbackCallback.ts";
+import { makeTerminalBrowserLaunches } from "./browserLaunches.ts";
 
 const terminal = { threadId: "thread-1", terminalId: "term-1" };
 const authorizeUrl =
@@ -13,16 +14,16 @@ const authorizeUrl =
 const deviceUrl = "https://github.com/login/device";
 
 it("reads the loopback target and state only when the URL advertises a loopback listener", () => {
-  assert.deepEqual(readBrowserLaunchCallback(new URL(authorizeUrl)), {
+  assert.deepEqual(readAuthorizationRequestCallback(new URL(authorizeUrl)), {
     redirectUri: "http://127.0.0.1:46353/callback",
     state: "opaque-state",
   });
-  assert.deepEqual(readBrowserLaunchCallback(new URL(deviceUrl)), {
+  assert.deepEqual(readAuthorizationRequestCallback(new URL(deviceUrl)), {
     redirectUri: null,
     state: null,
   });
   assert.deepEqual(
-    readBrowserLaunchCallback(
+    readAuthorizationRequestCallback(
       new URL(
         "https://auth.example.com/authorize?redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&state=s",
       ),
