@@ -483,7 +483,7 @@ function ProviderSetupActions({
               >
                 <label htmlFor={`provider-callback-${instanceId}`}>
                   The final 127.0.0.1 or localhost page will not load from another device. Paste its
-                  full address here.
+                  full address here. If the final page shows a code instead, paste the code.
                 </label>
                 <Input
                   id={`provider-callback-${instanceId}`}

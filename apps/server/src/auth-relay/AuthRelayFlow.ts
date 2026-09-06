@@ -23,10 +23,15 @@ import { AuthRelayError } from "./AuthRelayError.ts";
 import {
   CALLBACK_FORWARDING_FAILED_MESSAGE,
   forwardLoopbackCallback,
+  readPastedAuthorizationCode,
   validateLoopbackCallbackUrl,
   type LoopbackCallbackForwarder,
+  type PastedAuthorizationCode,
+  type PendingAuthorization,
   type PendingLoopbackCallback,
 } from "./loopbackCallback.ts";
+
+export type { AuthorizationCompletion, PendingAuthorization } from "./loopbackCallback.ts";
 
 /**
  * Driver-agnostic sign-in relay for one provider instance.
@@ -44,12 +49,6 @@ import {
 export const AUTH_RELAY_TIMEOUT_MS = 300_000;
 const SIGN_OUT_TIMEOUT = "90 seconds";
 const isSetupError = Schema.is(ProviderSetupError);
-
-export interface PendingAuthorization {
-  readonly authorizationUrl: string;
-  /** The listener the client must relay the return URL to, or null when none is expected. */
-  readonly callback: PendingLoopbackCallback | null;
-}
 
 /** Callbacks the driver's sign-in task uses to move the flow forward. */
 export interface AuthRelaySignInHandle {
@@ -110,8 +109,10 @@ export interface AuthRelayDriver<E> {
     pending: PendingLoopbackCallback,
     callbackUrl: string,
   ) => Effect.Effect<URL, AuthRelayError>;
-  /** Replaces the raw loopback GET, for tests and for tools that take a pasted code. */
+  /** Replaces the raw loopback GET, for tests. */
   readonly forwardCallback?: LoopbackCallbackForwarder;
+  /** Hands a pasted code to the tool, for authorizations that complete with a code. */
+  readonly submitCode?: (input: PastedAuthorizationCode) => Effect.Effect<void, AuthRelayError>;
   readonly isLogoutPrompt?: (text: string, hasAttachments: boolean) => boolean;
 }
 
@@ -300,7 +301,10 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
       lock.withPermits(1)(
         Effect.gen(function* () {
           if (activeFlow !== flow || operation !== "auth" || flow.pending) return;
-          flow.pending = { authorizationUrl: input.verificationUrl, callback: null };
+          flow.pending = {
+            authorizationUrl: input.verificationUrl,
+            completion: { kind: "none" },
+          };
           yield* publishFlow(flow, {
             ...flow.state,
             phase: "waiting",
@@ -434,19 +438,36 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
       const pending = yield* lock.withPermits(1)(
         Effect.gen(function* () {
           const flow = yield* requireFlow(ownerSessionId, input.flowId, "complete");
-          if (!flow.pending?.callback || flow.callbackSent) {
+          const completion = flow.pending?.completion;
+          if (!completion || completion.kind === "none" || flow.callbackSent) {
             return yield* setupError(
               "complete",
               flow.callbackSent
                 ? "The sign-in response was already sent. Wait for sign-in to finish."
-                : flow.pending
+                : completion
                   ? "This sign-in finishes on the sign-in page and does not take a return URL."
                   : "Wait for the sign-in link before you send a return URL.",
             );
           }
-          const callback = yield* validateCallback(flow.pending.callback, input.callbackUrl).pipe(
-            Effect.mapError((error) => setupError("complete", error.detail)),
-          );
+          const delivery =
+            completion.kind === "loopback"
+              ? yield* validateCallback(completion.callback, input.callbackUrl).pipe(
+                  Effect.map(forwardCallback),
+                  Effect.mapError((error) => setupError("complete", error.detail)),
+                )
+              : yield* readPastedAuthorizationCode(completion.state, input.callbackUrl).pipe(
+                  Effect.map((pasted) =>
+                    driver.submitCode
+                      ? driver.submitCode(pasted)
+                      : Effect.fail(
+                          new AuthRelayError({
+                            operation: "complete",
+                            detail: "This sign-in cannot take a pasted code.",
+                          }),
+                        ),
+                  ),
+                  Effect.mapError((error) => setupError("complete", error.detail)),
+                );
           flow.callbackSent = true;
           yield* publishFlow(flow, {
             ...flow.state,
@@ -458,7 +479,7 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
           // sent the callback may disconnect before the tool answers, and the
           // flow must still settle instead of sitting at "verifying" until
           // the deadline.
-          const forwarding = yield* forwardCallback(callback).pipe(
+          const forwarding = yield* delivery.pipe(
             // stopFlow interrupts this fiber, so it runs from a sibling fiber.
             Effect.tapError(() =>
               stopFlow(flow, "failed", CALLBACK_FORWARDING_FAILED_MESSAGE).pipe(

@@ -10,6 +10,7 @@ import {
   forwardLoopbackCallback,
   parseLoopbackRedirectUri,
   readLoopbackCallbackResponse,
+  readPastedAuthorizationCode,
   validateLoopbackCallbackUrl,
 } from "./loopbackCallback.ts";
 
@@ -180,6 +181,43 @@ describe("forwardLoopbackCallback", () => {
       assert.isTrue(Exit.isFailure(result));
       if (Exit.isFailure(result)) {
         assert.notInclude(encodeUnknownJson(result.cause), "secret-code");
+      }
+    }),
+  );
+});
+
+describe("readPastedAuthorizationCode", () => {
+  it.effect("accepts the hosted callback address, a bare code, and code#state", () =>
+    Effect.gen(function* () {
+      const fromUrl = yield* readPastedAuthorizationCode(
+        "expected",
+        "https://platform.example.com/oauth/code/callback?code=abc&state=expected",
+      );
+      assert.deepEqual(fromUrl, { code: "abc", state: "expected" });
+      assert.deepEqual(yield* readPastedAuthorizationCode("expected", " abc "), {
+        code: "abc",
+        state: "expected",
+      });
+      assert.deepEqual(yield* readPastedAuthorizationCode(null, "abc#other"), {
+        code: "abc",
+        state: "other",
+      });
+    }),
+  );
+
+  it.effect("rejects a foreign state, an insecure address, and anything with whitespace", () =>
+    Effect.gen(function* () {
+      for (const value of [
+        "abc#other",
+        "http://platform.example.com/oauth/code/callback?code=abc&state=expected",
+        "https://platform.example.com/oauth/code/callback?state=expected",
+        "https://platform.example.com/oauth/code/callback?code=abc&state=other",
+        "abc def",
+        "",
+        `${"a".repeat(3_000)}#expected`,
+      ]) {
+        const result = yield* readPastedAuthorizationCode("expected", value).pipe(Effect.exit);
+        assert.isTrue(Exit.isFailure(result), value);
       }
     }),
   );

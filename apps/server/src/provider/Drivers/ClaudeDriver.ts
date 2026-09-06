@@ -28,8 +28,10 @@ import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
 import { ServerConfig } from "../../config.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { makeClaudeAuth } from "../ClaudeAuth.ts";
 import { ProviderDriverError } from "../Errors.ts";
 import { makeClaudeAdapter } from "../Layers/ClaudeAdapter.ts";
+import { makeClaudeLoginCommands } from "../Layers/ClaudeLogin.ts";
 import { makeClaudeScopedLimitNames } from "../Layers/claudeUsageLimits.ts";
 import {
   checkClaudeProviderStatus,
@@ -243,6 +245,19 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
               Effect.provideService(Path.Path, path),
             );
 
+      // Each instance signs into its own CLAUDE_CONFIG_DIR.
+      const loginCommands = yield* makeClaudeLoginCommands(instanceId, effectiveConfig, processEnv);
+      const auth = yield* makeClaudeAuth({
+        instanceId,
+        spawnLogin: loginCommands.spawnLogin.pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        ),
+        runLogout: loginCommands.runLogout.pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        ),
+        refreshSnapshot: snapshot.refresh.pipe(Effect.asVoid),
+      });
+
       return {
         instanceId,
         driverKind: DRIVER_KIND,
@@ -257,6 +272,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         snapshotForCwd,
         adapter,
         textGeneration,
+        auth: auth.controller,
       } satisfies ProviderInstance;
     }),
 };
