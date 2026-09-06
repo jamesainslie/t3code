@@ -7,6 +7,8 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 
+import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
+
 import * as ProcessRunner from "../processRunner.ts";
 
 /**
@@ -37,7 +39,7 @@ export function pinnedRuntimePaths(
   const versionDir = path.join(baseDir, PINNED_RUNTIME_DIR, "versions", version);
   return {
     versionDir,
-    entryPath: path.join(versionDir, "node_modules", "t3", "dist", "bin.mjs"),
+    entryPath: path.join(versionDir, FORK_IDENTITY.installedBinRelativePath),
     sentinelPath: path.join(versionDir, ".install-complete"),
   };
 }
@@ -147,7 +149,7 @@ const installPinnedRuntime = Effect.fn("cloud.pinned_runtime.ensure_installed")(
     );
   const stagingPaths: PinnedRuntimePaths = {
     versionDir: stagingDir,
-    entryPath: input.path.join(stagingDir, "node_modules", "t3", "dist", "bin.mjs"),
+    entryPath: input.path.join(stagingDir, FORK_IDENTITY.installedBinRelativePath),
     sentinelPath: input.path.join(stagingDir, ".install-complete"),
   };
 
@@ -159,7 +161,7 @@ const installPinnedRuntime = Effect.fn("cloud.pinned_runtime.ensure_installed")(
       stagingDir,
       "--no-fund",
       "--no-audit",
-      `t3@${input.version}`,
+      forkPackageSpec(input.version),
     ];
     yield* runner
       .run({

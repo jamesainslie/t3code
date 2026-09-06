@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { forkPackageSpec } from "@t3tools/shared/forkIdentity";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -106,14 +107,14 @@ describe("ssh command", () => {
           appVersion: "0.0.17",
           updateChannel: "latest",
         }),
-        "t3@0.0.17",
+        forkPackageSpec("0.0.17"),
       );
       assert.equal(
         resolveRemoteT3CliPackageSpec({
           appVersion: "0.0.17-nightly.20260415.44",
           updateChannel: "nightly",
         }),
-        "t3@0.0.17-nightly.20260415.44",
+        forkPackageSpec("0.0.17-nightly.20260415.44"),
       );
       assert.equal(
         resolveRemoteT3CliPackageSpec({
@@ -121,7 +122,7 @@ describe("ssh command", () => {
           updateChannel: "nightly",
           isDevelopment: true,
         }),
-        "t3@nightly",
+        forkPackageSpec("nightly"),
       );
       assert.equal(
         resolveRemoteT3CliPackageSpec({
@@ -129,7 +130,7 @@ describe("ssh command", () => {
           updateChannel: "latest",
           isDevelopment: true,
         }),
-        "t3@nightly",
+        forkPackageSpec("nightly"),
       );
     }),
   );
