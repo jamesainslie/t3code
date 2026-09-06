@@ -900,11 +900,14 @@ export function EnvironmentProviderSettings({
         onSelect={mode === "list" ? () => setSelectedInstanceId(row.instanceId) : undefined}
         readOnly={readOnly}
         setup={
-          mode === "editor" && row.driver === "antigravity" ? (
+          mode === "editor" &&
+          (row.driver === "antigravity" || liveProvider?.setup?.canAuthenticate === true) ? (
             <ProviderSetupSection
               environmentId={environmentId}
               environmentLabel={environmentLabel}
               instanceId={row.instanceId}
+              driver={row.driver}
+              driverLabel={driverOption?.label ?? String(row.driver)}
               provider={liveProvider}
               binaryPath={configuredBinaryPath(row.instance.config)}
               authMethod={readAntigravityAuthMethod(row.instance.config)}
