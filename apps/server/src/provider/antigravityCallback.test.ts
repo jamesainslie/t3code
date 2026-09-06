@@ -1,18 +1,16 @@
 import { assert, it } from "@effect/vitest";
-import { ProviderInstanceId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
 
-const instanceId = ProviderInstanceId.make("antigravity-callback-test");
 const pending = { redirectUri: "http://127.0.0.1:51234/", state: "owned-state" };
 
 it.effect("accepts the exact owned Google callback and an explicit Google denial", () =>
   Effect.gen(function* () {
     for (const response of ["code=example-code", "error=access_denied"]) {
       const callback = `http://127.0.0.1:51234/?state=owned-state&${response}&iss=https%3A%2F%2Faccounts.google.com`;
-      const parsed = yield* validateAntigravityCallbackUrl(instanceId, pending, callback);
+      const parsed = yield* validateAntigravityCallbackUrl(pending, callback);
       assert.equal(parsed.toString(), callback);
     }
   }),
@@ -39,10 +37,18 @@ it.effect("rejects different targets, credentials, fragments, and duplicate OAut
       "http://127.0.0.1:51234/?state=owned-state&code=x&iss=https%3A%2F%2Faccounts.google.com&iss=https%3A%2F%2Faccounts.google.com",
     ];
     for (const callback of callbacks) {
-      const result = yield* validateAntigravityCallbackUrl(instanceId, pending, callback).pipe(
-        Effect.exit,
-      );
+      const result = yield* validateAntigravityCallbackUrl(pending, callback).pipe(Effect.exit);
       assert.isTrue(Exit.isFailure(result), callback);
     }
+  }),
+);
+
+it.effect("rejects a localhost listener even though generic loopback rules allow one", () =>
+  Effect.gen(function* () {
+    const result = yield* validateAntigravityCallbackUrl(
+      { redirectUri: "http://localhost:51234/", state: "owned-state" },
+      "http://localhost:51234/?state=owned-state&code=x",
+    ).pipe(Effect.exit);
+    assert.isTrue(Exit.isFailure(result));
   }),
 );
