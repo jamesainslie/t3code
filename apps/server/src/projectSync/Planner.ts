@@ -5,12 +5,55 @@ import {
   ProjectId,
   type OrchestrationProject,
   type OrchestrationReadModel,
+  type OrchestrationThread,
   type ProjectSyncApplyCommand,
   type ProjectSyncMapping,
   type ProjectSyncRecord,
 } from "@t3tools/contracts";
 import { contentHash, type SyncSource } from "./Source.ts";
 import { EventId } from "@t3tools/contracts";
+
+/** Identifies the source conversation across its content-addressed imported versions. */
+export function syncedThreadKey(threadId: string): string {
+  return threadId.slice(0, threadId.lastIndexOf("-"));
+}
+
+export interface SyncedThreadManagement {
+  deleted?: true;
+  archived?: boolean;
+  settledOverride?: "settled" | "active";
+}
+
+/** Reapplies local organization when replacing or restoring an imported version. */
+export function planThreadManagement(
+  commandId: CommandId,
+  threadId: ThreadId,
+  existing: Pick<OrchestrationThread, "archivedAt" | "settledOverride"> | undefined,
+  local: SyncedThreadManagement | undefined,
+): ProjectSyncApplyCommand["commands"] {
+  const commands: ProjectSyncApplyCommand["commands"][number][] = [];
+  let archived = existing?.archivedAt != null;
+  const desiredArchive = local?.archived ?? (existing ? archived : true);
+  if (local?.settledOverride !== undefined && local.settledOverride !== existing?.settledOverride) {
+    if (archived) {
+      commands.push({ type: "thread.unarchive", commandId, threadId });
+      archived = false;
+    }
+    commands.push(
+      local.settledOverride === "settled"
+        ? { type: "thread.settle", commandId, threadId }
+        : { type: "thread.unsettle", commandId, threadId, reason: "user" },
+    );
+  }
+  if (desiredArchive !== archived) {
+    commands.push({
+      type: desiredArchive ? "thread.archive" : "thread.unarchive",
+      commandId,
+      threadId,
+    });
+  }
+  return commands;
+}
 
 export function activeSyncRecord(
   history: ReadonlyArray<ProjectSyncRecord>,
@@ -59,6 +102,7 @@ export function planImport(input: {
   batchId: string;
   now: string;
   localSettingOverrides?: ReadonlyMap<ProjectId, ReadonlySet<string>>;
+  localThreadManagement?: ReadonlyMap<string, SyncedThreadManagement>;
 }): ProjectSyncApplyCommand {
   const plan: ProjectSyncApplyCommand = {
     type: "project.sync.apply",
@@ -154,6 +198,8 @@ export function planImport(input: {
     for (const thread of entry.threads) {
       const prefix = `t3sync-${input.source.sourceId.slice(0, 12)}-${contentHash(thread.id).slice(0, 12)}-`;
       const threadId = ThreadId.make(`${prefix}${contentHash({ thread, projectId }).slice(0, 20)}`);
+      const localManagement = input.localThreadManagement?.get(syncedThreadKey(threadId));
+      if (localManagement?.deleted) continue;
       const existingVersion = input.snapshot.threads.find((candidate) => candidate.id === threadId);
       for (const previous of input.snapshot.threads) {
         if (
@@ -221,9 +267,10 @@ export function planImport(input: {
               id: EventId.make(`${threadId}-${contentHash(activity.id).slice(0, 16)}`),
             },
           });
-        if (thread.archivedAt)
-          commands.push({ type: "thread.archive", commandId: plan.commandId, threadId });
       }
+      commands.push(
+        ...planThreadManagement(plan.commandId, threadId, existingVersion, localManagement),
+      );
       visible.push(threadId);
     }
   }
