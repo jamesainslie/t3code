@@ -92,6 +92,9 @@ export function ProjectsSettings({
   const groups = useSettingsProjectGroups();
   const { environments } = useEnvironments();
   const machine = environments.find((environment) => environment.environmentId === machineId);
+  const syncEnvironmentId =
+    machine?.environmentId ??
+    (machineId === null && environments.length === 1 ? environments[0]?.environmentId : null);
   const machineOptions = environments.map((environment) => ({
     value: environment.environmentId,
     label: environment.label,
@@ -152,16 +155,48 @@ export function ProjectsSettings({
               />
             </div>
           </div>
-          {projectKey === null &&
-            (machine?.environmentId ??
-              (environments.length === 1 ? environments[0]?.environmentId : null)) && (
-              <div className="mt-4 pb-4">
-                <ProjectSyncSettings
-                  key={machine?.environmentId ?? environments[0]!.environmentId}
-                  environmentId={machine?.environmentId ?? environments[0]!.environmentId}
-                />
-              </div>
-            )}
+          {projectKey === null && (
+            <div className="mt-4 pb-4">
+              {syncEnvironmentId ? (
+                <ProjectSyncSettings key={syncEnvironmentId} environmentId={syncEnvironmentId} />
+              ) : (
+                <section
+                  aria-label="Sync from another T3 install"
+                  className="space-y-3 rounded-lg border border-border/60 p-4"
+                >
+                  <div>
+                    <h3 className="text-sm font-medium">Sync from another T3 install</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose the machine running your fork. Projects and conversation history are
+                      imported from another T3 install on that machine.
+                    </p>
+                  </div>
+                  <label className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
+                    Destination machine
+                    <select
+                      value=""
+                      disabled={environments.length === 0}
+                      className="max-w-full rounded-md border border-input bg-background p-2 text-sm text-foreground"
+                      onChange={(event) => {
+                        if (event.target.value) onScopeChange(null, event.target.value);
+                      }}
+                    >
+                      <option value="" disabled>
+                        {environments.length === 0
+                          ? "Connect a machine to set up sync"
+                          : "Choose a machine"}
+                      </option>
+                      {machineOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </section>
+              )}
+            </div>
+          )}
         </WorkspacePageContainer>
       </div>
       {machineId !== null && !machine ? (
