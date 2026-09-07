@@ -11,6 +11,7 @@ import {
   parseLoopbackRedirectUri,
   readLoopbackCallbackResponse,
   readPastedAuthorizationCode,
+  validateLoopbackCallbackForm,
   validateLoopbackCallbackUrl,
 } from "./loopbackCallback.ts";
 
@@ -154,12 +155,16 @@ describe("forwardLoopbackCallback", () => {
           resume(Effect.succeed(typeof address === "object" && address ? address.port : 0));
         });
       });
-      yield* forwardLoopbackCallback(new URL(`http://127.0.0.1:${port}/callback?code=x&state=s`));
+      yield* forwardLoopbackCallback({
+        method: "GET",
+        url: new URL(`http://127.0.0.1:${port}/callback?code=x&state=s`),
+      });
       assert.deepEqual(requests, ["/callback?code=x&state=s"]);
 
-      const redirected = yield* forwardLoopbackCallback(
-        new URL(`http://127.0.0.1:${port}/redirect?code=x`),
-      ).pipe(Effect.exit);
+      const redirected = yield* forwardLoopbackCallback({
+        method: "GET",
+        url: new URL(`http://127.0.0.1:${port}/redirect?code=x`),
+      }).pipe(Effect.exit);
       assert.isTrue(Exit.isFailure(redirected));
       assert.deepEqual(requests, ["/callback?code=x&state=s", "/redirect?code=x"]);
     }).pipe(Effect.scoped),
@@ -175,12 +180,136 @@ describe("forwardLoopbackCallback", () => {
           server.close(() => resume(Effect.succeed(value)));
         });
       });
-      const result = yield* forwardLoopbackCallback(
-        new URL(`http://127.0.0.1:${port}/?code=secret-code`),
-      ).pipe(Effect.exit);
+      const result = yield* forwardLoopbackCallback({
+        method: "GET",
+        url: new URL(`http://127.0.0.1:${port}/?code=secret-code`),
+      }).pipe(Effect.exit);
       assert.isTrue(Exit.isFailure(result));
       if (Exit.isFailure(result)) {
         assert.notInclude(encodeUnknownJson(result.cause), "secret-code");
+      }
+    }),
+  );
+
+  it.effect("posts a form body to the listener and keeps the body out of failures", () =>
+    Effect.gen(function* () {
+      const requests: Array<{ method: string; url: string; type: string; body: string }> = [];
+      const server = NodeHttp.createServer((request, response) => {
+        let body = "";
+        request.setEncoding("utf8");
+        request.on("data", (chunk: string) => {
+          body += chunk;
+        });
+        request.on("end", () => {
+          requests.push({
+            method: request.method ?? "",
+            url: request.url ?? "",
+            type: request.headers["content-type"] ?? "",
+            body,
+          });
+          response.writeHead(request.url === "/reject" ? 400 : 200);
+          response.end("ok");
+        });
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(() => void server.close()));
+      const port = yield* Effect.callback<number>((resume) => {
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address();
+          resume(Effect.succeed(typeof address === "object" && address ? address.port : 0));
+        });
+      });
+      yield* forwardLoopbackCallback({
+        method: "POST",
+        url: new URL(`http://127.0.0.1:${port}/`),
+        body: "code=x&state=s",
+      });
+      assert.deepEqual(requests, [
+        {
+          method: "POST",
+          url: "/",
+          type: "application/x-www-form-urlencoded",
+          body: "code=x&state=s",
+        },
+      ]);
+
+      const rejected = yield* forwardLoopbackCallback({
+        method: "POST",
+        url: new URL(`http://127.0.0.1:${port}/reject`),
+        body: "code=secret-code&state=s",
+      }).pipe(Effect.exit);
+      assert.isTrue(Exit.isFailure(rejected));
+      if (Exit.isFailure(rejected)) {
+        assert.notInclude(encodeUnknownJson(rejected.cause), "secret-code");
+      }
+    }).pipe(Effect.scoped),
+  );
+});
+
+describe("validateLoopbackCallbackForm", () => {
+  const pending = { redirectUri: "http://localhost:9857/", state: "owned-state" };
+
+  it.effect("accepts a posted response for the owned listener with one code or one error", () =>
+    Effect.gen(function* () {
+      for (const body of [
+        "code=example-code&client_info=eyJ1aWQ&state=owned-state&session_state=0012",
+        "error=access_denied&state=owned-state",
+      ]) {
+        const delivery = yield* validateLoopbackCallbackForm(
+          pending,
+          "http://localhost:9857/",
+          body,
+        );
+        assert.equal(delivery.url.toString(), "http://localhost:9857/");
+        assert.equal(delivery.body, body);
+      }
+    }),
+  );
+
+  it.effect(
+    "rejects another listener, a foreign state, a query on the target, and bad bodies",
+    () =>
+      Effect.gen(function* () {
+        for (const [callbackUrl, body] of [
+          ["http://localhost:9858/", "code=x&state=owned-state"],
+          ["http://127.0.0.1:9857/", "code=x&state=owned-state"],
+          ["http://localhost:9857/other", "code=x&state=owned-state"],
+          ["http://localhost:9857/?code=x", "code=x&state=owned-state"],
+          ["http://localhost:9857/", "code=x&state=other"],
+          ["http://localhost:9857/", "code=x"],
+          ["http://localhost:9857/", "code=x&code=y&state=owned-state"],
+          ["http://localhost:9857/", "code=x&error=denied&state=owned-state"],
+          ["http://localhost:9857/", "state=owned-state"],
+          ["http://localhost:9857/", ""],
+        ] as const) {
+          const result = yield* validateLoopbackCallbackForm(pending, callbackUrl, body).pipe(
+            Effect.exit,
+          );
+          assert.isTrue(Exit.isFailure(result), `${callbackUrl} ${body}`);
+          if (Exit.isFailure(result)) {
+            assert.notInclude(encodeUnknownJson(result.cause), "owned-state");
+          }
+        }
+      }),
+  );
+
+  it.effect("takes any unprivileged loopback origin when the launch advertised none", () =>
+    Effect.gen(function* () {
+      const delivery = yield* validateLoopbackCallbackForm(
+        null,
+        "http://127.0.0.1:8080/callback",
+        "code=x",
+      );
+      assert.equal(delivery.url.toString(), "http://127.0.0.1:8080/callback");
+      for (const callbackUrl of [
+        "https://127.0.0.1:8080/callback",
+        "http://127.0.0.1:80/callback",
+        "http://example.com:8080/callback",
+        "http://127.0.0.1:8080/callback?code=x",
+      ]) {
+        const result = yield* validateLoopbackCallbackForm(null, callbackUrl, "code=x").pipe(
+          Effect.exit,
+        );
+        assert.isTrue(Exit.isFailure(result), callbackUrl);
       }
     }),
   );

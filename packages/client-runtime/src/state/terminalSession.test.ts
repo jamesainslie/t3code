@@ -515,6 +515,8 @@ describe("terminal browser launches", () => {
         captureId: "capture-1",
         url: launch.url,
         redirectUri: null,
+        // A server built before `responseMode` existed only ever sent query responses.
+        responseMode: "query",
         expiresAt: launch.expiresAt,
       },
     ]);
@@ -542,5 +544,19 @@ describe("terminal browser launches", () => {
     expect(combineTerminalSessionState(null, captured).browserLaunches).toBe(
       captured.browserLaunches,
     );
+  });
+
+  it("carries the capture's response mode to the banner", () => {
+    const captured = applyTerminalAttachStreamEvent(EMPTY_TERMINAL_BUFFER_STATE, {
+      ...launch,
+      captureId: "capture-2",
+      redirectUri: "http://localhost:47822/",
+      responseMode: "form_post",
+    });
+    expect(captured.browserLaunches[0]).toMatchObject({
+      captureId: "capture-2",
+      redirectUri: "http://localhost:47822/",
+      responseMode: "form_post",
+    });
   });
 });

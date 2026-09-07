@@ -452,7 +452,7 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
           const delivery =
             completion.kind === "loopback"
               ? yield* validateCallback(completion.callback, input.callbackUrl).pipe(
-                  Effect.map(forwardCallback),
+                  Effect.map((url) => forwardCallback({ method: "GET", url })),
                   Effect.mapError((error) => setupError("complete", error.detail)),
                 )
               : yield* readPastedAuthorizationCode(completion.state, input.callbackUrl).pipe(

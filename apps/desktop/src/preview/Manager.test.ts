@@ -1,6 +1,9 @@
 import { it as effectIt } from "@effect/vitest";
 import { DESKTOP_PREVIEW_RECORDING_CAPTURE_TRIGGER } from "@t3tools/contracts";
-import type { DesktopPreviewRecordingFrame } from "@t3tools/contracts";
+import type {
+  DesktopPreviewAuthRelayCallback,
+  DesktopPreviewRecordingFrame,
+} from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -4391,7 +4394,7 @@ describe("auth relay tabs", () => {
             off: vi.fn(),
           },
         } as never);
-        const callbacks: Array<{ tabId: string; url: string }> = [];
+        const callbacks: Array<DesktopPreviewAuthRelayCallback> = [];
         yield* manager.subscribeAuthRelayCallbacks((event) =>
           Effect.sync(() => {
             callbacks.push(event);
@@ -4418,7 +4421,15 @@ describe("auth relay tabs", () => {
         expect(returning.preventDefault).toHaveBeenCalledOnce();
         yield* Effect.yieldNow;
         yield* Effect.yieldNow;
-        expect(callbacks).toEqual([{ tabId: "tab_relay", url: returning.url }]);
+        expect(callbacks).toEqual([
+          {
+            tabId: "tab_relay",
+            hostId: null,
+            url: returning.url,
+            method: "GET",
+            body: null,
+          },
+        ]);
         expect(loadURL).toHaveBeenCalledWith(PreviewManager.AUTH_RELAY_RETURN_PAGE_URL);
 
         // The tag is consumed: a second return is an ordinary navigation.

@@ -17,10 +17,12 @@ it("reads the loopback target and state only when the URL advertises a loopback 
   assert.deepEqual(readAuthorizationRequestCallback(new URL(authorizeUrl)), {
     redirectUri: "http://127.0.0.1:46353/callback",
     state: "opaque-state",
+    responseMode: "query",
   });
   assert.deepEqual(readAuthorizationRequestCallback(new URL(deviceUrl)), {
     redirectUri: null,
     state: null,
+    responseMode: "query",
   });
   assert.deepEqual(
     readAuthorizationRequestCallback(
@@ -28,7 +30,7 @@ it("reads the loopback target and state only when the URL advertises a loopback 
         "https://auth.example.com/authorize?redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&state=s",
       ),
     ),
-    { redirectUri: null, state: null },
+    { redirectUri: null, state: null, responseMode: "query" },
   );
 });
 
@@ -38,13 +40,54 @@ it.layer(NodeServices.layer)("terminal browser launches", (it) => {
   ) {
     const forwarded: string[] = [];
     const launches = yield* makeTerminalBrowserLaunches({
-      forward: (callback) =>
+      forward: (delivery) =>
         options.fail
           ? Effect.fail(new AuthRelayError({ operation: "complete", detail: "refused" }))
-          : Effect.sync(() => void forwarded.push(callback.href)),
+          : Effect.sync(() => {
+              forwarded.push(
+                delivery.method === "GET"
+                  ? delivery.url.href
+                  : `POST ${delivery.url.href} ${delivery.body}`,
+              );
+            }),
     });
     return { launches, forwarded };
   });
+
+  it.effect("records how the listener wants its response and replays a posted form", () =>
+    Effect.gen(function* () {
+      const { launches, forwarded } = yield* makeHarness();
+      const queryCapture = yield* launches.capture(terminal, authorizeUrl);
+      assert.equal(queryCapture!.responseMode, "query");
+
+      const formPostUrl =
+        "https://login.example.com/authorize?client_id=x&response_mode=form_post&redirect_uri=http%3A%2F%2Flocalhost%3A9857%2F&state=posted-state";
+      const capture = yield* launches.capture(terminal, formPostUrl);
+      assert.equal(capture!.responseMode, "form_post");
+      assert.equal(capture!.redirectUri, "http://localhost:9857/");
+
+      const body = "code=abc&client_info=eyJ1aWQ&state=posted-state&session_state=0012";
+      const rejected = yield* launches
+        .complete({
+          ...terminal,
+          captureId: capture!.captureId,
+          callbackUrl: "http://localhost:9857/",
+          formBody: "code=abc&state=wrong",
+        })
+        .pipe(Effect.exit);
+      assert.isTrue(Exit.isFailure(rejected));
+      assert.deepEqual(forwarded, []);
+
+      yield* launches.complete({
+        ...terminal,
+        captureId: capture!.captureId,
+        callbackUrl: "http://localhost:9857/",
+        formBody: body,
+      });
+      assert.deepEqual(forwarded, [`POST http://localhost:9857/ ${body}`]);
+      assert.deepEqual(launches.pending(terminal), [queryCapture!]);
+    }),
+  );
 
   it.effect("replays an owned callback once and refuses a second delivery", () =>
     Effect.gen(function* () {

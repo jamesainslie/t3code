@@ -15,17 +15,26 @@ When one asks for a browser, T3 Code shows a banner above that terminal with the
 link instead. Choose **Open** to open it on the device you are using, or **Copy**
 it into another browser.
 
-Sign-ins that finish on a `127.0.0.1` or `localhost` page cannot reach the
-environment from another device, so that final page does not load. Copy the
-page's full address, including everything after `?`, into the banner's return
-URL field and choose **Continue**. T3 Code delivers it to the command waiting in
-the terminal. Watch the terminal output to confirm the command finished.
+Sign-ins that finish on a `127.0.0.1` or `localhost` page are returning to the
+command's own listener on the environment, which your browser cannot reach from
+another device.
 
-In the desktop app, opening the link in the in-app browser skips that step: when
-the sign-in returns to the environment's address, T3 Code passes it to the
-command itself and shows a short confirmation page in the tab. The return URL
-field stays available if the sign-in was opened elsewhere.
+In the desktop app, nothing more is needed. While the banner is showing, T3 Code
+stands in for that listener on your computer, so the sign-in can end in any
+browser here: the in-app browser, or the one **Open** or **Copy link** took you
+to. The final page confirms the result is on its way, and the command in the
+terminal continues. If the port the command chose is already in use on your
+computer, the banner falls back to the return URL field below.
+
+In a web browser or on mobile, that final page does not load. Copy its full
+address, including everything after `?`, into the banner's return URL field and
+choose **Continue**. T3 Code delivers it to the command waiting in the terminal.
+Some sign-ins, such as `az login`, post their result to that page instead of
+putting it in the address, so there is nothing to copy; the banner says so. Open
+the link from the desktop app instead, or use the command's device-code option
+(for example `az login --use-device-code`).
 
 Device-code sign-ins finish on the provider's website and need nothing pasted.
-Dismissing the banner drops the link; run the command again to get a new one.
-A link is valid for five minutes.
+Watch the terminal output to confirm the command finished. Dismissing the banner
+drops the link; run the command again to get a new one. A link is valid for five
+minutes.

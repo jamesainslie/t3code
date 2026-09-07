@@ -64,6 +64,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL } from "../ipc/channels.ts";
+import { AUTH_RELAY_RETURN_PAGE_HTML } from "./AuthRelayReturnPage.ts";
 import * as BrowserSession from "./BrowserSession.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
@@ -444,10 +445,7 @@ export function matchesAuthRelay(relay: DesktopPreviewAuthRelay, url: string): b
 
 /** Plain page shown in place of the loopback response, which this machine can never load. */
 export const AUTH_RELAY_RETURN_PAGE_URL = `data:text/html;charset=utf-8,${encodeURIComponent(
-  "<!doctype html><title>Returning to your environment</title>" +
-    '<body style="font:16px system-ui;margin:3rem;color:#333">' +
-    '<h1 style="font-size:1.25rem">Returning to your environment</h1>' +
-    "<p>T3 Code is passing this sign-in back to the command that started it. You can close this tab.</p>",
+  AUTH_RELAY_RETURN_PAGE_HTML,
 )}`;
 
 type PreviewInputSignal =
@@ -1778,7 +1776,13 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
           const listeners = yield* Ref.get(authRelayListenersRef);
           yield* Effect.forEach(
             listeners,
-            (listener) => deliverEvent("auth-relay", tabId, () => listener({ tabId, url })),
+            (listener) =>
+              deliverEvent("auth-relay", tabId, () =>
+                // A tab only ever carries the response in its URL; a form POST
+                // never reaches a navigation the desktop can intercept, which
+                // is what the loopback host exists for.
+                listener({ tabId, hostId: null, url, method: "GET", body: null }),
+              ),
             { discard: true },
           );
           yield* attemptPromise(

@@ -273,6 +273,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_SET_AUDIO_MUTED_CHANNEL, { tabId, audioMuted }),
     setAuthRelay: (tabId, relay) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_SET_AUTH_RELAY_CHANNEL, { tabId, relay }),
+    hostAuthRelay: (input) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_HOST_AUTH_RELAY_CHANNEL, input),
+    releaseAuthRelayHost: (hostId) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_RELEASE_AUTH_RELAY_HOST_CHANNEL, { hostId }),
     openDevTools: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL, { tabId }),
     listBrowserImportSources: () => ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_SOURCES_CHANNEL),

@@ -58,16 +58,38 @@ to attached clients, which show the link and relay a return URL back through the
 generic [loopback replay](../../apps/server/src/auth-relay/loopbackCallback.ts).
 
 Captures die with the process. The desktop strips `ELECTRON_RUN_AS_NODE` from
-terminal environments, so the helper is a wrapper script that sets it itself; the
-inline `node -e` helper providers use would not run under an Electron runtime
-there. Clients opt into the capture events per attach stream so a client built
-before they existed keeps decoding the stream.
+terminal environments, so each registration gets a launcher script that sets it
+itself and execs the helper; the inline `node -e` helper providers use would not
+run under an Electron runtime there. `BROWSER` is that launcher's bare path with
+the token baked into the file, never a quoted path or an argument in the value:
+Python's `webbrowser` (az, gcloud) and Go's browser package exec the value as one
+program with the URL appended and do not shell-split it, so anything else opens
+nothing while the tool reports success. Clients opt into the capture events per
+attach stream so a client built before they existed keeps decoding the stream.
 
-The desktop in-app browser can close the loop without a paste. A tab opened for a
-capture is tagged with the capture's loopback target through the preview bridge;
-the [preview manager](../../apps/desktop/src/preview/Manager.ts) cancels the
-matching return navigation (a server-side redirect only `will-redirect` can
-cancel), hands the URL to the renderer, and loads a plain confirmation page. The
-tag is consumed by that one navigation and untagged tabs navigate normally. Web
-and mobile cannot intercept the OS browser, so the paste field stays the primary
-path there.
+Some listeners want a form POST rather than a GET. MSAL requests
+`response_mode=form_post` and answers a GET carrying auth parameters with 400, and
+the browser's final URL then holds nothing a user could paste. The capture records
+the requested `responseMode` from the authorization URL, and completion accepts an
+optional urlencoded `formBody` alongside the posted-to address; the
+[loopback replay](../../apps/server/src/auth-relay/loopbackCallback.ts) forwards it
+as the POST the browser made. Only something on the browser's machine can catch a
+POST, which is why the desktop hosts the listener.
+
+The desktop closes the loop without a paste by standing in for the listener. While
+a capture with an advertised loopback target is on screen, the renderer asks the
+[loopback host](../../apps/desktop/src/preview/AuthRelayLoopbackHost.ts) to bind
+that port on `127.0.0.1` and `::1` (Chrome resolves `localhost` to `::1` first).
+Any browser on the machine, in-app or not, then lands on the desktop, which
+answers with a plain confirmation page and hands the request (URL, method, body)
+to the renderer for the same completion RPC the paste field uses. A busy port
+makes hosting fail softly and the banner falls back to the paste field; in-app
+tabs are then tagged so the [preview manager](../../apps/desktop/src/preview/Manager.ts)
+can still intercept a GET return navigation (a server-side redirect only
+`will-redirect` can cancel). Web and mobile can host nothing, so the paste field
+stays the primary path there and form POST sign-ins are called out as needing the
+desktop or a device-code option.
+
+Dismiss is idempotent and a completion that finds its capture gone settles it, so
+every attached client drops the banner rather than keeping a stale one that can no
+longer do anything.

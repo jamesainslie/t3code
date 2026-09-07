@@ -2330,10 +2330,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             // handler checks the pid so a launch reported by a stale helper
             // cannot land on a later process in the same terminal.
             let expectedPid = -1;
+            // A launcher that cannot be written costs the terminal its capture, not its shell.
             const browserLaunch = options.browserLaunchSocket
-              ? yield* options.browserLaunchSocket.register((url) =>
-                  captureBrowserLaunch(session, expectedPid, url),
-                )
+              ? yield* options.browserLaunchSocket
+                  .register((url) => captureBrowserLaunch(session, expectedPid, url))
+                  .pipe(
+                    Effect.catch((error) =>
+                      Effect.logWarning("terminal browser-launch capture unavailable", {
+                        detail: error.detail,
+                      }).pipe(Effect.as(null)),
+                    ),
+                  )
               : null;
             const terminalEnv = createTerminalSpawnEnv(
               baseEnv,
@@ -3156,43 +3163,48 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       resolveLaunchInputEnvironment(input).pipe(Effect.flatMap(restartResolved)),
     );
 
+  const publishBrowserLaunchSettled = Effect.fn("terminal.publishBrowserLaunchSettled")(function* (
+    input: TerminalBrowserLaunchCancelInput,
+    outcome: "completed" | "cancelled",
+  ) {
+    const session = yield* getSession(input.threadId, input.terminalId);
+    if (Option.isNone(session)) return;
+    yield* publishEvent({
+      type: "browser-launch-settled",
+      threadId: input.threadId,
+      terminalId: input.terminalId,
+      sequence: advanceEventSequence(session.value).sequence,
+      captureId: input.captureId,
+      outcome,
+    });
+  });
+
+  const isBrowserLaunchPending = (input: TerminalBrowserLaunchCancelInput) =>
+    browserLaunches.pending(input).some((capture) => capture.captureId === input.captureId);
+
   const completeBrowserLaunch: TerminalManager["Service"]["completeBrowserLaunch"] = (input) =>
     Effect.gen(function* () {
-      const session = yield* getSession(input.threadId, input.terminalId);
-      yield* browserLaunches.complete(input);
-      if (Option.isSome(session)) {
-        yield* publishEvent({
-          type: "browser-launch-settled",
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          sequence: advanceEventSequence(session.value).sequence,
-          captureId: input.captureId,
-          outcome: "completed",
-        });
-      }
+      // A failed attempt that finds the capture gone (expired, or already
+      // finished from another client) settles it for every client too, so
+      // nobody is left with a banner that can no longer do anything.
+      yield* browserLaunches
+        .complete(input)
+        .pipe(
+          Effect.tapError(() =>
+            isBrowserLaunchPending(input)
+              ? Effect.void
+              : publishBrowserLaunchSettled(input, "cancelled"),
+          ),
+        );
+      yield* publishBrowserLaunchSettled(input, "completed");
     });
 
+  // Dismissing is idempotent: whether or not the capture was still known, the
+  // banner goes away on every client.
   const cancelBrowserLaunch: TerminalManager["Service"]["cancelBrowserLaunch"] = (input) =>
     Effect.gen(function* () {
-      if (!browserLaunches.cancel(input)) {
-        return yield* new TerminalBrowserLaunchError({
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          captureId: input.captureId,
-          detail: "This sign-in link is no longer waiting in this terminal.",
-        });
-      }
-      const session = yield* getSession(input.threadId, input.terminalId);
-      if (Option.isSome(session)) {
-        yield* publishEvent({
-          type: "browser-launch-settled",
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          sequence: advanceEventSequence(session.value).sequence,
-          captureId: input.captureId,
-          outcome: "cancelled",
-        });
-      }
+      browserLaunches.cancel(input);
+      yield* publishBrowserLaunchSettled(input, "cancelled");
     });
 
   const close: TerminalManager["Service"]["close"] = (input) =>

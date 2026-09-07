@@ -22,30 +22,34 @@ import { AuthRelayError } from "./AuthRelayError.ts";
  * terminal manager and hands over its token and the URL. The token, issued
  * per terminal process, is the only thing the socket trusts.
  *
- * Two files live under the manager's directory: the Node helper and a
- * platform wrapper that sets `ELECTRON_RUN_AS_NODE`, because the desktop
- * strips that variable from terminal environments and the runtime may be
- * Electron. Only the wrapper path appears in `BROWSER`, shell-quoted, with
- * the token as its single argument; Python-style `%s` substitution and
- * appended-URL launchers both reach the helper the same way.
+ * The Node helper lives under the manager's directory. Each registration gets
+ * its own launcher script beside it, with the token baked in, that sets
+ * `ELECTRON_RUN_AS_NODE` (the desktop strips that variable from terminal
+ * environments and the runtime may be Electron) and execs the helper.
+ * `BROWSER` is that launcher's bare path and nothing else: Python's
+ * `webbrowser` and Go's browser packages run the value as one program with
+ * the URL appended and never shell-split it, so a quoted path or an argument
+ * in the value would silently open nothing. Python-style `%s` substitution
+ * and appended-URL launchers both reach the helper the same way.
  */
 
 export const BROWSER_LAUNCH_SOCKET_MAX_MESSAGE_BYTES = 20_480;
 const SOCKET_IDLE_TIMEOUT_MS = 5_000;
 const HELPER_FILE_NAME = "browser-launch.mjs";
-const WRAPPER_FILE_NAME = "browser-launch";
+const LAUNCHER_DIRECTORY_NAME = "launch";
 
 export interface BrowserLaunchRegistration {
-  /** The `BROWSER` value for the process whose launches should reach the handler. */
+  /** The `BROWSER` value for the process whose launches should reach the handler: one bare path. */
   readonly command: string;
   readonly release: Effect.Effect<void>;
 }
 
 export interface BrowserLaunchSocket {
   readonly address: string;
+  /** Issues a token and writes its launcher; fails only when the launcher cannot be written. */
   readonly register: (
     onLaunch: (url: string) => Effect.Effect<void>,
-  ) => Effect.Effect<BrowserLaunchRegistration>;
+  ) => Effect.Effect<BrowserLaunchRegistration, AuthRelayError>;
 }
 
 /** Wire format from the helper: token, newline, URL, newline. */
@@ -99,36 +103,49 @@ function quotePosixDoubleQuoted(value: string): string {
   return `"${value.replaceAll(/["\\$`]/g, (character) => `\\${character}`)}"`;
 }
 
+/** The per-registration launcher: token baked in, the launched URL appended by the tool. */
 export function browserLaunchWrapperScript(input: {
   readonly platform: NodeJS.Platform;
   readonly runtimeExecutablePath: string;
   readonly helperPath: string;
   readonly address: string;
+  readonly token: string;
 }): string {
   if (input.platform === "win32") {
     return [
       "@echo off",
       'set "ELECTRON_RUN_AS_NODE=1"',
-      `"${input.runtimeExecutablePath}" "${input.helperPath}" "${input.address}" %*`,
+      `"${input.runtimeExecutablePath}" "${input.helperPath}" "${input.address}" "${input.token}" %*`,
       "",
     ].join("\r\n");
   }
   return [
     "#!/bin/sh",
-    `ELECTRON_RUN_AS_NODE=1 exec ${quotePosixDoubleQuoted(input.runtimeExecutablePath)} ${quotePosixDoubleQuoted(input.helperPath)} ${quotePosixDoubleQuoted(input.address)} "$@"`,
+    `ELECTRON_RUN_AS_NODE=1 exec ${quotePosixDoubleQuoted(input.runtimeExecutablePath)} ${quotePosixDoubleQuoted(input.helperPath)} ${quotePosixDoubleQuoted(input.address)} ${quotePosixDoubleQuoted(input.token)} "$@"`,
     "",
   ].join("\n");
 }
 
-function quoteShellArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+/**
+ * Whether a path can be the whole `BROWSER` value. Python splits the value
+ * on the path separator and Go-style launchers split it on whitespace, so
+ * either character would break it, as would anything a launcher substitutes.
+ */
+function isUsableBrowserPath(platform: NodeJS.Platform, value: string): boolean {
+  return !(
+    value.includes(platform === "win32" ? ";" : ":") ||
+    /[\s\r\n\0'"]/.test(value) ||
+    value.includes("%s")
+  );
 }
 
 /**
- * Writes the helper files under `directory`, listens on the private socket
- * for the rest of the scope, and issues per-process tokens. Fails when the
- * wrapper path could not survive Python's `BROWSER` splitting; callers then
- * run terminals without capture rather than with a broken one.
+ * Writes the helper under `directory`, listens on the private socket for the
+ * rest of the scope, and issues per-process tokens, each with its own
+ * launcher. Launchers live beside the helper unless that path could not
+ * survive a launcher's `BROWSER` handling, in which case they move to a
+ * temporary directory; when neither works the socket fails and callers run
+ * terminals without capture rather than with a broken one.
  */
 export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(function* (input: {
   readonly directory: string;
@@ -148,16 +165,16 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
     new AuthRelayError({ operation: "browser", detail, cause });
   const address = input.address ?? browserLaunchSocketAddress(platform, input.directory);
   const helperPath = path.join(input.directory, HELPER_FILE_NAME);
-  const wrapperPath = path.join(
-    input.directory,
-    platform === "win32" ? `${WRAPPER_FILE_NAME}.cmd` : WRAPPER_FILE_NAME,
-  );
-  const browserPath = platform === "win32" ? wrapperPath.replaceAll("\\", "/") : wrapperPath;
-  if (
-    browserPath.includes(platform === "win32" ? ";" : ":") ||
-    /[\r\n\0]/.test(browserPath) ||
-    browserPath.includes("%s")
-  ) {
+  const toBrowserPath = (value: string) =>
+    platform === "win32" ? value.replaceAll("\\", "/") : value;
+  const launcherDirectory = [
+    path.join(input.directory, LAUNCHER_DIRECTORY_NAME),
+    path.join(
+      NodeOS.tmpdir(),
+      `t3-browser-launch-${NodeCrypto.createHash("sha256").update(input.directory).digest("hex").slice(0, 16)}`,
+    ),
+  ].find((candidate) => isUsableBrowserPath(platform, toBrowserPath(candidate)));
+  if (launcherDirectory === undefined) {
     return yield* failed("The T3 data directory cannot host a BROWSER helper.");
   }
 
@@ -169,18 +186,14 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
   yield* fs
     .writeFileString(helperPath, browserLaunchHelperScript())
     .pipe(Effect.mapError((cause) => failed("Could not write the browser helper.", cause)));
+  // Launchers from a previous server are dead: their tokens died with it.
+  yield* fs.remove(launcherDirectory, { recursive: true }).pipe(Effect.ignore);
   yield* fs
-    .writeFileString(
-      wrapperPath,
-      browserLaunchWrapperScript({ platform, runtimeExecutablePath, helperPath, address }),
-    )
-    .pipe(Effect.mapError((cause) => failed("Could not write the browser helper wrapper.", cause)));
+    .makeDirectory(launcherDirectory, { recursive: true, mode: 0o700 })
+    .pipe(
+      Effect.mapError((cause) => failed("Could not create the browser launcher directory.", cause)),
+    );
   if (platform !== "win32") {
-    yield* fs
-      .chmod(wrapperPath, 0o700)
-      .pipe(
-        Effect.mapError((cause) => failed("Could not mark the browser helper executable.", cause)),
-      );
     // A socket file left by a previous server on this directory would refuse the bind.
     yield* fs.remove(address).pipe(Effect.ignore);
   }
@@ -235,16 +248,41 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
 
   return {
     address,
-    register: (onLaunch) =>
-      Effect.sync(() => {
-        const token = NodeCrypto.randomBytes(24).toString("base64url");
-        handlers.set(token, onLaunch);
-        return {
-          command: `${quoteShellArgument(browserPath)} ${quoteShellArgument(token)}`,
-          release: Effect.sync(() => {
-            handlers.delete(token);
+    register: Effect.fn("browserLaunchSocket.register")(function* (onLaunch) {
+      const token = NodeCrypto.randomBytes(24).toString("base64url");
+      const launcherPath = path.join(
+        launcherDirectory,
+        platform === "win32" ? `${token}.cmd` : token,
+      );
+      yield* fs
+        .writeFileString(
+          launcherPath,
+          browserLaunchWrapperScript({
+            platform,
+            runtimeExecutablePath,
+            helperPath,
+            address,
+            token,
           }),
-        };
-      }),
+        )
+        .pipe(Effect.mapError((cause) => failed("Could not write the browser launcher.", cause)));
+      if (platform !== "win32") {
+        yield* fs
+          .chmod(launcherPath, 0o700)
+          .pipe(
+            Effect.mapError((cause) =>
+              failed("Could not mark the browser launcher executable.", cause),
+            ),
+          );
+      }
+      handlers.set(token, onLaunch);
+      return {
+        command: toBrowserPath(launcherPath),
+        release: Effect.gen(function* () {
+          handlers.delete(token);
+          yield* fs.remove(launcherPath).pipe(Effect.ignore);
+        }),
+      };
+    }),
   };
 });

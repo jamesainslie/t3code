@@ -16,19 +16,23 @@ import {
   forwardLoopbackCallback,
   parseLoopbackRedirectUri,
   readAuthorizationRequestCallback,
+  validateLoopbackCallbackForm,
   validateLoopbackCallbackUrl,
+  type LoopbackCallbackDelivery,
   type LoopbackCallbackForwarder,
+  type LoopbackResponseMode,
 } from "../auth-relay/loopbackCallback.ts";
 
 /**
  * Pending browser launches per terminal.
  *
  * A capture is the URL a command wanted opened plus, when the URL advertised
- * one, the loopback listener it will wait on. Completing a capture replays
- * the client's return URL against that listener once; cancelling forgets it.
- * A capture expires on the same deadline as a provider sign-in. Unlike the
- * provider flow, nothing here confirms that the tool finished: the terminal
- * output is the user's confirmation.
+ * one, the loopback listener it will wait on and how that listener wants its
+ * response. Completing a capture replays the client's return, the final URL
+ * or the form a client-side listener caught, against that listener once;
+ * cancelling forgets it. A capture expires on the same deadline as a provider
+ * sign-in. Unlike the provider flow, nothing here confirms that the tool
+ * finished: the terminal output is the user's confirmation.
  */
 
 type TerminalRef = { readonly threadId: string; readonly terminalId: string };
@@ -38,6 +42,7 @@ interface PendingBrowserLaunch {
   readonly url: string;
   readonly redirectUri: string | null;
   readonly state: string | null;
+  readonly responseMode: LoopbackResponseMode;
   readonly expiresAt: string;
   readonly expiresAtMillis: number;
   consumed: boolean;
@@ -73,6 +78,7 @@ function toCapture(launch: PendingBrowserLaunch): TerminalBrowserLaunchCapture {
     captureId: launch.captureId,
     url: launch.url,
     redirectUri: launch.redirectUri,
+    responseMode: launch.responseMode,
     expiresAt: launch.expiresAt,
   };
 }
@@ -144,16 +150,22 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
         forget(input);
         return yield* error("This sign-in link expired. Run the command again.");
       }
-      const callback = yield* (
-        launch.redirectUri
-          ? validateLoopbackCallbackUrl(
-              { redirectUri: launch.redirectUri, ...(launch.state ? { state: launch.state } : {}) },
-              input.callbackUrl,
-            )
-          : validateUnadvertisedLoopbackCallbackUrl(input.callbackUrl)
-      ).pipe(Effect.mapError((cause) => error(cause.detail)));
+      const pending = launch.redirectUri
+        ? { redirectUri: launch.redirectUri, ...(launch.state ? { state: launch.state } : {}) }
+        : null;
+      const validated: Effect.Effect<LoopbackCallbackDelivery, AuthRelayError> =
+        input.formBody !== undefined
+          ? validateLoopbackCallbackForm(pending, input.callbackUrl, input.formBody)
+          : pending
+            ? validateLoopbackCallbackUrl(pending, input.callbackUrl).pipe(
+                Effect.map((url) => ({ method: "GET", url }) as const),
+              )
+            : validateUnadvertisedLoopbackCallbackUrl(input.callbackUrl).pipe(
+                Effect.map((url) => ({ method: "GET", url }) as const),
+              );
+      const delivery = yield* validated.pipe(Effect.mapError((cause) => error(cause.detail)));
       launch.consumed = true;
-      yield* forward(callback).pipe(
+      yield* forward(delivery).pipe(
         Effect.tapError(() =>
           Effect.sync(() => {
             launch.consumed = false;

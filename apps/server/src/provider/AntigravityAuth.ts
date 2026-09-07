@@ -8,6 +8,7 @@ import * as Scope from "effect/Scope";
 import * as AcpErrors from "effect-acp/errors";
 
 import { AuthRelayError } from "../auth-relay/AuthRelayError.ts";
+import type { LoopbackCallbackDelivery } from "../auth-relay/loopbackCallback.ts";
 import {
   makeAuthRelayFlow,
   type AuthRelayFlow,
@@ -152,8 +153,9 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
     validateCallback: validateAntigravityCallbackUrl,
     ...(options.forwardCallback
       ? {
-          forwardCallback: (callback: URL) =>
-            options.forwardCallback!(callback).pipe(
+          // Google's callback is always a GET; the URL is all the Antigravity replay needs.
+          forwardCallback: (delivery: LoopbackCallbackDelivery) =>
+            options.forwardCallback!(delivery.url).pipe(
               Effect.mapError(
                 (error) => new AuthRelayError({ operation: "complete", detail: error.detail }),
               ),
