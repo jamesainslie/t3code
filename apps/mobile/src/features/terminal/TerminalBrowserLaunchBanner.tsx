@@ -3,7 +3,10 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import type { TerminalBrowserLaunch } from "@t3tools/client-runtime/state/terminal";
+import {
+  terminalBrowserLaunchRelayMode,
+  type TerminalBrowserLaunch,
+} from "@t3tools/client-runtime/state/terminal";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -52,8 +55,10 @@ function BannerButton(props: {
 }
 
 /**
- * The phone's browser can never reach the environment's loopback listener, so
- * the pasted return URL is the primary way a terminal sign-in finishes here.
+ * The phone's browser can never reach the environment's loopback listener, nor
+ * host one of its own, so the pasted return URL is the only way a terminal
+ * sign-in finishes here. A sign-in that posts its result has nothing to paste;
+ * it needs the desktop app or a device code instead.
  */
 export function TerminalBrowserLaunchBanner({
   environmentId,
@@ -68,6 +73,12 @@ export function TerminalBrowserLaunchBanner({
   const [callbackUrl, setCallbackUrl] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Mobile never stands in for the loopback listener, so hosting is never on.
+  const relayMode = terminalBrowserLaunchRelayMode({
+    responseMode: launch.responseMode,
+    redirectUri: launch.redirectUri,
+    hosted: null,
+  });
   const target = {
     environmentId,
     input: { threadId, terminalId, captureId: launch.captureId },
@@ -130,38 +141,48 @@ export function TerminalBrowserLaunchBanner({
           onPress={() => void run(() => cancel(target))}
         />
       </View>
-      <Text className="text-xs" style={{ color: colors.foreground, opacity: 0.8 }}>
-        If it ends on a 127.0.0.1 or localhost page that will not load, paste that page&apos;s full
-        address here.
-      </Text>
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-        <TextInput
-          accessibilityLabel="Sign-in return URL"
-          autoCapitalize="none"
-          autoCorrect={false}
-          className="min-h-10 flex-1 rounded-xl py-2 text-sm"
-          editable={!pending}
-          keyboardType="url"
-          maxLength={16_384}
-          onChangeText={setCallbackUrl}
-          placeholder="http://127.0.0.1:..."
-          value={callbackUrl}
-        />
-        <BannerButton
-          label="Continue"
-          borderColor={colors.border}
-          disabled={pending || callbackUrl.trim().length === 0}
-          onPress={() => {
-            const trimmed = callbackUrl.trim();
-            if (!trimmed) return;
-            void run(() =>
-              complete({ ...target, input: { ...target.input, callbackUrl: trimmed } }),
-            ).then((accepted) => {
-              if (accepted) setCallbackUrl("");
-            });
-          }}
-        />
-      </View>
+      {relayMode === "unreachable" ? (
+        <Text className="text-xs" style={{ color: colors.foreground, opacity: 0.8 }}>
+          This sign-in posts its result to a page only this computer&apos;s T3 Code desktop app can
+          catch. Open the link from the desktop app, or use the command&apos;s device-code option if
+          it has one.
+        </Text>
+      ) : (
+        <>
+          <Text className="text-xs" style={{ color: colors.foreground, opacity: 0.8 }}>
+            If it ends on a 127.0.0.1 or localhost page that will not load, paste that page&apos;s
+            full address here.
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <TextInput
+              accessibilityLabel="Sign-in return URL"
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="min-h-10 flex-1 rounded-xl py-2 text-sm"
+              editable={!pending}
+              keyboardType="url"
+              maxLength={16_384}
+              onChangeText={setCallbackUrl}
+              placeholder="http://127.0.0.1:..."
+              value={callbackUrl}
+            />
+            <BannerButton
+              label="Continue"
+              borderColor={colors.border}
+              disabled={pending || callbackUrl.trim().length === 0}
+              onPress={() => {
+                const trimmed = callbackUrl.trim();
+                if (!trimmed) return;
+                void run(() =>
+                  complete({ ...target, input: { ...target.input, callbackUrl: trimmed } }),
+                ).then((accepted) => {
+                  if (accepted) setCallbackUrl("");
+                });
+              }}
+            />
+          </View>
+        </>
+      )}
       {error ? (
         <Text accessibilityRole="alert" className="text-xs text-destructive">
           {error}

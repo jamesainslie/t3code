@@ -1026,10 +1026,48 @@ export const DesktopPreviewSetAuthRelayInputSchema = Schema.Struct({
   relay: Schema.NullOr(DesktopPreviewAuthRelaySchema),
 });
 
-/** The loopback return URL a relay tab was about to load. One per tagged tab. */
+const DesktopPreviewAuthRelayHostIdSchema = Schema.String.check(Schema.isNonEmpty()).check(
+  Schema.isMaxLength(128),
+);
+
+/**
+ * Ask the desktop to stand in for a sign-in's loopback listener on this
+ * machine while the capture is pending. The listener the environment's tool
+ * opened cannot be reached from here, so the desktop binds the same port
+ * (`origin` is `http://127.0.0.1:<port>` or `http://localhost:<port>`) and
+ * catches whatever the browser sends back, a GET with a query or a form POST,
+ * from any browser on this machine, not only an in-app tab. `path` narrows
+ * the accepted request to the advertised path; null takes any path.
+ */
+export const DesktopPreviewHostAuthRelayInputSchema = Schema.Struct({
+  hostId: DesktopPreviewAuthRelayHostIdSchema,
+  origin: Schema.String,
+  path: Schema.NullOr(Schema.String),
+});
+export type DesktopPreviewHostAuthRelayInput = typeof DesktopPreviewHostAuthRelayInputSchema.Type;
+
+/** `hosted` is false when the port is already taken on this machine; the paste fallback then applies. */
+export const DesktopPreviewHostAuthRelayResultSchema = Schema.Struct({
+  hosted: Schema.Boolean,
+});
+export type DesktopPreviewHostAuthRelayResult = typeof DesktopPreviewHostAuthRelayResultSchema.Type;
+
+export const DesktopPreviewReleaseAuthRelayHostInputSchema = Schema.Struct({
+  hostId: DesktopPreviewAuthRelayHostIdSchema,
+});
+
+/**
+ * A sign-in response the desktop caught on its way to a loopback listener:
+ * from a tagged in-app tab (`tabId`) or from a hosted listener (`hostId`),
+ * exactly one of which is set. `body` is the urlencoded form of a POST
+ * response and null for a GET, whose response rides in `url`'s query.
+ */
 export interface DesktopPreviewAuthRelayCallback {
-  readonly tabId: string;
+  readonly tabId: string | null;
+  readonly hostId: string | null;
   readonly url: string;
+  readonly method: "GET" | "POST";
+  readonly body: string | null;
 }
 
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
@@ -1222,6 +1260,15 @@ export interface DesktopPreviewBridge {
    * loading; the tag is consumed by that one navigation.
    */
   setAuthRelay: (tabId: string, relay: DesktopPreviewAuthRelay | null) => Promise<void>;
+  /**
+   * Stand in for a pending sign-in's loopback listener on this machine until
+   * released. Responses arrive through `onAuthRelayCallback` with `hostId`.
+   */
+  hostAuthRelay: (
+    input: DesktopPreviewHostAuthRelayInput,
+  ) => Promise<DesktopPreviewHostAuthRelayResult>;
+  /** Stop standing in for a listener; a no-op for an unknown or already released host. */
+  releaseAuthRelayHost: (hostId: string) => Promise<void>;
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */

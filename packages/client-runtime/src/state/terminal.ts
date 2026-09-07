@@ -103,4 +103,5 @@ export function createTerminalEnvironmentAtoms<R, E>(
   };
 }
 
+export * from "./terminalBrowserLaunch.ts";
 export * from "./terminalSession.ts";

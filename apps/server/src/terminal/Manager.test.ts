@@ -2579,8 +2579,8 @@ it.layer(
       const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
         env: { BROWSER: "firefox", browser: "chromium" },
         browserLaunchSocket: relay.socket,
-        forwardBrowserLaunchCallback: (callback) =>
-          Effect.sync(() => void forwarded.push(callback.href)),
+        forwardBrowserLaunchCallback: (delivery) =>
+          Effect.sync(() => void forwarded.push(delivery.url.href)),
       });
       const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
       const unsubscribe = yield* manager.attachStream(
@@ -2683,6 +2683,38 @@ it.layer(
         .pipe(Effect.exit);
       expect(Exit.isFailure(late)).toBe(true);
     }),
+  );
+
+  it.effect(
+    "settles a capture for every client when a dismiss or late completion finds it gone",
+    () =>
+      Effect.gen(function* () {
+        const relay = fakeBrowserLaunchSocket();
+        const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+          browserLaunchSocket: relay.socket,
+        });
+        yield* manager.open(openInput());
+        yield* relay.launch(ptyAdapter.spawnInputs[0]?.env.BROWSER, authorizeUrl);
+        const capture = (yield* getEvents).find((event) => event.type === "browser-launch");
+        if (capture?.type !== "browser-launch") return;
+
+        // A second client dismissing after the first already did must not see an error.
+        yield* manager.cancelBrowserLaunch({ ...openInput(), captureId: capture.captureId });
+        yield* manager.cancelBrowserLaunch({ ...openInput(), captureId: capture.captureId });
+        const settled = (yield* getEvents).filter(
+          (event) => event.type === "browser-launch-settled",
+        );
+        expect(settled).toHaveLength(2);
+
+        // Completing a capture that is gone fails, and also settles it so its banner disappears.
+        const late = yield* manager
+          .completeBrowserLaunch({ ...openInput(), captureId: capture.captureId, callbackUrl })
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(late)).toBe(true);
+        expect(
+          (yield* getEvents).filter((event) => event.type === "browser-launch-settled"),
+        ).toHaveLength(3);
+      }),
   );
 
   it.effect("leaves BROWSER alone when the environment cannot host the helper", () =>

@@ -16,6 +16,9 @@ import {
   DesktopPreviewScreenshotArtifactSchema,
   DesktopPreviewSetAudioMutedInputSchema,
   DesktopPreviewSetAuthRelayInputSchema,
+  DesktopPreviewHostAuthRelayInputSchema,
+  DesktopPreviewHostAuthRelayResultSchema,
+  DesktopPreviewReleaseAuthRelayHostInputSchema,
   DesktopPreviewSetColorSchemeInputSchema,
   BrowserImportResult,
   BrowserImportSource,
@@ -34,6 +37,7 @@ import * as Schema from "effect/Schema";
 import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
+import * as AuthRelayLoopbackHost from "../../preview/AuthRelayLoopbackHost.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -55,6 +59,12 @@ export const installPreviewEventForwarding = Effect.fn(
     electronWindow.sendAll(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, event),
   );
   yield* manager.subscribeAuthRelayCallbacks((event) =>
+    electronWindow.sendAll(IpcChannels.PREVIEW_AUTH_RELAY_CALLBACK_CHANNEL, event),
+  );
+  // The hosted loopback listener reports on the same channel; the renderer
+  // tells the two apart by which of `tabId` and `hostId` is set.
+  const loopbackHost = yield* AuthRelayLoopbackHost.AuthRelayLoopbackHost;
+  yield* loopbackHost.subscribe((event) =>
     electronWindow.sendAll(IpcChannels.PREVIEW_AUTH_RELAY_CALLBACK_CHANNEL, event),
   );
 });
@@ -183,6 +193,31 @@ export const setAuthRelay = DesktopIpc.makeIpcMethod({
     yield* manager.setAuthRelay(tabId, relay);
   }),
 });
+/**
+ * Registered on their own: these carry `AuthRelayLoopbackHost` in their
+ * context, so they do not unify with the manager-backed handlers the shared
+ * loop iterates.
+ */
+export const hostAuthRelay = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_HOST_AUTH_RELAY_CHANNEL,
+  payload: DesktopPreviewHostAuthRelayInputSchema,
+  result: DesktopPreviewHostAuthRelayResultSchema,
+  handler: Effect.fn("desktop.ipc.preview.hostAuthRelay")(function* (input) {
+    const loopbackHost = yield* AuthRelayLoopbackHost.AuthRelayLoopbackHost;
+    return yield* loopbackHost.host(input);
+  }),
+});
+
+export const releaseAuthRelayHost = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_RELEASE_AUTH_RELAY_HOST_CHANNEL,
+  payload: DesktopPreviewReleaseAuthRelayHostInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.releaseAuthRelayHost")(function* ({ hostId }) {
+    const loopbackHost = yield* AuthRelayLoopbackHost.AuthRelayLoopbackHost;
+    yield* loopbackHost.release(hostId);
+  }),
+});
+
 export const openDevTools = tabMethod(
   IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL,
   "desktop.ipc.preview.openDevTools",

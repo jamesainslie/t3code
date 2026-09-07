@@ -43,9 +43,10 @@ describe("browser launch socket protocol", () => {
       runtimeExecutablePath: '/opt/T3 "Code"/node',
       helperPath: "/state/auth-relay/browser-launch.mjs",
       address: "/tmp/t3.sock",
+      token: "token-1",
     });
     assert.include(script, 'ELECTRON_RUN_AS_NODE=1 exec "/opt/T3 \\"Code\\"/node"');
-    assert.include(script, '"$@"');
+    assert.include(script, '"/tmp/t3.sock" "token-1" "$@"');
   });
 });
 
@@ -55,12 +56,11 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
     launchArguments: ReadonlyArray<string>,
   ) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    // Launchers like gh split BROWSER shell-style and append the URL.
-    const [wrapper, token] = command
-      .split(" ")
-      .map((part) => part.slice(1, -1).replaceAll(`'"'"'`, "'"));
+    // Python's webbrowser and Go's browser package both exec BROWSER as one
+    // bare program path with the URL appended; nothing shell-splits the value.
+    assert.notMatch(command, /[\s'":]/);
     const child = yield* spawner.spawn(
-      ChildProcess.make(wrapper!, [token!, ...launchArguments], { shell: false }),
+      ChildProcess.make(command, [...launchArguments], { shell: false }),
     );
     const [stderr, exitCode] = yield* Effect.all(
       [collectUint8StreamText({ stream: child.stderr, maxBytes: 65_536 }), child.exitCode],
@@ -97,10 +97,14 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
         );
         assert.deepEqual(substituted, { stderr: "", exitCode: 0 });
 
+        // Each registration is its own launcher file, so two terminals never share a token.
+        const other = yield* socket.register(() => Effect.void);
+        assert.notEqual(other.command, registration.command);
+        assert.isTrue(yield* fs.exists(other.command));
+
         yield* registration.release;
-        const released = yield* runWrapper(registration.command, [url]).pipe(Effect.scoped);
-        assert.equal(released.exitCode, 0);
-        assert.include(released.stderr, url);
+        assert.isFalse(yield* fs.exists(registration.command));
+        assert.isTrue(yield* fs.exists(other.command));
       }
     }).pipe(Effect.scoped),
   );

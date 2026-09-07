@@ -3,10 +3,14 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import type { TerminalBrowserLaunch } from "@t3tools/client-runtime/state/terminal";
+import {
+  terminalBrowserLaunchRelayMode,
+  type TerminalBrowserLaunch,
+} from "@t3tools/client-runtime/state/terminal";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useState } from "react";
 
+import { useHostedAuthRelay } from "~/browser/useHostedAuthRelay";
 import { useOpenLink } from "~/browser/useOpenLink";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -22,9 +26,11 @@ interface TerminalBrowserLaunchBannerProps {
 
 /**
  * A command in the terminal asked the environment to open a page. The
- * environment never does; this banner opens it where the user is and, for a
- * sign-in that ends on a loopback page the browser cannot reach, carries that
- * page's address back to the waiting command.
+ * environment never does; this banner opens it where the user is and carries
+ * the sign-in's result back to the waiting command. On desktop the app holds
+ * the loopback port itself and needs nothing further from the user; elsewhere
+ * a query response can still be pasted, and a form POST cannot be relayed at
+ * all.
  */
 export function TerminalBrowserLaunchBanner({
   threadRef,
@@ -39,6 +45,18 @@ export function TerminalBrowserLaunchBanner({
   const [pending, setPending] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hosted = useHostedAuthRelay({
+    environmentId: threadRef.environmentId,
+    threadId: threadRef.threadId,
+    terminalId,
+    captureId: launch.captureId,
+    redirectUri: launch.redirectUri,
+  });
+  const relayMode = terminalBrowserLaunchRelayMode({
+    responseMode: launch.responseMode,
+    redirectUri: launch.redirectUri,
+    hosted,
+  });
   const target = {
     environmentId: threadRef.environmentId,
     input: { threadId: threadRef.threadId, terminalId, captureId: launch.captureId },
@@ -78,16 +96,23 @@ export function TerminalBrowserLaunchBanner({
           size="xs"
           variant="outline"
           onClick={() => {
-            void openLink(launch.url, {
-              authRelay: {
-                kind: "terminal",
-                environmentId: threadRef.environmentId,
-                threadId: threadRef.threadId,
-                terminalId,
-                captureId: launch.captureId,
-                redirectUri: launch.redirectUri,
-              },
-            }).catch(() => {
+            // A hosted listener catches the return itself, so the tab must not
+            // be tagged: the tagged navigation never reaches that listener.
+            void openLink(
+              launch.url,
+              relayMode === "hosted"
+                ? {}
+                : {
+                    authRelay: {
+                      kind: "terminal",
+                      environmentId: threadRef.environmentId,
+                      threadId: threadRef.threadId,
+                      terminalId,
+                      captureId: launch.captureId,
+                      redirectUri: launch.redirectUri,
+                    },
+                  },
+            ).catch(() => {
               setError("Could not open the page. Copy the link and open it in your browser.");
             });
           }}
@@ -114,40 +139,59 @@ export function TerminalBrowserLaunchBanner({
           Dismiss
         </Button>
       </div>
-      <form
-        className="flex flex-wrap items-center gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const trimmed = callbackUrl.trim();
-          if (!trimmed) return;
-          void run(() =>
-            complete({ ...target, input: { ...target.input, callbackUrl: trimmed } }),
-          ).then((accepted) => {
-            if (accepted) setCallbackUrl("");
-          });
-        }}
-      >
-        <label htmlFor={`terminal-browser-launch-${launch.captureId}`} className="basis-full">
-          If it ends on a 127.0.0.1 or localhost page that will not load, paste that page&apos;s
-          full address here.
-        </label>
-        <Input
-          id={`terminal-browser-launch-${launch.captureId}`}
-          size="sm"
-          type="url"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="http://127.0.0.1:..."
-          className="min-w-0 flex-1"
-          value={callbackUrl}
-          maxLength={16_384}
-          disabled={pending}
-          onChange={(event) => setCallbackUrl(event.target.value)}
-        />
-        <Button size="xs" variant="outline" type="submit" disabled={pending || !callbackUrl.trim()}>
-          Continue
-        </Button>
-      </form>
+      {relayMode === "hosted" ? (
+        <p className="text-muted-foreground">
+          Sign in there. T3 Code returns the result to the terminal on its own.
+        </p>
+      ) : null}
+      {relayMode === "unreachable" ? (
+        <p className="text-muted-foreground [overflow-wrap:anywhere]">
+          This sign-in posts its result to a page only this computer&apos;s T3 Code desktop app can
+          catch. Open the link from the desktop app, or use the command&apos;s device-code option if
+          it has one.
+        </p>
+      ) : null}
+      {relayMode === "paste" ? (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmed = callbackUrl.trim();
+            if (!trimmed) return;
+            void run(() =>
+              complete({ ...target, input: { ...target.input, callbackUrl: trimmed } }),
+            ).then((accepted) => {
+              if (accepted) setCallbackUrl("");
+            });
+          }}
+        >
+          <label htmlFor={`terminal-browser-launch-${launch.captureId}`} className="basis-full">
+            If it ends on a 127.0.0.1 or localhost page that will not load, paste that page&apos;s
+            full address here.
+          </label>
+          <Input
+            id={`terminal-browser-launch-${launch.captureId}`}
+            size="sm"
+            type="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="http://127.0.0.1:..."
+            className="min-w-0 flex-1"
+            value={callbackUrl}
+            maxLength={16_384}
+            disabled={pending}
+            onChange={(event) => setCallbackUrl(event.target.value)}
+          />
+          <Button
+            size="xs"
+            variant="outline"
+            type="submit"
+            disabled={pending || !callbackUrl.trim()}
+          >
+            Continue
+          </Button>
+        </form>
+      ) : null}
       {error ? (
         <p role="alert" className="text-destructive [overflow-wrap:anywhere]">
           {error}

@@ -2,6 +2,7 @@ import type {
   EnvironmentId,
   TerminalAttachStreamEvent,
   TerminalBrowserLaunchEvent,
+  TerminalBrowserLaunchResponseMode,
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
@@ -29,7 +30,10 @@ export {
 export type TerminalBrowserLaunch = Pick<
   TerminalBrowserLaunchEvent,
   "captureId" | "url" | "redirectUri" | "expiresAt"
->;
+> & {
+  /** Defaulted here: a server built before the field existed sends none, and meant `query`. */
+  readonly responseMode: TerminalBrowserLaunchResponseMode;
+};
 
 export interface TerminalSessionState {
   readonly summary: TerminalSummary | null;
@@ -217,6 +221,7 @@ export function applyTerminalAttachStreamEvent(
                 captureId: event.captureId,
                 url: event.url,
                 redirectUri: event.redirectUri,
+                responseMode: event.responseMode ?? "query",
                 expiresAt: event.expiresAt,
               },
             ],
