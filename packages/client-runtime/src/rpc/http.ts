@@ -1,6 +1,7 @@
 import {
   EnvironmentHttpApi,
   EnvironmentHttpCommonError,
+  ProjectSyncError,
   type EnvironmentAuthInvalidError,
   type EnvironmentInternalError,
   type EnvironmentOperationForbiddenError,
@@ -67,6 +68,7 @@ export class RemoteEnvironmentAuthTimeoutError extends Data.TaggedError(
 }
 
 export type RemoteEnvironmentRequestError =
+  | ProjectSyncError
   | EnvironmentRequestInvalidError
   | EnvironmentAuthInvalidError
   | EnvironmentScopeRequiredError
@@ -112,7 +114,7 @@ const failRemoteRequest = (
   if (cause instanceof RemoteEnvironmentAuthTimeoutError) {
     return Effect.fail(cause);
   }
-  if (isEnvironmentHttpCommonError(cause)) {
+  if (isEnvironmentHttpCommonError(cause) || Schema.is(ProjectSyncError)(cause)) {
     return Effect.fail(cause);
   }
   if (Schema.isSchemaError(cause)) {

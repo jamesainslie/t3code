@@ -158,9 +158,11 @@ type DecideOrchestrationCommandResult =
 const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
   commands,
   readModel,
+  syncImport = false,
 }: {
   readonly commands: ReadonlyArray<OrchestrationCommand>;
   readonly readModel: OrchestrationReadModel;
+  readonly syncImport?: boolean;
 }): Effect.fn.Return<
   ReadonlyArray<PlannedOrchestrationEvent>,
   OrchestrationCommandRejection | PlatformError.PlatformError,
@@ -174,6 +176,7 @@ const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
     const decided = yield* decideOrchestrationCommand({
       command: nextCommand,
       readModel: nextReadModel,
+      syncImport,
     });
     const nextEvents = Array.isArray(decided) ? decided : [decided];
     for (const nextEvent of nextEvents) {
@@ -193,28 +196,91 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   command,
   readModel,
   userInputActivity,
+  syncImport = false,
 }: {
   readonly command: OrchestrationCommand;
   readonly readModel: OrchestrationReadModel;
   readonly userInputActivity?: OrchestrationThreadActivity;
+  readonly syncImport?: boolean;
 }): Effect.fn.Return<
   DecideOrchestrationCommandResult,
   OrchestrationCommandRejection | PlatformError.PlatformError,
   Crypto.Crypto
 > {
+  if (!syncImport && "threadId" in command && command.threadId.startsWith("t3sync-")) {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail:
+        "Imported conversations are read-only. Use Continue in fork to create an independent conversation.",
+    });
+  }
   switch (command.type) {
+    case "project.sync.apply": {
+      if (command.expectedSequence !== readModel.snapshotSequence) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "The fork changed during sync preparation. Preview and retry the import.",
+        });
+      }
+      const events = yield* decideCommandSequence({
+        commands: command.commands,
+        readModel,
+        syncImport: true,
+      });
+      return [
+        ...events.map((event) => ({
+          ...event,
+          metadata: { ...event.metadata, historyImport: true },
+        })),
+        {
+          ...(yield* withEventBase({
+            aggregateKind: "project",
+            aggregateId: command.projectId,
+            commandId: command.commandId,
+            occurredAt: command.record.createdAt,
+            metadata: { historyImport: true },
+          })),
+          type: "project.sync-recorded" as const,
+          payload: command.record,
+        },
+      ];
+    }
+    case "thread.sync.visibility": {
+      if (!syncImport || !command.threadId.startsWith("t3sync-")) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "Only a sync publication can change imported conversation visibility.",
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          commandId: command.commandId,
+          occurredAt: command.updatedAt,
+          metadata: { historyImport: true },
+        })),
+        type: "thread.sync-visibility-set",
+        payload: {
+          threadId: command.threadId,
+          deletedAt: command.deletedAt,
+          updatedAt: command.updatedAt,
+        },
+      };
+    }
     case "project.create": {
       yield* requireProjectAbsent({
         readModel,
         command,
         projectId: command.projectId,
       });
-      yield* requireActiveProjectWorkspaceRootAbsent({
-        readModel,
-        command,
-        workspaceRoot: command.workspaceRoot,
-        exceptProjectId: command.projectId,
-      });
+      if (!syncImport)
+        yield* requireActiveProjectWorkspaceRootAbsent({
+          readModel,
+          command,
+          workspaceRoot: command.workspaceRoot,
+          exceptProjectId: command.projectId,
+        });
 
       return {
         ...(yield* withEventBase({
@@ -1459,6 +1525,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
             messageId: message.messageId,
             role: message.role,
             text: message.text,
+            ...(message.attachments === undefined ? {} : { attachments: message.attachments }),
             turnId: null,
             streaming: false,
             createdAt: message.createdAt,
