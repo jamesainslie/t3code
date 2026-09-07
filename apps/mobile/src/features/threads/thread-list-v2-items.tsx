@@ -356,7 +356,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => void;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
-  readonly onPinThread: (thread: EnvironmentThreadShell) => void;
+  readonly onPinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => void;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => void;
   /** False on environments whose server predates thread.settle/unsettle:
       swipe + menu fall back to Archive instead of failing on use. */
@@ -367,14 +367,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly pinningSupported: boolean;
   /** False on servers that predate thread title regeneration. */
   readonly titleRegenerationSupported: boolean;
-  /** False on servers that predate thread.pin.reorder. Gates the pinned
-      Move up / Move down menu items. */
+  /** Top pins use pin reordering; active threads need positioning support. */
   readonly pinReorderSupported?: boolean;
-  readonly onMovePinnedThread?: (thread: EnvironmentThreadShell, direction: "up" | "down") => void;
-  /** Position flags for the pinned block so the menu disables the move that
-      would fall off the end of the list. */
-  readonly canMovePinnedUp?: boolean;
-  readonly canMovePinnedDown?: boolean;
+  readonly positioningSupported?: boolean;
+  readonly threadPosition?: number;
+  readonly onMoveThread?: (thread: EnvironmentThreadShell, direction: "up" | "down") => void;
+  /** Movement boundaries in the row's visible section. */
+  readonly canMoveUp?: boolean;
+  readonly canMoveDown?: boolean;
   readonly onSwipeableWillOpen: (methods: SwipeableMethods) => void;
   readonly onSwipeableClose: (methods: SwipeableMethods) => void;
   readonly searchMatch?: EnvironmentThreadSearchMatch;
@@ -397,7 +397,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onArchiveThread,
     onPinThread,
     onUnpinThread,
-    onMovePinnedThread,
+    onMoveThread,
   } = props;
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
@@ -434,16 +434,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   );
   const handleUnsnooze = useCallback(() => onUnsnoozeThread(thread), [onUnsnoozeThread, thread]);
   const handleUnsettle = useCallback(() => onUnsettleThread(thread), [onUnsettleThread, thread]);
+  const handlePinHere = useCallback(() => {
+    if (props.threadPosition !== undefined) onPinThread(thread, props.threadPosition);
+  }, [onPinThread, props.threadPosition, thread]);
   const handlePin = useCallback(() => onPinThread(thread), [onPinThread, thread]);
   const handleUnpin = useCallback(() => onUnpinThread(thread), [onUnpinThread, thread]);
-  const handleMovePinnedUp = useCallback(
-    () => onMovePinnedThread?.(thread, "up"),
-    [onMovePinnedThread, thread],
-  );
-  const handleMovePinnedDown = useCallback(
-    () => onMovePinnedThread?.(thread, "down"),
-    [onMovePinnedThread, thread],
-  );
+  const handleMoveUp = useCallback(() => onMoveThread?.(thread, "up"), [onMoveThread, thread]);
+  const handleMoveDown = useCallback(() => onMoveThread?.(thread, "down"), [onMoveThread, thread]);
   const handleArchive = useCallback(() => onArchiveThread(thread), [onArchiveThread, thread]);
 
   // Swipe: the v2 primary action is the lifecycle transition. Un-settling a
@@ -479,38 +476,54 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       })),
     [snoozePresets],
   );
-  // Pinned cards keep the full lifecycle menu; only the pin item flips to
-  // Unpin. (Settling a pinned thread clears the pin server-side; snoozing
-  // hides the card until wake with the pin intact.)
+  // Position pins are locked until unpinned; top pins can be rearranged.
+  // Both retain the lifecycle actions, and snoozing preserves their placement.
   const pinMenuItem = useMemo<MenuAction[]>(
     () =>
       props.pinningSupported
         ? [
-            ...(pinnedRow && props.pinReorderSupported === true
+            ...((
+              thread.pinnedAt != null
+                ? thread.pinPosition == null && props.pinReorderSupported === true
+                : props.positioningSupported === true && variant === "card"
+            )
               ? [
                   {
-                    id: "move-pin-up",
+                    id: "move-up",
                     title: "Move up",
                     image: "arrow.up",
-                    attributes: { disabled: props.canMovePinnedUp !== true },
+                    attributes: { disabled: props.canMoveUp !== true },
                   } satisfies MenuAction,
                   {
-                    id: "move-pin-down",
+                    id: "move-down",
                     title: "Move down",
                     image: "arrow.down",
-                    attributes: { disabled: props.canMovePinnedDown !== true },
+                    attributes: { disabled: props.canMoveDown !== true },
                   } satisfies MenuAction,
                 ]
               : []),
-            thread.pinnedAt != null
-              ? { id: "unpin", title: "Unpin", image: "pin.slash" }
-              : { id: "pin", title: "Pin", image: "pin" },
+            ...(thread.pinnedAt == null ||
+            (props.positioningSupported && thread.pinPosition != null)
+              ? [{ id: "pin", title: "Pin to top", image: "pin" }]
+              : []),
+            ...(props.positioningSupported &&
+            variant === "card" &&
+            props.threadPosition !== undefined &&
+            (thread.pinnedAt == null || thread.pinPosition == null)
+              ? [{ id: "pin-here", title: "Pin here", image: "pin" }]
+              : []),
+            ...(thread.pinnedAt != null
+              ? [{ id: "unpin", title: "Unpin", image: "pin.slash" }]
+              : []),
           ]
         : [],
     [
-      pinnedRow,
-      props.canMovePinnedDown,
-      props.canMovePinnedUp,
+      variant,
+      props.positioningSupported,
+      props.threadPosition,
+      thread.pinPosition,
+      props.canMoveDown,
+      props.canMoveUp,
       props.pinReorderSupported,
       props.pinningSupported,
       thread.pinnedAt,
@@ -570,10 +583,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
+      if (nativeEvent.event === "pin-here") handlePinHere();
       if (nativeEvent.event === "pin") handlePin();
       if (nativeEvent.event === "unpin") handleUnpin();
-      if (nativeEvent.event === "move-pin-up") handleMovePinnedUp();
-      if (nativeEvent.event === "move-pin-down") handleMovePinnedDown();
+      if (nativeEvent.event === "move-up") handleMoveUp();
+      if (nativeEvent.event === "move-down") handleMoveDown();
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
       if (nativeEvent.event === "delete") handleDelete();
@@ -592,9 +606,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleArchive,
       handleDelete,
       handleRegenerateTitle,
-      handleMovePinnedDown,
-      handleMovePinnedUp,
+      handleMoveDown,
+      handleMoveUp,
       handlePin,
+      handlePinHere,
       handleSettle,
       handleSnooze,
       handleUnpin,

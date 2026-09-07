@@ -9,7 +9,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import {
-  activeThreadAnchorTimestampMs,
+  sortActiveThreads,
   resolveSettledThreadTimestamp,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
@@ -150,29 +150,7 @@ function parseTimestampMs(isoDate: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-/**
- * v2 sort: static order, newest anchor on top. Activity NEVER reorders the
- * list — a row holds its position between lifecycle transitions. The anchor
- * is creation time until an un-settle re-anchors it (see
- * activeThreadAnchorTimestampMs), so an un-settled thread surfaces at the
- * top instead of sinking back to its creation-order slot. Mirrors web's
- * sortThreadsForSidebar.
- */
-export function sortThreadsForListV2<
-  T extends {
-    readonly id: string;
-    readonly createdAt: string;
-    readonly unsettledAt?: string | null | undefined;
-  },
->(threads: readonly T[]): T[] {
-  // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023
-  // change-by-copy array methods.
-  return [...threads].sort(
-    (left, right) =>
-      activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left) ||
-      left.id.localeCompare(right.id),
-  );
-}
+export { sortActiveThreads as sortThreadsForListV2 } from "@t3tools/client-runtime/state/thread-sort";
 
 export interface ThreadListV2Item {
   readonly thread: EnvironmentThreadShell;
@@ -336,6 +314,13 @@ export function buildThreadListV2Items(input: {
     ? new Set(input.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`))
     : null;
 
+  const matchesSearch = (thread: EnvironmentThreadShell) =>
+    query.length === 0 ||
+    thread.title.toLocaleLowerCase().includes(query) ||
+    input.matchedThreadKeys?.has(
+      threadSearchMatchKey({ environmentId: thread.environmentId, threadId: thread.id }),
+    ) === true;
+
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
@@ -347,22 +332,11 @@ export function buildThreadListV2Items(input: {
     if (projectKeys !== null && !projectKeys.has(`${thread.environmentId}:${thread.projectId}`)) {
       continue;
     }
-    if (
-      query.length > 0 &&
-      !thread.title.toLocaleLowerCase().includes(query) &&
-      input.matchedThreadKeys?.has(
-        threadSearchMatchKey({
-          environmentId: thread.environmentId,
-          threadId: thread.id,
-        }),
-      ) !== true
-    ) {
-      continue;
-    }
     const supportsSettlement = input.settlementEnvironmentIds?.has(thread.environmentId) ?? true;
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
     // Snooze outranks settlement and pinning until the thread wakes.
     if (supportsSnooze && effectiveSnoozed(thread, { now })) {
+      if (!matchesSearch(thread)) continue;
       snoozed.push(thread);
       if (
         thread.snoozedUntil != null &&
@@ -374,15 +348,15 @@ export function buildThreadListV2Items(input: {
       continue;
     }
     if (supportsSettlement && thread.settledOverride === "settled") {
-      settled.push(thread);
-    } else if (thread.pinnedAt != null) {
+      if (matchesSearch(thread)) settled.push(thread);
+    } else if (thread.pinnedAt != null && thread.pinPosition == null) {
       pinned.push(thread);
     } else {
       active.push(thread);
     }
   }
 
-  const orderedActive = sortThreadsForListV2(active);
+  const orderedActive = sortActiveThreads(active, pinned.length).filter(matchesSearch);
   const orderedSnoozed = [...snoozed].sort(
     (left, right) =>
       parseTimestampMs(left.snoozedUntil ?? "") - parseTimestampMs(right.snoozedUntil ?? ""),
@@ -414,7 +388,7 @@ export function buildThreadListV2Items(input: {
         );
 
   const items: ThreadListV2Item[] = [];
-  for (const thread of sortPinnedThreadsByOrderKey(pinned)) {
+  for (const thread of sortPinnedThreadsByOrderKey(pinned).filter(matchesSearch)) {
     items.push({
       thread,
       variant: "card",
@@ -428,7 +402,7 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "card",
       snoozed: false,
-      pinned: false,
+      pinned: thread.pinnedAt != null,
       isLast: false,
     });
   }

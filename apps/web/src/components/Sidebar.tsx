@@ -22,7 +22,11 @@ import {
   effectiveSnoozed,
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
-import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
+import {
+  activeThreadOrderKey,
+  activeThreadOrderLowerBound,
+  resolveSettledThreadTimestamp,
+} from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import {
   parseScopedThreadKey,
@@ -1267,7 +1271,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         >
           <PinIcon aria-hidden className="size-3 shrink-0" />
         </TooltipTrigger>
-        <TooltipPopup>Unpin thread</TooltipPopup>
+        <TooltipPopup>
+          {thread.pinPosition != null
+            ? `Pinned to position ${thread.pinPosition + 1}. Unpin to move`
+            : "Unpin thread"}
+        </TooltipPopup>
       </Tooltip>
     ) : (
       <PinIcon
@@ -1816,6 +1824,10 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
+function getSidebarThreadKey(thread: EnvironmentThreadShell) {
+  return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+}
+
 export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
@@ -2238,7 +2250,7 @@ export default function Sidebar() {
         snoozed.push(thread);
       } else if (supportsSettlement && thread.settledOverride === "settled") {
         settled.push(thread);
-      } else if (thread.pinnedAt != null) {
+      } else if (thread.pinnedAt != null && thread.pinPosition == null) {
         pinned.push(thread);
       } else {
         active.push(thread);
@@ -2260,7 +2272,7 @@ export default function Sidebar() {
           )
           .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
       ),
-      activeThreads: sortThreadsForSidebar(active),
+      activeThreads: sortThreadsForSidebar(active, pinned.length),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -2787,13 +2799,13 @@ export default function Sidebar() {
     }
   }, [optimisticPinnedOrder, pinnedThreads, reorderablePinnedKeys]);
   const attemptPin = useCallback(
-    (threadRef: ScopedThreadRef) => {
+    (threadRef: ScopedThreadRef, pinPosition?: number) => {
       void (async () => {
         // Fresh pins take the top of the arranged run: pinThread computes a
         // key before the smallest key across ALL pinned shells — including
         // snoozed pins hidden from this list, whose keys are still part of
         // the run — so the new pin can't land beneath a hidden head.
-        const result = await pinThread(threadRef);
+        const result = await pinThread(threadRef, { pinPosition: pinPosition ?? null });
         if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
           const error = squashAtomCommandFailure(result);
           toastManager.add(
@@ -2827,11 +2839,9 @@ export default function Sidebar() {
     [confirmAndUnpinThread],
   );
 
-  const handlePinnedDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const activeKey = String(event.active.id);
-      const overKey = event.over === null ? null : String(event.over.id);
-      if (overKey === null || activeKey === overKey) return;
+  const reorderPinnedThreads = useCallback(
+    (activeKey: string, overKey: string) => {
+      if (activeKey === overKey) return;
       const reorderable = orderedPinnedThreads.filter((thread) =>
         reorderablePinnedKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
       );
@@ -2892,6 +2902,131 @@ export default function Sidebar() {
       })();
     },
     [orderedPinnedThreads, reorderPinnedThread, reorderablePinnedKeys],
+  );
+
+  const handlePinnedDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (event.over !== null) reorderPinnedThreads(String(event.active.id), String(event.over.id));
+    },
+    [reorderPinnedThreads],
+  );
+
+  const [optimisticActiveOrder, setOptimisticActiveOrder] = useState<{
+    baseline: ReadonlyMap<string, string>;
+    assignments: ReadonlyMap<string, string>;
+  } | null>(null);
+  const activeReorderInFlight = useRef(false);
+  const orderedActiveThreads = useMemo(
+    () =>
+      optimisticActiveOrder === null
+        ? activeThreads
+        : sortThreadsForSidebar(
+            activeThreads.map((thread) => {
+              const threadOrderKey = optimisticActiveOrder.assignments.get(
+                getSidebarThreadKey(thread),
+              );
+              return threadOrderKey === undefined ? thread : { ...thread, threadOrderKey };
+            }),
+            pinnedThreads.length,
+          ),
+    [activeThreads, optimisticActiveOrder, pinnedThreads.length],
+  );
+  const reorderableActiveKeys = useMemo(
+    () =>
+      new Set(
+        orderedActiveThreads
+          .filter(
+            (thread) =>
+              thread.pinnedAt == null &&
+              serverConfigs.get(thread.environmentId)?.environment.capabilities
+                .threadPositioning === true,
+          )
+          .map(getSidebarThreadKey),
+      ),
+    [orderedActiveThreads, serverConfigs],
+  );
+  useEffect(() => {
+    if (optimisticActiveOrder === null) return;
+    const current = new Map(
+      activeThreads.map((thread) => [getSidebarThreadKey(thread), activeThreadOrderKey(thread)]),
+    );
+    const membershipChanged =
+      current.size !== optimisticActiveOrder.baseline.size ||
+      [...current.keys()].some((key) => !optimisticActiveOrder.baseline.has(key));
+    const foreignChange = [...current].some(
+      ([key, value]) =>
+        value !== optimisticActiveOrder.baseline.get(key) &&
+        value !== optimisticActiveOrder.assignments.get(key),
+    );
+    const confirmed = [...optimisticActiveOrder.assignments].every(
+      ([key, value]) => current.get(key) === value,
+    );
+    if (membershipChanged || foreignChange || confirmed) setOptimisticActiveOrder(null);
+  }, [activeThreads, optimisticActiveOrder]);
+  const reorderActiveThreads = useCallback(
+    (movedId: string, overId: string) => {
+      if (activeReorderInFlight.current || optimisticActiveOrder !== null) return;
+      const movable = orderedActiveThreads.filter((thread) =>
+        reorderableActiveKeys.has(getSidebarThreadKey(thread)),
+      );
+      const ids = movable.map(getSidebarThreadKey);
+      const from = ids.indexOf(movedId);
+      const to = ids.indexOf(overId);
+      if (from < 0 || to < 0 || from === to) return;
+      const baseline = new Map(
+        activeThreads.map((thread) => [getSidebarThreadKey(thread), activeThreadOrderKey(thread)]),
+      );
+      const assignments = planPinnedReorder({
+        orderedIds: arrayMove(ids, from, to),
+        keysById: baseline,
+        movedId,
+        lowerBound: activeThreadOrderLowerBound(activeThreads),
+      });
+      setOptimisticActiveOrder({
+        baseline,
+        assignments: new Map(assignments.map((item) => [item.id, item.orderKey])),
+      });
+      activeReorderInFlight.current = true;
+      void (async () => {
+        try {
+          for (const assignment of assignments) {
+            const thread = movable.find((item) => getSidebarThreadKey(item) === assignment.id);
+            if (!thread) continue;
+            const result = await updateThreadMetadata({
+              environmentId: thread.environmentId,
+              input: { threadId: thread.id, threadOrderKey: assignment.orderKey },
+            });
+            if (result._tag === "Failure") {
+              setOptimisticActiveOrder(null);
+              if (!isAtomCommandInterrupted(result))
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Failed to reorder threads",
+                    description: String(squashAtomCommandFailure(result)),
+                  }),
+                );
+              return;
+            }
+          }
+        } finally {
+          activeReorderInFlight.current = false;
+        }
+      })();
+    },
+    [
+      activeThreads,
+      optimisticActiveOrder,
+      orderedActiveThreads,
+      reorderableActiveKeys,
+      updateThreadMetadata,
+    ],
+  );
+  const handleActiveDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (event.over !== null) reorderActiveThreads(String(event.active.id), String(event.over.id));
+    },
+    [reorderActiveThreads],
   );
   // One snooze per thread at a time — same double-dispatch guard as settle.
   const snoozingThreadKeysRef = useRef(new Set<string>());
@@ -3247,6 +3382,14 @@ export default function Sidebar() {
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
+        const movementKeys = isPinned
+          ? orderedPinnedThreads
+              .map(getSidebarThreadKey)
+              .filter((key) => reorderablePinnedKeys.has(key))
+          : orderedActiveThreads
+              .map(getSidebarThreadKey)
+              .filter((key) => reorderableActiveKeys.has(key));
+        const movementIndex = movementKeys.indexOf(threadKey);
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
         const clicked = await settlePromise(() =>
@@ -3254,6 +3397,13 @@ export default function Sidebar() {
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
               isPinned,
+              pinPosition: thread.pinPosition,
+              ...(movementIndex >= 0
+                ? {
+                    canMoveUp: movementIndex > 0,
+                    canMoveDown: movementIndex < movementKeys.length - 1,
+                  }
+                : {}),
               isSettled,
               isSnoozed,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
@@ -3264,6 +3414,9 @@ export default function Sidebar() {
                 settlement: supportsSettlement,
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
+                positioning:
+                  serverConfigs.get(thread.environmentId)?.environment.capabilities
+                    .threadPositioning === true,
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
@@ -3323,6 +3476,20 @@ export default function Sidebar() {
           case "unsnooze":
             attemptUnsnooze(threadRef);
             return;
+          case "move-up":
+          case "move-down": {
+            const target = movementKeys[movementIndex + (clicked.value === "move-up" ? -1 : 1)];
+            if (target !== undefined)
+              (isPinned ? reorderPinnedThreads : reorderActiveThreads)(threadKey, target);
+            return;
+          }
+          case "pin-here": {
+            const position = [...pinnedThreads, ...activeThreads].findIndex(
+              (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+            );
+            if (position >= 0) attemptPin(threadRef, position);
+            return;
+          }
           case "pin":
             attemptPin(threadRef);
             return;
@@ -3435,6 +3602,14 @@ export default function Sidebar() {
       })();
     },
     [
+      orderedPinnedThreads,
+      orderedActiveThreads,
+      reorderablePinnedKeys,
+      reorderableActiveKeys,
+      reorderPinnedThreads,
+      reorderActiveThreads,
+      pinnedThreads,
+      activeThreads,
       archiveThread,
       attemptPin,
       attemptSettle,
@@ -4113,9 +4288,42 @@ export default function Sidebar() {
                       />,
                     );
                   }
-                  for (const thread of activeThreads) {
-                    items.push(renderThreadRow(thread, "active"));
-                  }
+                  items.push(
+                    <li key="active-dnd" className="list-none">
+                      <DndContext
+                        sensors={pinnedDndSensors}
+                        collisionDetection={closestCenter}
+                        modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                        onDragEnd={handleActiveDragEnd}
+                      >
+                        <SortableContext
+                          items={orderedActiveThreads
+                            .map(getSidebarThreadKey)
+                            .filter((key) => reorderableActiveKeys.has(key))}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <ul
+                            role="list"
+                            aria-label="Active threads"
+                            className="flex flex-col gap-px"
+                          >
+                            {orderedActiveThreads.map((thread) =>
+                              reorderableActiveKeys.has(getSidebarThreadKey(thread)) ? (
+                                <SortablePinnedThreadRow
+                                  key={getSidebarThreadKey(thread)}
+                                  id={getSidebarThreadKey(thread)}
+                                >
+                                  {(bag) => renderThreadRow(thread, "active", bag)}
+                                </SortablePinnedThreadRow>
+                              ) : (
+                                renderThreadRow(thread, "active")
+                              ),
+                            )}
+                          </ul>
+                        </SortableContext>
+                      </DndContext>
+                    </li>,
+                  );
                   // Snoozed shelf: between the inbox and Settled — out of the
                   // way, never gone. The header always renders while anything
                   // is snoozed (the count is the whole footprint when

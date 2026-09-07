@@ -10,7 +10,6 @@ import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
 import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
-import { sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -158,7 +157,7 @@ function ThreadNavigationSidebarPane(
     unsettleThread,
     pinThread,
     unpinThread,
-    movePinnedThread,
+    moveThread,
     regenerateThreadTitle,
   } = useThreadListActions();
   const threadListV2Enabled = useThreadListV2Enabled();
@@ -456,19 +455,6 @@ function ThreadNavigationSidebarPane(
       ),
     [serverConfigs],
   );
-  // Canonical arranged pinned order for Move up/down flags — computed from
-  // all shells so search/scope filtering never disables a valid move.
-  const arrangedPinnedKeys = useMemo(() => {
-    const pinned = sortPinnedThreadsByOrderKey(
-      threads.filter(
-        (thread) =>
-          thread.pinnedAt != null &&
-          thread.archivedAt === null &&
-          pinReorderEnvironmentIds.has(thread.environmentId),
-      ),
-    );
-    return pinned.map((thread) => `${thread.environmentId}:${thread.id}`);
-  }, [pinReorderEnvironmentIds, threads]);
   const threadListV2Layout = useMemo(() => {
     if (!threadListV2Enabled)
       return {
@@ -510,6 +496,47 @@ function ThreadNavigationSidebarPane(
     threads,
     selectedProjectScope,
   ]);
+  const visiblePlacementThreads = useMemo(
+    () =>
+      threadListV2Layout.items.filter((item) => item.variant === "card").map((item) => item.thread),
+    [threadListV2Layout.items],
+  );
+  const arrangedPinnedKeys = useMemo(
+    () =>
+      visiblePlacementThreads
+        .filter(
+          (thread) =>
+            thread.pinnedAt != null &&
+            thread.pinPosition == null &&
+            pinReorderEnvironmentIds.has(thread.environmentId),
+        )
+        .map((thread) => `${thread.environmentId}:${thread.id}`),
+    [visiblePlacementThreads, pinReorderEnvironmentIds],
+  );
+  const arrangedActiveKeys = useMemo(
+    () =>
+      visiblePlacementThreads
+        .filter(
+          (thread) =>
+            thread.pinnedAt == null &&
+            serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning ===
+              true,
+        )
+        .map((thread) => `${thread.environmentId}:${thread.id}`),
+    [visiblePlacementThreads, serverConfigs],
+  );
+  const placementRevision = JSON.stringify([
+    arrangedPinnedKeys,
+    arrangedActiveKeys,
+    visiblePlacementThreads.map((thread) => `${thread.environmentId}:${thread.id}`),
+  ]);
+  const handleMoveThread = useCallback(
+    (thread: EnvironmentThreadShell, direction: "up" | "down") => {
+      void moveThread(thread, direction, visiblePlacementThreads);
+    },
+    [moveThread, visiblePlacementThreads],
+  );
+
   // Re-partition the moment the earliest snooze expires (clamped to the
   // signed-32-bit setTimeout range; far-future wakes re-arm at the clamp).
   const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
@@ -733,6 +760,7 @@ function ThreadNavigationSidebarPane(
   // favicon and fallback title it was first rendered with.
   const listExtraData = useMemo(
     () => ({
+      placementRevision,
       selectedThreadKey: props.selectedThreadKey ?? "",
       projectByKey,
       projectTitleByProjectKey,
@@ -742,6 +770,7 @@ function ThreadNavigationSidebarPane(
       threadSearchMatchByKey,
     }),
     [
+      placementRevision,
       props.selectedThreadKey,
       projectByKey,
       projectTitleByProjectKey,
@@ -891,20 +920,39 @@ function ThreadNavigationSidebarPane(
               onSettleThread={settleThread}
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
-              pinReorderSupported={pinReorderEnvironmentIds.has(thread.environmentId)}
-              canMovePinnedUp={
-                arrangedPinnedKeys.indexOf(`${thread.environmentId}:${thread.id}`) > 0
+              pinReorderSupported={
+                props.searchQuery.trim().length === 0 &&
+                pinReorderEnvironmentIds.has(thread.environmentId)
               }
-              canMovePinnedDown={(() => {
-                const index = arrangedPinnedKeys.indexOf(`${thread.environmentId}:${thread.id}`);
-                return index !== -1 && index < arrangedPinnedKeys.length - 1;
+              positioningSupported={
+                props.searchQuery.trim().length === 0 &&
+                serverConfigs.get(thread.environmentId)?.environment.capabilities
+                  .threadPositioning === true
+              }
+              threadPosition={visiblePlacementThreads.findIndex(
+                (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+              )}
+              canMoveUp={
+                (thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys).indexOf(
+                  `${thread.environmentId}:${thread.id}`,
+                ) > 0
+              }
+              canMoveDown={(() => {
+                const index = (
+                  thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys
+                ).indexOf(`${thread.environmentId}:${thread.id}`);
+                return (
+                  index !== -1 &&
+                  index <
+                    (thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys).length - 1
+                );
               })()}
               onSnoozeThread={snoozeThread}
               onUnsnoozeThread={unsnoozeThread}
               onUnsettleThread={unsettleThread}
               onPinThread={pinThread}
               onUnpinThread={unpinThread}
-              onMovePinnedThread={movePinnedThread}
+              onMoveThread={handleMoveThread}
               onSwipeableClose={handleSwipeableClose}
               onSwipeableWillOpen={handleSwipeableWillOpen}
               simultaneousSwipeGesture={sidebarScrollGesture}
@@ -1028,13 +1076,15 @@ function ThreadNavigationSidebarPane(
     [
       archiveThread,
       arrangedPinnedKeys,
+      arrangedActiveKeys,
+      visiblePlacementThreads,
       confirmDeletePendingTask,
       confirmDeleteThread,
       handleSelectThread,
       handleSwipeableClose,
       handleSwipeableWillOpen,
       machineByEnvironmentId,
-      movePinnedThread,
+      handleMoveThread,
       openPendingTask,
       pinReorderEnvironmentIds,
       pinThread,

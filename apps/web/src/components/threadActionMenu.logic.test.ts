@@ -27,6 +27,35 @@ function allIds(state: ThreadActionMenuState): string[] {
 }
 
 describe("buildThreadActionMenuItems", () => {
+  it("offers menu movement with disabled boundaries and hides it for a locked position", () => {
+    const state = { ...baseState, canMoveUp: false, canMoveDown: true };
+    expect(buildThreadActionMenuItems(state)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "move-up", disabled: true }),
+        expect.objectContaining({ id: "move-down", disabled: false }),
+      ]),
+    );
+    expect(ids({ ...state, isPinned: true, pinPosition: 2 })).not.toContain("move-up");
+    expect(ids({ ...state, isSettled: true })).not.toContain("move-up");
+  });
+  it("offers both pin destinations and allows switching a position pin to the top", () => {
+    const supports = { ...baseState.supports, positioning: true };
+    expect(ids({ ...baseState, supports })).toEqual(expect.arrayContaining(["pin", "pin-here"]));
+    const pinnedHere = buildThreadActionMenuItems({
+      ...baseState,
+      supports,
+      isPinned: true,
+      pinPosition: 2,
+    });
+    expect(pinnedHere).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "pin", label: "Pin to top" }),
+        expect.objectContaining({ id: "unpin" }),
+      ]),
+    );
+    expect(ids({ ...baseState, supports, isSettled: true })).not.toContain("pin-here");
+    expect(ids(baseState)).not.toContain("pin-here");
+  });
   it("hides lifecycle items when the environment lacks the capabilities", () => {
     expect(
       ids({
