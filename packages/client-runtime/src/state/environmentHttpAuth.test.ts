@@ -34,6 +34,7 @@ import {
 import { fetchEnvironmentSessionState } from "./session.ts";
 import { fetchEnvironmentShellSnapshot } from "./shellSnapshotHttp.ts";
 import { fetchEnvironmentThreadSnapshot } from "./threadSnapshotHttp.ts";
+import { executeProjectSync } from "./projectSync.ts";
 
 const TARGET = new RelayConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -214,6 +215,42 @@ const LOADERS: ReadonlyArray<{
 ];
 
 describe("authenticated environment HTTP requests", () => {
+  it.effect("sends project sync through the current relay origin and signs its POST", () =>
+    Effect.gen(function* () {
+      const harness = makeHarness(() =>
+        Response.json({
+          configuration: {
+            sourceHome: null,
+            sourceId: null,
+            enabled: false,
+            hour: 3,
+            timezone: "UTC",
+            lastAttemptAt: null,
+            lastSuccessAt: null,
+            lastError: null,
+            mappings: [],
+          },
+          history: [],
+          activeBatchId: null,
+          defaultSourceHome: "/source",
+          backups: [],
+          restorePending: false,
+        }),
+      );
+      const response = yield* executeProjectSync(PREPARED, { operation: "status" }).pipe(
+        Effect.provide(harness.httpLayer),
+        Effect.provideService(RemoteEnvironmentAuthorization, harness.remoteAuthorization),
+        Effect.provideService(ManagedRelayDpopSigner, Option.getOrThrow(harness.input.signer)),
+      );
+      expect(response.configuration.enabled).toBe(false);
+      expect(harness.calls[0]?.url).toBe(`${CURRENT_ORIGIN}/api/project-sync`);
+      expect(harness.calls[0]?.init.method).toBe("POST");
+      expect(harness.calls[0]?.init.body).toEqual(
+        new TextEncoder().encode(JSON.stringify({ request: { operation: "status" } })),
+      );
+      expect(harness.proofs).toHaveLength(1);
+    }),
+  );
   it.effect.each(LOADERS)("uses current relay authorization and endpoint for $name", (loader) =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json(loader.response));

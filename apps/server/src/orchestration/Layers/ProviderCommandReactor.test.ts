@@ -830,6 +830,67 @@ describe("ProviderCommandReactor", () => {
     }),
   );
 
+  effectIt.effect(
+    "sends imported conversation context to a fresh continuation provider session",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* Effect.promise(() => createHarness());
+        const threadId = ThreadId.make("t3continue-context-test");
+        const now = "2026-01-01T00:00:00.000Z";
+        yield* harness.engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("continue-create"),
+          threadId,
+          projectId: asProjectId("project-1"),
+          title: "Continued",
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          historyImport: true,
+        });
+        yield* harness.engine.dispatch({
+          type: "thread.history.import",
+          commandId: CommandId.make("continue-history"),
+          threadId,
+          messages: [
+            {
+              messageId: MessageId.make(`${threadId}-0`),
+              role: "user",
+              text: "The earlier requirement was a red theme",
+              createdAt: now,
+            },
+          ],
+        });
+        yield* harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("continue-turn"),
+          threadId,
+          message: {
+            messageId: MessageId.make("new-request"),
+            role: "user",
+            text: "Make the heading larger",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: now,
+        });
+        yield* Effect.promise(() => harness.drain());
+        expect(harness.sendTurn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId,
+            input: expect.stringContaining("The earlier requirement was a red theme"),
+          }),
+        );
+        expect(harness.sendTurn).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.stringContaining("Make the heading larger") }),
+        );
+      }),
+  );
+
   it("reacts to thread.turn.start by ensuring session and sending provider turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
