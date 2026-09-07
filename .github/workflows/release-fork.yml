@@ -502,6 +502,31 @@ jobs:
             fi
           done
 
+      # GitHub's generated notes list merged pull requests only. This fork's
+      # commits mostly land without one, so the generated body is just the
+      # compare link, which the desktop update popover deliberately hides.
+      # Listing the commits gives the popover its "What's changed" back.
+      # Oldest first: the desktop keeps the last lines and shows the newest on
+      # top. GitHub appends its own notes after this body.
+      - name: Write changelog
+        if: needs.preflight.outputs.previous_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.ref }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${RELEASE_SHA}?per_page=250" \
+            --jq '.commits[] | select(.parents | length < 2) | "* \(.commit.message | split("\n")[0]) (\(.sha[0:7]))"' \
+            | tail -n 100 > release-commits.md
+          if [[ -s release-commits.md ]]; then
+            { echo "## What's Changed"; echo; cat release-commits.md; echo; } > release-body.md
+          else
+            : > release-body.md
+          fi
+          wc -l release-commits.md
+
       - name: Publish release
         if: needs.preflight.outputs.previous_tag != ''
         uses: softprops/action-gh-release@v3
@@ -509,6 +534,7 @@ jobs:
           tag_name: ${{ needs.preflight.outputs.tag }}
           target_commitish: ${{ needs.preflight.outputs.ref }}
           name: ${{ needs.preflight.outputs.release_name }}
+          body_path: release-body.md
           generate_release_notes: true
           previous_tag: ${{ needs.preflight.outputs.previous_tag }}
           prerelease: ${{ needs.preflight.outputs.is_prerelease }}
