@@ -239,6 +239,23 @@ const makeHarness = Effect.fn("makeThreadPullRequestHarness")(function* (options
 });
 
 describe("ThreadPullRequestReactor", () => {
+  it.effect("leaves imported conversation metadata unchanged", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeHarness({
+          threads: [thread("t3sync-source-version")],
+          existingWorktrees: ["/repo"],
+          branchPullRequest: () =>
+            Effect.die("Imported history must not query or update branch PRs"),
+        });
+        yield* Effect.gen(function* () {
+          yield* fixture.start();
+          expect(yield* Ref.get(fixture.commands)).toEqual([]);
+          expect(yield* Ref.get(fixture.branchCalls)).toEqual([]);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
   it.effect("discovers saved branch PRs without a client and shares branch lookups", () =>
     Effect.scoped(
       Effect.gen(function* () {

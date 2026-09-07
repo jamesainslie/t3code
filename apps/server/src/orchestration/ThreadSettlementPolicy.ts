@@ -1,4 +1,4 @@
-import type { OrchestrationThreadShell } from "@t3tools/contracts";
+import { isSyncedThreadId, type OrchestrationThreadShell } from "@t3tools/contracts";
 
 export interface SettlementPullRequest {
   readonly state: "open" | "closed" | "merged";
@@ -93,6 +93,7 @@ export function resolveAutoSettlementAt(input: {
 
 /** Cheap checks that run before any source control lookup. */
 export function isAutoSettlementCandidate(thread: OrchestrationThreadShell, now: string): boolean {
+  if (isSyncedThreadId(thread.id)) return false;
   if (thread.archivedAt !== null || thread.settledOverride !== null) return false;
   if (thread.hasPendingApprovals || thread.hasPendingUserInput) return false;
   if (thread.session?.status === "starting" || thread.session?.status === "running") return false;
