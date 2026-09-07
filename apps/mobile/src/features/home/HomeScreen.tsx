@@ -116,11 +116,12 @@ interface HomeScreenProps {
   ) => Promise<boolean>;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
-  readonly onPinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly onPinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => Promise<boolean>;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onMoveThread: (
     thread: EnvironmentThreadShell,
     direction: "up" | "down",
+    visibleThreads?: readonly EnvironmentThreadShell[],
   ) => Promise<boolean>;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onSelectPendingTask: (pendingTask: PendingNewTask) => void;
@@ -510,8 +511,8 @@ export function HomeScreen(props: HomeScreenProps) {
     [props.onUnsnoozeThread],
   );
   const handlePinThread = useCallback(
-    (thread: EnvironmentThreadShell) => {
-      void props.onPinThread(thread);
+    (thread: EnvironmentThreadShell, pinPosition?: number) => {
+      void props.onPinThread(thread, pinPosition);
     },
     [props.onPinThread],
   );
@@ -721,6 +722,11 @@ export function HomeScreen(props: HomeScreenProps) {
     threadListV2Enabled,
     v2ScopedProjectGroup,
   ]);
+  const visiblePlacementThreads = useMemo(
+    () =>
+      threadListV2Layout.items.filter((item) => item.variant === "card").map((item) => item.thread),
+    [threadListV2Layout.items],
+  );
   // Re-partition the moment the earliest snooze expires (clamped to the
   // signed-32-bit setTimeout range; far-future wakes re-arm at the clamp).
   const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
@@ -768,7 +774,7 @@ export function HomeScreen(props: HomeScreenProps) {
         settledShelfHeaderIndex: threadListV2Layout.settledShelfHeaderIndex,
         snoozeLabelNow: `${nowMinute}:00.000Z`,
       }),
-    [settledShelfExpanded, snoozedShelfExpanded, threadListV2Layout, v2PendingTasks],
+    [nowMinute, settledShelfExpanded, snoozedShelfExpanded, threadListV2Layout, v2PendingTasks],
   );
 
   const renderV2Item = useCallback(
@@ -864,6 +870,8 @@ export function HomeScreen(props: HomeScreenProps) {
           onSettleThread={handleSettleThread}
           snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
+          positioningSupported={serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning === true}
+          threadPosition={visiblePlacementThreads.findIndex((item) => item.environmentId === thread.environmentId && item.id === thread.id)}
           reorderSupported={
             item.item.pinned
               ? pinReorderEnvironmentIds.has(thread.environmentId)
@@ -885,6 +893,7 @@ export function HomeScreen(props: HomeScreenProps) {
     [
       handleDeleteThread,
       activeReorderEnvironmentIds,
+      visiblePlacementThreads,
       threadMovePlanners,
       pendingOrder,
       queuedThreadKeys,

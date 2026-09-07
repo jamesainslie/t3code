@@ -22,7 +22,17 @@ worktree**, each background submission creates its own worktree.
 
 ## Pin and reorder threads
 
-Pin a thread from its menu to keep it above your active work.
+Drag threads to reorder them on web and desktop, or choose **Move up** and
+**Move down** from a thread's menu. The order syncs across devices.
+
+Choose **Pin here** to hold a thread in its current numbered position as new
+threads arrive. Unpin it before moving it again. Choose **Pin to top** to keep it
+in the pinned section, where you can reorder it among other top pins. **Unpin**
+returns the thread to its default order.
+
+Positions count thread rows in the current project scope. If there are too few
+threads to fill a saved position, the pin appears at the end; top pins always
+come first. On mobile, clear your search before arranging threads.
 
 Pinning does not prevent automatic settlement. Settling a thread removes its pin.
 

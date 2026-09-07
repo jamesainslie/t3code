@@ -9,7 +9,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import {
-  sortActiveThreadsByOrderKey,
+  sortActiveThreads,
   resolveSettledThreadTimestamp,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
@@ -167,7 +167,7 @@ export function sortThreadsForListV2<
     readonly environmentId?: string | undefined;
   },
 >(threads: readonly T[]): T[] {
-  return sortActiveThreadsByOrderKey(threads);
+  return sortActiveThreads(threads);
 }
 
 /** Canonical card section for Move up/down, independent of search or scope. */
@@ -195,12 +195,12 @@ export function getThreadListV2OrderedSection(input: {
     ) {
       return false;
     }
-    return (thread.pinnedAt != null) === (input.section === "pinned");
+    return (thread.pinnedAt != null && thread.pinPosition == null) === (input.section === "pinned");
   });
   const ordered =
     input.section === "pinned"
       ? sortPinnedThreadsByOrderKey(threads)
-      : sortActiveThreadsByOrderKey(threads);
+      : sortActiveThreads(threads);
   const pending =
     input.pendingOrder?.section === input.section
       ? reconcilePendingThreadOrder(input.pendingOrder, ordered)
@@ -386,6 +386,13 @@ export function buildThreadListV2Items(input: {
     ? new Set(input.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`))
     : null;
 
+  const matchesSearch = (thread: EnvironmentThreadShell) =>
+    query.length === 0 ||
+    thread.title.toLocaleLowerCase().includes(query) ||
+    input.matchedThreadKeys?.has(
+      threadSearchMatchKey({ environmentId: thread.environmentId, threadId: thread.id }),
+    ) === true;
+
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
@@ -397,22 +404,11 @@ export function buildThreadListV2Items(input: {
     if (projectKeys !== null && !projectKeys.has(`${thread.environmentId}:${thread.projectId}`)) {
       continue;
     }
-    if (
-      query.length > 0 &&
-      !thread.title.toLocaleLowerCase().includes(query) &&
-      input.matchedThreadKeys?.has(
-        threadSearchMatchKey({
-          environmentId: thread.environmentId,
-          threadId: thread.id,
-        }),
-      ) !== true
-    ) {
-      continue;
-    }
     const supportsSettlement = input.settlementEnvironmentIds?.has(thread.environmentId) ?? true;
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
     // Snooze outranks settlement and pinning until the thread wakes.
     if (supportsSnooze && effectiveSnoozed(thread, { now })) {
+      if (!matchesSearch(thread)) continue;
       snoozed.push(thread);
       if (
         thread.snoozedUntil != null &&
@@ -426,15 +422,15 @@ export function buildThreadListV2Items(input: {
     const hasQueuedMessages =
       input.queuedThreadKeys?.has(`${thread.environmentId}:${thread.id}`) === true;
     if (supportsSettlement && thread.settledOverride === "settled" && !hasQueuedMessages) {
-      settled.push(thread);
-    } else if (thread.pinnedAt != null) {
+      if (matchesSearch(thread)) settled.push(thread);
+    } else if (thread.pinnedAt != null && thread.pinPosition == null) {
       pinned.push(thread);
     } else {
       active.push(thread);
     }
   }
 
-  const orderedActive = applyPendingThreadOrder(sortThreadsForListV2(active), "active", pending);
+  const orderedActive = applyPendingThreadOrder(sortActiveThreads(active, pinned.length), "active", pending).filter(matchesSearch);
   const orderedSnoozed = [...snoozed].sort(
     (left, right) =>
       parseTimestampMs(left.snoozedUntil ?? "") - parseTimestampMs(right.snoozedUntil ?? ""),
@@ -470,7 +466,7 @@ export function buildThreadListV2Items(input: {
     sortPinnedThreadsByOrderKey(pinned),
     "pinned",
     pending,
-  )) {
+  ).filter(matchesSearch)) {
     items.push({
       thread,
       variant: "card",
@@ -484,7 +480,7 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "card",
       snoozed: false,
-      pinned: false,
+      pinned: thread.pinnedAt != null,
       isLast: false,
     });
   }

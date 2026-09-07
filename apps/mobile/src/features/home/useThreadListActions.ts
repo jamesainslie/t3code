@@ -42,6 +42,13 @@ function environmentSupportsPinning(environmentId: EnvironmentThreadShell["envir
   );
 }
 
+function environmentSupportsPositioning(environmentId: EnvironmentThreadShell["environmentId"]) {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadPositioning === true
+  );
+}
+
 function environmentSupportsPinReorder(environmentId: EnvironmentThreadShell["environmentId"]) {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -225,11 +232,12 @@ export function useThreadListActions(): {
   readonly snoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => Promise<boolean>;
   readonly unsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unsettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly pinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly pinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => Promise<boolean>;
   readonly unpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly moveThread: (
     thread: EnvironmentThreadShell,
     direction: "up" | "down",
+    visibleThreads?: readonly EnvironmentThreadShell[],
   ) => Promise<boolean>;
   readonly regenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
 } {
@@ -357,8 +365,11 @@ export function useThreadListActions(): {
     [executeAction],
   );
   const pinThread = useCallback(
-    async (thread: EnvironmentThreadShell) => {
-      if (!environmentSupportsPinning(thread.environmentId)) {
+    async (thread: EnvironmentThreadShell, pinPosition?: number) => {
+      if (
+        !environmentSupportsPinning(thread.environmentId) ||
+        (pinPosition !== undefined && !environmentSupportsPositioning(thread.environmentId))
+      ) {
         Alert.alert(
           "Could not pin thread",
           "This environment's server does not support pinning yet. Update the server to use Pin.",
@@ -373,14 +384,21 @@ export function useThreadListActions(): {
         const shells = appAtomRegistry.get(environmentThreadShells.threadShellsAtom);
         let firstKey: string | null = null;
         for (const shell of shells) {
-          if (shell.pinnedAt == null || shell.pinOrderKey == null) continue;
+          if (shell.pinnedAt == null || shell.pinPosition != null || shell.pinOrderKey == null)
+            continue;
           if (firstKey === null || shell.pinOrderKey < firstKey) firstKey = shell.pinOrderKey;
         }
         orderKey = pinOrderKeyBetween(null, firstKey) ?? undefined;
       }
       const result = await pinMutation({
         environmentId: thread.environmentId,
-        input: { threadId: thread.id, ...(orderKey !== undefined ? { orderKey } : {}) },
+        input: {
+          threadId: thread.id,
+          ...(environmentSupportsPositioning(thread.environmentId)
+            ? { pinPosition: pinPosition ?? null }
+            : {}),
+          ...(orderKey !== undefined ? { orderKey } : {}),
+        },
       });
       if (result._tag === "Failure") {
         const error = Cause.squash(result.cause);
@@ -475,7 +493,7 @@ export function useThreadListActions(): {
   });
   const moveThread = useCallback(
     async (thread: EnvironmentThreadShell, direction: "up" | "down") => {
-      if (getPendingThreadOrder() !== null) return false;
+      if (getPendingThreadOrder() !== null || thread.pinPosition != null) return false;
       const section = thread.pinnedAt != null ? "pinned" : "active";
       const configs = appAtomRegistry.get(environmentServerConfigsAtom);
       const supportsReorder = (environmentId: EnvironmentThreadShell["environmentId"]) => {

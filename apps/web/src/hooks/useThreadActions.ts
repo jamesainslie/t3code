@@ -26,6 +26,7 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
+  readEnvironmentSupportsThreadPositioning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentThreadRefs,
@@ -95,7 +96,7 @@ export class ThreadSnoozeBlockedError extends Schema.TaggedError<ThreadSnoozeBlo
 function topOfPinnedRunOrderKey(): string | undefined {
   let firstKey: string | null = null;
   for (const shell of readThreadShells()) {
-    if (shell.pinnedAt == null || shell.pinOrderKey == null) continue;
+    if (shell.pinnedAt == null || shell.pinPosition != null || shell.pinOrderKey == null) continue;
     if (firstKey === null || shell.pinOrderKey < firstKey) firstKey = shell.pinOrderKey;
   }
   return pinOrderKeyBetween(null, firstKey) ?? undefined;
@@ -149,10 +150,9 @@ export async function requestThreadUnpinConfirmation(input: {
 
   return settlePromise(() =>
     confirm(
-      [
-        `Unpin thread "${input.title}"?`,
-        "This will move the thread out of your pinned section.",
-      ].join("\n"),
+      [`Unpin thread "${input.title}"?`, "This will return the thread to its default order."].join(
+        "\n",
+      ),
     ),
   );
 }
@@ -552,9 +552,16 @@ export function useThreadActions() {
   );
 
   const pinThread = useCallback(
-    async (target: ScopedThreadRef, opts: { orderKey?: string } = {}) => {
+    async (
+      target: ScopedThreadRef,
+      opts: { orderKey?: string; pinPosition?: number | null } = {},
+    ) => {
       // Version skew: never send the command to a server that predates it.
-      if (!readEnvironmentSupportsPinning(target.environmentId)) {
+      if (
+        !readEnvironmentSupportsPinning(target.environmentId) ||
+        (opts.pinPosition != null &&
+          !readEnvironmentSupportsThreadPositioning(target.environmentId))
+      ) {
         return AsyncResult.failure(
           Cause.fail(
             new ThreadPinningUnsupportedError({
@@ -578,6 +585,9 @@ export function useThreadActions() {
         input: {
           threadId: target.threadId,
           ...(orderKey !== undefined ? { orderKey } : {}),
+          ...(readEnvironmentSupportsThreadPositioning(target.environmentId)
+            ? { pinPosition: opts.pinPosition ?? null }
+            : {}),
         },
       });
     },

@@ -117,6 +117,84 @@ function activeThreadAnchorTimestampMs(thread: {
   );
 }
 
+type ActiveThreadPlacement = {
+  readonly id: string;
+  readonly environmentId?: string | undefined;
+  readonly createdAt: string;
+  readonly unsettledAt?: string | null | undefined;
+  readonly pinnedAt?: string | null | undefined;
+  readonly pinPosition?: number | null | undefined;
+  readonly threadOrderKey?: string | null | undefined;
+  readonly activeOrderKey?: string | null | undefined;
+};
+
+/** Natural positions share the fractional-key alphabet with manual positions,
+ * so a move writes only the moved thread, even across environments. */
+export function activeThreadOrderKey(thread: ActiveThreadPlacement): string {
+  if (thread.threadOrderKey != null && isValidPinOrderKey(thread.threadOrderKey)) {
+    return thread.threadOrderKey;
+  }
+  return naturalThreadOrderKey(activeThreadAnchorTimestampMs(thread));
+}
+
+function naturalThreadOrderKey(timestampMs: number): string {
+  let value = Number.MAX_SAFE_INTEGER - Math.max(0, timestampMs);
+  let key = "";
+  for (let digit = 0; digit < 12; digit++) {
+    key = PIN_ORDER_DIGITS[value % 26]! + key;
+    value = Math.floor(value / 26);
+  }
+  return key + "n";
+}
+
+/** Leave newer creation timestamps ahead of every manual position, including
+ * moves to the first row and materialization of equal neighbor keys. */
+export function activeThreadOrderLowerBound(threads: readonly ActiveThreadPlacement[]): string {
+  let newest = 0;
+  for (const thread of threads) newest = Math.max(newest, activeThreadAnchorTimestampMs(thread));
+  return naturalThreadOrderKey(newest + 1);
+}
+
+/** Positions count thread rows, including the top-pinned section. Hidden
+ * rows leave no gaps; colliding pins use a stable identity tie-break. */
+export function sortActiveThreads<T extends ActiveThreadPlacement>(
+  threads: readonly T[],
+  topPinnedCount = 0,
+): T[] {
+  const fixed = threads.filter((thread) => thread.pinnedAt != null && thread.pinPosition != null);
+  const movable = threads.filter((thread) => thread.pinnedAt == null || thread.pinPosition == null);
+  const keysByThread = new Map(movable.map((thread) => [thread, activeThreadOrderKey(thread)]));
+  movable.sort((a, b) => {
+    if (a.activeOrderKey != null || b.activeOrderKey != null) {
+      if (a.activeOrderKey == null) return -1;
+      if (b.activeOrderKey == null) return 1;
+      return a.activeOrderKey < b.activeOrderKey ? -1 : a.activeOrderKey > b.activeOrderKey ? 1 :
+        a.id.localeCompare(b.id) || (a.environmentId ?? "").localeCompare(b.environmentId ?? "");
+    }
+    const left = keysByThread.get(a)!;
+    const right = keysByThread.get(b)!;
+    return (
+      (left < right ? -1 : left > right ? 1 : 0) ||
+      `${a.environmentId ?? ""}:${a.id}`.localeCompare(`${b.environmentId ?? ""}:${b.id}`)
+    );
+  });
+  fixed.sort(
+    (a, b) =>
+      a.pinPosition! - b.pinPosition! ||
+      `${a.environmentId ?? ""}:${a.id}`.localeCompare(`${b.environmentId ?? ""}:${b.id}`),
+  );
+  let previousPosition = -1;
+  for (const [index, thread] of fixed.entries()) {
+    const position = Math.min(
+      Math.max(previousPosition + 1, thread.pinPosition! - topPinnedCount),
+      threads.length - (fixed.length - index),
+    );
+    movable.splice(position, 0, thread);
+    previousPosition = position;
+  }
+  return movable;
+}
+
 export function sortThreads<T extends { readonly id: string } & ThreadSortInput>(
   threads: readonly T[],
   sortOrder: SidebarThreadSortOrder,
@@ -244,6 +322,7 @@ export function planPinnedReorder(input: {
   /** Include retained keys from hidden rows; only orderedIds receive writes. */
   readonly keysById: ReadonlyMap<string, string | null | undefined>;
   readonly movedId: string;
+  readonly lowerBound?: string | undefined;
 }): ReadonlyArray<{ readonly id: string; readonly orderKey: string }> {
   const { orderedIds, keysById, movedId } = input;
   const visibleIds = new Set(orderedIds);
@@ -254,7 +333,8 @@ export function planPinnedReorder(input: {
   if (movedIndex === -1) return [];
   const beforeId = movedIndex > 0 ? orderedIds[movedIndex - 1] : null;
   const afterId = movedIndex < orderedIds.length - 1 ? orderedIds[movedIndex + 1] : null;
-  const beforeKey = beforeId != null ? (keysById.get(beforeId) ?? null) : null;
+  const beforeKey =
+    beforeId != null ? (keysById.get(beforeId) ?? null) : (input.lowerBound ?? null);
   const afterKey = afterId != null ? (keysById.get(afterId) ?? null) : null;
   const beforeUsable = beforeId === null || beforeKey != null;
   const afterUsable = afterId === null || afterKey != null;
@@ -265,6 +345,7 @@ export function planPinnedReorder(input: {
   }
   // Keyless neighbor (or corrupt keys): rewrite the section in the new order.
   const keys = generateSpreadPinOrderKeys(orderedIds.length + reservedKeys.size)
+    .map((key) => (input.lowerBound ?? "") + key)
     .filter((key) => !reservedKeys.has(key))
     .slice(0, orderedIds.length);
   return orderedIds.flatMap((id, index) => {
@@ -356,6 +437,7 @@ export function planPinnedMove(input: {
   readonly keysById: ReadonlyMap<string, string | null | undefined>;
   readonly movedId: string;
   readonly direction: "up" | "down";
+  readonly lowerBound?: string | undefined;
 }): ReadonlyArray<{ readonly id: string; readonly orderKey: string }> | null {
   const { orderedIds, keysById, movedId, direction } = input;
   const from = orderedIds.indexOf(movedId);
@@ -365,5 +447,10 @@ export function planPinnedMove(input: {
   const newOrder = [...orderedIds];
   newOrder.splice(from, 1);
   newOrder.splice(to, 0, movedId);
-  return planPinnedReorder({ orderedIds: newOrder, keysById, movedId });
+  return planPinnedReorder({
+    orderedIds: newOrder,
+    keysById,
+    movedId,
+    lowerBound: input.lowerBound,
+  });
 }

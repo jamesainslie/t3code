@@ -17,7 +17,9 @@ import {
   effectiveSnoozed,
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
-import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
+import {
+  resolveSettledThreadTimestamp,
+} from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import {
   parseScopedThreadKey,
@@ -1489,7 +1491,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         >
           <PinIcon aria-hidden className="size-3 shrink-0" />
         </TooltipTrigger>
-        <TooltipPopup>Unpin thread</TooltipPopup>
+        <TooltipPopup>
+          {thread.pinPosition != null
+            ? `Pinned to position ${thread.pinPosition + 1}. Unpin to move`
+            : "Unpin thread"}
+        </TooltipPopup>
       </Tooltip>
     ) : (
       <PinIcon
@@ -2019,6 +2025,10 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
+function getSidebarThreadKey(thread: EnvironmentThreadShell) {
+  return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+}
+
 export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
@@ -2430,10 +2440,10 @@ export default function Sidebar() {
       const supportsSettlement = capabilities?.threadSettlement === true;
       const supportsSnooze = capabilities?.threadSnooze === true;
       const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-      if (capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
+      if (thread.pinPosition == null && capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
       // Older servers retain their existing drag actions. Active placement
       // additionally requires its own ordering capability at the drop target.
-      if (capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
+      if (thread.pinPosition == null && capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
         draggable.add(threadKey);
       }
       if (optimisticDrop?.key === threadKey) {
@@ -2458,7 +2468,7 @@ export default function Sidebar() {
         snoozed.push(thread);
       } else if (supportsSettlement && thread.settledOverride === "settled") {
         settled.push(thread);
-      } else if (thread.pinnedAt != null) {
+      } else if (thread.pinnedAt != null && thread.pinPosition == null) {
         pinned.push(thread);
       } else {
         active.push(thread);
@@ -2470,7 +2480,7 @@ export default function Sidebar() {
     // sort, or mixed-version fleets would render different pinned orders on
     // web and mobile from the same data.
     const sortedPinned = sortPinnedThreadsForSidebar(pinned);
-    const sortedActive = sortThreadsForSidebar(active);
+    const sortedActive = sortThreadsForSidebar(active, pinned.length);
     return {
       pinnedThreads:
         optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -3087,13 +3097,13 @@ export default function Sidebar() {
     }
   }, [activeKeys, optimisticDrop, pinnedKeys, threads]);
   const attemptPin = useCallback(
-    (threadRef: ScopedThreadRef) => {
+    (threadRef: ScopedThreadRef, pinPosition?: number) => {
       void (async () => {
         // Fresh pins take the top of the arranged run: pinThread computes a
         // key before the smallest key across ALL pinned shells — including
         // snoozed pins hidden from this list, whose keys are still part of
         // the run — so the new pin can't land beneath a hidden head.
-        const result = await pinThread(threadRef);
+        const result = await pinThread(threadRef, { pinPosition: pinPosition ?? null });
         if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
           const error = squashAtomCommandFailure(result);
           toastManager.add(
@@ -3347,14 +3357,10 @@ export default function Sidebar() {
     sidebarListItems,
     threadByKey,
   ]);
-  const handleThreadDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const activeKey = String(event.active.id);
+  const moveSidebarThread = useCallback(
+    (activeKey: string, overKey: string) => {
       const activeSection = sectionByThreadKey.get(activeKey);
-      const target =
-        event.over === null
-          ? null
-          : resolveSidebarDropTarget(sidebarListItems, activeKey, String(event.over.id));
+      const target = resolveSidebarDropTarget(sidebarListItems, activeKey, overKey);
       const activeThread = threadByKey.get(activeKey);
       if (activeSection === undefined || target === null || activeThread === undefined) return;
       const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
@@ -3498,6 +3504,10 @@ export default function Sidebar() {
       unsnoozeThread,
     ],
   );
+
+  const handleThreadDragEnd = useCallback((event: DragEndEvent) => {
+    if (event.over !== null) moveSidebarThread(String(event.active.id), String(event.over.id));
+  }, [moveSidebarThread]);
   // One snooze per thread at a time — same double-dispatch guard as settle.
   const snoozingThreadKeysRef = useRef(new Set<string>());
   const performSnooze = useCallback(
@@ -3852,6 +3862,14 @@ export default function Sidebar() {
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
+        const movementKeys = isPinned
+          ? pinnedThreads
+              .map(getSidebarThreadKey)
+              .filter((key) => draggableThreadKeys.has(key))
+          : activeThreads
+              .map(getSidebarThreadKey)
+              .filter((key) => activeReorderableThreadKeys.has(key));
+        const movementIndex = movementKeys.indexOf(threadKey);
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
         const clicked = await settlePromise(() =>
@@ -3859,6 +3877,13 @@ export default function Sidebar() {
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
               isPinned,
+              pinPosition: thread.pinPosition,
+              ...(movementIndex >= 0
+                ? {
+                    canMoveUp: movementIndex > 0,
+                    canMoveDown: movementIndex < movementKeys.length - 1,
+                  }
+                : {}),
               isSettled,
               isSnoozed,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
@@ -3869,6 +3894,9 @@ export default function Sidebar() {
                 settlement: supportsSettlement,
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
+                positioning:
+                  serverConfigs.get(thread.environmentId)?.environment.capabilities
+                    .threadPositioning === true,
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
@@ -3928,6 +3956,20 @@ export default function Sidebar() {
           case "unsnooze":
             attemptUnsnooze(threadRef);
             return;
+          case "move-up":
+          case "move-down": {
+            const target = movementKeys[movementIndex + (clicked.value === "move-up" ? -1 : 1)];
+            if (target !== undefined)
+              moveSidebarThread(threadKey, target);
+            return;
+          }
+          case "pin-here": {
+            const position = [...pinnedThreads, ...activeThreads].findIndex(
+              (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+            );
+            if (position >= 0) attemptPin(threadRef, position);
+            return;
+          }
           case "pin":
             attemptPin(threadRef);
             return;
@@ -4040,6 +4082,13 @@ export default function Sidebar() {
       })();
     },
     [
+      pinnedThreads,
+      activeThreads,
+      draggableThreadKeys,
+      activeReorderableThreadKeys,
+      moveSidebarThread,
+      pinnedThreads,
+      activeThreads,
       archiveThread,
       attemptPin,
       attemptSettle,

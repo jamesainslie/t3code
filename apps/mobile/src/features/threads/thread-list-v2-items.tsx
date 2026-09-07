@@ -381,7 +381,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => void;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
-  readonly onPinThread: (thread: EnvironmentThreadShell) => void;
+  readonly onPinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => void;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => void;
   /** False on environments whose server predates thread.settle/unsettle:
       swipe + menu fall back to Archive instead of failing on use. */
@@ -394,6 +394,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly titleRegenerationSupported: boolean;
   /** Server supports reordering this card's section. */
   readonly reorderSupported?: boolean;
+  readonly positioningSupported?: boolean;
+  readonly threadPosition?: number;
   readonly onMoveThread?: (thread: EnvironmentThreadShell, direction: "up" | "down") => void;
   /** Position flags for the card's section so the menu disables the move that
       would fall off the end of the list. */
@@ -468,6 +470,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   );
   const handleUnsnooze = useCallback(() => onUnsnoozeThread(thread), [onUnsnoozeThread, thread]);
   const handleUnsettle = useCallback(() => onUnsettleThread(thread), [onUnsettleThread, thread]);
+  const handlePinHere = useCallback(() => {
+    if (props.threadPosition !== undefined) onPinThread(thread, props.threadPosition);
+  }, [onPinThread, props.threadPosition, thread]);
   const handlePin = useCallback(() => onPinThread(thread), [onPinThread, thread]);
   const handleUnpin = useCallback(() => onUnpinThread(thread), [onUnpinThread, thread]);
   const handleMoveUp = useCallback(() => onMoveThread?.(thread, "up"), [onMoveThread, thread]);
@@ -512,7 +517,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   // hides the card until wake with the pin intact.)
   const arrangementMenuItems = useMemo<MenuAction[]>(
     () => [
-      ...(variant === "card" && props.reorderSupported === true
+      ...(variant === "card" && thread.pinPosition == null && props.reorderSupported === true
         ? [
             {
               id: "move-up",
@@ -530,9 +535,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         : []),
       ...(props.pinningSupported
         ? [
-            thread.pinnedAt != null
-              ? { id: "unpin", title: "Unpin", image: "pin.slash" }
-              : { id: "pin", title: "Pin", image: "pin" },
+            ...(thread.pinnedAt == null || thread.pinPosition != null
+              ? [{ id: "pin", title: "Pin to top", image: "pin" }] : []),
+            ...(props.positioningSupported && variant === "card" && props.threadPosition !== undefined && thread.pinPosition == null
+              ? [{ id: "pin-here", title: "Pin here", image: "pin" }] : []),
+            ...(thread.pinnedAt != null
+              ? [{ id: "unpin", title: "Unpin", image: "pin.slash" }] : []),
           ]
         : []),
     ],
@@ -540,6 +548,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       props.canMoveDown,
       props.canMoveUp,
       props.reorderSupported,
+      props.positioningSupported,
+      props.threadPosition,
+      thread.pinPosition,
       props.pinningSupported,
       thread.pinnedAt,
       variant,
@@ -605,6 +616,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
+      if (nativeEvent.event === "pin-here") handlePinHere();
       if (nativeEvent.event === "pin") handlePin();
       if (nativeEvent.event === "unpin") handleUnpin();
       if (nativeEvent.event === "move-up") handleMoveUp();
@@ -632,6 +644,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleMoveDown,
       handleMoveUp,
       handlePin,
+      handlePinHere,
       handleSettle,
       handleSnooze,
       handleUnpin,

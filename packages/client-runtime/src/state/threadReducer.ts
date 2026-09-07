@@ -195,6 +195,9 @@ export function applyThreadDetailEvent(
         thread: {
           ...thread,
           pinnedAt: event.payload.pinnedAt,
+          ...(event.payload.pinPosition !== undefined
+            ? { pinPosition: event.payload.pinPosition }
+            : {}),
           ...(event.payload.pinOrderKey !== undefined
             ? { pinOrderKey: event.payload.pinOrderKey }
             : {}),
@@ -209,6 +212,8 @@ export function applyThreadDetailEvent(
           ...thread,
           pinnedAt: null,
           pinOrderKey: null,
+          pinPosition: null,
+          threadOrderKey: null,
           updatedAt: event.payload.updatedAt,
         },
       };
@@ -229,6 +234,9 @@ export function applyThreadDetailEvent(
         kind: "updated",
         thread: {
           ...thread,
+          ...(event.payload.threadOrderKey !== undefined
+            ? { threadOrderKey: event.payload.threadOrderKey }
+            : {}),
           ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
           ...(event.payload.titleRegeneration !== undefined
             ? { titleRegeneration: event.payload.titleRegeneration }

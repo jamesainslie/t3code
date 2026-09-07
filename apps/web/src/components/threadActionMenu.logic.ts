@@ -10,6 +10,9 @@ export type ThreadActionMenuId =
   | "new-thread-on-branch"
   | "project-settings"
   | "pin"
+  | "pin-here"
+  | "move-up"
+  | "move-down"
   | "unpin"
   | "settle"
   | "unsettle"
@@ -29,6 +32,9 @@ export type ThreadActionMenuId =
 export interface ThreadActionMenuState {
   readonly branch: string | null;
   readonly isPinned: boolean;
+  readonly pinPosition?: number | null | undefined;
+  readonly canMoveUp?: boolean;
+  readonly canMoveDown?: boolean;
   readonly isSettled: boolean;
   readonly isSnoozed: boolean;
   readonly canSnoozeNow: boolean;
@@ -39,6 +45,7 @@ export interface ThreadActionMenuState {
     readonly settlement: boolean;
     readonly snooze: boolean;
     readonly pinning: boolean;
+    readonly positioning?: boolean;
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
@@ -53,6 +60,25 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
   return [
+    ...(!state.isSettled &&
+    !state.isSnoozed &&
+    !(state.isPinned && state.pinPosition != null) &&
+    state.canMoveUp !== undefined
+      ? [
+          {
+            id: "move-up" as const,
+            label: "Move up",
+            icon: "arrow-up",
+            disabled: !state.canMoveUp,
+          },
+          {
+            id: "move-down" as const,
+            label: "Move down",
+            icon: "arrow-down",
+            disabled: !state.canMoveDown,
+          },
+        ]
+      : []),
     ...(state.branch
       ? [
           {
@@ -64,9 +90,18 @@ export function buildThreadActionMenuItems(
       : []),
     ...(state.supports.pinning
       ? [
-          state.isPinned
-            ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
-            : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+          ...(!state.isPinned || (state.supports.positioning && state.pinPosition != null)
+            ? [{ id: "pin" as const, label: "Pin to top", icon: "pin" }]
+            : []),
+          ...(state.supports.positioning &&
+          !state.isSettled &&
+          !state.isSnoozed &&
+          (!state.isPinned || state.pinPosition == null)
+            ? [{ id: "pin-here" as const, label: "Pin here", icon: "pin" }]
+            : []),
+          ...(state.isPinned
+            ? [{ id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }]
+            : []),
         ]
       : []),
     // Both lifecycle actions stay available on pinned threads: settling

@@ -554,6 +554,11 @@ function ThreadNavigationSidebarPane(
     threads,
     selectedProjectScope,
   ]);
+  const visiblePlacementThreads = useMemo(
+    () =>
+      threadListV2Layout.items.filter((item) => item.variant === "card").map((item) => item.thread),
+    [threadListV2Layout.items],
+  );
   // Re-partition the moment the earliest snooze expires (clamped to the
   // signed-32-bit setTimeout range; far-future wakes re-arm at the clamp).
   const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
@@ -930,7 +935,9 @@ function ThreadNavigationSidebarPane(
               onSettleThread={settleThread}
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
-              reorderSupported={
+              positioningSupported={serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning === true}
+          threadPosition={visiblePlacementThreads.findIndex((item) => item.environmentId === thread.environmentId && item.id === thread.id)}
+          reorderSupported={
                 item.item.pinned
                   ? pinReorderEnvironmentIds.has(thread.environmentId)
                   : activeReorderEnvironmentIds.has(thread.environmentId)
@@ -1065,6 +1072,7 @@ function ThreadNavigationSidebarPane(
     [
       archiveThread,
       activeReorderEnvironmentIds,
+      visiblePlacementThreads,
       threadMovePlanners,
       pendingOrder,
       queuedThreadKeys,

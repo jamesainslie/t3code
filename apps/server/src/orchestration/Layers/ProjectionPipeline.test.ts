@@ -3978,6 +3978,76 @@ const engineLayer = it.layer(
   ),
 );
 
+engineLayer("thread sidebar placement", (it) => {
+  it.effect("persists manual placement, pin modes, and unpin through shell and detail reads", () =>
+    Effect.gen(function* () {
+      const engine = yield* OrchestrationEngineService;
+      const query = yield* ProjectionSnapshotQuery;
+      const threadId = ThreadId.make("thread-placement");
+      const projectId = ProjectId.make("project-placement");
+      const createdAt = "2026-09-01T00:00:00.000Z";
+      yield* engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("placement-project"),
+        projectId,
+        title: "Placement",
+        workspaceRoot: "/tmp/thread-placement",
+        createdAt,
+      });
+      yield* engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("placement-create"),
+        threadId,
+        projectId,
+        title: "Placement",
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      });
+      yield* engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.make("placement-order"),
+        threadId,
+        threadOrderKey: "kn",
+      });
+      yield* engine.dispatch({
+        type: "thread.pin",
+        commandId: CommandId.make("placement-here"),
+        threadId,
+        pinPosition: 2,
+      });
+      const shell = Option.getOrThrow(yield* query.getThreadShellById(threadId));
+      assert.strictEqual(shell.pinPosition, 2);
+      assert.strictEqual(shell.threadOrderKey, "kn");
+      const detail = Option.getOrThrow(yield* query.getThreadDetailById(threadId));
+      assert.strictEqual(detail.pinPosition, 2);
+      assert.strictEqual(detail.threadOrderKey, "kn");
+      yield* engine.dispatch({
+        type: "thread.pin",
+        commandId: CommandId.make("placement-top"),
+        threadId,
+        pinPosition: null,
+        orderKey: "g",
+      });
+      const top = Option.getOrThrow(yield* query.getThreadShellById(threadId));
+      assert.isNull(top.pinPosition);
+      assert.strictEqual(top.pinOrderKey, "g");
+      yield* engine.dispatch({
+        type: "thread.unpin",
+        commandId: CommandId.make("placement-unpin"),
+        threadId,
+      });
+      const unpinned = Option.getOrThrow(yield* query.getThreadDetailById(threadId));
+      assert.isNull(unpinned.pinnedAt);
+      assert.isNull(unpinned.pinPosition);
+      assert.isNull(unpinned.threadOrderKey);
+    }),
+  );
+});
+
 engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
   it.effect("projects dispatched engine events immediately", () =>
     Effect.gen(function* () {

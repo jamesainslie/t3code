@@ -622,6 +622,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pinnedAt: null,
             pinOrderKey: null,
             activeOrderKey: null,
+            pinPosition: null,
+            threadOrderKey: null,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
             latestUserMessageAt: null,
@@ -747,6 +749,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             pinnedAt: event.payload.pinnedAt,
+            ...(event.payload.pinPosition !== undefined
+              ? { pinPosition: event.payload.pinPosition }
+              : {}),
             ...(event.payload.pinOrderKey !== undefined
               ? { pinOrderKey: event.payload.pinOrderKey }
               : {}),
@@ -766,6 +771,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             pinnedAt: null,
             pinOrderKey: null,
+            pinPosition: null,
+            threadOrderKey: null,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -795,6 +802,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           }
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
+            ...(event.payload.threadOrderKey !== undefined
+              ? { threadOrderKey: event.payload.threadOrderKey }
+              : {}),
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
             ...(event.payload.activeOrderKey !== undefined
               ? { activeOrderKey: event.payload.activeOrderKey }
