@@ -77,10 +77,12 @@ import { readLocalApi } from "~/localApi";
 import { confirmTerminalClose } from "~/lib/terminalCloseConfirm";
 import { useClientSettings } from "../hooks/useSettings";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useReleaseSettledAuthRelayHosts } from "../browser/useHostedAuthRelay";
 import { useAttachedTerminalSession } from "../state/terminalSessions";
 import { serverEnvironment } from "../state/server";
 import { previewEnvironment } from "../state/preview";
 import { terminalEnvironment } from "../state/terminal";
+import { usePendingTerminalBrowserLaunches } from "../state/terminalBrowserLaunches";
 import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
 import { TerminalBrowserLaunchBanner } from "./terminal/TerminalBrowserLaunchBanner";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -428,7 +430,8 @@ export function TerminalViewport({
   const terminalOutput = terminalSession.output;
   const terminalError = terminalSession.error;
   const terminalStatus = terminalSession.status;
-  const browserLaunches = terminalSession.browserLaunches;
+  const browserLaunches = usePendingTerminalBrowserLaunches(terminalSession.browserLaunches);
+  useReleaseSettledAuthRelayHosts(browserLaunches);
   const outputCursorRef = useRef<TerminalOutputCursor>(INITIAL_TERMINAL_OUTPUT_CURSOR);
   const synchronizedStatusRef = useRef<TerminalSessionState["status"]>("closed");
   const synchronizeTerminalStatus = useEffectEvent(

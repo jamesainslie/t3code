@@ -1,9 +1,12 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import { previewBridge } from "~/components/preview/previewBridge";
-
-import { forgetAuthRelayHost, registerAuthRelayHost } from "./authRelayHosts";
+import {
+  hostAuthRelay,
+  readAuthRelayHosted,
+  releaseAuthRelayHost,
+  subscribeAuthRelayHosts,
+} from "./authRelayHosts";
 
 interface HostedAuthRelayInput {
   readonly environmentId: EnvironmentId;
@@ -12,53 +15,39 @@ interface HostedAuthRelayInput {
   readonly captureId: string;
   /** The loopback listener the capture advertised; without one there is no port to stand in for. */
   readonly redirectUri: string | null;
-}
-
-function loopbackTarget(redirectUri: string): { origin: string; path: string } | null {
-  try {
-    const url = new URL(redirectUri);
-    return { origin: url.origin, path: url.pathname };
-  } catch {
-    return null;
-  }
+  readonly expiresAt: string;
 }
 
 /**
- * Asks the desktop to hold the sign-in's loopback port for as long as the
- * banner is up, so the browser's return lands here instead of failing. Resolves
- * to `null` where hosting is unavailable (web, mobile, an older desktop build)
- * and to `false` when the port is already taken on this machine.
+ * Has the desktop hold the loopback port of a pending sign-in and reports what
+ * it said. The banner only starts the host; it never ends it, because the user
+ * may well be signing in while this banner is off screen. Resolves to `null`
+ * where hosting is unavailable (web, mobile, an older desktop build) and to
+ * `false` when the port is already taken on this machine.
  */
 export function useHostedAuthRelay(input: HostedAuthRelayInput): boolean | null {
-  const { environmentId, threadId, terminalId, captureId, redirectUri } = input;
-  const [hosted, setHosted] = useState<boolean | null>(null);
+  const { environmentId, threadId, terminalId, captureId, redirectUri, expiresAt } = input;
   useEffect(() => {
-    const target = redirectUri === null ? null : loopbackTarget(redirectUri);
-    if (!target) return;
-    // Registered before the request so a return that beats its ack still lands.
-    registerAuthRelayHost(captureId, { environmentId, threadId, terminalId, captureId });
-    const request = previewBridge?.hostAuthRelay?.({
-      hostId: captureId,
-      origin: target.origin,
-      path: target.path,
-    });
-    if (!request) {
-      forgetAuthRelayHost(captureId);
-      return;
+    hostAuthRelay({ environmentId, threadId, terminalId, captureId }, { redirectUri, expiresAt });
+  }, [captureId, environmentId, expiresAt, redirectUri, terminalId, threadId]);
+  return useSyncExternalStore(subscribeAuthRelayHosts, () => readAuthRelayHosted(captureId));
+}
+
+/**
+ * Frees the port of any capture that left the pending list of an on-screen
+ * terminal: settled from another client, dismissed here, or gone with the
+ * process. Captures that settle while the terminal is off screen are released
+ * by the delivery itself or by their deadline.
+ */
+export function useReleaseSettledAuthRelayHosts(
+  launches: ReadonlyArray<{ readonly captureId: string }>,
+): void {
+  const previous = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const current = new Set(launches.map((launch) => launch.captureId));
+    for (const captureId of previous.current) {
+      if (!current.has(captureId)) releaseAuthRelayHost(captureId);
     }
-    let released = false;
-    void request
-      .then((result) => {
-        if (!released) setHosted(result.hosted);
-      })
-      .catch(() => {
-        if (!released) setHosted(false);
-      });
-    return () => {
-      released = true;
-      forgetAuthRelayHost(captureId);
-      void previewBridge?.releaseAuthRelayHost?.(captureId).catch(() => {});
-    };
-  }, [captureId, environmentId, redirectUri, terminalId, threadId]);
-  return hosted;
+    previous.current = current;
+  }, [launches]);
 }
