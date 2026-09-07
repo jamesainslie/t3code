@@ -17,6 +17,7 @@ const PINNED_AT = "1969-12-30T00:00:00.000Z";
 function makeReadModel(input: {
   readonly pinnedAt?: string | null;
   readonly pinOrderKey?: string | null;
+  readonly pinPosition?: number | null;
   readonly archivedAt?: string | null;
   readonly settledOverride?: "settled" | "active" | null;
   readonly settledAt?: string | null;
@@ -46,6 +47,7 @@ function makeReadModel(input: {
         snoozedAt: input.snoozedAt ?? (input.snoozedUntil != null ? PINNED_AT : null),
         pinnedAt: input.pinnedAt ?? null,
         pinOrderKey: input.pinOrderKey ?? null,
+        pinPosition: input.pinPosition ?? null,
         deletedAt: null,
         messages: [],
         proposedPlans: [],
@@ -59,6 +61,49 @@ function makeReadModel(input: {
 }
 
 it.layer(NodeServices.layer)("pinned thread decider", (it) => {
+  it.effect("pins at a numbered position and switches an existing pin to the top", () =>
+    Effect.gen(function* () {
+      const result = yield* decideOrchestrationCommand({
+        command: {
+          type: "thread.pin",
+          commandId: CommandId.make("pin-here"),
+          threadId: ThreadId.make("thread-1"),
+          pinPosition: 2,
+        },
+        readModel: makeReadModel({}),
+      });
+      const events = Array.isArray(result) ? result : [result];
+      expect(events[0]?.payload).toMatchObject({ pinPosition: 2 });
+      const moved = yield* decideOrchestrationCommand({
+        command: {
+          type: "thread.pin",
+          commandId: CommandId.make("pin-top"),
+          threadId: ThreadId.make("thread-1"),
+          pinPosition: null,
+          orderKey: "g",
+        },
+        readModel: makeReadModel({ pinnedAt: PINNED_AT, pinPosition: 2 }),
+      });
+      const movedEvents = Array.isArray(moved) ? moved : [moved];
+      expect(movedEvents[0]?.payload).toMatchObject({ pinPosition: null, pinOrderKey: "g" });
+    }),
+  );
+
+  it.effect("saves manual order without treating arrangement as thread activity", () =>
+    Effect.gen(function* () {
+      const result = yield* decideOrchestrationCommand({
+        command: {
+          type: "thread.meta.update",
+          commandId: CommandId.make("move-thread"),
+          threadId: ThreadId.make("thread-1"),
+          threadOrderKey: "g",
+        },
+        readModel: makeReadModel({}),
+      });
+      const events = Array.isArray(result) ? result : [result];
+      expect(events[0]?.payload).toMatchObject({ threadOrderKey: "g", updatedAt: NOW });
+    }),
+  );
   it.effect("pins a thread, stamping pinnedAt and updatedAt together", () =>
     Effect.gen(function* () {
       const event = yield* decideOrchestrationCommand({

@@ -660,11 +660,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const occurredAt = yield* nowIso;
-      // Re-pinning an already-pinned thread is a duplicate (double-click,
-      // raced clients): re-emit with the original timestamps so the
-      // projection is a no-op. Pinning has no lifecycle invariants — a pin
-      // only ever promotes visibility, so it can never hide pending work.
+      // Repeating the same placement preserves timestamps and order. An
+      // explicit position change can switch between a numbered slot and the top.
       const existingPinnedAt = thread.pinnedAt ?? null;
+      const placementChanged =
+        command.pinPosition !== undefined && command.pinPosition !== (thread.pinPosition ?? null);
       const pinnedEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -676,13 +676,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           pinnedAt: existingPinnedAt ?? occurredAt,
-          // A fresh pin takes the client's slot in the arranged order; on a
-          // re-pin the existing key wins so raced duplicates cannot move a
-          // thread the user already placed.
-          ...(existingPinnedAt === null && command.orderKey !== undefined
+          // New pins and placement changes accept the supplied top-section key.
+          ...(command.pinPosition !== undefined ? { pinPosition: command.pinPosition } : {}),
+          ...((existingPinnedAt === null || placementChanged) && command.orderKey !== undefined
             ? { pinOrderKey: command.orderKey }
             : {}),
-          updatedAt: existingPinnedAt !== null ? thread.updatedAt : occurredAt,
+          updatedAt: existingPinnedAt !== null && !placementChanged ? thread.updatedAt : occurredAt,
         },
       };
       // Pinning is a promotion: it clears the parked states rather than
@@ -811,6 +810,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         type: "thread.meta-updated",
         payload: {
           threadId: command.threadId,
+          ...(command.threadOrderKey !== undefined
+            ? { threadOrderKey: command.threadOrderKey }
+            : {}),
           ...(command.title !== undefined ? { title: command.title } : {}),
           ...(command.regenerateTitle === true
             ? {
@@ -833,7 +835,16 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.linkedPullRequest !== undefined
             ? { linkedPullRequest: command.linkedPullRequest }
             : {}),
-          updatedAt: occurredAt,
+          updatedAt:
+            command.threadOrderKey !== undefined &&
+            command.title === undefined &&
+            command.regenerateTitle !== true &&
+            command.modelSelection === undefined &&
+            command.branch === undefined &&
+            command.worktreePath === undefined &&
+            command.linkedPullRequest === undefined
+              ? thread.updatedAt
+              : occurredAt,
         },
       };
     }

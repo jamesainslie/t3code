@@ -514,8 +514,8 @@ export const OrchestrationThread = Schema.Struct({
   // Optional so payloads from pre-snooze servers still decode.
   snoozedUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
-  // Active pinned threads render in the pinned block. Settled and snoozed
-  // threads remain in their respective shelves even when pinned.
+  // Pins with a numbered position stay in the active list; other pins go
+  // to the top section. Settled and snoozed threads stay in their shelves.
   // Optional so payloads from pre-pinning servers still decode.
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   // Fractional index for user-arranged pinned order. Keyed threads sort by
@@ -523,6 +523,10 @@ export const OrchestrationThread = Schema.Struct({
   // servers never need each other's threads to agree on the merged list.
   // Optional so payloads from pre-reorder servers still decode.
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  pinPosition: Schema.optional(
+    Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  ),
+  threadOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   // Pending-only state. Optional so older servers remain compatible.
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -588,6 +592,10 @@ export const OrchestrationThreadShell = Schema.Struct({
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  pinPosition: Schema.optional(
+    Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  ),
+  threadOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
   session: Schema.NullOr(OrchestrationSession),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
@@ -869,6 +877,10 @@ const ThreadUnsnoozeCommand = Schema.Struct({
 });
 
 const ThreadPinCommand = Schema.Struct({
+  // Zero-based slot among visible thread rows; null explicitly selects the top section.
+  pinPosition: Schema.optional(
+    Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  ),
   type: Schema.Literal("thread.pin"),
   commandId: CommandId,
   threadId: ThreadId,
@@ -896,6 +908,7 @@ const ThreadPinReorderCommand = Schema.Struct({
 });
 
 const ThreadMetaUpdateCommand = Schema.Struct({
+  threadOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   type: Schema.Literal("thread.meta.update"),
   commandId: CommandId,
   threadId: ThreadId,
@@ -1354,6 +1367,9 @@ export const ThreadUnsnoozedPayload = Schema.Struct({
 });
 
 export const ThreadPinnedPayload = Schema.Struct({
+  pinPosition: Schema.optional(
+    Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  ),
   threadId: ThreadId,
   pinnedAt: IsoDateTime,
   // Absent on re-pins of an already-pinned thread (the existing key wins)
@@ -1374,6 +1390,7 @@ export const ThreadPinReorderedPayload = Schema.Struct({
 });
 
 export const ThreadMetaUpdatedPayload = Schema.Struct({
+  threadOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   threadId: ThreadId,
   title: Schema.optional(TrimmedNonEmptyString),
   /** Intent marker consumed by the title-generation reactor. Keeping this on
