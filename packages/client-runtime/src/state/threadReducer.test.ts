@@ -46,6 +46,23 @@ const baseThread: OrchestrationThread = {
 };
 
 describe("applyThreadDetailEvent", () => {
+  it("removes an open imported detail when its version is superseded", () => {
+    expect(
+      applyThreadDetailEvent(baseThread, {
+        ...baseEventFields,
+        sequence: 1,
+        occurredAt: baseThread.createdAt,
+        aggregateKind: "thread",
+        aggregateId: baseThread.id,
+        type: "thread.sync-visibility-set",
+        payload: {
+          threadId: baseThread.id,
+          deletedAt: baseThread.createdAt,
+          updatedAt: baseThread.createdAt,
+        },
+      }).kind,
+    ).toBe("deleted");
+  });
   describe("project events", () => {
     it("returns unchanged for project.created", () => {
       const result = applyThreadDetailEvent(baseThread, {

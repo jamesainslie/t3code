@@ -120,6 +120,14 @@ export function applyThreadDetailEvent(
     case "thread.deleted":
       return { kind: "deleted" };
 
+    case "thread.sync-visibility-set":
+      return event.payload.deletedAt !== null
+        ? { kind: "deleted" }
+        : {
+            kind: "updated",
+            thread: { ...thread, deletedAt: null, updatedAt: event.payload.updatedAt },
+          };
+
     case "thread.archived":
       return {
         kind: "updated",

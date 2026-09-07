@@ -48,6 +48,9 @@ const decide = (
   }) !== null;
 
 describe("resolveAutoSettlementAt", () => {
+  it("does not automatically settle a source-owned conversation", () => {
+    expect(decide(makeThread({ id: ThreadId.make("t3sync-source-version") }))).toBe(false);
+  });
   it("returns the last activity time for persisted settlement", () => {
     expect(
       resolveAutoSettlementAt({

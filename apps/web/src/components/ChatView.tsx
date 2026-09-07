@@ -315,6 +315,7 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { SyncedConversation } from "./chat/SyncedConversation";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
@@ -8276,6 +8277,12 @@ export default function ChatView(props: ChatViewProps) {
                     <ComposerSurface.Shell contextStrip={showComposerContextStrip}>
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
+                          {activeThread?.id.startsWith("t3sync-") ? (
+                            <SyncedConversation
+                              environmentId={activeThread.environmentId}
+                              threadId={activeThread.id}
+                            />
+                          ) : (
                           <ChatComposer
                             composerRef={composerRef}
                             composerDraftTarget={composerDraftTarget}
@@ -8391,6 +8398,7 @@ export default function ChatView(props: ChatViewProps) {
                             onExpandImage={onExpandTimelineImage}
                             onFileOpen={openFileAttachment}
                           />
+                          )}
                         </div>
                       </ComposerSurface.Host>
                       <div className="min-h-0">
@@ -8398,7 +8406,7 @@ export default function ChatView(props: ChatViewProps) {
                           data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
                           className="relative z-0"
                         >
-                          {mountComposerContextStrip && (
+                          {mountComposerContextStrip && !activeThread.id.startsWith("t3sync-") && (
                             <div className="pointer-events-auto">
                               <BranchToolbar
                                 environmentId={activeThread.environmentId}

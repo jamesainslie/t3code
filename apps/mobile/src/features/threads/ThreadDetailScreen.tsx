@@ -62,6 +62,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { SyncedConversation } from "./SyncedConversation";
 import { collectProviderUsageLimits } from "@t3tools/shared/usageLimits";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
@@ -1003,6 +1004,13 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     : undefined
                 }
               >
+                {props.selectedThread.id.startsWith("t3sync-") ? (
+                  <SyncedConversation
+                    environmentId={props.environmentId}
+                    threadId={props.selectedThread.id}
+                    bottomInset={composerBottomInset}
+                  />
+                ) : (
                 <ThreadComposer
                   editorRef={composerEditorRef}
                   draftMessage={props.draftMessage}
@@ -1038,6 +1046,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                   onExpandedChange={setComposerExpanded}
                   onEditorFocusChange={handleComposerFocusChange}
                 />
+                )}
               </View>
             </View>
           </Animated.View>

@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import { ProjectSyncRequest, ProjectSyncResponse, ProjectSyncError } from "./projectSync.ts";
 import type * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
@@ -614,7 +615,22 @@ class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
     }),
   ) {}
 
+class EnvironmentProjectSyncHttpApi extends HttpApiGroup.make("projectSync").add(
+  HttpApiEndpoint.post("execute", "/api/project-sync", {
+    headers: OptionalBearerHeaders,
+    payload: Schema.Struct({ request: ProjectSyncRequest }),
+    success: ProjectSyncResponse,
+    error: [
+      ProjectSyncError,
+      EnvironmentAuthInvalidError,
+      EnvironmentScopeRequiredError,
+      EnvironmentInternalError,
+    ],
+  }).middleware(EnvironmentAuthenticatedAuth),
+) {}
+
 export class EnvironmentHttpApi extends HttpApi.make("environment")
+  .add(EnvironmentProjectSyncHttpApi)
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)

@@ -69,6 +69,7 @@ function commandToAggregateRef(command: OrchestrationCommand): {
     case "project.create":
     case "project.meta.update":
     case "project.delete":
+    case "project.sync.apply":
       return {
         aggregateKind: "project",
         aggregateId: command.projectId,

@@ -668,6 +668,9 @@ export const OrchestrationThread = Schema.Struct({
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
+/** Reserved for immutable conversations owned by another T3 environment. */
+export const isSyncedThreadId = (threadId: string): boolean => threadId.startsWith("t3sync-");
+
 export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
@@ -1297,9 +1300,10 @@ const ThreadHistoryImportCommand = Schema.Struct({
   messages: Schema.Array(
     Schema.Struct({
       messageId: MessageId,
-      role: Schema.Literals(["user", "assistant"]),
+      role: OrchestrationMessageRole,
       text: Schema.String,
       createdAt: IsoDateTime,
+      attachments: Schema.optional(Schema.Array(ChatAttachment)),
     }),
   ).check(Schema.isNonEmpty()),
 });
@@ -1367,7 +1371,71 @@ const ThreadPullRequestSyncCommand = Schema.Struct({
   linkedPullRequest: Schema.optional(ThreadLinkedPullRequest),
 });
 
+export const ProjectSyncMapping = Schema.Struct({
+  sourceProjectId: ProjectId,
+  projectId: Schema.NullOr(ProjectId),
+});
+export type ProjectSyncMapping = typeof ProjectSyncMapping.Type;
+
+export const ProjectSyncRecord = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  sourceId: TrimmedNonEmptyString,
+  sourceHome: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+  parentId: Schema.NullOr(TrimmedNonEmptyString),
+  undoBatchId: Schema.NullOr(TrimmedNonEmptyString),
+  schedule: Schema.optional(
+    Schema.Struct({ enabled: Schema.Boolean, hour: NonNegativeInt, timezone: Schema.String }),
+  ),
+  contentHash: TrimmedNonEmptyString,
+  mappings: Schema.Array(ProjectSyncMapping),
+  visibleThreadIds: Schema.Array(ThreadId),
+  hiddenThreadIds: Schema.Array(ThreadId),
+  projectChanges: Schema.Array(
+    Schema.Struct({
+      before: Schema.NullOr(OrchestrationProject),
+      after: OrchestrationProject,
+      ownedSettings: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
+});
+export type ProjectSyncRecord = typeof ProjectSyncRecord.Type;
+
+export const ThreadSyncVisibilityPayload = Schema.Struct({
+  threadId: ThreadId,
+  deletedAt: Schema.NullOr(IsoDateTime),
+  updatedAt: IsoDateTime,
+});
+const ThreadSyncVisibilityCommand = Schema.Struct({
+  type: Schema.Literal("thread.sync.visibility"),
+  commandId: CommandId,
+  ...ThreadSyncVisibilityPayload.fields,
+});
+
+export const ProjectSyncApplyCommand = Schema.Struct({
+  type: Schema.Literal("project.sync.apply"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  expectedSequence: NonNegativeInt,
+  commands: Schema.Array(
+    Schema.Union([
+      ProjectCreateCommand,
+      ProjectMetaUpdateCommand,
+      ProjectDeleteCommand,
+      ThreadCreateCommand,
+      ThreadHistoryImportCommand,
+      ThreadActivityAppendCommand,
+      ThreadSyncVisibilityCommand,
+      ThreadArchiveCommand,
+    ]),
+  ),
+  record: ProjectSyncRecord,
+});
+export type ProjectSyncApplyCommand = typeof ProjectSyncApplyCommand.Type;
+
 const InternalOrchestrationCommand = Schema.Union([
+  ProjectSyncApplyCommand,
+  ThreadSyncVisibilityCommand,
   ThreadAutoSettleCommand,
   ThreadSessionSetCommand,
   ThreadMessageAssistantDeltaCommand,
@@ -1389,6 +1457,8 @@ export const OrchestrationCommand = Schema.Union([
 export type OrchestrationCommand = typeof OrchestrationCommand.Type;
 
 export const OrchestrationEventType = Schema.Literals([
+  "project.sync-recorded",
+  "thread.sync-visibility-set",
   "project.created",
   "project.meta-updated",
   "project.deleted",
@@ -1701,6 +1771,16 @@ const EventBaseFields = {
 } as const;
 
 export const OrchestrationEvent = Schema.Union([
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.sync-recorded"),
+    payload: ProjectSyncRecord,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.sync-visibility-set"),
+    payload: ThreadSyncVisibilityPayload,
+  }),
   Schema.Struct({
     ...EventBaseFields,
     type: Schema.Literal("project.created"),

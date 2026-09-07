@@ -1,5 +1,6 @@
 import {
   CommandId,
+  isSyncedThreadId,
   type OrchestrationEvent,
   type OrchestrationProjectShell,
   type ThreadId,
@@ -120,6 +121,7 @@ export const make = Effect.gen(function* () {
     }
     const threads = snapshot.threads.filter(
       (thread) =>
+        !isSyncedThreadId(thread.id) &&
         thread.archivedAt === null &&
         (request.threadId === null || thread.id === request.threadId) &&
         (thread.settledOverride !== "settled" ||

@@ -20,6 +20,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { continuationInput } from "../../projectSync/Continuation.ts";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -858,8 +859,23 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
-    const normalizedAttachments = input.attachments ?? [];
+    const importedHistory =
+      thread.id.startsWith("t3continue-") && thread.session === null
+        ? ((yield* resolveThreadDetail(thread.id))?.messages.filter((message) =>
+            message.id.startsWith(`${thread.id}-`),
+          ) ?? [])
+        : [];
+    const normalizedInput = toNonEmptyProviderInput(
+      continuationInput(importedHistory, input.messageText, importedHistory.length > 0),
+    );
+    const normalizedAttachments = [
+      ...new Map(
+        [
+          ...importedHistory.flatMap((message) => message.attachments ?? []),
+          ...(input.attachments ?? []),
+        ].map((attachment) => [attachment.id, attachment]),
+      ).values(),
+    ];
     const activeSession = yield* providerService
       .listSessions()
       .pipe(

@@ -59,6 +59,7 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
  * does not need to be external — only the entry point must stay unbundled.
  */
 export const CLI_BUILD_ONLY_EXTERNAL_PREFIXES = [
+  "bun:",
   "@effect/platform-bun",
   "@effect/sql-sqlite-bun",
 ] as const;

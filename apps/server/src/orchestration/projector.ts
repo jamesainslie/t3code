@@ -365,6 +365,18 @@ export function projectEvent(
         };
       });
 
+    case "project.sync-recorded":
+      return Effect.succeed(nextBase);
+
+    case "thread.sync-visibility-set":
+      return Effect.succeed({
+        ...nextBase,
+        threads: updateThread(nextBase.threads, event.payload.threadId, {
+          deletedAt: event.payload.deletedAt,
+          updatedAt: event.payload.updatedAt,
+        }),
+      });
+
     case "thread.deleted":
       return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({

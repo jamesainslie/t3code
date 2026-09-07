@@ -31,6 +31,9 @@ type PackageManifest = typeof PackageManifest.Type;
 const decodeManifest = Schema.decodeUnknownSync(Schema.fromJsonString(PackageManifest));
 
 describe("shouldBundleCliDependency", () => {
+  it("keeps the runtime-conditional Bun SQLite builtin external", () => {
+    assert.strictEqual(shouldBundleCliDependency("bun:sqlite"), false);
+  });
   it("bundles ordinary runtime dependencies", () => {
     for (const id of ["effect", "@effect/platform", "hono", "@t3tools/shared/hostProcess"]) {
       assert.strictEqual(shouldBundleCliDependency(id), true, id);

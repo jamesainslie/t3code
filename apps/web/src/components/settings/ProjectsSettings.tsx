@@ -19,6 +19,7 @@ import { selectTriggerVariants } from "../ui/select";
 import { cn } from "../../lib/utils";
 import { ProjectSettingsPanel, useSettingsProjectGroups } from "./ProjectSettingsPanel";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { ProjectSyncSettings } from "./ProjectSyncSettings";
 
 function ScopePicker({
   label,
@@ -151,6 +152,16 @@ export function ProjectsSettings({
               />
             </div>
           </div>
+          {projectKey === null &&
+            (machine?.environmentId ??
+              (environments.length === 1 ? environments[0]?.environmentId : null)) && (
+              <div className="mt-4 pb-4">
+                <ProjectSyncSettings
+                  key={machine?.environmentId ?? environments[0]!.environmentId}
+                  environmentId={machine?.environmentId ?? environments[0]!.environmentId}
+                />
+              </div>
+            )}
         </WorkspacePageContainer>
       </div>
       {machineId !== null && !machine ? (
