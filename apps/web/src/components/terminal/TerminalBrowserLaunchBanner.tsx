@@ -51,6 +51,7 @@ export function TerminalBrowserLaunchBanner({
     terminalId,
     captureId: launch.captureId,
     redirectUri: launch.redirectUri,
+    expiresAt: launch.expiresAt,
   });
   const relayMode = terminalBrowserLaunchRelayMode({
     responseMode: launch.responseMode,
@@ -89,7 +90,7 @@ export function TerminalBrowserLaunchBanner({
       data-terminal-browser-launch={launch.captureId}
     >
       <p className="font-medium">
-        A command in this terminal wants to open a page in your browser.
+        A command in this terminal asked to open a page. Press Open to open it in your browser.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -141,7 +142,8 @@ export function TerminalBrowserLaunchBanner({
       </div>
       {relayMode === "hosted" ? (
         <p className="text-muted-foreground">
-          Sign in there. T3 Code returns the result to the terminal on its own.
+          Sign in there. T3 Code returns the result to this terminal on its own, even if you switch
+          threads meanwhile.
         </p>
       ) : null}
       {relayMode === "unreachable" ? (

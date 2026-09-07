@@ -76,10 +76,17 @@ optional urlencoded `formBody` alongside the posted-to address; the
 as the POST the browser made. Only something on the browser's machine can catch a
 POST, which is why the desktop hosts the listener.
 
-The desktop closes the loop without a paste by standing in for the listener. While
-a capture with an advertised loopback target is on screen, the renderer asks the
+The desktop closes the loop without a paste by standing in for the listener. When
+a capture with an advertised loopback target first appears, the renderer asks the
 [loopback host](../../apps/desktop/src/preview/AuthRelayLoopbackHost.ts) to bind
 that port on `127.0.0.1` and `::1` (Chrome resolves `localhost` to `::1` first).
+The host follows the capture, not the banner: the user is usually looking at the
+browser, or at another thread, when the return arrives, so unmounting the banner
+must not drop the port. The [renderer registry](../../apps/web/src/browser/authRelayHosts.ts)
+releases it when the return is delivered, when the capture leaves the terminal, or
+at the capture deadline, and the desktop caps a host at six minutes as a backstop.
+Clients also hide a capture at that deadline, since the server has forgotten it and
+only the expiry error could follow.
 Any browser on the machine, in-app or not, then lands on the desktop, which
 answers with a plain confirmation page and hands the request (URL, method, body)
 to the renderer for the same completion RPC the paste field uses. A busy port

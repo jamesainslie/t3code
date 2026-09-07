@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { takeAuthRelayHost } from "~/browser/authRelayHosts";
+import { releaseAuthRelayHost, takeAuthRelayHost } from "~/browser/authRelayHosts";
 import { takeAuthRelayTab } from "~/browser/authRelayTabs";
 import { terminalEnvironment } from "~/state/terminal";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -30,7 +30,7 @@ export function AuthRelayCallbackHost() {
             : undefined;
       if (!relay) return;
       const formBody = event.method === "POST" && event.body ? event.body : undefined;
-      void completeBrowserLaunch({
+      const completion = completeBrowserLaunch({
         environmentId: relay.environmentId,
         input: {
           threadId: relay.threadId,
@@ -40,6 +40,12 @@ export function AuthRelayCallbackHost() {
           ...(formBody === undefined ? {} : { formBody }),
         },
       });
+      // A hosted port answers one sign-in. Once the environment has the
+      // response, whichever way that went, the port has nothing left to do.
+      if (event.hostId != null) {
+        const hostId = event.hostId;
+        void completion.finally(() => releaseAuthRelayHost(hostId));
+      }
     });
   }, [completeBrowserLaunch]);
   return null;
