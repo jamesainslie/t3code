@@ -117,7 +117,7 @@ export function TerminalBrowserLaunchBanner({
       }}
     >
       <Text className="text-xs font-medium" style={{ color: colors.foreground }}>
-        A command in this terminal wants to open a page in your browser.
+        A command in this terminal asked to open a page. Press Open to open it in your browser.
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         <BannerButton

@@ -42,6 +42,7 @@ import {
   useAttachedTerminalSession,
   useKnownTerminalSessions,
 } from "../../state/use-terminal-session";
+import { usePendingTerminalBrowserLaunches } from "../../state/use-terminal-browser-launches";
 import { useThreadSelection } from "../../state/use-thread-selection";
 import { useSelectedThreadDetail } from "../../state/use-thread-detail";
 import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnectionNotice";
@@ -333,6 +334,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     environmentId: selectedThread?.environmentId ?? null,
     terminal: terminalAttachInput,
   });
+  const browserLaunches = usePendingTerminalBrowserLaunches(terminal.browserLaunches);
   const terminalKey = selectedThread
     ? `${selectedThread.environmentId}:${selectedThread.id}:${terminalId}`
     : terminalId;
@@ -1263,7 +1265,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
           <>
             <View className="flex-1" style={{ paddingBottom: terminalBottomInset }}>
               {routeEnvironmentId !== null
-                ? terminal.browserLaunches.map((launch) => (
+                ? browserLaunches.map((launch) => (
                     <TerminalBrowserLaunchBanner
                       key={launch.captureId}
                       environmentId={routeEnvironmentId}
