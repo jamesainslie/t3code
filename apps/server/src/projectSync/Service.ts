@@ -34,7 +34,14 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import { readSyncSource, contentHash } from "./Source.ts";
 import { inspectSyncAssets, stageSyncSource } from "./Assets.ts";
 import { isSyncDue } from "./scheduleDue.ts";
-import { activeSyncRecord, planImport, projectSettings } from "./Planner.ts";
+import {
+  activeSyncRecord,
+  planImport,
+  projectSettings,
+  syncedThreadKey,
+  planThreadManagement,
+  type SyncedThreadManagement,
+} from "./Planner.ts";
 import {
   cancelRecoveryRestore,
   createRecoveryBackup,
@@ -158,6 +165,38 @@ export class ProjectSyncService extends Context.Service<
         }
         return overrides;
       });
+      const localThreadManagement = Effect.gen(function* () {
+        const rows = yield* sql<{ stream_id: string; event_type: string }>`
+          SELECT stream_id, event_type FROM orchestration_events
+          WHERE event_type IN ('thread.deleted', 'thread.archived', 'thread.unarchived', 'thread.settled', 'thread.unsettled')
+          AND stream_id LIKE 't3sync-%'
+          AND COALESCE(json_extract(metadata_json, '$.historyImport'), 0) = 0
+          ORDER BY sequence ASC`;
+        const overrides = new Map<string, SyncedThreadManagement>();
+        for (const row of rows) {
+          const key = syncedThreadKey(row.stream_id);
+          const local = overrides.get(key) ?? {};
+          switch (row.event_type) {
+            case "thread.deleted":
+              local.deleted = true;
+              break;
+            case "thread.archived":
+              local.archived = true;
+              break;
+            case "thread.unarchived":
+              local.archived = false;
+              break;
+            case "thread.settled":
+              local.settledOverride = "settled";
+              break;
+            case "thread.unsettled":
+              local.settledOverride = "active";
+              break;
+          }
+          overrides.set(key, local);
+        }
+        return overrides;
+      });
       const loadSource = Effect.fn("ProjectSync.loadSource")(function* (home: string) {
         const source = yield* attempt(() => readSyncSource(home));
         const destination = yield* attempt(() => NodeFSP.realpath(config.baseDir));
@@ -266,12 +305,16 @@ export class ProjectSyncService extends Context.Service<
             return yield* new ProjectSyncError({
               message: "Choose an imported conversation to continue.",
             });
-          const thread = yield* snapshots.getThreadDetailById(request.threadId);
+          const snapshot = yield* snapshots.getSnapshot();
+          const thread = Option.fromNullishOr(
+            snapshot.threads.find(
+              (candidate) => candidate.id === request.threadId && candidate.deletedAt === null,
+            ),
+          );
           if (Option.isNone(thread))
             return yield* new ProjectSyncError({
               message: "This imported conversation is no longer visible. Open its current version.",
             });
-          const snapshot = yield* snapshots.getSnapshot();
           const threadId = ThreadId.make(`t3continue-${NodeCrypto.randomUUID()}`);
           const commandId = CommandId.make(NodeCrypto.randomUUID());
           const commands: ProjectSyncApplyCommand["commands"][number][] = [
@@ -345,6 +388,10 @@ export class ProjectSyncService extends Context.Service<
           yield* saveConfiguration({ ...configuration, enabled: false });
           const snapshot = yield* snapshots.getSnapshot();
           const overrides = yield* localOverrides(active.id);
+          const threadManagement = yield* localThreadManagement;
+          const restoredThreadIds = active.hiddenThreadIds.filter(
+            (threadId) => !threadManagement.get(syncedThreadKey(threadId))?.deleted,
+          );
           const commandId = CommandId.make(NodeCrypto.randomUUID());
           const commands: ProjectSyncApplyCommand["commands"][number][] = [
             ...active.visibleThreadIds.map((threadId) => ({
@@ -354,7 +401,7 @@ export class ProjectSyncService extends Context.Service<
               deletedAt: now,
               updatedAt: now,
             })),
-            ...active.hiddenThreadIds.map((threadId) => ({
+            ...restoredThreadIds.map((threadId) => ({
               type: "thread.sync.visibility" as const,
               commandId,
               threadId,
@@ -362,6 +409,16 @@ export class ProjectSyncService extends Context.Service<
               updatedAt: now,
             })),
           ];
+          for (const threadId of restoredThreadIds) {
+            commands.push(
+              ...planThreadManagement(
+                commandId,
+                threadId,
+                snapshot.threads.find((thread) => thread.id === threadId),
+                threadManagement.get(syncedThreadKey(threadId)),
+              ),
+            );
+          }
           for (const change of active.projectChanges) {
             const current = snapshot.projects.find(
               (project) => project.id === change.after.id && project.deletedAt === null,
@@ -420,7 +477,7 @@ export class ProjectSyncService extends Context.Service<
                 hour: configuration.hour,
                 timezone: configuration.timezone,
               },
-              visibleThreadIds: active.hiddenThreadIds,
+              visibleThreadIds: restoredThreadIds,
               hiddenThreadIds: active.visibleThreadIds,
               projectChanges: [],
             },
@@ -492,6 +549,7 @@ export class ProjectSyncService extends Context.Service<
             batchId,
             now,
             localSettingOverrides: yield* localOverrides(),
+            localThreadManagement: yield* localThreadManagement,
           });
           return { ...planned, record: { ...planned.record, schedule } };
         });
