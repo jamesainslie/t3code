@@ -207,7 +207,19 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   OrchestrationCommandRejection | PlatformError.PlatformError,
   Crypto.Crypto
 > {
-  if (!syncImport && "threadId" in command && command.threadId.startsWith("t3sync-")) {
+  const localThreadManagement =
+    command.type === "thread.delete" ||
+    command.type === "thread.archive" ||
+    command.type === "thread.unarchive" ||
+    command.type === "thread.settle" ||
+    command.type === "thread.auto-settle" ||
+    command.type === "thread.unsettle";
+  if (
+    !syncImport &&
+    !localThreadManagement &&
+    "threadId" in command &&
+    command.threadId.startsWith("t3sync-")
+  ) {
     return yield* new OrchestrationCommandInvariantError({
       commandType: command.type,
       detail:

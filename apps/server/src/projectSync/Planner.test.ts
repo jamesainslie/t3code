@@ -244,6 +244,7 @@ it.effect(
       }).pipe(Effect.provide(NodeServices.layer));
       expect(next.projects[0]?.title).toBe("Upstream");
       expect(next.threads[0]?.messages[0]?.text).toBe("Existing question");
+      expect(next.threads[0]?.archivedAt).not.toBeNull();
       const second = planImport({
         source,
         snapshot: next,

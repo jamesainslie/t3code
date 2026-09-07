@@ -55,6 +55,136 @@ const runtime = Effect.fn(function* (home: string) {
 });
 
 it.effect(
+  "keeps a locally deleted conversation deleted across sync, source updates, restart, and undo",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-lifecycle-")),
+      );
+      const source = yield* runtime(NodePath.join(root, "source"));
+      let target = yield* runtime(NodePath.join(root, "target"));
+      const projectId = ProjectId.make("source-project");
+      const threadId = ThreadId.make("source-thread");
+      const at = "2026-09-07T00:00:00Z";
+      const dispatchSource = (command: OrchestrationCommand) =>
+        source.run(
+          Effect.flatMap(OrchestrationEngineService, (engine) => engine.dispatch(command)),
+        );
+      const details = (id: ThreadId) =>
+        target.run(
+          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getSnapshot()).pipe(
+            Effect.map((snapshot) =>
+              Option.fromNullishOr(
+                snapshot.threads.find((thread) => thread.id === id && thread.deletedAt === null),
+              ),
+            ),
+          ),
+        );
+      try {
+        yield* dispatchSource({
+          type: "project.create",
+          commandId: CommandId.make("project"),
+          projectId,
+          title: "Source",
+          workspaceRoot: root,
+          createdAt: at,
+        });
+        yield* dispatchSource({
+          type: "thread.create",
+          commandId: CommandId.make("thread"),
+          projectId,
+          threadId,
+          title: "History",
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: at,
+          historyImport: true,
+        });
+        yield* dispatchSource({
+          type: "thread.history.import",
+          commandId: CommandId.make("history"),
+          threadId,
+          messages: [
+            {
+              messageId: MessageId.make("question"),
+              role: "user",
+              text: "Original question",
+              createdAt: at,
+            },
+          ],
+        });
+        let service = yield* target.run(Effect.service(ProjectSyncService));
+        const preview = yield* target.run(
+          service.execute({ operation: "preview", sourceHome: NodePath.join(root, "source") }),
+        );
+        const imported = yield* target.run(
+          service.execute({
+            operation: "import",
+            sourceHome: preview.preview!.sourceHome,
+            contentHash: preview.preview!.contentHash,
+            mappings: preview.preview!.projects.map((p) => ({
+              sourceProjectId: p.sourceProjectId,
+              projectId: p.projectId,
+            })),
+            nightly: true,
+          }),
+        );
+        const firstId = imported.history[0]!.visibleThreadIds[0]!;
+        expect(Option.getOrThrow(yield* details(firstId)).archivedAt).not.toBeNull();
+        // Create a replacement so undo has an older version it could mistakenly resurrect.
+        yield* dispatchSource({
+          type: "thread.meta.update",
+          commandId: CommandId.make("rename"),
+          threadId,
+          title: "Updated history",
+        });
+        const updated = yield* target.run(service.execute({ operation: "syncNow" }));
+        const updatedId = updated.history[0]!.visibleThreadIds[0]!;
+        yield* target.run(
+          Effect.flatMap(OrchestrationEngineService, (engine) =>
+            engine.dispatch({
+              type: "thread.delete",
+              commandId: CommandId.make("delete-copy"),
+              threadId: updatedId,
+            }),
+          ),
+        );
+        yield* target.dispose();
+        target = yield* runtime(NodePath.join(root, "target"));
+        service = yield* target.run(Effect.service(ProjectSyncService));
+        yield* target.run(service.execute({ operation: "syncNow" }));
+        expect(Option.isNone(yield* details(updatedId))).toBe(true);
+        yield* target.run(service.execute({ operation: "undo", batchId: updated.activeBatchId! }));
+        expect(Option.isNone(yield* details(firstId))).toBe(true);
+        yield* dispatchSource({
+          type: "thread.meta.update",
+          commandId: CommandId.make("rename-again"),
+          threadId,
+          title: "Newer history",
+        });
+        const synced = yield* target.run(service.execute({ operation: "syncNow" }));
+        expect(synced.history[0]!.visibleThreadIds).not.toContain(updatedId);
+        const snapshot = yield* target.run(
+          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getSnapshot()),
+        );
+        expect(snapshot.threads.filter((thread) => thread.deletedAt === null)).toEqual([]);
+        const original = yield* source.run(
+          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getThreadDetailById(threadId)),
+        );
+        expect(Option.getOrThrow(original).messages[0]?.text).toBe("Original question");
+        expect(Option.getOrThrow(original).archivedAt).toBeNull();
+      } finally {
+        yield* target.dispose();
+        yield* source.dispose();
+        yield* Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true }));
+      }
+    }),
+);
+
+it.effect(
   "previews, imports, continues independently, and undoes while preserving the continuation",
   () =>
     Effect.gen(function* () {
@@ -175,6 +305,23 @@ it.effect(
           service.execute({ operation: "continue", threadId: mirrorId }),
         );
         expect(continued.threadId).toBeDefined();
+        for (const command of [
+          {
+            type: "thread.unarchive",
+            commandId: CommandId.make("reopen-copy"),
+            threadId: mirrorId,
+          },
+          {
+            type: "thread.unsettle",
+            commandId: CommandId.make("activate-copy"),
+            threadId: mirrorId,
+            reason: "user",
+          },
+        ] satisfies OrchestrationCommand[]) {
+          yield* target.run(
+            Effect.flatMap(OrchestrationEngineService, (engine) => engine.dispatch(command)),
+          );
+        }
         yield* source.run(
           Effect.flatMap(OrchestrationEngineService, (engine) =>
             engine.dispatch({
@@ -200,14 +347,39 @@ it.effect(
         );
         const updated = yield* target.run(service.execute({ operation: "syncNow" }));
         expect(updated.history[0]!.hiddenThreadIds).toContain(mirrorId);
+        const updatedId = updated.history[0]!.visibleThreadIds[0]!;
+        const reopened = yield* target.run(
+          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getSnapshot()),
+        );
+        const updatedThread = reopened.threads.find((thread) => thread.id === updatedId)!;
+        expect(updatedThread.archivedAt).toBeNull();
+        expect(updatedThread.settledOverride).toBe("active");
+        yield* target.run(
+          Effect.flatMap(OrchestrationEngineService, (engine) =>
+            engine.dispatch({
+              type: "thread.archive",
+              commandId: CommandId.make("archive-updated-copy"),
+              threadId: updatedId,
+            }),
+          ),
+        );
         yield* target.dispose();
         target = yield* runtime(NodePath.join(root, "target"));
         service = yield* target.run(Effect.service(ProjectSyncService));
         yield* target.run(service.execute({ operation: "undo", batchId: updated.activeBatchId! }));
         const restoredMirror = yield* target.run(
-          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getThreadDetailById(mirrorId)),
+          Effect.flatMap(ProjectionSnapshotQuery, (query) => query.getSnapshot()).pipe(
+            Effect.map((snapshot) =>
+              Option.fromNullishOr(
+                snapshot.threads.find(
+                  (thread) => thread.id === mirrorId && thread.deletedAt === null,
+                ),
+              ),
+            ),
+          ),
         );
         expect(Option.getOrThrow(restoredMirror).messages).toHaveLength(1);
+        expect(Option.getOrThrow(restoredMirror).archivedAt).not.toBeNull();
         const undone = yield* target.run(
           service.execute({ operation: "undo", batchId: imported.activeBatchId! }),
         );

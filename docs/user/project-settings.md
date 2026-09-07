@@ -39,7 +39,10 @@ when the environment runs again. New source projects are discovered automaticall
 you skipped stay skipped. Active conversations are deferred until a later sync. **Sync now**
 retries immediately after a reported failure, and **Pause sync** stops automatic runs.
 
-Imported conversations have a **T3** indicator and stay read-only. **Continue in fork**, available
+Newly imported conversations start archived and have a **T3** indicator. You can reopen, settle,
+archive, or delete the local copy. These choices survive later syncs and undo without changing the
+main install. Deleting an imported copy keeps that source conversation out of future imports.
+Conversation content stays read-only. **Continue in fork**, available
 on desktop, web, and mobile, starts an independent conversation with the imported history and
 attachments as context for a new provider session. Later imports and undo leave that continuation
 intact. Changes and deletions in the main install never delete your fork conversations.
