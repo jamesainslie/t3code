@@ -21,9 +21,10 @@ When there are several checkouts, the checkout picker selects which actions and 
 
 ## Sync from another T3 install
 
-On web or desktop, open **Settings → Projects**, choose **All projects** and the destination
-machine, then **Preview import**. Enter the main install's T3 home on that machine, usually
-`~/.t3`. The fork must use a separate home, usually `~/.t3f`.
+On web or desktop, open **Settings → Projects** and choose **All projects**. Under **All machines**,
+use **Destination machine** in the sync section to select the machine running your fork. You can
+also select its machine tab directly. Enter the main install's T3 home on that machine, usually
+`~/.t3`, then choose **Preview import**. The fork must use a separate home, usually `~/.t3f`.
 
 Review each project and choose an existing destination, a separate project, or **Skip**.
 Imports include project settings, conversations, attachments, historical tool activity, and
