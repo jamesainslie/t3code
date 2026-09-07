@@ -282,6 +282,34 @@ describe("sortThreadsForListV2", () => {
 });
 
 describe("buildThreadListV2Items", () => {
+  it("searches the arranged list without shifting a position pin behind a match", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("new"), title: "New", createdAt: NOW }),
+        makeThread({ id: ThreadId.make("fixed"), title: "Match A", pinnedAt: NOW, pinPosition: 1 }),
+        makeThread({ id: ThreadId.make("last"), title: "Match B" }),
+      ],
+      environmentId: null,
+      searchQuery: "match",
+      now: NOW,
+    });
+    expect(layout.items.map((item) => item.thread.id)).toEqual(["fixed", "last"]);
+  });
+  it("keeps a position pin in the active list as new threads arrive", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("old"), title: "Old" }),
+        makeThread({ id: ThreadId.make("fixed"), title: "Fixed", pinnedAt: NOW, pinPosition: 2 }),
+        makeThread({ id: ThreadId.make("new"), title: "New", createdAt: NOW }),
+        makeThread({ id: ThreadId.make("top"), title: "Top", pinnedAt: NOW }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+    expect(layout.items.map((item) => item.thread.id)).toEqual(["top", "new", "fixed", "old"]);
+    expect(layout.items[2]?.pinned).toBe(true);
+  });
   it("places a persisted settled thread in the settled shelf", () => {
     const thread = makeThread({
       id: ThreadId.make("linked-merged"),

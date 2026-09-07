@@ -463,6 +463,7 @@ export function projectEvent(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             pinnedAt: payload.pinnedAt,
+            ...(payload.pinPosition !== undefined ? { pinPosition: payload.pinPosition } : {}),
             ...(payload.pinOrderKey !== undefined ? { pinOrderKey: payload.pinOrderKey } : {}),
             updatedAt: payload.updatedAt,
           }),
@@ -478,6 +479,8 @@ export function projectEvent(
             // Unpin clears the slot: re-pinning is "pin again", not "restore
             // an ancient position".
             pinOrderKey: null,
+            pinPosition: null,
+            threadOrderKey: null,
             updatedAt: payload.updatedAt,
           }),
         })),
@@ -499,6 +502,9 @@ export function projectEvent(
         Effect.map((payload) => ({
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
+            ...(payload.threadOrderKey !== undefined
+              ? { threadOrderKey: payload.threadOrderKey }
+              : {}),
             ...(payload.title !== undefined ? { title: payload.title } : {}),
             ...(payload.titleRegeneration !== undefined
               ? { titleRegeneration: payload.titleRegeneration }

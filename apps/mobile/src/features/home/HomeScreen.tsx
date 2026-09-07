@@ -11,7 +11,6 @@ import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
-import { sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
 import {
   type EnvironmentId,
   resolveEnvironmentMachineKind,
@@ -112,11 +111,12 @@ interface HomeScreenProps {
   ) => Promise<boolean>;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
-  readonly onPinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly onPinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => Promise<boolean>;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly onMovePinnedThread: (
+  readonly onMoveThread: (
     thread: EnvironmentThreadShell,
     direction: "up" | "down",
+    visibleThreads?: readonly EnvironmentThreadShell[],
   ) => Promise<boolean>;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onSelectPendingTask: (pendingTask: PendingNewTask) => void;
@@ -506,17 +506,12 @@ export function HomeScreen(props: HomeScreenProps) {
     },
     [props.onUnsnoozeThread],
   );
+  const { onPinThread, onMoveThread } = props;
   const handlePinThread = useCallback(
-    (thread: EnvironmentThreadShell) => {
-      void props.onPinThread(thread);
+    (thread: EnvironmentThreadShell, pinPosition?: number) => {
+      void onPinThread(thread, pinPosition);
     },
-    [props.onPinThread],
-  );
-  const handleMovePinnedThread = useCallback(
-    (thread: EnvironmentThreadShell, direction: "up" | "down") => {
-      void props.onMovePinnedThread(thread, direction);
-    },
-    [props.onMovePinnedThread],
+    [onPinThread],
   );
   const handleUnpinThread = useCallback(
     (thread: EnvironmentThreadShell) => {
@@ -627,20 +622,6 @@ export function HomeScreen(props: HomeScreenProps) {
       ),
     [serverConfigs],
   );
-  // Canonical arranged pinned order (reorder-capable threads only) for the
-  // Move up/down position flags. Computed from all shells, not the rendered
-  // list, so search/scope filtering never disables or misdirects a move.
-  const arrangedPinnedKeys = useMemo(() => {
-    const pinned = sortPinnedThreadsByOrderKey(
-      props.threads.filter(
-        (thread) =>
-          thread.pinnedAt != null &&
-          thread.archivedAt === null &&
-          pinReorderEnvironmentIds.has(thread.environmentId),
-      ),
-    );
-    return pinned.map((thread) => `${thread.environmentId}:${thread.id}`);
-  }, [pinReorderEnvironmentIds, props.threads]);
   const threadListV2Layout = useMemo(() => {
     if (!threadListV2Enabled)
       return {
@@ -683,6 +664,47 @@ export function HomeScreen(props: HomeScreenProps) {
     threadListV2Enabled,
     v2ScopedProjectGroup,
   ]);
+  const visiblePlacementThreads = useMemo(
+    () =>
+      threadListV2Layout.items.filter((item) => item.variant === "card").map((item) => item.thread),
+    [threadListV2Layout.items],
+  );
+  const arrangedPinnedKeys = useMemo(
+    () =>
+      visiblePlacementThreads
+        .filter(
+          (thread) =>
+            thread.pinnedAt != null &&
+            thread.pinPosition == null &&
+            pinReorderEnvironmentIds.has(thread.environmentId),
+        )
+        .map((thread) => `${thread.environmentId}:${thread.id}`),
+    [visiblePlacementThreads, pinReorderEnvironmentIds],
+  );
+  const arrangedActiveKeys = useMemo(
+    () =>
+      visiblePlacementThreads
+        .filter(
+          (thread) =>
+            thread.pinnedAt == null &&
+            serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning ===
+              true,
+        )
+        .map((thread) => `${thread.environmentId}:${thread.id}`),
+    [visiblePlacementThreads, serverConfigs],
+  );
+  const placementRevision = JSON.stringify([
+    arrangedPinnedKeys,
+    arrangedActiveKeys,
+    visiblePlacementThreads.map((thread) => `${thread.environmentId}:${thread.id}`),
+  ]);
+  const handleMoveThread = useCallback(
+    (thread: EnvironmentThreadShell, direction: "up" | "down") => {
+      void onMoveThread(thread, direction, visiblePlacementThreads);
+    },
+    [onMoveThread, visiblePlacementThreads],
+  );
+
   // Re-partition the moment the earliest snooze expires (clamped to the
   // signed-32-bit setTimeout range; far-future wakes re-arm at the clamp).
   const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
@@ -730,7 +752,7 @@ export function HomeScreen(props: HomeScreenProps) {
         settledShelfHeaderIndex: threadListV2Layout.settledShelfHeaderIndex,
         snoozeLabelNow: `${nowMinute}:00.000Z`,
       }),
-    [settledShelfExpanded, snoozedShelfExpanded, threadListV2Layout, v2PendingTasks],
+    [nowMinute, settledShelfExpanded, snoozedShelfExpanded, threadListV2Layout, v2PendingTasks],
   );
 
   const renderV2Item = useCallback(
@@ -830,18 +852,38 @@ export function HomeScreen(props: HomeScreenProps) {
           onSettleThread={handleSettleThread}
           snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
-          pinReorderSupported={pinReorderEnvironmentIds.has(thread.environmentId)}
-          canMovePinnedUp={arrangedPinnedKeys.indexOf(`${thread.environmentId}:${thread.id}`) > 0}
-          canMovePinnedDown={(() => {
-            const index = arrangedPinnedKeys.indexOf(`${thread.environmentId}:${thread.id}`);
-            return index !== -1 && index < arrangedPinnedKeys.length - 1;
+          pinReorderSupported={
+            props.searchQuery.trim().length === 0 &&
+            pinReorderEnvironmentIds.has(thread.environmentId)
+          }
+          positioningSupported={
+            props.searchQuery.trim().length === 0 &&
+            serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning ===
+              true
+          }
+          threadPosition={visiblePlacementThreads.findIndex(
+            (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+          )}
+          canMoveUp={
+            (thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys).indexOf(
+              `${thread.environmentId}:${thread.id}`,
+            ) > 0
+          }
+          canMoveDown={(() => {
+            const index = (
+              thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys
+            ).indexOf(`${thread.environmentId}:${thread.id}`);
+            return (
+              index !== -1 &&
+              index < (thread.pinnedAt != null ? arrangedPinnedKeys : arrangedActiveKeys).length - 1
+            );
           })()}
           onSnoozeThread={handleSnoozeThread}
           onUnsnoozeThread={handleUnsnoozeThread}
           onUnsettleThread={handleUnsettleThread}
           onPinThread={handlePinThread}
           onUnpinThread={handleUnpinThread}
-          onMovePinnedThread={handleMovePinnedThread}
+          onMoveThread={handleMoveThread}
           onSwipeableClose={handleSwipeableClose}
           onSwipeableWillOpen={handleSwipeableWillOpen}
         />
@@ -850,7 +892,9 @@ export function HomeScreen(props: HomeScreenProps) {
     [
       handleDeleteThread,
       arrangedPinnedKeys,
-      handleMovePinnedThread,
+      arrangedActiveKeys,
+      visiblePlacementThreads,
+      handleMoveThread,
       handlePinThread,
       handleRegenerateThreadTitle,
       handleSettleThread,
@@ -890,6 +934,7 @@ export function HomeScreen(props: HomeScreenProps) {
   // HomeScreen render.
   const v2ExtraData = useMemo(
     () => ({
+      placementRevision,
       projectByKey,
       projectTitleByProjectKey: v2ProjectTitleByProjectKey,
       serverConfigs,
@@ -899,6 +944,7 @@ export function HomeScreen(props: HomeScreenProps) {
       threadSearchMatchByKey,
     }),
     [
+      placementRevision,
       projectByKey,
       props.searchQuery,
       props.savedConnectionsById,

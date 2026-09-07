@@ -6,6 +6,10 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  sortActiveThreads,
+  sortPinnedThreadsByOrderKey,
+} from "@t3tools/client-runtime/state/thread-sort";
 import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
@@ -20,6 +24,8 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
   readEnvironmentSupportsPinning,
+  readEnvironmentSupportsThreadPositioning,
+  readThreadShells,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
@@ -133,6 +139,7 @@ export function useThreadActionMenu(input: {
           settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
           snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
           pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
+          positioning: readEnvironmentSupportsThreadPositioning(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
@@ -140,6 +147,7 @@ export function useThreadActionMenu(input: {
         const items = buildThreadActionMenuItems({
           branch: thread.branch ?? null,
           isPinned: thread.pinnedAt != null,
+          pinPosition: thread.pinPosition,
           isSettled: supports.settlement && thread.settledOverride === "settled",
           isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
           canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
@@ -231,6 +239,46 @@ export function useThreadActionMenu(input: {
           case "unsnooze":
             await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
             return;
+          case "pin-here": {
+            const scope = useUiStateStore.getState().sidebarProjectScopeKey;
+            const scopedProjects = projects.filter(
+              (project) =>
+                (logicalProjectKeyByPhysicalKey.get(derivePhysicalProjectKey(project)) ??
+                  deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)) === scope,
+            );
+            const projectKeys = new Set(
+              scopedProjects.map((project) => `${project.environmentId}:${project.id}`),
+            );
+            const visible = readThreadShells().filter(
+              (item) =>
+                item.archivedAt === null &&
+                (projectKeys.size === 0 ||
+                  projectKeys.has(`${item.environmentId}:${item.projectId}`)) &&
+                !(
+                  readEnvironmentSupportsSettlement(item.environmentId) &&
+                  item.settledOverride === "settled"
+                ) &&
+                !(
+                  readEnvironmentSupportsSnooze(item.environmentId) &&
+                  effectiveSnoozed(item, { now: now.toISOString() })
+                ),
+            );
+            const top = sortPinnedThreadsByOrderKey(
+              visible.filter((item) => item.pinnedAt != null && item.pinPosition == null),
+            );
+            const active = sortActiveThreads(
+              visible.filter((item) => item.pinnedAt == null || item.pinPosition != null),
+              top.length,
+            );
+            const pinPosition = [...top, ...active].findIndex(
+              (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+            );
+            if (pinPosition >= 0)
+              await reportFailure("Failed to pin thread", () =>
+                pinThread(threadRef, { pinPosition }),
+              );
+            return;
+          }
           case "pin":
             await reportFailure("Failed to pin thread", () => pinThread(threadRef));
             return;

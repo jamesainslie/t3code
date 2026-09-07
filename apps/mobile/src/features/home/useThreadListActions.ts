@@ -1,5 +1,5 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
+import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";
@@ -10,6 +10,9 @@ import { scopedThreadKey } from "../../lib/scopedEntities";
 import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
 import {
   pinOrderKeyBetween,
+  activeThreadOrderKey,
+  activeThreadOrderLowerBound,
+  sortActiveThreads,
   planPinnedMove,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
@@ -38,6 +41,13 @@ function environmentSupportsPinning(environmentId: EnvironmentThreadShell["envir
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadPinning === true
+  );
+}
+
+function environmentSupportsPositioning(environmentId: EnvironmentThreadShell["environmentId"]) {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadPositioning === true
   );
 }
 
@@ -220,11 +230,12 @@ export function useThreadListActions(): {
   readonly snoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => Promise<boolean>;
   readonly unsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unsettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly pinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly pinThread: (thread: EnvironmentThreadShell, pinPosition?: number) => Promise<boolean>;
   readonly unpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly movePinnedThread: (
+  readonly moveThread: (
     thread: EnvironmentThreadShell,
     direction: "up" | "down",
+    visibleThreads?: readonly EnvironmentThreadShell[],
   ) => Promise<boolean>;
   readonly regenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
 } {
@@ -342,8 +353,11 @@ export function useThreadListActions(): {
     [executeAction],
   );
   const pinThread = useCallback(
-    async (thread: EnvironmentThreadShell) => {
-      if (!environmentSupportsPinning(thread.environmentId)) {
+    async (thread: EnvironmentThreadShell, pinPosition?: number) => {
+      if (
+        !environmentSupportsPinning(thread.environmentId) ||
+        (pinPosition !== undefined && !environmentSupportsPositioning(thread.environmentId))
+      ) {
         Alert.alert(
           "Could not pin thread",
           "This environment's server does not support pinning yet. Update the server to use Pin.",
@@ -358,14 +372,21 @@ export function useThreadListActions(): {
         const shells = appAtomRegistry.get(environmentThreadShells.threadShellsAtom);
         let firstKey: string | null = null;
         for (const shell of shells) {
-          if (shell.pinnedAt == null || shell.pinOrderKey == null) continue;
+          if (shell.pinnedAt == null || shell.pinPosition != null || shell.pinOrderKey == null)
+            continue;
           if (firstKey === null || shell.pinOrderKey < firstKey) firstKey = shell.pinOrderKey;
         }
         orderKey = pinOrderKeyBetween(null, firstKey) ?? undefined;
       }
       const result = await pinMutation({
         environmentId: thread.environmentId,
-        input: { threadId: thread.id, ...(orderKey !== undefined ? { orderKey } : {}) },
+        input: {
+          threadId: thread.id,
+          ...(environmentSupportsPositioning(thread.environmentId)
+            ? { pinPosition: pinPosition ?? null }
+            : {}),
+          ...(orderKey !== undefined ? { orderKey } : {}),
+        },
       });
       if (result._tag === "Failure") {
         const error = Cause.squash(result.cause);
@@ -463,36 +484,63 @@ export function useThreadListActions(): {
   // would plan from the same stale snapshot and silently collapse two moves
   // into one — same double-dispatch guard as snoozeThread.
   const movePinnedInFlightRef = useRef(false);
-  const movePinnedThread = useCallback(
-    async (thread: EnvironmentThreadShell, direction: "up" | "down") => {
+  const moveThread = useCallback(
+    async (
+      thread: EnvironmentThreadShell,
+      direction: "up" | "down",
+      visibleThreads?: readonly EnvironmentThreadShell[],
+    ) => {
       if (movePinnedInFlightRef.current) return false;
-      if (!environmentSupportsPinReorder(thread.environmentId)) {
+      const topPin = thread.pinnedAt != null && thread.pinPosition == null;
+      if (thread.pinnedAt != null && thread.pinPosition != null) return false;
+      if (
+        !(topPin
+          ? environmentSupportsPinReorder(thread.environmentId)
+          : environmentSupportsPositioning(thread.environmentId))
+      ) {
         Alert.alert(
           "Could not move thread",
-          "This environment's server does not support pinned reordering yet. Update the server to reorder pins.",
+          "This environment's server does not support thread reordering yet. Update the server to reorder threads.",
         );
         return false;
       }
       const shells = appAtomRegistry.get(environmentThreadShells.threadShellsAtom);
-      const pinned = sortPinnedThreadsByOrderKey(
-        shells.filter(
-          (shell) =>
-            shell.pinnedAt != null &&
-            shell.archivedAt === null &&
-            environmentSupportsPinReorder(shell.environmentId),
-        ),
+      const visibleKeys = visibleThreads
+        ? new Set(visibleThreads.map((item) => scopedThreadKey(item.environmentId, item.id)))
+        : null;
+      const available = shells.filter(
+        (item) =>
+          item.archivedAt === null &&
+          item.settledOverride !== "settled" &&
+          !effectiveSnoozed(item, { now: new Date().toISOString() }) &&
+          (visibleKeys === null || visibleKeys.has(scopedThreadKey(item.environmentId, item.id))),
       );
+      const pinned = topPin
+        ? sortPinnedThreadsByOrderKey(
+            available.filter(
+              (item) =>
+                item.pinnedAt != null &&
+                item.pinPosition == null &&
+                environmentSupportsPinReorder(item.environmentId),
+            ),
+          )
+        : sortActiveThreads(
+            available.filter(
+              (item) => item.pinnedAt == null && environmentSupportsPositioning(item.environmentId),
+            ),
+          );
       const orderedIds = pinned.map((shell) => scopedThreadKey(shell.environmentId, shell.id));
       const assignments = planPinnedMove({
         orderedIds,
         keysById: new Map(
           pinned.map((shell) => [
             scopedThreadKey(shell.environmentId, shell.id),
-            shell.pinOrderKey ?? null,
+            topPin ? (shell.pinOrderKey ?? null) : activeThreadOrderKey(shell),
           ]),
         ),
         movedId: scopedThreadKey(thread.environmentId, thread.id),
         direction,
+        lowerBound: topPin ? undefined : activeThreadOrderLowerBound(available),
       });
       if (assignments === null || assignments.length === 0) return false;
       const shellByKey = new Map(
@@ -504,17 +552,22 @@ export function useThreadListActions(): {
         for (const assignment of assignments) {
           const target = shellByKey.get(assignment.id);
           if (target === undefined) continue;
-          const result = await reorderPinnedMutation({
-            environmentId: target.environmentId,
-            input: { threadId: target.id, orderKey: assignment.orderKey },
-          });
+          const result = topPin
+            ? await reorderPinnedMutation({
+                environmentId: target.environmentId,
+                input: { threadId: target.id, orderKey: assignment.orderKey },
+              })
+            : await updateThreadMetadata({
+                environmentId: target.environmentId,
+                input: { threadId: target.id, threadOrderKey: assignment.orderKey },
+              });
           if (result._tag === "Failure") {
             const error = Cause.squash(result.cause);
             Alert.alert(
               "Could not move thread",
               error instanceof Error && error.message.trim().length > 0
                 ? error.message
-                : "The pinned thread could not be moved.",
+                : "The thread could not be moved.",
             );
             // No rollback: keys already written are valid orderings on their
             // own (each write is a complete, consistent placement), so a
@@ -527,7 +580,7 @@ export function useThreadListActions(): {
         movePinnedInFlightRef.current = false;
       }
     },
-    [reorderPinnedMutation],
+    [reorderPinnedMutation, updateThreadMetadata],
   );
 
   const confirmDeleteThread = useConfirmDeleteThread(executeAction);
@@ -541,7 +594,7 @@ export function useThreadListActions(): {
     unsettleThread,
     pinThread,
     unpinThread,
-    movePinnedThread,
+    moveThread,
     regenerateThreadTitle,
   };
 }
