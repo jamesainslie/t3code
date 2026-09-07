@@ -246,7 +246,7 @@ describe("authenticated environment HTTP requests", () => {
       expect(harness.calls[0]?.url).toBe(`${CURRENT_ORIGIN}/api/project-sync`);
       expect(harness.calls[0]?.init.method).toBe("POST");
       expect(harness.calls[0]?.init.body).toEqual(
-        new TextEncoder().encode(JSON.stringify({ request: { operation: "status" } })),
+        new TextEncoder().encode('{"request":{"operation":"status"}}'),
       );
       expect(harness.proofs).toHaveLength(1);
     }),
