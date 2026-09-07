@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EnvironmentId, ProjectSyncRequest, ProjectSyncResponse } from "@t3tools/contracts";
 import { executeProjectSync } from "@t3tools/client-runtime/state/project-sync";
+import * as Option from "effect/Option";
 import { runtime } from "../lib/runtime";
-import { readPreparedConnection } from "../state/session";
+import { usePreparedConnection } from "../state/session";
 
 export function useProjectSync(environmentId: EnvironmentId) {
+  const prepared = Option.getOrNull(usePreparedConnection(environmentId));
   const [result, setResult] = useState<{
     environmentId: EnvironmentId;
     value: ProjectSyncResponse;
@@ -21,7 +23,6 @@ export function useProjectSync(environmentId: EnvironmentId) {
       setPending(true);
       setError(null);
       try {
-        const prepared = readPreparedConnection(environmentId);
         if (!prepared) throw new Error("Connect to this environment before managing sync.");
         const response = await runtime.runPromise(executeProjectSync(prepared, request));
         if (current !== generation.current)
@@ -41,15 +42,15 @@ export function useProjectSync(environmentId: EnvironmentId) {
         }
       }
     },
-    [environmentId],
+    [environmentId, prepared],
   );
   useEffect(() => {
     generation.current += 1;
-    void run({ operation: "status" }).catch(() => undefined);
+    if (prepared) void run({ operation: "status" }).catch(() => undefined);
     return () => {
       generation.current += 1;
     };
-  }, [run]);
+  }, [prepared, run]);
   return {
     data: result?.environmentId === environmentId ? result.value : null,
     error,
