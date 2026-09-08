@@ -106,7 +106,7 @@ const closeServer = (server: NodeHttp.Server) =>
     server.close(() => resume(Effect.void));
   });
 
-export const make = Effect.gen(function* AuthRelayLoopbackHostMake() {
+const make = Effect.gen(function* AuthRelayLoopbackHostMake() {
   const parentScope = yield* Scope.Scope;
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const listenersRef = yield* Ref.make<ReadonlySet<AuthRelayCallbackListener>>(new Set());

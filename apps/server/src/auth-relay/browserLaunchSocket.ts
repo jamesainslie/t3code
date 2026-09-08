@@ -33,7 +33,7 @@ import { AuthRelayError } from "./AuthRelayError.ts";
  * and appended-URL launchers both reach the helper the same way.
  */
 
-export const BROWSER_LAUNCH_SOCKET_MAX_MESSAGE_BYTES = 20_480;
+const BROWSER_LAUNCH_SOCKET_MAX_MESSAGE_BYTES = 20_480;
 const SOCKET_IDLE_TIMEOUT_MS = 5_000;
 const HELPER_FILE_NAME = "browser-launch.mjs";
 const LAUNCHER_DIRECTORY_NAME = "launch";
@@ -66,14 +66,14 @@ export function parseBrowserLaunchMessage(
   return { token, url };
 }
 
-export function browserLaunchSocketAddress(platform: NodeJS.Platform, directory: string): string {
+function browserLaunchSocketAddress(platform: NodeJS.Platform, directory: string): string {
   const digest = NodeCrypto.createHash("sha256").update(directory).digest("hex").slice(0, 16);
   return platform === "win32"
     ? `\\\\.\\pipe\\t3-browser-launch-${digest}`
     : `${NodeOS.tmpdir()}/t3-browser-launch-${digest}.sock`;
 }
 
-export function browserLaunchHelperScript(): string {
+function browserLaunchHelperScript(): string {
   return [
     'import net from "node:net";',
     "const [socketPath, token, ...rest] = process.argv.slice(2);",
