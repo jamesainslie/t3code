@@ -168,8 +168,12 @@ export function sortActiveThreads<T extends ActiveThreadPlacement>(
     if (a.activeOrderKey != null || b.activeOrderKey != null) {
       if (a.activeOrderKey == null) return -1;
       if (b.activeOrderKey == null) return 1;
-      return a.activeOrderKey < b.activeOrderKey ? -1 : a.activeOrderKey > b.activeOrderKey ? 1 :
-        a.id.localeCompare(b.id) || (a.environmentId ?? "").localeCompare(b.environmentId ?? "");
+      return a.activeOrderKey < b.activeOrderKey
+        ? -1
+        : a.activeOrderKey > b.activeOrderKey
+          ? 1
+          : a.id.localeCompare(b.id) ||
+            (a.environmentId ?? "").localeCompare(b.environmentId ?? "");
     }
     const left = keysByThread.get(a)!;
     const right = keysByThread.get(b)!;
@@ -178,6 +182,16 @@ export function sortActiveThreads<T extends ActiveThreadPlacement>(
       `${a.environmentId ?? ""}:${a.id}`.localeCompare(`${b.environmentId ?? ""}:${b.id}`)
     );
   });
+  return applyFixedThreadPositions([...movable, ...fixed], topPinnedCount);
+}
+
+/** Restore fixed pin slots after sorting or applying a pending manual order. */
+export function applyFixedThreadPositions<T extends ActiveThreadPlacement>(
+  threads: readonly T[],
+  topPinnedCount = 0,
+): T[] {
+  const fixed = threads.filter((thread) => thread.pinnedAt != null && thread.pinPosition != null);
+  const movable = threads.filter((thread) => thread.pinnedAt == null || thread.pinPosition == null);
   fixed.sort(
     (a, b) =>
       a.pinPosition! - b.pinPosition! ||

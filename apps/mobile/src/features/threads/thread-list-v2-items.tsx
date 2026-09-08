@@ -536,11 +536,17 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ...(props.pinningSupported
         ? [
             ...(thread.pinnedAt == null || thread.pinPosition != null
-              ? [{ id: "pin", title: "Pin to top", image: "pin" }] : []),
-            ...(props.positioningSupported && variant === "card" && props.threadPosition !== undefined && thread.pinPosition == null
-              ? [{ id: "pin-here", title: "Pin here", image: "pin" }] : []),
+              ? [{ id: "pin", title: "Pin to top", image: "pin" }]
+              : []),
+            ...(props.positioningSupported &&
+            variant === "card" &&
+            props.threadPosition !== undefined &&
+            thread.pinPosition == null
+              ? [{ id: "pin-here", title: "Pin here", image: "pin" }]
+              : []),
             ...(thread.pinnedAt != null
-              ? [{ id: "unpin", title: "Unpin", image: "pin.slash" }] : []),
+              ? [{ id: "unpin", title: "Unpin", image: "pin.slash" }]
+              : []),
           ]
         : []),
     ],

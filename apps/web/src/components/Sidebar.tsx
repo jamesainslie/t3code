@@ -18,6 +18,7 @@ import {
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
 import {
+  applyFixedThreadPositions,
   resolveSettledThreadTimestamp,
 } from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
@@ -2448,10 +2449,15 @@ export default function Sidebar() {
       const supportsSettlement = capabilities?.threadSettlement === true;
       const supportsSnooze = capabilities?.threadSnooze === true;
       const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-      if (thread.pinPosition == null && capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
+      if (thread.pinPosition == null && capabilities?.threadActiveReorder === true)
+        activeReorderable.add(threadKey);
       // Older servers retain their existing drag actions. Active placement
       // additionally requires its own ordering capability at the drop target.
-      if (thread.pinPosition == null && capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
+      if (
+        thread.pinPosition == null &&
+        capabilities?.threadPinning === true &&
+        capabilities.threadPinReorder === true
+      ) {
         draggable.add(threadKey);
       }
       if (optimisticDrop?.key === threadKey) {
@@ -2503,11 +2509,14 @@ export default function Sidebar() {
       activeThreads:
         optimisticDrop?.section !== "active" || optimisticDrop.order === null
           ? sortedActive
-          : orderItemsByPreferredIds({
-              items: sortedActive,
-              preferredIds: optimisticDrop.order,
-              getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-            }),
+          : applyFixedThreadPositions(
+              orderItemsByPreferredIds({
+                items: sortedActive,
+                preferredIds: optimisticDrop.order,
+                getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+              }),
+              pinned.length,
+            ),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -3030,9 +3039,9 @@ export default function Sidebar() {
   );
   const activeKeys = useMemo(
     () =>
-      activeThreads.map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      ),
+      activeThreads
+        .filter((thread) => thread.pinPosition == null)
+        .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
     [activeThreads],
   );
   useEffect(() => {
@@ -3513,9 +3522,12 @@ export default function Sidebar() {
     ],
   );
 
-  const handleThreadDragEnd = useCallback((event: DragEndEvent) => {
-    if (event.over !== null) moveSidebarThread(String(event.active.id), String(event.over.id));
-  }, [moveSidebarThread]);
+  const handleThreadDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (event.over !== null) moveSidebarThread(String(event.active.id), String(event.over.id));
+    },
+    [moveSidebarThread],
+  );
   // One snooze per thread at a time — same double-dispatch guard as settle.
   const snoozingThreadKeysRef = useRef(new Set<string>());
   const performSnooze = useCallback(
@@ -3871,9 +3883,7 @@ export default function Sidebar() {
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
         const movementKeys = isPinned
-          ? pinnedThreads
-              .map(getSidebarThreadKey)
-              .filter((key) => draggableThreadKeys.has(key))
+          ? pinnedThreads.map(getSidebarThreadKey).filter((key) => draggableThreadKeys.has(key))
           : activeThreads
               .map(getSidebarThreadKey)
               .filter((key) => activeReorderableThreadKeys.has(key));
@@ -3967,8 +3977,7 @@ export default function Sidebar() {
           case "move-up":
           case "move-down": {
             const target = movementKeys[movementIndex + (clicked.value === "move-up" ? -1 : 1)];
-            if (target !== undefined)
-              moveSidebarThread(threadKey, target);
+            if (target !== undefined) moveSidebarThread(threadKey, target);
             return;
           }
           case "pin-here": {

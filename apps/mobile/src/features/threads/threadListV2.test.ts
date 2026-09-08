@@ -390,6 +390,38 @@ describe("getThreadListV2OrderedSection", () => {
 });
 
 describe("buildThreadListV2Items", () => {
+  it("moves active threads around fixed pins and keeps the pin in place while awaiting receipts", () => {
+    const threads = [
+      makeThread({ id: ThreadId.make("first"), title: "First", activeOrderKey: "f" }),
+      makeThread({ id: ThreadId.make("fixed"), title: "Fixed", pinnedAt: NOW, pinPosition: 1 }),
+      makeThread({ id: ThreadId.make("last"), title: "Last", activeOrderKey: "t" }),
+    ];
+    const ordered = getThreadListV2OrderedSection({ threads, section: "active", now: NOW });
+    expect(ordered.map((thread) => thread.id)).toEqual(["first", "last"]);
+    const movedId = `${environmentId}:last`;
+    const assignments = createThreadMovePlanner({
+      ordered,
+      allThreads: threads,
+      section: "active",
+      reorderableEnvironmentIds: new Set([environmentId]),
+    })(movedId, "up")!;
+    expect(assignments.map((assignment) => assignment.id)).toEqual([movedId]);
+    const pendingOrder = createPendingThreadOrder({
+      ordered,
+      movedId,
+      assignments,
+      section: "active",
+      direction: "up",
+    });
+    const layout = buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      pendingOrder,
+    });
+    expect(layout.items.map((item) => item.thread.id)).toEqual(["last", "fixed", "first"]);
+  });
   it("searches the arranged list without shifting a position pin behind a match", () => {
     const layout = buildThreadListV2Items({
       threads: [

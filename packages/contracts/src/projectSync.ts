@@ -72,7 +72,7 @@ export const ProjectSyncResponse = Schema.Struct({
 });
 export type ProjectSyncResponse = typeof ProjectSyncResponse.Type;
 
-export class ProjectSyncError extends Schema.TaggedErrorClass<ProjectSyncError>()(
+export class ProjectSyncError extends Schema.TaggedError<ProjectSyncError>()(
   "ProjectSyncError",
   {
     message: Schema.String,

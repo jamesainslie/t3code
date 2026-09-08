@@ -935,9 +935,14 @@ function ThreadNavigationSidebarPane(
               onSettleThread={settleThread}
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
-              positioningSupported={serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPositioning === true}
-          threadPosition={visiblePlacementThreads.findIndex((item) => item.environmentId === thread.environmentId && item.id === thread.id)}
-          reorderSupported={
+              positioningSupported={
+                serverConfigs.get(thread.environmentId)?.environment.capabilities
+                  .threadPositioning === true
+              }
+              threadPosition={visiblePlacementThreads.findIndex(
+                (item) => item.environmentId === thread.environmentId && item.id === thread.id,
+              )}
+              reorderSupported={
                 item.item.pinned
                   ? pinReorderEnvironmentIds.has(thread.environmentId)
                   : activeReorderEnvironmentIds.has(thread.environmentId)

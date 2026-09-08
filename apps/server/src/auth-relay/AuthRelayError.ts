@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
  * carries an authorization URL, a return URL, a code, or a token. Callers
  * that own a richer error type map this onto it at their boundary.
  */
-export class AuthRelayError extends Schema.TaggedErrorClass<AuthRelayError>()("AuthRelayError", {
+export class AuthRelayError extends Schema.TaggedError<AuthRelayError>()("AuthRelayError", {
   operation: Schema.String,
   detail: Schema.String,
   cause: Schema.optional(Schema.Defect()),

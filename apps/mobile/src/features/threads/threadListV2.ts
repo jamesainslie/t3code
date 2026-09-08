@@ -10,6 +10,7 @@ import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import {
   sortActiveThreads,
+  applyFixedThreadPositions,
   resolveSettledThreadTimestamp,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
@@ -182,6 +183,7 @@ export function getThreadListV2OrderedSection(input: {
 }): EnvironmentThreadShell[] {
   const threads = input.threads.filter((thread) => {
     if (thread.archivedAt !== null) return false;
+    if (thread.pinnedAt != null && thread.pinPosition != null) return false;
     if (
       (input.settlementEnvironmentIds?.has(thread.environmentId) ?? true) &&
       thread.settledOverride === "settled" &&
@@ -198,9 +200,7 @@ export function getThreadListV2OrderedSection(input: {
     return (thread.pinnedAt != null && thread.pinPosition == null) === (input.section === "pinned");
   });
   const ordered =
-    input.section === "pinned"
-      ? sortPinnedThreadsByOrderKey(threads)
-      : sortActiveThreads(threads);
+    input.section === "pinned" ? sortPinnedThreadsByOrderKey(threads) : sortActiveThreads(threads);
   const pending =
     input.pendingOrder?.section === input.section
       ? reconcilePendingThreadOrder(input.pendingOrder, ordered)
@@ -430,7 +430,10 @@ export function buildThreadListV2Items(input: {
     }
   }
 
-  const orderedActive = applyPendingThreadOrder(sortActiveThreads(active, pinned.length), "active", pending).filter(matchesSearch);
+  const orderedActive = applyFixedThreadPositions(
+    applyPendingThreadOrder(sortActiveThreads(active, pinned.length), "active", pending),
+    pinned.length,
+  ).filter(matchesSearch);
   const orderedSnoozed = [...snoozed].sort(
     (left, right) =>
       parseTimestampMs(left.snoozedUntil ?? "") - parseTimestampMs(right.snoozedUntil ?? ""),
