@@ -4,6 +4,10 @@ const { getDefaultConfig } = require("expo/metro-config");
 const { withUniwindConfig } = require("uniwind/metro");
 const extraThemes = require("./generated-uniwind-theme-names.json");
 
+// Expo's native DOM export hashes asset filenames without rewriting split-chunk
+// dependencies. A single DOM bundle also resolves locally when opened via file://.
+process.env.EXPO_NO_BUNDLE_SPLITTING ??= "1";
+
 /** @type {import("expo/metro-config").MetroConfig} */
 const config = getDefaultConfig(__dirname);
 const workspaceRoot = path.resolve(__dirname, "../..");

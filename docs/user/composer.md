@@ -122,6 +122,19 @@ File links refer to the environment's machine, including when you connect remote
 Previews use the original file, even outside the workspace. Moving or deleting it
 can break the preview, so save a copy if you need to keep it.
 
+## Diagrams in messages
+
+Mermaid code blocks render as diagrams, including in existing conversations.
+Expand a diagram to inspect it, then drag to pan or scroll or pinch to zoom.
+**Fit** shows the whole diagram; **Center** recenters it without changing the zoom.
+With the canvas focused, arrow keys pan, `+` and `-` zoom, `F` fits, `C` centers,
+and `0` restores actual size. Press Escape to close the web or desktop viewer.
+
+The original source remains available. If a diagram cannot render, **Ask agent
+to fix** adds its source and the error to your draft. Review and send the request
+when you are ready; viewing a broken diagram never starts an agent turn.
+For synced conversations, continue in fork before requesting a repair.
+
 ## Files outside the workspace
 
 Follow an agent's file link to read a report or other file outside the workspace.

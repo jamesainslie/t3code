@@ -784,6 +784,20 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     composerEditorRef.current?.blur();
   }, []);
 
+  const handleRepairMermaid = useCallback(
+    (prompt: string) => {
+      const draft = draftMessageRef.current;
+      const nextDraft = draft.trim() ? `${draft}\n\n${prompt}` : prompt;
+      draftMessageRef.current = nextDraft;
+      props.onChangeDraftMessage(nextDraft);
+      requestAnimationFrame(() => {
+        composerEditorRef.current?.focus();
+        composerEditorRef.current?.setSelection({ start: nextDraft.length, end: nextDraft.length });
+      });
+    },
+    [props.onChangeDraftMessage],
+  );
+
   const handleUseArtifactTemplate = useCallback(
     (template: CodexArtifactTemplate) => {
       const currentDraft = draftMessageRef.current;
@@ -880,6 +894,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             onEndFollowEnabledChange={setEndFollowEnabled}
             skills={selectedProviderSkills}
             onUseArtifactTemplate={handleUseArtifactTemplate}
+            onRepairMermaid={
+              props.selectedThread.id.startsWith("t3sync-") ? undefined : handleRepairMermaid
+            }
             loadEarlier={props.loadEarlier ?? null}
           />
         </View>
