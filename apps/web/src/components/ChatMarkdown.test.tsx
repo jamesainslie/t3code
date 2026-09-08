@@ -9,6 +9,13 @@ import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
 
+vi.mock("@t3tools/client-runtime/mermaid-renderer", () => ({
+  renderMermaid: vi.fn(
+    async () =>
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><text>A to B</text></svg>',
+  ),
+}));
+
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
 vi.mock("../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
 vi.mock("../hooks/useSettings", async (importOriginal) => {
@@ -71,6 +78,72 @@ function codeButton(renderer: ReactTestRenderer, label: string) {
   if (!button) throw new Error(`Missing code button: ${label}`);
   return button.props as ComponentProps<typeof Button>;
 }
+
+describe("Mermaid chat diagrams", () => {
+  it("keeps invalid source readable and renders a corrected diagram in the same message", async () => {
+    const { renderMermaid } = await import("@t3tools/client-runtime/mermaid-renderer");
+    vi.mocked(renderMermaid).mockRejectedValueOnce(new Error("Parse error on line 2"));
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(
+          <ChatMarkdown
+            cwd={undefined}
+            text={"```mermaid\nbroken diagram\n```\nThe explanation still works."}
+          />,
+        );
+      });
+      expect(JSON.stringify(renderer!.toJSON())).toContain("Couldn’t render this diagram");
+      expect(JSON.stringify(renderer!.toJSON())).toContain("broken diagram");
+      expect(JSON.stringify(renderer!.toJSON())).toContain("The explanation still works.");
+      await act(async () => {
+        renderer!.update(
+          <ChatMarkdown cwd={undefined} text={"```mermaid\ngraph TD; A-->B\n```"} />,
+        );
+      });
+      expect(
+        renderer!.root.findAllByType("img").some((img) => img.props.alt === "Mermaid diagram"),
+      ).toBe(true);
+      expect(JSON.stringify(renderer!.toJSON())).not.toContain("Couldn’t render this diagram");
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+  it("waits for the closing fence, then renders while the rest of the response streams", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(
+          <ChatMarkdown cwd={undefined} text={"```mermaid\ngraph TD; A-->B"} isStreaming />,
+        );
+      });
+      expect(JSON.stringify(renderer!.toJSON())).toContain("Waiting for diagram");
+      await act(async () => {
+        renderer!.update(
+          <ChatMarkdown
+            cwd={undefined}
+            text={"```mermaid\ngraph TD; A-->B\n```\nMore text"}
+            isStreaming
+          />,
+        );
+      });
+      expect(
+        renderer!.root.findAllByType("img").some((img) => img.props.alt === "Mermaid diagram"),
+      ).toBe(true);
+      expect(JSON.stringify(renderer!.toJSON())).toContain("More text");
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+});
 
 describe("ChatMarkdown favicon privacy", () => {
   it("suppresses private link images while preserving public links across updates", async () => {
