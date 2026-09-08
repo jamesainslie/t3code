@@ -1,3 +1,5 @@
+import { splitMermaidMarkdown } from "@t3tools/client-runtime/mermaid";
+import { MermaidDiagram } from "./MermaidDiagram";
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
@@ -255,6 +257,7 @@ export interface ThreadFeedProps {
   readonly onEndFollowEnabledChange?: (enabled: boolean) => void;
   readonly skills?: ReadonlyArray<SelectableMarkdownSkill>;
   readonly onUseArtifactTemplate?: (template: CodexArtifactTemplate) => void;
+  readonly onRepairMermaid?: ((prompt: string) => void) | undefined;
   /** Non-null when older turns exist beyond the loaded window. */
   readonly loadEarlier?: {
     readonly loading: boolean;
@@ -744,6 +747,8 @@ interface MarkdownLinkHandlers {
 
 const AssistantMarkdownContent = memo(function AssistantMarkdownContent(props: {
   readonly markdown: string;
+  readonly isStreaming: boolean;
+  readonly onRepairMermaid?: ((prompt: string) => void) | undefined;
   readonly markdownStyles: MarkdownStyleSet;
   readonly linkHandlers: MarkdownLinkHandlers;
   readonly onUseArtifactTemplate?: ((template: CodexArtifactTemplate) => void) | undefined;
@@ -767,27 +772,38 @@ const AssistantMarkdownContent = memo(function AssistantMarkdownContent(props: {
     }
     if (segment.markdown.trim().length === 0) return null;
 
-    const markdown = renderCodexFileCitationsAsMarkdown(segment.markdown);
-    return hasNativeSelectableMarkdownText() ? (
-      <SelectableMarkdownText
-        key={`markdown:${segment.sourceOffset}`}
-        markdown={markdown}
-        skills={props.skills}
-        textStyle={props.markdownStyles.nativeTextStyle}
-        {...props.linkHandlers}
-        renderImage={props.renderImage}
-      />
-    ) : (
-      <Markdown
-        key={`markdown:${segment.sourceOffset}`}
-        options={{ gfm: true }}
-        renderers={props.markdownStyles.renderers}
-        styles={props.markdownStyles.styles}
-        theme={props.markdownStyles.theme}
-      >
-        {markdown}
-      </Markdown>
-    );
+    return splitMermaidMarkdown(segment.markdown).map((part) => {
+      if (part.kind === "mermaid")
+        return (
+          <MermaidDiagram
+            key={`mermaid:${segment.sourceOffset + part.sourceOffset}`}
+            source={part.source}
+            pending={props.isStreaming && !part.complete}
+            onRepair={props.onRepairMermaid}
+          />
+        );
+      const markdown = renderCodexFileCitationsAsMarkdown(part.markdown);
+      return hasNativeSelectableMarkdownText() ? (
+        <SelectableMarkdownText
+          key={`markdown:${segment.sourceOffset + part.sourceOffset}`}
+          markdown={markdown}
+          skills={props.skills}
+          textStyle={props.markdownStyles.nativeTextStyle}
+          {...props.linkHandlers}
+          renderImage={props.renderImage}
+        />
+      ) : (
+        <Markdown
+          key={`markdown:${segment.sourceOffset + part.sourceOffset}`}
+          options={{ gfm: true }}
+          renderers={props.markdownStyles.renderers}
+          styles={props.markdownStyles.styles}
+          theme={props.markdownStyles.theme}
+        >
+          {markdown}
+        </Markdown>
+      );
+    });
   });
 });
 
@@ -1326,6 +1342,7 @@ function renderFeedEntry(
     ThreadFeedProps,
     | "environmentId"
     | "onUseArtifactTemplate"
+    | "onRepairMermaid"
     | "skills"
     | "dispatchingMessageId"
     | "onEditPendingMessage"
@@ -1598,6 +1615,8 @@ function renderFeedEntry(
           <MarkdownImageAvailableWidthContext value={props.markdownContentWidth}>
             <AssistantMarkdownContent
               markdown={renderedText}
+              isStreaming={Boolean(message.streaming)}
+              onRepairMermaid={props.onRepairMermaid}
               markdownStyles={styles}
               linkHandlers={props.markdownLinkHandlers}
               onUseArtifactTemplate={props.onUseArtifactTemplate}
@@ -2729,6 +2748,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             markdownContentWidth,
             skills: props.skills,
             onUseArtifactTemplate: props.onUseArtifactTemplate,
+            onRepairMermaid: props.onRepairMermaid,
           })}
         </ThreadMediaVisibility>
       </Animated.View>
@@ -2761,6 +2781,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       onToggleWorkRow,
       props.environmentId,
       props.onUseArtifactTemplate,
+      props.onRepairMermaid,
       props.skills,
       renderMarkdownImage,
       renderViewedImage,
