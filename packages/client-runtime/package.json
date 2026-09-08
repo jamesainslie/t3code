@@ -3,6 +3,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./mermaid": {
+      "types": "./src/mermaid.ts",
+      "default": "./src/mermaid.ts"
+    },
+    "./mermaid-renderer": {
+      "types": "./src/mermaidRenderer.ts",
+      "default": "./src/mermaidRenderer.ts"
+    },
+    "./mermaid-viewport": {
+      "types": "./src/mermaidViewport.ts",
+      "default": "./src/mermaidViewport.ts"
+    },
     "./state/project-sync": {
       "types": "./src/state/projectSync.ts",
       "default": "./src/state/projectSync.ts"
@@ -245,6 +257,7 @@
     "@t3tools/shared": "workspace:*",
     "effect": "catalog:",
     "mdast-util-directive": "^3.1.0",
+    "mermaid": "11.17.2",
     "micromark-extension-directive": "^4.0.0",
     "micromark-util-character": "^2.1.1",
     "remark-parse": "^11.0.0",
