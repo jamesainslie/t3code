@@ -605,6 +605,19 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       "applyThreadsProjection",
     )(function* (event, attachmentSideEffects) {
       switch (event.type) {
+        case "thread.sync-visibility-set": {
+          const existing = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isSome(existing)) {
+            yield* projectionThreadRepository.upsert({
+              ...existing.value,
+              deletedAt: event.payload.deletedAt,
+              updatedAt: event.payload.updatedAt,
+            });
+          }
+          return;
+        }
         case "thread.created":
           // A draft retry can re-create this id; links belong to the old incarnation.
           yield* projectionThreadPullRequestRepository.deleteByThreadId({

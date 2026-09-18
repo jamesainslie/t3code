@@ -6,6 +6,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runMigrations } from "../Migrations.ts";
+import { restorePendingRecovery } from "../../projectSync/Recovery.ts";
+import { ProjectSyncError } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
 
 const setup = Layer.effectDiscard(
@@ -24,6 +26,15 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  if (path.basename(dbPath) === "state.sqlite") {
+    yield* Effect.tryPromise({
+      try: () => restorePendingRecovery(path.dirname(dbPath)),
+      catch: (cause) =>
+        new ProjectSyncError({
+          message: `Could not restore the prepared recovery backup: ${String(cause)}`,
+        }),
+    });
+  }
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
 
   return Layer.provideMerge(

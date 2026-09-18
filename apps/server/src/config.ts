@@ -17,9 +17,12 @@ import type * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
+import * as PlatformError from "effect/PlatformError";
+import { restorePendingRecovery } from "./projectSync/Recovery.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { OtlpProtocol } from "@t3tools/shared/observability";
 
-export const DEFAULT_PORT = 3773;
+export const DEFAULT_PORT = FORK_IDENTITY.defaultPort;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
@@ -149,6 +152,18 @@ export const deriveServerPaths = Effect.fn(function* (
 export const ensureServerDirectories = Effect.fn(function* (derivedPaths: ServerDerivedPaths) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
+  // Restore before settings, credentials, or SQLite consumers can cache the old state.
+  yield* Effect.tryPromise({
+    try: () => restorePendingRecovery(derivedPaths.stateDir),
+    catch: (cause) =>
+      PlatformError.systemError({
+        _tag: "Unknown",
+        module: "FileSystem",
+        method: "restorePendingRecovery",
+        description: `Could not restore the prepared recovery backup: ${String(cause)}`,
+      }),
+  });
 
   yield* Effect.all(
     [

@@ -78,6 +78,46 @@ Existing prompts for deleting a worktree manually remain available when this pol
 Browser captures and rotated logs have separate retention periods. Expired capture links stop
 working. Current logs, message attachments, and browser profiles are kept.
 
+## Sync from another T3 install
+
+On web or desktop, open **Settings → Projects & threads** and keep **All projects** selected in the
+breadcrumb. Choose the environment running your fork in the breadcrumb, or use **Destination
+machine** in the sync section; with a single connected environment it is selected for you. Enter
+the main install's T3 home on that machine, usually `~/.t3`, then choose **Preview import**. The
+fork must use a separate home, usually `~/.t3f`.
+
+Review each project and choose an existing destination, a separate project, or **Skip**.
+Imports include project settings, conversations, attachments, historical tool activity, and
+proposed plans. Existing destination settings stay unchanged. Defaults on newly imported
+projects follow the source until you edit them in the fork. Project folders must already be
+available on the destination machine. Provider credentials, live sessions, and Git checkpoints
+are configured separately and are not imported. Remote-host projects are shown as unsupported.
+
+Choose **Import and enable nightly sync**, or turn off the nightly option for a manual import.
+Nightly runs default to 03:00 in the destination machine's timezone. A missed night catches up
+when the environment runs again. New source projects are discovered automatically; projects
+you skipped stay skipped. Active conversations are deferred until a later sync. **Sync now**
+retries immediately after a reported failure, and **Pause sync** stops automatic runs.
+
+Newly imported conversations start archived and have a **T3** indicator. You can reopen, settle,
+archive, or delete the local copy. These choices survive later syncs and undo without changing the
+main install. Deleting an imported copy keeps that source conversation out of future imports.
+Conversation content stays read-only. **Continue in fork**, available
+on desktop, web, and mobile, starts an independent conversation with the imported history and
+attachments as context for a new provider session. Later imports and undo leave that continuation
+intact. Changes and deletions in the main install never delete your fork conversations.
+
+In **Sync history**, **Undo this sync** restores the previous imported versions and pauses nightly
+sync. Undo the latest active batch first; repeat to undo earlier batches. Later local project edits
+remain in place.
+
+Use **Recovery backups** for a full rewind of this environment's database, attachments, and settings.
+The seven most recent automatic backups are retained. Preparing a restore pauses sync; quit and
+restart the destination environment to apply it, or choose **Cancel restore** before restarting.
+Recovery rewinds work recorded since the backup and retains the current state under the T3 home's
+`sync-recovery/before-restore-*` directory. It does not rewind files in your Git working directories.
+The main install remains unchanged.
+
 ## Project icons
 
 Select the project and open Project to choose an icon, emoji, monogram, or image. The choice applies to

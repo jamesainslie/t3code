@@ -1493,6 +1493,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       )}
     >
       {thread.title}
+      {thread.id.startsWith("t3sync-") && (
+        <span
+          className="ml-1.5 text-[10px] text-muted-foreground"
+          aria-label="Read-only conversation synced from T3 Code"
+        >
+          T3
+        </span>
+      )}
     </span>
   );
 
