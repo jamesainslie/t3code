@@ -1,7 +1,5 @@
 import type { OrchestrationThreadShell, ProjectId } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
-import * as Arr from "effect/Array";
-import * as Order from "effect/Order";
 
 export interface ThreadSortInput {
   readonly createdAt: string;
@@ -117,115 +115,19 @@ function activeThreadAnchorTimestampMs(thread: {
   );
 }
 
-type ActiveThreadPlacement = {
-  readonly id: string;
-  readonly environmentId?: string | undefined;
-  readonly createdAt: string;
-  readonly unsettledAt?: string | null | undefined;
-  readonly pinnedAt?: string | null | undefined;
-  readonly pinPosition?: number | null | undefined;
-  readonly threadOrderKey?: string | null | undefined;
-  readonly activeOrderKey?: string | null | undefined;
-};
-
-/** Natural positions share the fractional-key alphabet with manual positions,
- * so a move writes only the moved thread, even across environments. */
-export function activeThreadOrderKey(thread: ActiveThreadPlacement): string {
-  if (thread.threadOrderKey != null && isValidPinOrderKey(thread.threadOrderKey)) {
-    return thread.threadOrderKey;
-  }
-  return naturalThreadOrderKey(activeThreadAnchorTimestampMs(thread));
-}
-
-function naturalThreadOrderKey(timestampMs: number): string {
-  let value = Number.MAX_SAFE_INTEGER - Math.max(0, timestampMs);
-  let key = "";
-  for (let digit = 0; digit < 12; digit++) {
-    key = PIN_ORDER_DIGITS[value % 26]! + key;
-    value = Math.floor(value / 26);
-  }
-  return key + "n";
-}
-
-/** Leave newer creation timestamps ahead of every manual position, including
- * moves to the first row and materialization of equal neighbor keys. */
-export function activeThreadOrderLowerBound(threads: readonly ActiveThreadPlacement[]): string {
-  let newest = 0;
-  for (const thread of threads) newest = Math.max(newest, activeThreadAnchorTimestampMs(thread));
-  return naturalThreadOrderKey(newest + 1);
-}
-
-/** Positions count thread rows, including the top-pinned section. Hidden
- * rows leave no gaps; colliding pins use a stable identity tie-break. */
-export function sortActiveThreads<T extends ActiveThreadPlacement>(
-  threads: readonly T[],
-  topPinnedCount = 0,
-): T[] {
-  const fixed = threads.filter((thread) => thread.pinnedAt != null && thread.pinPosition != null);
-  const movable = threads.filter((thread) => thread.pinnedAt == null || thread.pinPosition == null);
-  const keysByThread = new Map(movable.map((thread) => [thread, activeThreadOrderKey(thread)]));
-  movable.sort((a, b) => {
-    if (a.activeOrderKey != null || b.activeOrderKey != null) {
-      if (a.activeOrderKey == null) return -1;
-      if (b.activeOrderKey == null) return 1;
-      return a.activeOrderKey < b.activeOrderKey
-        ? -1
-        : a.activeOrderKey > b.activeOrderKey
-          ? 1
-          : a.id.localeCompare(b.id) ||
-            (a.environmentId ?? "").localeCompare(b.environmentId ?? "");
-    }
-    const left = keysByThread.get(a)!;
-    const right = keysByThread.get(b)!;
-    return (
-      (left < right ? -1 : left > right ? 1 : 0) ||
-      `${a.environmentId ?? ""}:${a.id}`.localeCompare(`${b.environmentId ?? ""}:${b.id}`)
-    );
-  });
-  return applyFixedThreadPositions([...movable, ...fixed], topPinnedCount);
-}
-
-/** Restore fixed pin slots after sorting or applying a pending manual order. */
-export function applyFixedThreadPositions<T extends ActiveThreadPlacement>(
-  threads: readonly T[],
-  topPinnedCount = 0,
-): T[] {
-  const fixed = threads.filter((thread) => thread.pinnedAt != null && thread.pinPosition != null);
-  const movable = threads.filter((thread) => thread.pinnedAt == null || thread.pinPosition == null);
-  fixed.sort(
-    (a, b) =>
-      a.pinPosition! - b.pinPosition! ||
-      `${a.environmentId ?? ""}:${a.id}`.localeCompare(`${b.environmentId ?? ""}:${b.id}`),
-  );
-  let previousPosition = -1;
-  for (const [index, thread] of fixed.entries()) {
-    const position = Math.min(
-      Math.max(previousPosition + 1, thread.pinPosition! - topPinnedCount),
-      threads.length - (fixed.length - index),
-    );
-    movable.splice(position, 0, thread);
-    previousPosition = position;
-  }
-  return movable;
-}
-
 export function sortThreads<T extends { readonly id: string } & ThreadSortInput>(
   threads: readonly T[],
   sortOrder: SidebarThreadSortOrder,
 ): T[] {
-  return Arr.sort(
-    threads,
-    Order.mapInput(
-      Order.Struct({
-        timestamp: Order.flip(Order.Number),
-        id: Order.flip(Order.String),
-      }),
-      (thread: T) => ({
-        timestamp: getThreadSortTimestamp(thread, sortOrder),
-        id: thread.id,
-      }),
-    ),
-  );
+  if (threads.length < 2) return [...threads];
+  return threads
+    .map((thread) => ({ thread, timestamp: getThreadSortTimestamp(thread, sortOrder) }))
+    .sort(
+      (left, right) =>
+        right.timestamp - left.timestamp ||
+        (left.thread.id < right.thread.id ? 1 : left.thread.id > right.thread.id ? -1 : 0),
+    )
+    .map(({ thread }) => thread);
 }
 
 export function getLatestThreadForProject<
@@ -235,12 +137,21 @@ export function getLatestThreadForProject<
     readonly archivedAt: string | null;
   } & ThreadSortInput,
 >(threads: readonly T[], projectId: ProjectId, sortOrder: SidebarThreadSortOrder): T | null {
-  return (
-    sortThreads(
-      threads.filter((thread) => thread.projectId === projectId && thread.archivedAt === null),
-      sortOrder,
-    )[0] ?? null
-  );
+  let latest: T | null = null;
+  let latestTimestamp = Number.NEGATIVE_INFINITY;
+  for (const thread of threads) {
+    if (thread.projectId !== projectId || thread.archivedAt !== null) continue;
+    const timestamp = getThreadSortTimestamp(thread, sortOrder);
+    if (
+      latest === null ||
+      timestamp > latestTimestamp ||
+      (timestamp === latestTimestamp && thread.id > latest.id)
+    ) {
+      latest = thread;
+      latestTimestamp = timestamp;
+    }
+  }
+  return latest;
 }
 
 // ── Pinned reorder: fractional index keys ──────────────────────────────
@@ -336,7 +247,6 @@ export function planPinnedReorder(input: {
   /** Include retained keys from hidden rows; only orderedIds receive writes. */
   readonly keysById: ReadonlyMap<string, string | null | undefined>;
   readonly movedId: string;
-  readonly lowerBound?: string | undefined;
 }): ReadonlyArray<{ readonly id: string; readonly orderKey: string }> {
   const { orderedIds, keysById, movedId } = input;
   const visibleIds = new Set(orderedIds);
@@ -347,8 +257,7 @@ export function planPinnedReorder(input: {
   if (movedIndex === -1) return [];
   const beforeId = movedIndex > 0 ? orderedIds[movedIndex - 1] : null;
   const afterId = movedIndex < orderedIds.length - 1 ? orderedIds[movedIndex + 1] : null;
-  const beforeKey =
-    beforeId != null ? (keysById.get(beforeId) ?? null) : (input.lowerBound ?? null);
+  const beforeKey = beforeId != null ? (keysById.get(beforeId) ?? null) : null;
   const afterKey = afterId != null ? (keysById.get(afterId) ?? null) : null;
   const beforeUsable = beforeId === null || beforeKey != null;
   const afterUsable = afterId === null || afterKey != null;
@@ -359,7 +268,6 @@ export function planPinnedReorder(input: {
   }
   // Keyless neighbor (or corrupt keys): rewrite the section in the new order.
   const keys = generateSpreadPinOrderKeys(orderedIds.length + reservedKeys.size)
-    .map((key) => (input.lowerBound ?? "") + key)
     .filter((key) => !reservedKeys.has(key))
     .slice(0, orderedIds.length);
   return orderedIds.flatMap((id, index) => {
@@ -385,6 +293,7 @@ export function sortPinnedThreadsByOrderKey<
     readonly environmentId?: string | undefined;
   },
 >(threads: readonly T[]): T[] {
+  if (threads.length < 2) return [...threads];
   const keyed: T[] = [];
   const keyless: T[] = [];
   for (const thread of threads) {
@@ -398,14 +307,13 @@ export function sortPinnedThreadsByOrderKey<
     const rightKey = right.pinOrderKey!;
     return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : identityTiebreak(left, right);
   });
-  keyless.sort((left, right) => {
-    const leftMs = Date.parse(left.createdAt);
-    const rightMs = Date.parse(right.createdAt);
-    return (
-      (Number.isNaN(rightMs) ? 0 : rightMs) - (Number.isNaN(leftMs) ? 0 : leftMs) ||
-      identityTiebreak(left, right)
-    );
-  });
+  const timestamps = new Map(
+    keyless.map((thread) => [thread, toSortableTimestamp(thread.createdAt) ?? 0]),
+  );
+  keyless.sort(
+    (left, right) =>
+      timestamps.get(right)! - timestamps.get(left)! || identityTiebreak(left, right),
+  );
   return [...keyed, ...keyless];
 }
 
@@ -420,6 +328,13 @@ export function sortActiveThreadsByOrderKey<
     readonly environmentId?: string | undefined;
   },
 >(threads: readonly T[]): T[] {
+  if (threads.length < 2) return [...threads];
+  const timestamps = new Map<T, number>();
+  for (const thread of threads) {
+    if (thread.activeOrderKey == null) {
+      timestamps.set(thread, activeThreadAnchorTimestampMs(thread));
+    }
+  }
   return [...threads].sort((left, right) => {
     const leftKey = left.activeOrderKey;
     const rightKey = right.activeOrderKey;
@@ -429,7 +344,7 @@ export function sortActiveThreadsByOrderKey<
     if (leftKey != null && rightKey != null) {
       order = leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
     } else {
-      order = activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left);
+      order = timestamps.get(right)! - timestamps.get(left)!;
     }
     return (
       order ||
@@ -451,7 +366,6 @@ export function planPinnedMove(input: {
   readonly keysById: ReadonlyMap<string, string | null | undefined>;
   readonly movedId: string;
   readonly direction: "up" | "down";
-  readonly lowerBound?: string | undefined;
 }): ReadonlyArray<{ readonly id: string; readonly orderKey: string }> | null {
   const { orderedIds, keysById, movedId, direction } = input;
   const from = orderedIds.indexOf(movedId);
@@ -461,10 +375,5 @@ export function planPinnedMove(input: {
   const newOrder = [...orderedIds];
   newOrder.splice(from, 1);
   newOrder.splice(to, 0, movedId);
-  return planPinnedReorder({
-    orderedIds: newOrder,
-    keysById,
-    movedId,
-    lowerBound: input.lowerBound,
-  });
+  return planPinnedReorder({ orderedIds: newOrder, keysById, movedId });
 }

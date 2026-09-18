@@ -1,3 +1,4 @@
+import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import {
   effectiveSnoozed,
   hasQueuedTurnStart,
@@ -9,8 +10,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import {
-  sortActiveThreads,
-  applyFixedThreadPositions,
+  sortActiveThreadsByOrderKey,
   resolveSettledThreadTimestamp,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
@@ -168,7 +168,7 @@ export function sortThreadsForListV2<
     readonly environmentId?: string | undefined;
   },
 >(threads: readonly T[]): T[] {
-  return sortActiveThreads(threads);
+  return sortActiveThreadsByOrderKey(threads);
 }
 
 /** Canonical card section for Move up/down, independent of search or scope. */
@@ -183,7 +183,6 @@ export function getThreadListV2OrderedSection(input: {
 }): EnvironmentThreadShell[] {
   const threads = input.threads.filter((thread) => {
     if (thread.archivedAt !== null) return false;
-    if (thread.pinnedAt != null && thread.pinPosition != null) return false;
     if (
       (input.settlementEnvironmentIds?.has(thread.environmentId) ?? true) &&
       thread.settledOverride === "settled" &&
@@ -197,10 +196,12 @@ export function getThreadListV2OrderedSection(input: {
     ) {
       return false;
     }
-    return (thread.pinnedAt != null && thread.pinPosition == null) === (input.section === "pinned");
+    return (thread.pinnedAt != null) === (input.section === "pinned");
   });
   const ordered =
-    input.section === "pinned" ? sortPinnedThreadsByOrderKey(threads) : sortActiveThreads(threads);
+    input.section === "pinned"
+      ? sortPinnedThreadsByOrderKey(threads)
+      : sortActiveThreadsByOrderKey(threads);
   const pending =
     input.pendingOrder?.section === input.section
       ? reconcilePendingThreadOrder(input.pendingOrder, ordered)
@@ -386,13 +387,6 @@ export function buildThreadListV2Items(input: {
     ? new Set(input.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`))
     : null;
 
-  const matchesSearch = (thread: EnvironmentThreadShell) =>
-    query.length === 0 ||
-    thread.title.toLocaleLowerCase().includes(query) ||
-    input.matchedThreadKeys?.has(
-      threadSearchMatchKey({ environmentId: thread.environmentId, threadId: thread.id }),
-    ) === true;
-
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
@@ -404,11 +398,25 @@ export function buildThreadListV2Items(input: {
     if (projectKeys !== null && !projectKeys.has(`${thread.environmentId}:${thread.projectId}`)) {
       continue;
     }
+    if (
+      query.length > 0 &&
+      !thread.title.toLocaleLowerCase().includes(query) &&
+      !threadPullRequestSearchTerms(thread).some((term) =>
+        term.toLocaleLowerCase().includes(query),
+      ) &&
+      input.matchedThreadKeys?.has(
+        threadSearchMatchKey({
+          environmentId: thread.environmentId,
+          threadId: thread.id,
+        }),
+      ) !== true
+    ) {
+      continue;
+    }
     const supportsSettlement = input.settlementEnvironmentIds?.has(thread.environmentId) ?? true;
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
     // Snooze outranks settlement and pinning until the thread wakes.
     if (supportsSnooze && effectiveSnoozed(thread, { now })) {
-      if (!matchesSearch(thread)) continue;
       snoozed.push(thread);
       if (
         thread.snoozedUntil != null &&
@@ -422,18 +430,15 @@ export function buildThreadListV2Items(input: {
     const hasQueuedMessages =
       input.queuedThreadKeys?.has(`${thread.environmentId}:${thread.id}`) === true;
     if (supportsSettlement && thread.settledOverride === "settled" && !hasQueuedMessages) {
-      if (matchesSearch(thread)) settled.push(thread);
-    } else if (thread.pinnedAt != null && thread.pinPosition == null) {
+      settled.push(thread);
+    } else if (thread.pinnedAt != null) {
       pinned.push(thread);
     } else {
       active.push(thread);
     }
   }
 
-  const orderedActive = applyFixedThreadPositions(
-    applyPendingThreadOrder(sortActiveThreads(active, pinned.length), "active", pending),
-    pinned.length,
-  ).filter(matchesSearch);
+  const orderedActive = applyPendingThreadOrder(sortThreadsForListV2(active), "active", pending);
   const orderedSnoozed = [...snoozed].sort(
     (left, right) =>
       parseTimestampMs(left.snoozedUntil ?? "") - parseTimestampMs(right.snoozedUntil ?? ""),
@@ -469,7 +474,7 @@ export function buildThreadListV2Items(input: {
     sortPinnedThreadsByOrderKey(pinned),
     "pinned",
     pending,
-  ).filter(matchesSearch)) {
+  )) {
     items.push({
       thread,
       variant: "card",
@@ -483,7 +488,7 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "card",
       snoozed: false,
-      pinned: thread.pinnedAt != null,
+      pinned: false,
       isLast: false,
     });
   }

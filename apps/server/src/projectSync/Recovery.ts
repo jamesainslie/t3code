@@ -117,10 +117,17 @@ export async function createRecoveryBackup(stateDir: string, createdAt: string):
   }
 }
 
+/** Read-only: the root is created by the first backup, never by a status read. */
 export async function listRecoveryBackups(stateDir: string) {
-  await NodeFSP.mkdir(backupRoot(stateDir), { recursive: true, mode: 0o700 });
+  let entries: string[];
+  try {
+    entries = await NodeFSP.readdir(backupRoot(stateDir));
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw cause;
+  }
   const results = [];
-  for (const entry of await NodeFSP.readdir(backupRoot(stateDir))) {
+  for (const entry of entries) {
     if (!/^[0-9a-f-]{36}$/.test(entry)) continue;
     const manifest = decodeManifest(
       await NodeFSP.readFile(NodePath.join(backupRoot(stateDir), entry, "manifest.json"), "utf8"),

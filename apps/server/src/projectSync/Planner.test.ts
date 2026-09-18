@@ -208,6 +208,7 @@ it.effect(
                 activities: [],
                 proposedPlans: [],
                 checkpoints: [],
+                pullRequests: [],
                 messages: [
                   {
                     id: MessageId.make("upstream-message"),

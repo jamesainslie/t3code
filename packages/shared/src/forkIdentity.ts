@@ -10,13 +10,19 @@
 export const FORK_IDENTITY = Object.freeze({
   npmPackageName: "@jamesainslie/t3code",
   cliBin: "t3f",
-  installedBinRelativePath: "node_modules/@jamesainslie/t3code/dist/bin.mjs",
+  /** Per-platform executable packages the launcher (`npmPackageName`) depends on. */
+  npm: Object.freeze({
+    platformPackageScope: "@jamesainslie",
+    platformPackagePrefix: "t3code-",
+  }),
   baseDirName: ".t3f",
   defaultPort: 4773,
   productBaseName: "T3 Code Fork",
   artifactBaseName: "T3-Code-Fork",
   appId: "us.ainslies.t3code",
   repositoryUrl: "https://github.com/jamesainslie/t3code",
+  /** GitHub `owner/repo` whose releases host the CLI archives and SHA256SUMS. */
+  releaseRepository: "jamesainslie/t3code",
   releasesUrl: "https://github.com/jamesainslie/t3code/releases",
   urlHandlerDesktopEntryName: "t3code-fork-url-handler.desktop",
   bootService: Object.freeze({
@@ -63,3 +69,7 @@ export const forkDesktopSchemes = [
   FORK_IDENTITY.desktop.production.scheme,
   FORK_IDENTITY.desktop.development.scheme,
 ] as const;
+
+/** `@jamesainslie/t3code-<platformKey>`: the executable package the launcher installs for one platform. */
+export const forkPlatformPackageName = (platformKey: string): string =>
+  `${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}${platformKey}`;

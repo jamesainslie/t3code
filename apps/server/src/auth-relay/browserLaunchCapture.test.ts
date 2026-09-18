@@ -39,7 +39,7 @@ describe("browser launch command", () => {
       assert.isTrue(command.command.startsWith("'/opt/t3/node' '-e' '"));
       assert.isTrue(command.command.endsWith("'--' '%s'"));
       assert.notInclude(command.command, ":");
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("rejects runtime paths that collide with the platform BROWSER delimiter", () =>
@@ -61,7 +61,7 @@ describe("browser launch command", () => {
         platform: "win32",
       });
       assert.equal(windows.executable, "C:/Program Files/T3/node.exe");
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

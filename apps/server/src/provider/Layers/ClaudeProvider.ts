@@ -55,6 +55,7 @@ const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabili
 const CLAUDE_PRESENTATION = {
   displayName: "Claude",
   showInteractionModeToggle: true,
+  reportsContextWindow: true,
 } as const;
 
 /** Settings can drive `claude auth login`; installation stays with the user. */

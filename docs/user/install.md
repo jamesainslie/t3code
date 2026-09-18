@@ -5,50 +5,73 @@ desktop, web, or mobile app. Set up the machine where the agents will work first
 
 ## Requirements
 
-Command-line use, SSH hosts, and WSL backends need Node.js 22.16+ (22.x), 23.11+
-(23.x), or 24.10 and later. The native desktop app includes its server runtime.
-
 You need an installed, authenticated provider before starting a thread. You can
 launch T3 Code and configure providers afterwards.
 
-## Run without installing
+## Command line
 
 ```bash
-npx t3@latest
+curl -fsSL https://raw.githubusercontent.com/jamesainslie/t3code/main/scripts/install.sh | sh
 ```
 
-This starts the server and opens the local web app. Run
-`npx t3@latest --help` for command-line options.
+This puts `t3f` in `~/.local/bin` and keeps its data in `~/.t3f`, beside any
+upstream T3 Code install. If your shell reports `command not found`
+afterwards, that directory is not on your `PATH` yet; the installer prints the
+line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
+`T3CODE_VERSION` to pin an exact version.
+
+| Task                                             | Command                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| Start the server and open the web app            | `t3f`                                                      |
+| Start the server without a browser               | `t3f serve`                                                |
+| Keep it running in the background (macOS, Linux) | `t3f service install` ([details](./background-service.md)) |
+| Move to the newest release                       | `t3f update`                                               |
+| Remove it again                                  | `t3f uninstall`                                            |
+
+Run `t3f --help` for the full reference.
+
+To try it once without installing, run `npx @jamesainslie/t3code@latest` instead
+(needs Node.js for `npx`).
+
+### Intel Macs and Windows
+
+The fork ships executables for Apple Silicon Macs and Linux (x64 and arm64).
+On an Intel Mac, use the desktop app, or build a server from source with
+Node.js 24 and `vp` ([Install vp](https://github.com/jamesainslie/t3code#install-vp)):
+
+```bash
+git clone https://github.com/jamesainslie/t3code
+cd t3code && vp i && vp run build:desktop
+node apps/server/dist/bin.mjs
+```
+
+`t3f update` and the background service do not apply to a server run this way;
+update it with `git pull` and a rebuild.
 
 ## Desktop app
 
-Download a release from [GitHub Releases](https://github.com/pingdotgg/t3code/releases),
-or use a package manager:
-
-| Platform           | Install                         |
-| ------------------ | ------------------------------- |
-| Windows            | `winget install T3Tools.T3Code` |
-| macOS              | `brew install --cask t3-code`   |
-| Arch Linux         | `yay -S t3code-bin`             |
-| Arch Linux nightly | `yay -S t3code-nightly-bin`     |
+Download a release from [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
+The fork installs as **T3 Code Fork** with its own data directory, so it runs
+alongside the upstream desktop app. Builds are published for macOS (Apple
+Silicon and Intel) and Linux (AppImage).
 
 ### Windows Subsystem for Linux
 
 Choose a WSL distro in **Settings → Connections** to run agents and projects
-there. Install Node.js and provider CLIs inside that distro. T3 Code installs its
-matching server runtime there automatically; the first launch after an app
-update can take longer.
+there. Install the provider CLIs inside that distro. T3 Code installs its own
+server runtime there automatically; the first launch after an app update can
+take longer.
 
 ### Open a project from a terminal
 
 With the desktop app already running on the same machine:
 
 ```bash
-npx t3 app
+t3 app
 ```
 
 This opens a new thread for the current directory, adding the project if needed.
-Pass a path, such as `npx t3 app ../my-project`, to open another directory. It requires
+Pass a path, such as `t3 app ../my-project`, to open another directory. It requires
 the desktop app, so a standalone server or an SSH session is not enough. If the
 command cannot reach the app, start or update the desktop app and try again.
 
@@ -59,6 +82,12 @@ Install T3 Code from the
 [Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code).
 The phone connects to a server on another machine. Follow
 [remote access](./remote-access.md) to link it through T3 Connect or a pairing URL.
+
+If the app crashes during launch, open Settings → Diagnostics on the next launch
+that succeeds. It lists startup crashes from the last 7 days with the error and
+component stack that store crash reports leave out. Copy the report and paste it
+into a GitHub issue. Error messages can quote values from the app, so read it over
+before sharing.
 
 ## Providers
 

@@ -3,7 +3,8 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
-import { HostProcessExecutablePath, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -160,7 +161,15 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = input.platform ?? (yield* HostProcessPlatform);
-  const runtimeExecutablePath = input.runtimeExecutablePath ?? (yield* HostProcessExecutablePath);
+  // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
+  const runtimeExecutablePath =
+    input.runtimeExecutablePath ??
+    (yield* resolveNodeExecutable("Provider sign-in").pipe(
+      Effect.mapError(
+        (error) =>
+          new AuthRelayError({ operation: "browser", detail: error.message, cause: error }),
+      ),
+    ));
   const failed = (detail: string, cause?: unknown) =>
     new AuthRelayError({ operation: "browser", detail, cause });
   const address = input.address ?? browserLaunchSocketAddress(platform, input.directory);

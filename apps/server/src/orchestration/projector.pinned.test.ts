@@ -110,13 +110,11 @@ it.effect("projects pin order key lifecycle", () =>
           threadId: ThreadId.make("thread-1"),
           pinnedAt: now,
           pinOrderKey: "g",
-          pinPosition: 2,
           updatedAt: now,
         },
       }),
     );
     expect(pinned.threads[0]?.pinOrderKey).toBe("g");
-    expect(pinned.threads[0]?.pinPosition).toBe(2);
 
     // Re-pins and events from pre-reorder servers omit the field entirely;
     // the existing key must survive rather than being nulled out.
@@ -129,7 +127,6 @@ it.effect("projects pin order key lifecycle", () =>
       }),
     );
     expect(repinned.threads[0]?.pinOrderKey).toBe("g");
-    expect(repinned.threads[0]?.pinPosition).toBe(2);
 
     // A drag persists the new slot.
     const reordered = yield* projectEvent(
@@ -153,7 +150,5 @@ it.effect("projects pin order key lifecycle", () =>
       }),
     );
     expect(unpinned.threads[0]?.pinOrderKey).toBeNull();
-    expect(unpinned.threads[0]?.pinPosition).toBeNull();
-    expect(unpinned.threads[0]?.threadOrderKey).toBeNull();
   }),
 );

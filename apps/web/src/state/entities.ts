@@ -220,14 +220,8 @@ export function readEnvironmentSupportsTitleRegeneration(environmentId: Environm
   );
 }
 
-/** Whether the server persists manual active order and numbered pin positions. */
-export function readEnvironmentSupportsThreadPositioning(environmentId: EnvironmentId): boolean {
-  return (
-    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
-      .threadPositioning === true
-  );
-}
-
+/** Whether the environment's server understands thread.pin.reorder (and
+    orderKey on thread.pin). Same version-skew contract as settlement. */
 export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities

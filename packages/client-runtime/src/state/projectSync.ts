@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
-import { environmentEndpointUrl } from "../environment/endpoint.ts";
+import { makeEnvironmentHttpApiUrlBuilder } from "../rpc/http.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
 
 export const executeProjectSync = Effect.fn("clientRuntime.state.executeProjectSync")(function* (
@@ -16,9 +16,10 @@ export const executeProjectSync = Effect.fn("clientRuntime.state.executeProjectS
     prepared,
     signer,
     remoteAuthorization,
+    group: "projectSync",
     method: "POST",
     timeoutMs: 120_000,
-    url: (base) => environmentEndpointUrl(base, "/api/project-sync"),
-    request: ({ client, headers }) => client.projectSync.execute({ payload: { request }, headers }),
+    url: (httpBaseUrl) => makeEnvironmentHttpApiUrlBuilder(httpBaseUrl).projectSync.execute(),
+    request: ({ client, headers }) => client.execute({ payload: { request }, headers }),
   });
 });

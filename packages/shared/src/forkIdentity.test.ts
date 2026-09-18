@@ -6,6 +6,7 @@ import {
   forkDesktopSchemes,
   forkPackageSpec,
 } from "./forkIdentity.ts";
+import { forkPlatformPackageName } from "./forkIdentity.ts";
 
 // Upstream's identity literals. The fork must differ from every one of them,
 // or a fork build silently shares state, ports, or handlers with upstream.
@@ -54,9 +55,14 @@ describe("FORK_IDENTITY", () => {
       `${FORK_IDENTITY.desktop.production.scheme}-dev`,
     );
     expect(FORK_IDENTITY.bootService.launchdLabel).toBe(`${FORK_IDENTITY.appId}.service`);
-    expect(FORK_IDENTITY.installedBinRelativePath).toBe(
-      `node_modules/${FORK_IDENTITY.npmPackageName}/dist/bin.mjs`,
-    );
+    expect(forkPlatformPackageName("linux-x64")).toBe("@jamesainslie/t3code-linux-x64");
+    // The launcher tarball sits in the same scope directory as the platform
+    // tarballs, so the platform prefix must never match the launcher name.
+    expect(
+      FORK_IDENTITY.npmPackageName.startsWith(
+        `${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}`,
+      ),
+    ).toBe(false);
     expect(FORK_IDENTITY.releasesUrl).toBe(`${FORK_IDENTITY.repositoryUrl}/releases`);
     expect(FORK_IDENTITY.desktop.production.desktopEntryName).toBe(
       `${FORK_IDENTITY.desktop.production.wmClass}.desktop`,

@@ -7,6 +7,7 @@ import {
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { canSnooze, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
 import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -16,6 +17,8 @@ import { useCallback, useMemo, useRef } from "react";
 import { getFallbackThreadIdAfterDelete, pinOrderKeyBetween } from "../components/Sidebar.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { terminalEnvironment } from "../state/terminal";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { environmentServerConfigsAtom } from "../state/server";
 import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
@@ -26,7 +29,6 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
-  readEnvironmentSupportsThreadPositioning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentThreadRefs,
@@ -96,7 +98,7 @@ export class ThreadSnoozeBlockedError extends Schema.TaggedError<ThreadSnoozeBlo
 function topOfPinnedRunOrderKey(): string | undefined {
   let firstKey: string | null = null;
   for (const shell of readThreadShells()) {
-    if (shell.pinnedAt == null || shell.pinPosition != null || shell.pinOrderKey == null) continue;
+    if (shell.pinnedAt == null || shell.pinOrderKey == null) continue;
     if (firstKey === null || shell.pinOrderKey < firstKey) firstKey = shell.pinOrderKey;
   }
   return pinOrderKeyBetween(null, firstKey) ?? undefined;
@@ -150,9 +152,10 @@ export async function requestThreadUnpinConfirmation(input: {
 
   return settlePromise(() =>
     confirm(
-      [`Unpin thread "${input.title}"?`, "This will return the thread to its default order."].join(
-        "\n",
-      ),
+      [
+        `Unpin thread "${input.title}"?`,
+        "This will move the thread out of your pinned section.",
+      ].join("\n"),
     ),
   );
 }
@@ -356,7 +359,13 @@ export function useThreadActions() {
       const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== null;
       const localApi = readLocalApi();
       let shouldDeleteWorktree = false;
-      if (canDeleteWorktree && localApi) {
+      const environmentSettings = appAtomRegistry
+        .get(environmentServerConfigsAtom)
+        .get(threadRef.environmentId)?.settings;
+      const automaticWorktreeCleanup = environmentSettings
+        ? resolveWorktreeCleanup(environmentSettings, thread.projectId).worktreeOnDelete
+        : false;
+      if (canDeleteWorktree && localApi && !automaticWorktreeCleanup) {
         const confirmationResult = await settlePromise(() =>
           localApi.dialogs.confirm(
             [
@@ -552,16 +561,9 @@ export function useThreadActions() {
   );
 
   const pinThread = useCallback(
-    async (
-      target: ScopedThreadRef,
-      opts: { orderKey?: string; pinPosition?: number | null } = {},
-    ) => {
+    async (target: ScopedThreadRef, opts: { orderKey?: string } = {}) => {
       // Version skew: never send the command to a server that predates it.
-      if (
-        !readEnvironmentSupportsPinning(target.environmentId) ||
-        (opts.pinPosition != null &&
-          !readEnvironmentSupportsThreadPositioning(target.environmentId))
-      ) {
+      if (!readEnvironmentSupportsPinning(target.environmentId)) {
         return AsyncResult.failure(
           Cause.fail(
             new ThreadPinningUnsupportedError({
@@ -585,9 +587,6 @@ export function useThreadActions() {
         input: {
           threadId: target.threadId,
           ...(orderKey !== undefined ? { orderKey } : {}),
-          ...(readEnvironmentSupportsThreadPositioning(target.environmentId)
-            ? { pinPosition: opts.pinPosition ?? null }
-            : {}),
         },
       });
     },

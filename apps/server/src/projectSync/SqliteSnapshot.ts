@@ -1,44 +1,23 @@
 // @effect-diagnostics nodeBuiltinImport:off
-type SqliteValue = string | number | bigint | Uint8Array | null;
-type SqliteRow = Record<string, SqliteValue>;
 
-/** The source boundary only exposes reads; neither runtime can migrate or update it. */
+/** The source boundary only exposes reads; nothing here can migrate or update it. */
 export async function openReadOnlyDatabase(filename: string) {
-  if (process.versions.bun !== undefined) {
-    const BunSqlite = await import("bun:sqlite");
-    const db = new BunSqlite.Database(filename, { readonly: true });
-    return {
-      prepare: (query: string) => {
-        const statement = db.query<SqliteRow, SqliteValue[]>(query);
-        return {
-          all: (...values: SqliteValue[]) => statement.all(...values),
-          get: (...values: SqliteValue[]) => statement.get(...values) ?? undefined,
-        };
-      },
-      close: () => db.close(),
-    };
-  }
   const NodeSqlite = await import("node:sqlite");
   return new NodeSqlite.DatabaseSync(filename, { readOnly: true });
 }
 
-/** Both operations include committed WAL pages and write only the private destination. */
+/**
+ * Copies a database that another connection in this process may hold open,
+ * including committed WAL pages, into a private destination file. `VACUUM
+ * INTO` runs synchronously on the read-only connection: `node:sqlite`'s async
+ * `backup()` only settles when something else wakes the event loop, so an
+ * otherwise idle Effect fiber awaiting it hangs.
+ */
 export async function snapshotDatabase(source: string, destination: string): Promise<void> {
-  if (process.versions.bun !== undefined) {
-    const BunSqlite = await import("bun:sqlite");
-    const db = new BunSqlite.Database(source, { readonly: true });
-    try {
-      db.run("VACUUM INTO ?", [destination]);
-    } finally {
-      db.close();
-    }
-  } else {
-    const NodeSqlite = await import("node:sqlite");
-    const db = new NodeSqlite.DatabaseSync(source, { readOnly: true });
-    try {
-      await NodeSqlite.backup(db, destination);
-    } finally {
-      db.close();
-    }
+  const db = await openReadOnlyDatabase(source);
+  try {
+    db.prepare("VACUUM INTO ?").run(destination);
+  } finally {
+    db.close();
   }
 }

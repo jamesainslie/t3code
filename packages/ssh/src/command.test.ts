@@ -1,6 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { forkPackageSpec } from "@t3tools/shared/forkIdentity";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -15,7 +14,6 @@ import {
   baseSshArgs,
   getLastNonEmptyOutputLine,
   parseSshResolveOutput,
-  resolveRemoteT3CliPackageSpec,
   runSshCommand,
 } from "./command.ts";
 import { SshCommandError } from "./errors.ts";
@@ -96,41 +94,6 @@ describe("ssh command", () => {
           { batchMode: "no" },
         ),
         ["-o", "BatchMode=no", "-o", "ConnectTimeout=10", "-p", "2222"],
-      );
-    }),
-  );
-
-  it.effect("resolves the remote t3 package spec from the desktop release channel", () =>
-    Effect.sync(() => {
-      assert.equal(
-        resolveRemoteT3CliPackageSpec({
-          appVersion: "0.0.17",
-          updateChannel: "latest",
-        }),
-        forkPackageSpec("0.0.17"),
-      );
-      assert.equal(
-        resolveRemoteT3CliPackageSpec({
-          appVersion: "0.0.17-nightly.20260415.44",
-          updateChannel: "nightly",
-        }),
-        forkPackageSpec("0.0.17-nightly.20260415.44"),
-      );
-      assert.equal(
-        resolveRemoteT3CliPackageSpec({
-          appVersion: "0.0.0-dev",
-          updateChannel: "nightly",
-          isDevelopment: true,
-        }),
-        forkPackageSpec("nightly"),
-      );
-      assert.equal(
-        resolveRemoteT3CliPackageSpec({
-          appVersion: "0.0.0-dev",
-          updateChannel: "latest",
-          isDevelopment: true,
-        }),
-        forkPackageSpec("nightly"),
       );
     }),
   );

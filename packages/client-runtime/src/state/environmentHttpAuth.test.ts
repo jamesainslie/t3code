@@ -85,6 +85,7 @@ const THREAD = {
     runtimeMode: "full-access",
     interactionMode: "default",
     branch: null,
+    pullRequests: [],
     worktreePath: null,
     latestTurn: null,
     createdAt: "2026-09-04T00:00:00.000Z",
@@ -210,6 +211,7 @@ const LOADERS: ReadonlyArray<{
         ...input,
         threadId: THREAD.thread.id,
         window: { turnLimit: 20, beforeCursor: "older-page" },
+        reasoningMessages: true,
       }),
   },
 ];
@@ -245,12 +247,23 @@ describe("authenticated environment HTTP requests", () => {
       expect(response.configuration.enabled).toBe(false);
       expect(harness.calls[0]?.url).toBe(`${CURRENT_ORIGIN}/api/project-sync`);
       expect(harness.calls[0]?.init.method).toBe("POST");
-      expect(harness.calls[0]?.init.body).toEqual(
-        new TextEncoder().encode('{"request":{"operation":"status"}}'),
+      expect(new TextDecoder().decode(harness.calls[0]?.init.body as Uint8Array)).toBe(
+        '{"request":{"operation":"status"}}',
       );
       expect(harness.proofs).toHaveLength(1);
     }),
   );
+  it.effect.each(LOADERS)("rejects an invalid $name response", (loader) =>
+    Effect.gen(function* () {
+      const harness = makeHarness(() => Response.json({}));
+      const result = yield* loader
+        .load(harness.input)
+        .pipe(Effect.provide(harness.httpLayer), Effect.asVoid, Effect.flip);
+      expect(result._tag).toBe("RemoteEnvironmentAuthInvalidJsonError");
+      expect(harness.calls).toHaveLength(1);
+    }),
+  );
+
   it.effect.each(LOADERS)("uses current relay authorization and endpoint for $name", (loader) =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json(loader.response));
@@ -277,6 +290,7 @@ describe("authenticated environment HTTP requests", () => {
       if (loader.name === "older thread history") {
         expect(url.searchParams.get("turnLimit")).toBe("20");
         expect(url.searchParams.get("beforeCursor")).toBe("older-page");
+        expect(url.searchParams.get("reasoningMessages")).toBe("true");
       }
       expect(PREPARED.httpAuthorization).toMatchObject({ accessToken: "expired-token" });
     }),

@@ -7,17 +7,27 @@ const sync = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock("../../state/environments", () => ({
   useEnvironments: () => ({
     environments: [
-      { environmentId: "laptop", label: "My laptop", serverConfig: null },
-      { environmentId: "server", label: "Remote server", serverConfig: null },
+      {
+        environmentId: "laptop",
+        label: "My laptop",
+        serverConfig: null,
+        connection: { phase: "connected" },
+      },
+      {
+        environmentId: "server",
+        label: "Remote server",
+        serverConfig: null,
+        connection: { phase: "connected" },
+      },
     ],
   }),
+  usePrimaryEnvironmentId: () => null,
 }));
-vi.mock("./ProjectSettingsPanel", () => ({
-  useSettingsProjectGroups: () => [],
-  ProjectSettingsPanel: () => null,
+vi.mock("./useSettingsProjectGroups", () => ({ useSettingsProjectGroups: () => [] }));
+vi.mock("./ProjectSettingsPanel", () => ({ ProjectSettingsPanel: () => null }));
+vi.mock("./SettingsScopeNotice", () => ({
+  SettingsScopeNotice: ({ children }: { children: string }) => <p>{children}</p>,
 }));
-vi.mock("./ProjectDefaultsSettings", () => ({ ProjectDefaultsSettings: () => null }));
-vi.mock("../ProjectFavicon", () => ({ ProjectFavicon: () => null }));
 vi.mock("../../hooks/useProjectSync", () => ({
   useProjectSync: (environmentId: string) => ({
     data: {
@@ -44,6 +54,8 @@ vi.mock("../../hooks/useProjectSync", () => ({
   }),
 }));
 import { ProjectsSettings } from "./ProjectsSettings";
+import { SettingsScopeProvider } from "./SettingsScopeContext";
+import type { SettingsScopeSearch } from "./settingsScope";
 
 let view: ReactTestRenderer;
 afterEach(async () => {
@@ -55,13 +67,11 @@ afterEach(async () => {
 it("discovers sync from All machines and previews only the chosen destination", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   function Settings() {
-    const [machineId, setMachineId] = useState<string | null>(null);
+    const [search, setSearch] = useState<SettingsScopeSearch>({});
     return (
-      <ProjectsSettings
-        projectKey={null}
-        machineId={machineId}
-        onScopeChange={(_, machine) => setMachineId(machine)}
-      />
+      <SettingsScopeProvider search={search} onChange={setSearch}>
+        <ProjectsSettings />
+      </SettingsScopeProvider>
     );
   }
   await act(() => {

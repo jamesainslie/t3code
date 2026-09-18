@@ -44,7 +44,8 @@ function detectCliRunner(entryPath: string): CliRunner | null {
  * anything else suggests the bare package.
  */
 function suggestedPackageSpec(version: string): string {
-  return version.includes("-nightly.") ? forkPackageSpec("nightly") : FORK_IDENTITY.npmPackageName;
+  const channel = /^[^-+]+-(nightly|preview)\./.exec(version)?.[1];
+  return channel === undefined ? FORK_IDENTITY.npmPackageName : forkPackageSpec(channel);
 }
 
 /**

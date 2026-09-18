@@ -1,5 +1,8 @@
-import { HostProcessExecutablePath, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -63,9 +66,17 @@ export const buildBrowserLaunchCommand = Effect.fn("buildBrowserLaunchCommand")(
   readonly marker: string;
   readonly runtimeExecutablePath?: string;
   readonly platform?: NodeJS.Platform;
-}): Effect.fn.Return<BrowserLaunchCommand, AuthRelayError> {
+}): Effect.fn.Return<BrowserLaunchCommand, AuthRelayError, FileSystem.FileSystem | Path.Path> {
   const platform = input.platform ?? (yield* HostProcessPlatform);
-  const runtimeExecutablePath = input.runtimeExecutablePath ?? (yield* HostProcessExecutablePath);
+  // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
+  const runtimeExecutablePath =
+    input.runtimeExecutablePath ??
+    (yield* resolveNodeExecutable("Provider sign-in").pipe(
+      Effect.mapError(
+        (error) =>
+          new AuthRelayError({ operation: "browser", detail: error.message, cause: error }),
+      ),
+    ));
   const executable =
     platform === "win32" ? runtimeExecutablePath.replaceAll("\\", "/") : runtimeExecutablePath;
   if (/[:;\s"'\\]/.test(input.marker)) {

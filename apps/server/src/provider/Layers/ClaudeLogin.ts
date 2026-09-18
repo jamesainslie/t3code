@@ -5,6 +5,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -42,7 +43,7 @@ export const makeClaudeLoginCommands = Effect.fn("makeClaudeLoginCommands")(func
     >;
   },
   never,
-  Path.Path
+  FileSystem.FileSystem | Path.Path
 > {
   const setupError = (operation: string, detail: string) =>
     new ProviderSetupError({ instanceId, operation, detail });
