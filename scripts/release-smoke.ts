@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeChildProcess from "node:child_process";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -253,7 +254,7 @@ try {
   );
   assertContains(
     nightlyReleaseMetadata,
-    "name=T3 Code Nightly 9.9.10-nightly.20260413.321 (abcdef123456)",
+    `name=${FORK_IDENTITY.productBaseName} Nightly 9.9.10-nightly.20260413.321 (abcdef123456)`,
     "Expected nightly metadata to include the short commit SHA in the release name.",
   );
 
