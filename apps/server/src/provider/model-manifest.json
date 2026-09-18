@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-12T00:41:55Z",
+  "updatedAt": "2026-09-18T14:00:00Z",
   "currentModels": {
     "codex": [
       "gpt-6-astra",
@@ -10,7 +10,13 @@
       "gpt-daybreak-blue-latest",
       "gpt-daybreak-red-latest"
     ],
-    "claudeAgent": ["claude-fable-5-1", "claude-opus-5", "claude-sonnet-5"],
+    "claudeAgent": [
+      "claude-fable-5-1",
+      "claude-mythos-5-1",
+      "claude-mythos-5",
+      "claude-opus-5",
+      "claude-sonnet-5"
+    ],
     "antigravity": ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"]
   },
   "providers": {
@@ -570,6 +576,31 @@
           "slug": "claude-fable-5",
           "name": "Claude Fable 5",
           "status": "legacy",
+          "profile": "fable-5",
+          "adapter": {
+            "claudeCode": {
+              "minVersion": "2.1.169"
+            }
+          }
+        },
+        {
+          "slug": "claude-mythos-5-1",
+          "name": "Claude Mythos 5.1",
+          "aliases": ["mythos", "mythos-5.1", "claude-mythos-5.1"],
+          "status": "current",
+          "badge": "new",
+          "profile": "fable-5",
+          "adapter": {
+            "claudeCode": {
+              "minVersion": "2.1.257"
+            }
+          }
+        },
+        {
+          "slug": "claude-mythos-5",
+          "name": "Claude Mythos 5",
+          "aliases": ["mythos-5", "claude-mythos-5.0", "claude-mythos-5-0"],
+          "status": "current",
           "profile": "fable-5",
           "adapter": {
             "claudeCode": {

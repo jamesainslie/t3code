@@ -156,6 +156,7 @@ const UNPRICEABLE_MODELS = new Set([
   "sonnet",
   "haiku",
   "fable",
+  "mythos",
 ]);
 
 export function lookupRate(table: RateTable, model: string): ModelRate | null {

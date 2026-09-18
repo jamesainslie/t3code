@@ -32,12 +32,14 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { hasValidClaudeManifestAdapters } from "./ClaudeModelManifest.ts";
 import bundledManifestJson from "./model-manifest.json" with { type: "json" };
 import type { ServerProviderDraft } from "./providerSnapshot.ts";
 
-const MODEL_MANIFEST_URL =
-  "https://raw.githubusercontent.com/pingdotgg/t3code/main/apps/server/src/provider/model-manifest.json";
+// Fork: refresh from the fork's own `main`, not upstream, so models the fork
+// adds to its bundled manifest (Claude Mythos) survive the runtime refresh.
+const MODEL_MANIFEST_URL = `https://raw.githubusercontent.com/${FORK_IDENTITY.releaseRepository}/main/apps/server/src/provider/model-manifest.json`;
 
 /** How long a fetched manifest stays fresh before the next probe re-fetches. */
 const MANIFEST_TTL_MS = 60 * 60 * 1000;
