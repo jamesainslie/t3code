@@ -10,6 +10,7 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { DEVELOPMENT_ICON_OVERRIDES } from "../../../scripts/lib/brand-assets.ts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { findEsmImportsOfExternalPackages } from "../../../scripts/lib/cli-external-packages.ts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
@@ -191,17 +192,20 @@ const publishCmd = Command.make(
       // npm runs with cwd set to the packages dir below, so tarball paths are
       // resolved once here rather than joined twice.
       const packagesDir = path.resolve(config.packagesDir);
-      const scopeDir = path.join(packagesDir, "@t3code");
-      const launcherTarball = path.join(packagesDir, "t3.tgz");
+      const scopeDir = path.join(packagesDir, FORK_IDENTITY.npm.platformPackageScope);
+      const launcherTarball = path.join(packagesDir, `${FORK_IDENTITY.npmPackageName}.tgz`);
       const platformTarballs = (yield* fs
         .readDirectory(scopeDir)
         .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => [])))
-        .filter((entry) => entry.startsWith("t3-") && entry.endsWith(".tgz"))
+        .filter(
+          (entry) =>
+            entry.startsWith(FORK_IDENTITY.npm.platformPackagePrefix) && entry.endsWith(".tgz"),
+        )
         .sort()
         .map((entry) => path.join(scopeDir, entry));
       if (platformTarballs.length === 0) {
         return yield* new ServerCliBuildAssetMissingError({
-          assetPath: path.join(scopeDir, "t3-<platform>.tgz"),
+          assetPath: path.join(scopeDir, `${FORK_IDENTITY.npm.platformPackagePrefix}<platform>.tgz`),
         });
       }
       if (!(yield* fs.exists(launcherTarball))) {
@@ -227,7 +231,7 @@ const publishCmd = Command.make(
     }),
 ).pipe(
   Command.withDescription(
-    "Publish the @t3code/t3-<platform> tarballs and then the t3 launcher to npm.",
+    `Publish the ${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}<platform> tarballs and then the ${FORK_IDENTITY.npmPackageName} launcher to npm.`,
   ),
 );
 

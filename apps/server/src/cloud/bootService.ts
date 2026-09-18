@@ -4,6 +4,7 @@ import {
   HostProcessPlatform,
   HostProcessUserId,
 } from "@t3tools/shared/hostProcess";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -36,11 +37,11 @@ import {
   type ServiceState,
 } from "./serviceProtocol.ts";
 
-const BOOT_SERVICE_NAME = "t3code";
+const BOOT_SERVICE_NAME = FORK_IDENTITY.bootService.systemdName;
 const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
 // `.service` suffix keeps the label distinct from the desktop app's bundle id
 // (com.t3tools.t3code), so launchd and TCC records never collide.
-const BOOT_SERVICE_LAUNCHD_LABEL = "com.t3tools.t3code.service";
+const BOOT_SERVICE_LAUNCHD_LABEL = FORK_IDENTITY.bootService.launchdLabel;
 const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
 const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
 
@@ -459,11 +460,11 @@ export function formatBootServiceProblem(problem: BootServiceProblem): string {
     case "linger-disabled":
       return 'Lingering is disabled. T3 Code will stop when your last login session ends and will not start at boot. Run `sudo loginctl enable-linger "$(id -un)"` on this machine, then retry the service command as your normal user.';
     case "service-disabled":
-      return "The service is not enabled to start automatically. Run `t3 service install` to repair it.";
+      return `The service is not enabled to start automatically. Run \`${FORK_IDENTITY.cliBin} service install\` to repair it.`;
     case "service-stopped":
-      return "The service is not running. Check the service log and `systemctl --user status t3code.service`, then run `t3 service install`.";
+      return `The service is not running. Check the service log and \`systemctl --user status ${BOOT_SERVICE_UNIT_FILE}\`, then run \`${FORK_IDENTITY.cliBin} service install\`.`;
     case "restart-pending":
-      return "A newer version is installed but the service is still running the previous one. Run `t3 service restart` to switch.";
+      return `A newer version is installed but the service is still running the previous one. Run \`${FORK_IDENTITY.cliBin} service restart\` to switch.`;
   }
 }
 

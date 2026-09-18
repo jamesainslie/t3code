@@ -6,6 +6,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { expect, it } from "vite-plus/test";
 
+import { FORK_IDENTITY, forkPlatformPackageName } from "./forkIdentity.ts";
 import { legacyCliLauncherScript } from "./legacyCliLauncher.ts";
 
 // oxlint-disable-next-line t3code/no-global-process-runtime -- This test launches a real host executable.
@@ -18,10 +19,10 @@ it.skipIf(hostPlatform === "win32")(
   "keeps service IPC, arguments, and termination connected",
   async () => {
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-legacy-launcher-"));
-    const entry = NodePath.join(root, "node_modules/t3/dist/bin.mjs");
+    const entry = NodePath.join(root, `node_modules/${FORK_IDENTITY.npmPackageName}/dist/bin.mjs`);
     const executable = NodePath.join(
       root,
-      `node_modules/@t3code/t3-${hostPlatform}-${hostArch}/t3`,
+      `node_modules/${forkPlatformPackageName(`${hostPlatform}-${hostArch}`)}/t3`,
     );
     await NodeFSP.mkdir(NodePath.dirname(entry), { recursive: true });
     await NodeFSP.mkdir(NodePath.dirname(executable), { recursive: true });

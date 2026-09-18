@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+
 import {
   DesktopBackendPortUnavailableError,
   DesktopDevelopmentBackendPortRequiredError,
@@ -8,17 +10,17 @@ import {
 describe("DesktopApp errors", () => {
   it("preserves unavailable backend port context", () => {
     const error = new DesktopBackendPortUnavailableError({
-      startPort: 3_773,
+      startPort: FORK_IDENTITY.defaultPort,
       maxPort: 65_535,
       hosts: ["127.0.0.1", "0.0.0.0", "::"],
     });
 
-    assert.equal(error.startPort, 3_773);
+    assert.equal(error.startPort, FORK_IDENTITY.defaultPort);
     assert.equal(error.maxPort, 65_535);
     assert.deepEqual(error.hosts, ["127.0.0.1", "0.0.0.0", "::"]);
     assert.equal(
       error.message,
-      "No desktop backend port is available on hosts 127.0.0.1, 0.0.0.0, :: between 3773 and 65535.",
+      `No desktop backend port is available on hosts 127.0.0.1, 0.0.0.0, :: between ${FORK_IDENTITY.defaultPort} and 65535.`,
     );
   });
 

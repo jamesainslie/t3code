@@ -10,6 +10,8 @@
  * Remove it once no supported release predates the executable (after the
  * first stable release that ships it).
  */
+import { FORK_IDENTITY } from "./forkIdentity.ts";
+
 export function legacyCliLauncherScript(): string {
   return `import { spawn } from "node:child_process";
 import { constants } from "node:os";
@@ -17,14 +19,14 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const executableName = process.platform === "win32" ? "t3.exe" : "t3";
-const executable = join(dirname(require.resolve("@t3code/t3-" + process.platform + "-" + process.arch + "/package.json")), executableName);
+const executable = join(dirname(require.resolve("${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}" + process.platform + "-" + process.arch + "/package.json")), executableName);
 const ipc = process.send !== undefined;
 const child = spawn(executable, process.argv.slice(2), {
   stdio: ipc ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
 });
 const fail = (error) => {
   if (!error) return;
-  process.stderr.write("t3: " + error.message + "\\n");
+  process.stderr.write("${FORK_IDENTITY.cliBin}: " + error.message + "\\n");
   child.kill("SIGTERM");
   process.exitCode = 1;
 };

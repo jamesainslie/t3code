@@ -98,7 +98,7 @@ describe.skipIf(HostProcessPlatform.defaultValue() !== "linux")("installer termi
             await NodeFSP.readFile(NodePath.join(versions, version, ".install-complete"), "utf8"),
           ).toBe("1.2.3\n");
           expect(
-            NodeChildProcess.execFileSync(NodePath.join(root, "bin/t3"), ["--version"], {
+            NodeChildProcess.execFileSync(NodePath.join(root, "bin/t3f"), ["--version"], {
               encoding: "utf8",
             }).trim(),
           ).toBe("t3 v1.2.3");

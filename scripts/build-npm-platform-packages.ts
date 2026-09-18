@@ -19,6 +19,7 @@
  * bundleDependencies needs an arborist tree these flattened installs are
  * not), whereas `npm publish <tarball>` uploads the bytes as given.
  */
+import { FORK_IDENTITY, forkPlatformPackageName } from "@t3tools/shared/forkIdentity";
 import { legacyCliLauncherScript } from "@t3tools/shared/legacyCliLauncher";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -43,8 +44,8 @@ import serverPackageJson from "../apps/server/package.json" with { type: "json" 
 
 import { windowsSystemTar } from "./build-cli-archive.ts";
 
-export const NPM_PLATFORM_PACKAGE_SCOPE = "@t3code";
-export const NPM_LAUNCHER_PACKAGE_NAME = "t3";
+export const NPM_PLATFORM_PACKAGE_SCOPE = FORK_IDENTITY.npm.platformPackageScope;
+export const NPM_LAUNCHER_PACKAGE_NAME = FORK_IDENTITY.npmPackageName;
 
 const encodePackageJson = Schema.encodeEffect(fromJsonStringPretty(Schema.Unknown));
 
@@ -85,7 +86,7 @@ export class NpmPackagesArchiveLayoutError extends Schema.TaggedError<NpmPackage
 }
 
 export function npmPlatformPackageName(platformKey: CliArchivePlatformKey): string {
-  return `${NPM_PLATFORM_PACKAGE_SCOPE}/t3-${platformKey}`;
+  return forkPlatformPackageName(platformKey);
 }
 
 /**
@@ -109,7 +110,7 @@ export function npmPlatformPackageManifest(
     version,
     description: `T3 Code CLI executable for ${platformKey}`,
     license: serverPackageJson.license,
-    repository: serverPackageJson.repository,
+    repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
     os: [os],
     cpu: [cpu],
     files: ["t3", "t3.exe", "client", "resource-monitor", "node_modules"],
@@ -163,7 +164,7 @@ export function npmPlatformPackageReadme(platformKey: CliArchivePlatformKey): st
     `npx ${NPM_LAUNCHER_PACKAGE_NAME}@latest`,
     "```",
     "",
-    "Source and documentation: https://github.com/pingdotgg/t3code",
+    `Source and documentation: ${FORK_IDENTITY.repositoryUrl}`,
     "",
   ].join("\n");
 }
@@ -178,8 +179,8 @@ export function npmLauncherPackageManifest(
     version,
     description: "T3 Code CLI. Installs the self-contained executable for this platform.",
     license: serverPackageJson.license,
-    repository: serverPackageJson.repository,
-    bin: { t3: "./bin/t3.js" },
+    repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
+    bin: { [FORK_IDENTITY.cliBin]: "./bin/t3.js" },
     files: ["bin", "dist"],
     optionalDependencies: Object.fromEntries(
       platformKeys.map((key) => [npmPlatformPackageName(key), version]),
@@ -203,14 +204,14 @@ const key = process.platform + "-" + process.arch;
 
 let packageDir;
 try {
-  packageDir = dirname(require.resolve("${NPM_PLATFORM_PACKAGE_SCOPE}/t3-" + key + "/package.json"));
+  packageDir = dirname(require.resolve("${NPM_PLATFORM_PACKAGE_SCOPE}/${FORK_IDENTITY.npm.platformPackagePrefix}" + key + "/package.json"));
 } catch {
   process.stderr.write(
     [
-      "t3: no T3 Code CLI build is available for this platform (" + key + ").",
+      "${FORK_IDENTITY.cliBin}: no ${FORK_IDENTITY.productBaseName} CLI build is available for this platform (" + key + ").",
       "Supported platforms: " + SUPPORTED.join(", ") + ".",
-      "If yours is listed, reinstall t3 so npm fetches its optional dependency.",
-      "The desktop app and release archives are at https://github.com/pingdotgg/t3code/releases",
+      "If yours is listed, reinstall ${NPM_LAUNCHER_PACKAGE_NAME} so npm fetches its optional dependency.",
+      "The desktop app and release archives are at ${FORK_IDENTITY.releasesUrl}",
       "",
     ].join("\\n"),
   );
@@ -220,7 +221,7 @@ try {
 const executable = join(packageDir, process.platform === "win32" ? "t3.exe" : "t3");
 const result = spawnSync(executable, process.argv.slice(2), { stdio: "inherit" });
 if (result.error) {
-  process.stderr.write("t3: failed to start " + executable + ": " + result.error.message + "\\n");
+  process.stderr.write("${FORK_IDENTITY.cliBin}: failed to start " + executable + ": " + result.error.message + "\\n");
   process.exit(1);
 }
 // A child killed by a signal has no status; report it the way a shell would.
