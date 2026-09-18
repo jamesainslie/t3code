@@ -205,7 +205,10 @@ const publishCmd = Command.make(
         .map((entry) => path.join(scopeDir, entry));
       if (platformTarballs.length === 0) {
         return yield* new ServerCliBuildAssetMissingError({
-          assetPath: path.join(scopeDir, `${FORK_IDENTITY.npm.platformPackagePrefix}<platform>.tgz`),
+          assetPath: path.join(
+            scopeDir,
+            `${FORK_IDENTITY.npm.platformPackagePrefix}<platform>.tgz`,
+          ),
         });
       }
       if (!(yield* fs.exists(launcherTarball))) {

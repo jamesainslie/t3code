@@ -117,7 +117,11 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       // Platform packages in CLI_ARCHIVE_PLATFORM_KEYS order, launcher last.
       assert.deepStrictEqual(
         outputs.map((output) => output.name),
-        ["@jamesainslie/t3code-darwin-arm64", "@jamesainslie/t3code-linux-x64", "@jamesainslie/t3code"],
+        [
+          "@jamesainslie/t3code-darwin-arm64",
+          "@jamesainslie/t3code-linux-x64",
+          "@jamesainslie/t3code",
+        ],
       );
       for (const output of outputs) {
         assert.isTrue(yield* fs.exists(output.tarball), output.tarball);
@@ -223,7 +227,12 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         yield* fs.makeDirectory(installedLauncher);
         const unpack = yield* run(
           "tar",
-          ["-xf", path.join(fixture.outputDir, "@jamesainslie/t3code.tgz"), "-C", installedLauncher],
+          [
+            "-xf",
+            path.join(fixture.outputDir, "@jamesainslie/t3code.tgz"),
+            "-C",
+            installedLauncher,
+          ],
           {
             cwd: fixture.root,
           },
