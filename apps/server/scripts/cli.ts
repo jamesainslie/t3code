@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
@@ -20,6 +21,10 @@ import {
   ServerCliDevelopmentIconTargetMissingError,
   ServerCliExecutableImportError,
 } from "./cliErrors.ts";
+
+const decodePackageIdentity = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String })),
+);
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("../../..", import.meta.url))),
@@ -219,7 +224,46 @@ const publishCmd = Command.make(
       if (config.provenance) args.push("--provenance");
       if (config.dryRun) args.push("--dry-run");
 
+      // npm refuses to republish a version, so a rerun after a partial
+      // publish (one package rejected, the rest already live) skips what
+      // landed instead of failing on the first tarball again. The build
+      // script leaves each package's directory beside its tarball.
+      const alreadyPublished = Effect.fn("alreadyPublished")(function* (tarball: string) {
+        const manifest = yield* fs
+          .readFileString(path.join(tarball.slice(0, -".tgz".length), "package.json"))
+          .pipe(Effect.flatMap(decodePackageIdentity));
+        const spawnCommand = yield* resolveSpawnCommand("npm", [
+          "view",
+          `${manifest.name}@${manifest.version}`,
+          "version",
+        ]);
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const exitCode = yield* spawner
+          .spawn(
+            ChildProcess.make(spawnCommand.command, spawnCommand.args, {
+              cwd: packagesDir,
+              stdout: "ignore",
+              stderr: "ignore",
+              shell: spawnCommand.shell,
+            }),
+          )
+          .pipe(
+            Effect.flatMap((child) => child.exitCode),
+            Effect.scoped,
+          );
+        return { ...manifest, published: exitCode === 0 };
+      });
+
       for (const tarball of [...platformTarballs, launcherTarball]) {
+        if (!config.dryRun) {
+          const existing = yield* alreadyPublished(tarball);
+          if (existing.published) {
+            yield* Effect.log(
+              `[cli] ${existing.name}@${existing.version} is already on npm, skipping`,
+            );
+            continue;
+          }
+        }
         const spawnCommand = yield* resolveSpawnCommand("npm", [...args, tarball]);
         yield* Effect.log(`[cli] npm ${args.join(" ")} ${path.basename(tarball)}`);
         yield* runCommand(
