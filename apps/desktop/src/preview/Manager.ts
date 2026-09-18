@@ -17,6 +17,8 @@ import type {
   PreviewAnnotationRect,
   PreviewAnnotationSubmissionResult,
   DesktopPreviewRecordingArtifact,
+  DesktopPreviewAuthRelay,
+  DesktopPreviewAuthRelayCallback,
   DesktopPreviewRecordingFrame,
   DesktopPreviewScreenshotArtifact,
   DesktopPreviewTabDefaults,
@@ -63,6 +65,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL } from "../ipc/channels.ts";
+import { AUTH_RELAY_RETURN_PAGE_HTML } from "./AuthRelayReturnPage.ts";
 import * as BrowserSession from "./BrowserSession.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
@@ -422,6 +425,39 @@ const nextZoomLevel = (current: number, direction: "in" | "out"): number => {
 
 type Listener = (tabId: string, state: PreviewTabState) => Effect.Effect<void>;
 type RecordingFrameListener = (frame: DesktopPreviewRecordingFrame) => Effect.Effect<void>;
+type AuthRelayCallbackListener = (event: DesktopPreviewAuthRelayCallback) => Effect.Effect<void>;
+
+const MIN_UNPRIVILEGED_PORT = 1_024;
+
+/**
+ * Whether a navigation is the return leg of the relay a tab was tagged with:
+ * the exact listener the sign-in advertised, or any unprivileged loopback
+ * origin when it advertised none. Mirrors the environment's own rule.
+ */
+export function matchesAuthRelay(relay: DesktopPreviewAuthRelay, url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (
+    parsed.protocol !== "http:" ||
+    (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") ||
+    !/^[1-9][0-9]{0,4}$/.test(parsed.port) ||
+    Number(parsed.port) < MIN_UNPRIVILEGED_PORT
+  ) {
+    return false;
+  }
+  return relay.origin === null
+    ? true
+    : parsed.origin === relay.origin && parsed.pathname === (relay.path ?? "/");
+}
+
+/** Plain page shown in place of the loopback response, which this machine can never load. */
+export const AUTH_RELAY_RETURN_PAGE_URL = `data:text/html;charset=utf-8,${encodeURIComponent(
+  AUTH_RELAY_RETURN_PAGE_HTML,
+)}`;
 
 type PreviewInputSignal =
   | { readonly kind: "pointer"; readonly x: number; readonly y: number; readonly button: number }
@@ -636,6 +672,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const attachedRef = yield* Ref.make<ReadonlyMap<number, ManagedListeners>>(new Map());
   const listenersRef = yield* Ref.make<ReadonlySet<Listener>>(new Set());
   const pointerEventListenersRef = yield* Ref.make<ReadonlySet<PointerEventListener>>(new Set());
+  const authRelayListenersRef = yield* Ref.make<ReadonlySet<AuthRelayCallbackListener>>(new Set());
+  // Read synchronously from navigation events, which must decide preventDefault on the spot.
+  const authRelays = new Map<string, DesktopPreviewAuthRelay>();
   const recordingFrameListenersRef = yield* Ref.make<ReadonlySet<RecordingFrameListener>>(
     new Set(),
   );
@@ -896,7 +935,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   });
 
   const deliverEvent = (
-    eventKind: "state-change" | "recording-frame" | "pointer-event",
+    eventKind: "state-change" | "recording-frame" | "pointer-event" | "auth-relay",
     tabId: string,
     delivery: () => Effect.Effect<void>,
   ) =>
@@ -1732,6 +1771,44 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>,
     ) => {
       if (event.isMainFrame && !event.isSameDocument) cancelFaviconCapture();
+      // A navigation Chromium already started cannot be cancelled here, but the
+      // loopback host is unreachable from this machine anyway; taking the URL
+      // now and replacing the page is as good as cancelling.
+      if (event.isMainFrame) relayNavigation(event, event.url);
+    };
+    // The return leg is normally a server-side redirect, which only
+    // will-redirect can cancel; will-navigate covers a page that navigates itself.
+    const willRedirect = (event: Electron.Event<Electron.WebContentsWillRedirectEventParams>) => {
+      if (event.isMainFrame) relayNavigation(event, event.url);
+    };
+    const willNavigate = (event: Electron.Event<Electron.WebContentsWillNavigateEventParams>) => {
+      relayNavigation(event, event.url);
+    };
+    const relayNavigation = (event: { preventDefault: () => void }, url: string) => {
+      const relay = authRelays.get(tabId);
+      if (!relay || !matchesAuthRelay(relay, url)) return;
+      authRelays.delete(tabId);
+      event.preventDefault();
+      runFork(
+        Effect.gen(function* () {
+          const listeners = yield* Ref.get(authRelayListenersRef);
+          yield* Effect.forEach(
+            listeners,
+            (listener) =>
+              deliverEvent("auth-relay", tabId, () =>
+                // A tab only ever carries the response in its URL; a form POST
+                // never reaches a navigation the desktop can intercept, which
+                // is what the loopback host exists for.
+                listener({ tabId, hostId: null, url, method: "GET", body: null }),
+              ),
+            { discard: true },
+          );
+          yield* attemptPromise(
+            { operation: "authRelay.loadReturnPage", tabId, webContentsId: wc.id },
+            () => wc.loadURL(AUTH_RELAY_RETURN_PAGE_URL),
+          ).pipe(Effect.ignore);
+        }),
+      );
     };
     const audioStateChanged = (
       event: Electron.Event<Electron.WebContentsAudioStateChangedEventParams>,
@@ -1922,6 +1999,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       attempt({ operation: "detachListeners", tabId, webContentsId: wc.id }, () => {
         cancelFaviconCapture();
         wc.off("did-start-navigation", navigationStarted);
+        wc.off("will-redirect", willRedirect);
+        wc.off("will-navigate", willNavigate);
         wc.off("did-navigate", syncNavigation);
         wc.off("did-navigate-in-page", syncInPageNavigation);
         wc.off("page-title-updated", sync);
@@ -1942,6 +2021,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         // Other preview input, including CDP keys, belongs to the page.
         wc.setIgnoreMenuShortcuts(true);
         wc.on("did-start-navigation", navigationStarted);
+        wc.on("will-redirect", willRedirect);
+        wc.on("will-navigate", willNavigate);
         wc.on("did-navigate", syncNavigation);
         wc.on("did-navigate-in-page", syncInPageNavigation);
         wc.on("page-title-updated", sync);
@@ -2113,6 +2194,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       return [true, new Set([...closingTabIds, tabId])] as const;
     });
     if (!claimed) return;
+    authRelays.delete(tabId);
     return yield* withTabLifecycleLock(tabId, closeTabUnlocked(tabId)).pipe(
       Effect.ensuring(
         Ref.update(closingTabIdsRef, (closingTabIds) => {
@@ -2709,6 +2791,18 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     const wc = webContents.fromId(webContentsId);
     if (!wc || wc.isDestroyed()) return;
     yield* applyColorScheme(tabId, wc, colorScheme);
+  });
+
+  const setAuthRelay = Effect.fn("PreviewManager.setAuthRelay")(function* (
+    tabId: string,
+    relay: DesktopPreviewAuthRelay | null,
+  ) {
+    const tab = (yield* SynchronizedRef.get(tabsRef)).get(tabId);
+    if (!tab) {
+      return yield* new PreviewTabNotFoundError({ tabId });
+    }
+    if (relay === null) authRelays.delete(tabId);
+    else authRelays.set(tabId, relay);
   });
 
   const setAudioMuted = Effect.fn("PreviewManager.setAudioMuted")(function* (
@@ -4516,6 +4610,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     subscribeRecordingFrames: (listener: RecordingFrameListener) =>
       subscribe(recordingFrameListenersRef, listener),
     subscribeStateChanges: (listener: Listener) => subscribe(listenersRef, listener),
+    subscribeAuthRelayCallbacks: (listener: AuthRelayCallbackListener) =>
+      subscribe(authRelayListenersRef, listener),
+    setAuthRelay,
     zoomIn: (tabId: string) => applyZoom(tabId, (current) => nextZoomLevel(current, "in")),
     zoomOut: (tabId: string) => applyZoom(tabId, (current) => nextZoomLevel(current, "out")),
   };
@@ -4915,6 +5012,13 @@ export class PreviewManager extends Context.Service<
       input: PreviewAutomationWaitForInput,
     ) => Effect.Effect<void, PreviewManagerError>;
     readonly subscribeStateChanges: (listener: Listener) => Effect.Effect<void, never, Scope.Scope>;
+    readonly subscribeAuthRelayCallbacks: (
+      listener: AuthRelayCallbackListener,
+    ) => Effect.Effect<void, never, Scope.Scope>;
+    readonly setAuthRelay: (
+      tabId: string,
+      relay: DesktopPreviewAuthRelay | null,
+    ) => Effect.Effect<void, PreviewManagerError>;
     readonly subscribePointerEvents: (
       listener: PointerEventListener,
     ) => Effect.Effect<void, never, Scope.Scope>;
@@ -5009,6 +5113,8 @@ export const make = Effect.gen(function* PreviewManagerMake() {
     automationEvaluate: operations.automationEvaluate,
     automationWaitFor: operations.automationWaitFor,
     subscribeStateChanges: operations.subscribeStateChanges,
+    subscribeAuthRelayCallbacks: operations.subscribeAuthRelayCallbacks,
+    setAuthRelay: operations.setAuthRelay,
     subscribePointerEvents: operations.subscribePointerEvents,
     subscribeRecordingFrames: operations.subscribeRecordingFrames,
   });

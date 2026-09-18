@@ -23,6 +23,9 @@ import {
   TerminalWriteError,
   type TerminalAttachInput,
   type TerminalAttachStreamEvent,
+  type TerminalBrowserLaunchCancelInput,
+  type TerminalBrowserLaunchCompleteInput,
+  TerminalBrowserLaunchError,
   type TerminalClearInput,
   type TerminalCloseInput,
   type TerminalEvent,
@@ -58,7 +61,14 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
+import {
+  makeBrowserLaunchSocket,
+  type BrowserLaunchRegistration,
+  type BrowserLaunchSocket,
+} from "../auth-relay/browserLaunchSocket.ts";
+import type { LoopbackCallbackForwarder } from "../auth-relay/loopbackCallback.ts";
 import * as ServerConfig from "../config.ts";
+import { makeTerminalBrowserLaunches } from "./browserLaunches.ts";
 import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { makeClaudeEnvironment } from "../provider/Drivers/ClaudeHome.ts";
@@ -199,6 +209,19 @@ export class TerminalManager extends Context.Service<
     readonly close: (input: TerminalCloseInput) => Effect.Effect<void, TerminalError>;
 
     /**
+     * Replay a sign-in return URL against the loopback listener a command in
+     * this terminal is waiting on. One delivery per capture.
+     */
+    readonly completeBrowserLaunch: (
+      input: TerminalBrowserLaunchCompleteInput,
+    ) => Effect.Effect<void, TerminalBrowserLaunchError>;
+
+    /** Forget a captured browser launch without delivering anything. */
+    readonly cancelBrowserLaunch: (
+      input: TerminalBrowserLaunchCancelInput,
+    ) => Effect.Effect<void, TerminalBrowserLaunchError>;
+
+    /**
      * Subscribe to terminal runtime events with a direct callback.
      *
      * Returns an unsubscribe function.
@@ -284,6 +307,8 @@ interface TerminalSessionState {
   /** Normalized child command name when `hasRunningSubprocess`; cleared when idle. */
   childCommandLabel: string | null;
   runtimeEnv: Record<string, string> | null;
+  /** `BROWSER` token for the running process; released with the process. */
+  browserLaunch: BrowserLaunchRegistration | null;
 }
 
 interface PersistHistoryRequest {
@@ -397,8 +422,14 @@ function shouldPublishTerminalMetadataEvent(event: TerminalEvent): boolean {
       return true;
     case "output":
     case "cleared":
+    case "browser-launch":
+    case "browser-launch-settled":
       return false;
   }
+}
+
+function isBrowserLaunchEvent(event: TerminalEvent): boolean {
+  return event.type === "browser-launch" || event.type === "browser-launch-settled";
 }
 
 function terminalEventToAttachEvent(event: TerminalEvent): TerminalAttachStreamEvent | null {
@@ -415,6 +446,8 @@ function terminalEventToAttachEvent(event: TerminalEvent): TerminalAttachStreamE
     case "cleared":
     case "restarted":
     case "activity":
+    case "browser-launch":
+    case "browser-launch-settled":
       return event;
   }
 }
@@ -1283,6 +1316,7 @@ function stripAppImageRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 function createTerminalSpawnEnv(
   baseEnv: NodeJS.ProcessEnv,
   runtimeEnv?: Record<string, string> | null,
+  browserCommand?: string | null,
 ): NodeJS.ProcessEnv {
   const spawnEnv: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(baseEnv)) {
@@ -1299,6 +1333,15 @@ function createTerminalSpawnEnv(
   // Both PTY backends feed truecolor-capable terminal clients.
   if (spawnEnv.COLORTERM === undefined || spawnEnv.COLORTERM === "") {
     spawnEnv.COLORTERM = "truecolor";
+  }
+  // The user is at a client, never at the environment, so a browser opened
+  // here is always wrong even when the environment has a display. T3's
+  // capture helper wins over any BROWSER the user's own environment sets.
+  if (browserCommand) {
+    for (const key of Object.keys(spawnEnv)) {
+      if (key.toUpperCase() === "BROWSER") delete spawnEnv[key];
+    }
+    spawnEnv.BROWSER = browserCommand;
   }
   return stripAppImageRuntimeEnv(spawnEnv);
 }
@@ -1343,6 +1386,10 @@ interface TerminalManagerOptions {
     Record<string, string>,
     TerminalProviderInstanceNotFoundError | TerminalProviderEnvironmentError
   >;
+  /** Absent when the environment could not host the `BROWSER` helper; terminals then run without capture. */
+  browserLaunchSocket?: BrowserLaunchSocket;
+  /** Test seam for the loopback replay. */
+  forwardBrowserLaunchCallback?: LoopbackCallbackForwarder;
 }
 
 export const resolveProviderInstanceTerminalEnvironment = Effect.fn(
@@ -1388,12 +1435,21 @@ export const resolveProviderInstanceTerminalEnvironment = Effect.fn(
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.fn("TerminalManager.make")(function* () {
-  const { terminalLogsDir } = yield* ServerConfig.ServerConfig;
+  const { terminalLogsDir, stateDir } = yield* ServerConfig.ServerConfig;
   const ptyAdapter = yield* PtyAdapter.PtyAdapter;
   const portDiscovery = yield* PortScanner.PortDiscovery;
   const nativeTelemetry = yield* NativeTelemetryClient.NativeTelemetryClient;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const path = yield* Path.Path;
+  // A missing helper only costs sign-in capture; terminals must still open.
+  const browserLaunchSocket = yield* makeBrowserLaunchSocket({
+    directory: path.join(stateDir, "auth-relay"),
+  }).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning("terminal browser launches are not captured", { error }),
+    ),
+    Effect.option,
+  );
   const resolveProviderInstanceEnvironment = Effect.fn(
     "terminal.resolveProviderInstanceEnvironment",
   )((rawProviderInstanceId: string, env: Record<string, string> | undefined) =>
@@ -1415,6 +1471,9 @@ export const make = Effect.fn("TerminalManager.make")(function* () {
     registerTerminalProcesses: portDiscovery.registerTerminalProcesses,
     unregisterTerminal: portDiscovery.unregisterTerminal,
     resolveProviderInstanceEnvironment,
+    ...(Option.isSome(browserLaunchSocket)
+      ? { browserLaunchSocket: browserLaunchSocket.value }
+      : {}),
   });
 });
 
@@ -1520,6 +1579,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     options.maxRetainedInactiveSessions ?? DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS;
   const registerTerminalProcesses = options.registerTerminalProcesses ?? (() => Effect.void);
   const unregisterTerminal = options.unregisterTerminal ?? (() => Effect.void);
+  const browserLaunches = yield* makeTerminalBrowserLaunches(
+    options.forwardBrowserLaunchCallback ? { forward: options.forwardBrowserLaunchCallback } : {},
+  );
 
   yield* fileSystem.makeDirectory(logsDir, { recursive: true }).pipe(Effect.orDie);
 
@@ -2087,6 +2149,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         threadId: action.threadId,
         terminalId: action.terminalId,
       });
+      yield* releaseBrowserLaunches(session);
       yield* publishEvent({
         type: "exited",
         threadId: action.threadId,
@@ -2098,6 +2161,46 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       yield* evictInactiveSessionsIfNeeded();
       return;
     }
+  });
+
+  /**
+   * A launch outlives nothing: once the process is gone, its captures can no
+   * longer be delivered anywhere, so attached clients drop their banners.
+   */
+  const releaseBrowserLaunches = Effect.fn("terminal.releaseBrowserLaunches")(function* (
+    session: TerminalSessionState,
+  ) {
+    if (session.browserLaunch) {
+      yield* session.browserLaunch.release;
+      session.browserLaunch = null;
+    }
+    for (const captureId of browserLaunches.clear(session)) {
+      yield* publishEvent({
+        type: "browser-launch-settled",
+        threadId: session.threadId,
+        terminalId: session.terminalId,
+        sequence: advanceEventSequence(session).sequence,
+        captureId,
+        outcome: "cancelled",
+      });
+    }
+  });
+
+  const captureBrowserLaunch = Effect.fn("terminal.captureBrowserLaunch")(function* (
+    session: TerminalSessionState,
+    expectedPid: number,
+    url: string,
+  ) {
+    if (session.pid !== expectedPid || session.status !== "running") return;
+    const capture = yield* browserLaunches.capture(session, url);
+    if (!capture) return;
+    yield* publishEvent({
+      type: "browser-launch",
+      threadId: session.threadId,
+      terminalId: session.terminalId,
+      sequence: advanceEventSequence(session).sequence,
+      ...capture,
+    });
   });
 
   const stopProcess = Effect.fn("terminal.stopProcess")(function* (session: TerminalSessionState) {
@@ -2120,6 +2223,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       return [undefined, state] as const;
     });
 
+    yield* releaseBrowserLaunches(session);
     yield* clearKillFiber(process);
     yield* unregisterTerminal({
       threadId: session.threadId,
@@ -2223,12 +2327,36 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         Effect.andThen(
           Effect.gen(function* () {
             const shellCandidates = resolveShellCandidates(shellResolver, platform, baseEnv);
-            const terminalEnv = createTerminalSpawnEnv(baseEnv, session.runtimeEnv);
-            const spawnResult = yield* trySpawn(shellCandidates, terminalEnv, session);
+            // The token is bound to the process it is spawned with: the
+            // handler checks the pid so a launch reported by a stale helper
+            // cannot land on a later process in the same terminal.
+            let expectedPid = -1;
+            // A launcher that cannot be written costs the terminal its capture, not its shell.
+            const browserLaunch = options.browserLaunchSocket
+              ? yield* options.browserLaunchSocket
+                  .register((url) => captureBrowserLaunch(session, expectedPid, url))
+                  .pipe(
+                    Effect.catch((error) =>
+                      Effect.logWarning("terminal browser-launch capture unavailable", {
+                        detail: error.detail,
+                      }).pipe(Effect.as(null)),
+                    ),
+                  )
+              : null;
+            const terminalEnv = createTerminalSpawnEnv(
+              baseEnv,
+              session.runtimeEnv,
+              browserLaunch?.command,
+            );
+            const spawnResult = yield* trySpawn(shellCandidates, terminalEnv, session).pipe(
+              Effect.tapError(() => browserLaunch?.release ?? Effect.void),
+            );
             ptyProcess = spawnResult.process;
             startedShell = spawnResult.shellLabel;
 
             const processPid = ptyProcess.pid;
+            expectedPid = processPid;
+            session.browserLaunch = browserLaunch;
             const unsubscribeData = ptyProcess.onData((data) => {
               if (!enqueueProcessEvent(session, processPid, { type: "output", data })) {
                 return;
@@ -2277,6 +2405,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       if (ptyProcess) {
         yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
       }
+      yield* releaseBrowserLaunches(session);
 
       yield* modifyManagerState((state) => {
         cleanupProcessHandles(session);
@@ -2554,6 +2683,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         hasRunningSubprocess: false,
         childCommandLabel: null,
         runtimeEnv: normalizedRuntimeEnv(input.env),
+        browserLaunch: null,
       };
 
       const createdSession = session;
@@ -2747,6 +2877,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         if (event.threadId !== input.threadId || event.terminalId !== input.terminalId) {
           return Effect.void;
         }
+        if (!input.browserLaunchEvents && isBrowserLaunchEvent(event)) {
+          return Effect.void;
+        }
 
         if (!deliverLive) {
           bufferedEvents.push(event);
@@ -2763,6 +2896,22 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         type: "snapshot",
         snapshot: initialSnapshot,
       });
+
+      // A client that attaches after a command asked for a browser gets the
+      // capture with its snapshot; the banner must survive a reconnect.
+      if (input.browserLaunchEvents) {
+        for (const capture of browserLaunches.pending(input)) {
+          yield* listener({
+            type: "browser-launch",
+            threadId: input.threadId,
+            terminalId: input.terminalId,
+            ...(initialSnapshot.sequence !== undefined
+              ? { sequence: initialSnapshot.sequence }
+              : {}),
+            ...capture,
+          });
+        }
+      }
 
       for (const event of bufferedEvents) {
         if (isDuplicateAttachSnapshotEvent(event, initialSnapshot)) {
@@ -2975,6 +3124,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           hasRunningSubprocess: false,
           childCommandLabel: null,
           runtimeEnv: normalizedRuntimeEnv(input.env),
+          browserLaunch: null,
         };
         const createdSession = session;
         yield* modifyManagerState((state) => {
@@ -3029,6 +3179,50 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       ),
     );
 
+  const publishBrowserLaunchSettled = Effect.fn("terminal.publishBrowserLaunchSettled")(function* (
+    input: TerminalBrowserLaunchCancelInput,
+    outcome: "completed" | "cancelled",
+  ) {
+    const session = yield* getSession(input.threadId, input.terminalId);
+    if (Option.isNone(session)) return;
+    yield* publishEvent({
+      type: "browser-launch-settled",
+      threadId: input.threadId,
+      terminalId: input.terminalId,
+      sequence: advanceEventSequence(session.value).sequence,
+      captureId: input.captureId,
+      outcome,
+    });
+  });
+
+  const isBrowserLaunchPending = (input: TerminalBrowserLaunchCancelInput) =>
+    browserLaunches.pending(input).some((capture) => capture.captureId === input.captureId);
+
+  const completeBrowserLaunch: TerminalManager["Service"]["completeBrowserLaunch"] = (input) =>
+    Effect.gen(function* () {
+      // A failed attempt that finds the capture gone (expired, or already
+      // finished from another client) settles it for every client too, so
+      // nobody is left with a banner that can no longer do anything.
+      yield* browserLaunches
+        .complete(input)
+        .pipe(
+          Effect.tapError(() =>
+            isBrowserLaunchPending(input)
+              ? Effect.void
+              : publishBrowserLaunchSettled(input, "cancelled"),
+          ),
+        );
+      yield* publishBrowserLaunchSettled(input, "completed");
+    });
+
+  // Dismissing is idempotent: whether or not the capture was still known, the
+  // banner goes away on every client.
+  const cancelBrowserLaunch: TerminalManager["Service"]["cancelBrowserLaunch"] = (input) =>
+    Effect.gen(function* () {
+      browserLaunches.cancel(input);
+      yield* publishBrowserLaunchSettled(input, "cancelled");
+    });
+
   const close: TerminalManager["Service"]["close"] = (input) =>
     withThreadLock(
       input.threadId,
@@ -3059,6 +3253,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     clear,
     restart,
     close,
+    completeBrowserLaunch,
+    cancelBrowserLaunch,
     subscribe,
     subscribeMetadata,
   });

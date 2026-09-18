@@ -1160,6 +1160,68 @@ export const DesktopPreviewSetAudioMutedInputSchema = Schema.Struct({
   audioMuted: Schema.Boolean,
 });
 
+/**
+ * A tab opened for a pending sign-in relay. When the page returns to the
+ * loopback listener on the environment, the desktop intercepts the navigation
+ * and hands the return URL to the renderer instead of letting it fail. With
+ * `origin` set the return must match that origin and path exactly; without it
+ * any unprivileged loopback origin is taken, as the server would.
+ */
+export const DesktopPreviewAuthRelaySchema = Schema.Struct({
+  origin: Schema.NullOr(Schema.String),
+  path: Schema.NullOr(Schema.String),
+});
+export type DesktopPreviewAuthRelay = typeof DesktopPreviewAuthRelaySchema.Type;
+
+export const DesktopPreviewSetAuthRelayInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  relay: Schema.NullOr(DesktopPreviewAuthRelaySchema),
+});
+
+const DesktopPreviewAuthRelayHostIdSchema = Schema.String.check(Schema.isNonEmpty()).check(
+  Schema.isMaxLength(128),
+);
+
+/**
+ * Ask the desktop to stand in for a sign-in's loopback listener on this
+ * machine while the capture is pending. The listener the environment's tool
+ * opened cannot be reached from here, so the desktop binds the same port
+ * (`origin` is `http://127.0.0.1:<port>` or `http://localhost:<port>`) and
+ * catches whatever the browser sends back, a GET with a query or a form POST,
+ * from any browser on this machine, not only an in-app tab. `path` narrows
+ * the accepted request to the advertised path; null takes any path.
+ */
+export const DesktopPreviewHostAuthRelayInputSchema = Schema.Struct({
+  hostId: DesktopPreviewAuthRelayHostIdSchema,
+  origin: Schema.String,
+  path: Schema.NullOr(Schema.String),
+});
+export type DesktopPreviewHostAuthRelayInput = typeof DesktopPreviewHostAuthRelayInputSchema.Type;
+
+/** `hosted` is false when the port is already taken on this machine; the paste fallback then applies. */
+export const DesktopPreviewHostAuthRelayResultSchema = Schema.Struct({
+  hosted: Schema.Boolean,
+});
+export type DesktopPreviewHostAuthRelayResult = typeof DesktopPreviewHostAuthRelayResultSchema.Type;
+
+export const DesktopPreviewReleaseAuthRelayHostInputSchema = Schema.Struct({
+  hostId: DesktopPreviewAuthRelayHostIdSchema,
+});
+
+/**
+ * A sign-in response the desktop caught on its way to a loopback listener:
+ * from a tagged in-app tab (`tabId`) or from a hosted listener (`hostId`),
+ * exactly one of which is set. `body` is the urlencoded form of a POST
+ * response and null for a GET, whose response rides in `url`'s query.
+ */
+export interface DesktopPreviewAuthRelayCallback {
+  readonly tabId: string | null;
+  readonly hostId: string | null;
+  readonly url: string;
+  readonly method: "GET" | "POST";
+  readonly body: string | null;
+}
+
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
   theme: DesktopPreviewAnnotationThemeSchema,
 });
@@ -1371,6 +1433,22 @@ export interface DesktopPreviewBridge {
    * allowed; it simply takes effect once the page plays something.
    */
   setAudioMuted: (tabId: string, audioMuted: boolean) => Promise<void>;
+  /**
+   * Tag a tab as the browser for a pending sign-in relay, or clear the tag.
+   * The next main-frame navigation to the relay's loopback target is
+   * intercepted and reported through `onAuthRelayCallback` instead of
+   * loading; the tag is consumed by that one navigation.
+   */
+  setAuthRelay: (tabId: string, relay: DesktopPreviewAuthRelay | null) => Promise<void>;
+  /**
+   * Stand in for a pending sign-in's loopback listener on this machine until
+   * released. Responses arrive through `onAuthRelayCallback` with `hostId`.
+   */
+  hostAuthRelay: (
+    input: DesktopPreviewHostAuthRelayInput,
+  ) => Promise<DesktopPreviewHostAuthRelayResult>;
+  /** Stop standing in for a listener; a no-op for an unknown or already released host. */
+  releaseAuthRelayHost: (hostId: string) => Promise<void>;
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */
@@ -1434,6 +1512,7 @@ export interface DesktopPreviewBridge {
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
+  onAuthRelayCallback: (listener: (event: DesktopPreviewAuthRelayCallback) => void) => () => void;
 }
 
 export type ConfirmDialogVariant = "default" | "destructive";

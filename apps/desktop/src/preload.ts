@@ -4,6 +4,7 @@ import type {
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
+  DesktopPreviewAuthRelayCallback,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
@@ -298,6 +299,12 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_SET_COLOR_SCHEME_CHANNEL, { tabId, colorScheme }),
     setAudioMuted: (tabId, audioMuted) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_SET_AUDIO_MUTED_CHANNEL, { tabId, audioMuted }),
+    setAuthRelay: (tabId, relay) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_SET_AUTH_RELAY_CHANNEL, { tabId, relay }),
+    hostAuthRelay: (input) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_HOST_AUTH_RELAY_CHANNEL, input),
+    releaseAuthRelayHost: (hostId) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_RELEASE_AUTH_RELAY_HOST_CHANNEL, { hostId }),
     openDevTools: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL, { tabId }),
     listBrowserImportSources: () => ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_SOURCES_CHANNEL),
@@ -377,6 +384,18 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.on(IpcChannels.PREVIEW_STATE_CHANGE_CHANNEL, wrappedListener);
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_STATE_CHANGE_CHANNEL, wrappedListener);
+    },
+    onAuthRelayCallback: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, event: unknown) => {
+        if (typeof event !== "object" || event === null) return;
+        listener(event as DesktopPreviewAuthRelayCallback);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_AUTH_RELAY_CALLBACK_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_AUTH_RELAY_CALLBACK_CHANNEL,
+          wrappedListener,
+        );
     },
     onPointerEvent: (listener) => {
       const wrappedListener = (_event: Electron.IpcRendererEvent, pointerEvent: unknown) => {

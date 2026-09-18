@@ -11,59 +11,49 @@ launch T3 Code and configure providers afterwards.
 ## Command line
 
 ```bash
-curl -fsSL https://t3.codes/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jamesainslie/t3code/main/scripts/install.sh | sh
 ```
 
-On Windows, in PowerShell:
-
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
-
-This puts `t3` in `~/.local/bin`. If your shell reports `command not found`
+This puts `t3f` in `~/.local/bin` and keeps its data in `~/.t3f`, beside any
+upstream T3 Code install. If your shell reports `command not found`
 afterwards, that directory is not on your `PATH` yet; the installer prints the
 line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
 `T3CODE_VERSION` to pin an exact version.
 
-| Task                                             | Command                                                   |
-| ------------------------------------------------ | --------------------------------------------------------- |
-| Start the server and open the web app            | `t3`                                                      |
-| Start the server without a browser               | `t3 serve`                                                |
-| Keep it running in the background (macOS, Linux) | `t3 service install` ([details](./background-service.md)) |
-| Move to the newest release                       | `t3 update`                                               |
-| Remove it again                                  | `t3 uninstall`                                            |
+| Task                                             | Command                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| Start the server and open the web app            | `t3f`                                                      |
+| Start the server without a browser               | `t3f serve`                                                |
+| Keep it running in the background (macOS, Linux) | `t3f service install` ([details](./background-service.md)) |
+| Move to the newest release                       | `t3f update`                                               |
+| Remove it again                                  | `t3f uninstall`                                            |
 
-Run `t3 --help` for the full reference.
+Run `t3f --help` for the full reference.
 
-To try T3 Code once without installing it, run `npx t3@latest` instead (needs
-Node.js for `npx`).
+To try it once without installing, run `npx @jamesainslie/t3code@latest` instead
+(needs Node.js for `npx`).
 
-### Intel Macs
+### Intel Macs and Windows
 
-There is no `t3` executable for Intel Macs (the desktop app is available). To
-run a server there, build it from source with Node.js 24 and `vp`
-([Install vp](https://github.com/pingdotgg/t3code#install-vp)):
+The fork ships executables for Apple Silicon Macs and Linux (x64 and arm64).
+On an Intel Mac, use the desktop app, or build a server from source with
+Node.js 24 and `vp` ([Install vp](https://github.com/jamesainslie/t3code#install-vp)):
 
 ```bash
-git clone https://github.com/pingdotgg/t3code
+git clone https://github.com/jamesainslie/t3code
 cd t3code && vp i && vp run build:desktop
 node apps/server/dist/bin.mjs
 ```
 
-`t3 update` and the background service do not apply to a server run this way;
+`t3f update` and the background service do not apply to a server run this way;
 update it with `git pull` and a rebuild.
 
 ## Desktop app
 
-Download a release from [GitHub Releases](https://github.com/pingdotgg/t3code/releases),
-or use a package manager:
-
-| Platform           | Install                         |
-| ------------------ | ------------------------------- |
-| Windows            | `winget install T3Tools.T3Code` |
-| macOS              | `brew install --cask t3-code`   |
-| Arch Linux         | `yay -S t3code-bin`             |
-| Arch Linux nightly | `yay -S t3code-nightly-bin`     |
+Download a release from [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
+The fork installs as **T3 Code Fork** with its own data directory, so it runs
+alongside the upstream desktop app. Builds are published for macOS (Apple
+Silicon and Intel) and Linux (AppImage).
 
 ### Windows Subsystem for Linux
 
@@ -106,14 +96,14 @@ and enable the provider you want. Installation, login, and configuration belong
 to that environment's machine, even when you connect from a phone or another
 computer.
 
-| Provider    | Install and authenticate                                                                     |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| Codex       | Install [Codex CLI](https://developers.openai.com/codex/cli), then run `codex login`.        |
-| Claude      | Install [Claude Code](https://claude.com/product/claude-code), then run `claude auth login`. |
-| Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                        |
-| Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                           |
-| OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                     |
-| Antigravity | Install and sign in with Google from T3 Code's provider settings.                            |
+| Provider    | Install and authenticate                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| Codex       | Install [Codex CLI](https://developers.openai.com/codex/cli), then sign in from Settings or run `codex login`.        |
+| Claude      | Install [Claude Code](https://claude.com/product/claude-code), then sign in from Settings or run `claude auth login`. |
+| Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                                                 |
+| Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                                                    |
+| OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                                              |
+| Antigravity | Install and sign in with Google from T3 Code's provider settings.                                                     |
 
 Provider CLIs must be on the server's `PATH`. If T3 Code cannot find one, set its
 **Binary path** in provider settings, especially when using a version manager.

@@ -206,6 +206,8 @@ export function buildServerProvider(input: {
   slashCommands?: ReadonlyArray<ServerProviderSlashCommand>;
   skills?: ReadonlyArray<ServerProviderSkill>;
   probe: ProviderProbeResult;
+  /** What Settings may drive for this provider; absent means CLI-only setup. */
+  setup?: ServerProvider["setup"];
 }): ServerProviderDraft {
   const versionAdvisory = input.driver
     ? createProviderVersionAdvisory({
@@ -241,6 +243,7 @@ export function buildServerProvider(input: {
     skills: [...(input.skills ?? [])],
     ...(input.probe.usageLimits ? { usageLimits: input.probe.usageLimits } : {}),
     ...(versionAdvisory ? { versionAdvisory } : {}),
+    ...(input.setup ? { setup: input.setup } : {}),
   };
 }
 

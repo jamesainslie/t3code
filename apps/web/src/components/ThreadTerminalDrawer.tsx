@@ -77,11 +77,14 @@ import { readLocalApi } from "~/localApi";
 import { confirmTerminalClose } from "~/lib/terminalCloseConfirm";
 import { useClientSettings } from "../hooks/useSettings";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useReleaseSettledAuthRelayHosts } from "../browser/useHostedAuthRelay";
 import { useAttachedTerminalSession } from "../state/terminalSessions";
 import { serverEnvironment } from "../state/server";
 import { previewEnvironment } from "../state/preview";
 import { terminalEnvironment } from "../state/terminal";
+import { usePendingTerminalBrowserLaunches } from "../state/terminalBrowserLaunches";
 import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
+import { TerminalBrowserLaunchBanner } from "./terminal/TerminalBrowserLaunchBanner";
 import { useAtomCommand } from "../state/use-atom-command";
 import { preventTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import {
@@ -427,6 +430,8 @@ export function TerminalViewport({
   const terminalOutput = terminalSession.output;
   const terminalError = terminalSession.error;
   const terminalStatus = terminalSession.status;
+  const browserLaunches = usePendingTerminalBrowserLaunches(terminalSession.browserLaunches);
+  useReleaseSettledAuthRelayHosts(browserLaunches);
   const outputCursorRef = useRef<TerminalOutputCursor>(INITIAL_TERMINAL_OUTPUT_CURSOR);
   const synchronizedStatusRef = useRef<TerminalSessionState["status"]>("closed");
   const synchronizeTerminalStatus = useEffectEvent(
@@ -976,13 +981,24 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, environmentId, resizeEpoch, terminalId, threadId]);
+    // A banner above the surface changes the space left for the grid.
+  }, [browserLaunches.length, drawerHeight, environmentId, resizeEpoch, terminalId, threadId]);
   return (
-    <div
-      ref={containerRef}
-      tabIndex={-1}
-      className="relative h-full w-full overflow-hidden bg-[var(--terminal-background)]"
-    />
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--terminal-background)]">
+      {browserLaunches.map((launch) => (
+        <TerminalBrowserLaunchBanner
+          key={launch.captureId}
+          threadRef={threadRef}
+          terminalId={terminalId}
+          launch={launch}
+        />
+      ))}
+      <div
+        ref={containerRef}
+        tabIndex={-1}
+        className="relative min-h-0 w-full flex-1 overflow-hidden bg-[var(--terminal-background)]"
+      />
+    </div>
   );
 }
 

@@ -42,11 +42,25 @@ Opening a provider session can start MCP servers, run hooks, or launch a login b
 session creation for this reason. Antigravity likewise reserves authenticated catalog sessions for
 explicit setup or model refresh; background checks use initialization only.
 
-[Antigravity sign-in](../../apps/server/src/provider/AntigravityAuth.ts) belongs to the initiating
-T3 auth session. The client carries the return URL back to the environment because the provider's
-loopback listener may be on another machine. Forward only the callback for the owned pending flow;
-a successful callback HTTP request is not proof that provider authentication finished. The native
-process owns token exchange and storage.
+## Browser sign-in is relayed through the client
+
+A sign-in started on the environment prints an authorization URL and waits on a loopback listener
+that the user's browser, on another machine, never reaches. The
+[auth relay](../../apps/server/src/auth-relay/AuthRelayFlow.ts) closes that gap for every
+provider the same way: capture the URL on the environment, show it only to the T3 auth session that
+started the flow, carry the return URL back from that session, and replay it against the listener
+on the environment. Drivers supply how to obtain the URL, how to recognize their own callback, and
+how to sign out; the flow owns ownership, single flight, the deadline, and cancellation.
+
+Tools that open the page themselves are caught through the
+[`BROWSER` hijack](../../apps/server/src/auth-relay/browserLaunchCapture.ts), which reports the URL
+instead of launching anything on the environment. Replay accepts only the
+[exact listener](../../apps/server/src/auth-relay/loopbackCallback.ts) the tool advertised, with
+its state, and sends one raw request without redirects or logging. A successful callback request
+is not proof that authentication finished; the flow reports success only when the native tool
+confirms it. The native process owns token exchange and storage. Antigravity adds Google-only
+checks on top of the generic rules; see
+[its driver](../../apps/server/src/provider/AntigravityAuth.ts).
 
 Antigravity sign-out closes admission to new processes and stops existing processes before clearing account
 metadata. Otherwise a helper or resumed session could retain the old account. Cached model lists

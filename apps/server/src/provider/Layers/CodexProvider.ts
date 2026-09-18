@@ -69,6 +69,9 @@ const CODEX_PRESENTATION = {
   reportsContextWindow: true,
 } as const;
 
+/** Settings can sign in through the app-server; installation stays with the user. */
+const CODEX_SETUP = { canAuthenticate: true, canInstall: false } as const;
+
 export interface CodexAppServerProviderSnapshot {
   readonly account: CodexSchema.V2GetAccountResponse;
   readonly rateLimits?: CodexRateLimitsProbe;
@@ -499,6 +502,7 @@ const makePendingCodexProvider = (
     if (!codexSettings.enabled) {
       return buildServerProvider({
         presentation: CODEX_PRESENTATION,
+        setup: CODEX_SETUP,
         enabled: false,
         checkedAt,
         models,
@@ -515,6 +519,7 @@ const makePendingCodexProvider = (
 
     return buildServerProvider({
       presentation: CODEX_PRESENTATION,
+      setup: CODEX_SETUP,
       enabled: true,
       checkedAt,
       models,
@@ -585,6 +590,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   if (!codexSettings.enabled) {
     return buildServerProvider({
       presentation: CODEX_PRESENTATION,
+      setup: CODEX_SETUP,
       enabled: false,
       checkedAt,
       models: emptyModels,
@@ -617,6 +623,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     const installed = !isCodexAppServerSpawnError(error);
     return buildServerProvider({
       presentation: CODEX_PRESENTATION,
+      setup: CODEX_SETUP,
       enabled: codexSettings.enabled,
       checkedAt,
       models: emptyModels,
@@ -639,6 +646,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   if (Option.isNone(probeResult.success)) {
     return buildServerProvider({
       presentation: CODEX_PRESENTATION,
+      setup: CODEX_SETUP,
       enabled: codexSettings.enabled,
       checkedAt,
       models: emptyModels,
@@ -673,6 +681,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   return buildServerProvider({
     presentation: CODEX_PRESENTATION,
+    setup: CODEX_SETUP,
     enabled: codexSettings.enabled,
     checkedAt,
     models: snapshot.models,

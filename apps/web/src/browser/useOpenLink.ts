@@ -15,6 +15,7 @@ import {
   resolveBrowserLinkTargetPreference,
   resolveLinkTarget,
 } from "./browserLinkTarget";
+import { tagAuthRelayTab, type AuthRelayTag } from "./authRelayTabs";
 import { BrowserSettingsReadError, openUrlInPreview } from "./openFileInPreview";
 
 const NO_MODIFIER = { metaKey: false, ctrlKey: false } as const;
@@ -36,6 +37,8 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
     readonly event?: { readonly metaKey: boolean; readonly ctrlKey: boolean };
     /** Thread to open beside when it is not the hook's own, e.g. a sidebar row's. */
     readonly threadRef?: ScopedThreadRef | undefined;
+    /** A pending sign-in this link belongs to; an in-app tab is tagged so the desktop can relay its return. */
+    readonly authRelay?: AuthRelayTag | undefined;
   },
 ) => Promise<void> {
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
@@ -53,6 +56,7 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
         if (isAtomCommandInterrupted(result)) return;
         if (result._tag === "Success") {
           recordVisitForThread(targetThreadRef, url);
+          if (options.authRelay) await tagAuthRelayTab(result.value, options.authRelay);
           return;
         }
         const failure = squashAtomCommandFailure(result);

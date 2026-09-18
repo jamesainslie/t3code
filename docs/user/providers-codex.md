@@ -4,6 +4,24 @@ For one account, use the default Codex provider with your normal Codex login.
 [Provider setup](./install.md#providers) covers installation, Settings > Providers,
 and custom binaries or environment variables.
 
+## Sign in from T3 Code
+
+On web or desktop, open **Settings > Providers**, choose the environment that runs
+your project, open the Codex instance, and choose **Sign in**. T3 Code asks Codex for
+a device code when the installed version offers one: open the sign-in page on the
+device you are using, enter the code shown in settings, and wait for T3 Code to
+confirm the account. Nothing needs to be pasted back.
+
+Older Codex versions use a browser sign-in that returns to a `localhost` page on
+the environment. From another device that page does not load; copy its full
+address, including everything after `?`, into the return URL field and choose
+**Continue**. Only the T3 Code client that started the sign-in can finish it, and a
+link is valid for five minutes.
+
+**Sign out** in the same place removes the saved login for that instance and stops
+its running threads. `codex login` and `codex logout` on the environment still work
+and T3 Code picks up the result on the next status refresh.
+
 ## Use multiple accounts
 
 A shared Codex home with a shadow home lets work and personal accounts continue
