@@ -1,4 +1,6 @@
 import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
+import { isMermaidFenceComplete } from "@t3tools/client-runtime/mermaid";
+import { MermaidDiagram } from "./chat/MermaidDiagram";
 import { useAtomValue } from "@effect/atom-react";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
@@ -207,6 +209,7 @@ interface ChatMarkdownProps {
   environmentId?: EnvironmentId | undefined;
   onTaskListChange?: ((input: { markerOffset: number; checked: boolean }) => void) | undefined;
   isStreaming?: boolean;
+  onRepairMermaid?: ((prompt: string) => void) | undefined;
   skills?: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   className?: string;
   /** Treat single newlines as hard breaks — chat-style user input. */
@@ -2257,6 +2260,7 @@ function useChatMarkdownState({
   isStreaming = false,
   skills = EMPTY_MARKDOWN_SKILLS,
   onUseArtifactTemplate,
+  onRepairMermaid,
   imageBaseDir,
   onImageExpand,
   renderContextReference,
@@ -2669,6 +2673,7 @@ function useChatMarkdownState({
       markdownFileLinkMetaByHref,
       onTaskListChange,
       onUseArtifactTemplate,
+      onRepairMermaid,
       openChangeRequestLink,
       openDeferredMarkdownLink,
       openExternalLinkInPreview,
@@ -2699,6 +2704,7 @@ function useChatMarkdownState({
       markdownFileLinkMetaByHref,
       onTaskListChange,
       onUseArtifactTemplate,
+      onRepairMermaid,
       openChangeRequestLink,
       openDeferredMarkdownLink,
       openExternalLinkInPreview,
@@ -3254,13 +3260,31 @@ const CHAT_MARKDOWN_COMPONENTS = {
     return <MarkdownDetails open={detailsOpen}>{children}</MarkdownDetails>;
   },
   pre: function MarkdownPre({ node, children, ...props }) {
-    const { resolvedTheme, diffThemeName, isStreaming } = use(ChatMarkdownRendererContext);
+    const { resolvedTheme, diffThemeName, isStreaming, text, onRepairMermaid } = use(
+      ChatMarkdownRendererContext,
+    );
     const codeBlock = extractCodeBlock(children);
     if (!codeBlock) {
       return <pre {...props}>{children}</pre>;
     }
 
     const language = extractFenceLanguage(codeBlock.className);
+    if (language?.toLowerCase() === "mermaid") {
+      const start = node?.position?.start.offset;
+      const end = node?.position?.end.offset;
+      const complete =
+        start !== undefined &&
+        end !== undefined &&
+        isMermaidFenceComplete(text.slice(start, end), codeBlock.code);
+      return (
+        <MermaidDiagram
+          source={codeBlock.code.replace(/\n$/, "")}
+          theme={resolvedTheme}
+          pending={isStreaming && !complete}
+          onRepair={onRepairMermaid}
+        />
+      );
+    }
     const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
     return (
       <MarkdownCodeBlock
