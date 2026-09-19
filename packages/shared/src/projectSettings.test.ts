@@ -272,3 +272,37 @@ describe("resolveWorktreeCleanup", () => {
     ).toBe(8);
   });
 });
+
+describe("project GitHub account override", () => {
+  it("resolves a project GitHub account override with source project", () => {
+    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      projectSettingsOverrides: { [projectId]: { gitHubAccount: "work" } },
+    });
+    const resolved = resolveProjectSettings(settings, projectId);
+    expect(resolved.overrides.gitHubAccount).toBe("work");
+    expect(resolved.sources.gitHubAccount).toBe("project");
+    expect(
+      resolveProjectSettings(settings, otherProjectId).overrides.gitHubAccount,
+    ).toBeUndefined();
+    expect(resolveProjectSettings(settings, otherProjectId).sources.gitHubAccount).toBe(
+      "environment",
+    );
+  });
+
+  it("clearing gitHubAccount removes the key and drops an empty entry", () => {
+    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      projectSettingsOverrides: { [projectId]: { gitHubAccount: "work", defaultAutoPull: true } },
+    });
+    expect(clearProjectSettingsOverrides(settings, projectId, ["gitHubAccount"])).toEqual({
+      defaultAutoPull: true,
+    });
+    const only = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      projectSettingsOverrides: { [projectId]: { gitHubAccount: "work" } },
+    });
+    expect(clearProjectSettingsOverrides(only, projectId, ["gitHubAccount"])).toBeNull();
+    expect(
+      applyServerSettingsPatch(only, { projectSettingsOverrides: { [projectId]: null } })
+        .projectSettingsOverrides,
+    ).toEqual({});
+  });
+});

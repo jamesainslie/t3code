@@ -123,6 +123,10 @@
       "types": "./src/projectSettings.ts",
       "import": "./src/projectSettings.ts"
     },
+    "./gitHubAccountRouting": {
+      "types": "./src/gitHubAccountRouting.ts",
+      "import": "./src/gitHubAccountRouting.ts"
+    },
     "./threadEnvMode": {
       "types": "./src/threadEnvMode.ts",
       "import": "./src/threadEnvMode.ts"

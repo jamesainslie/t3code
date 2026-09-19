@@ -69,6 +69,50 @@ describe("mobile project settings scope", () => {
     expect(secondSettings.responseStreamingMode).toBe("token");
   });
 
+  it("writes gitHubAccount into the project's overrides", () => {
+    const settings: ServerSettings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: { [firstProject]: { defaultAutoPull: true } },
+    };
+    const targets = resolveMobileSettingsTargets(
+      [environment(firstId, settings)],
+      [{ environmentId: firstId, id: firstProject }],
+    );
+
+    expect(planMobileScopedSettingsPatch(targets, true, { gitHubAccount: "work" })).toEqual([
+      {
+        environmentId: firstId,
+        patch: {
+          projectSettingsOverrides: {
+            [firstProject]: { defaultAutoPull: true, gitHubAccount: "work" },
+          },
+        },
+      },
+    ]);
+    // The account is a project-only override; no environment write can carry it.
+    expect(planMobileScopedSettingsPatch(targets, false, { gitHubAccount: "work" })).toEqual([]);
+  });
+
+  it("clears gitHubAccount and keeps the project's other overrides", () => {
+    const settings: ServerSettings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: {
+        [firstProject]: { defaultAutoPull: true, gitHubAccount: "work" },
+      },
+    };
+    const targets = resolveMobileSettingsTargets(
+      [environment(firstId, settings)],
+      [{ environmentId: firstId, id: firstProject }],
+    );
+
+    expect(planMobileScopedSettingsClear(targets, ["gitHubAccount"])).toEqual([
+      {
+        environmentId: firstId,
+        patch: { projectSettingsOverrides: { [firstProject]: { defaultAutoPull: true } } },
+      },
+    ]);
+  });
+
   it("resets only the selected page's override and rejects environment-wide writes", () => {
     const settings: ServerSettings = {
       ...DEFAULT_SERVER_SETTINGS,

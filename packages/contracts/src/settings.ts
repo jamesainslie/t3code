@@ -910,6 +910,27 @@ export const SourceControlWritingStyleSettings = Schema.Struct({
 });
 export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyleSettings.Type;
 
+/** A `gh` login on one host. Case is preserved for display; matching is case-insensitive. */
+export const GitHubAccountLogin = TrimmedNonEmptyString;
+export type GitHubAccountLogin = typeof GitHubAccountLogin.Type;
+
+/** Repository owner pattern: literal characters plus `*` wildcards, matched against the whole owner. */
+export const GitHubOwnerPattern = TrimmedNonEmptyString.check(
+  Schema.isPattern(/^[A-Za-z0-9._*-]+$/, { description: "owner name or pattern using *" }),
+);
+export type GitHubOwnerPattern = typeof GitHubOwnerPattern.Type;
+
+/** One account rule. Rules are ordered; the first whose host and owner match wins. */
+export const GitHubAccountRule = Schema.Struct({
+  host: TrimmedNonEmptyString.pipe(Schema.withDecodingDefault(Effect.succeed("github.com"))),
+  owner: GitHubOwnerPattern,
+  login: GitHubAccountLogin,
+});
+export type GitHubAccountRule = typeof GitHubAccountRule.Type;
+
+export const GitHubAccountRules = Schema.Array(GitHubAccountRule);
+export type GitHubAccountRules = typeof GitHubAccountRules.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 export const DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL = Duration.minutes(5);
 
@@ -1005,6 +1026,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "sidebarAutoSettleAfterDays",
   "continueThreadsAfterServerUpdate",
   "responseStreamingMode",
+  "gitHubAccount",
 ] as const;
 export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTING_KEYS)[number];
 
@@ -1031,6 +1053,8 @@ export const ProjectSettingsOverrides = Schema.Struct({
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
+  // Non-nullable on purpose: clearing the override is always "delete the key".
+  gitHubAccount: Schema.optionalKey(GitHubAccountLogin),
 } satisfies Record<ProjectScopedServerSettingKey, unknown>);
 export type ProjectSettingsOverrides = typeof ProjectSettingsOverrides.Type;
 
@@ -1193,6 +1217,8 @@ export const ServerSettings = Schema.Struct({
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  /** Ordered owner rules that choose a `gh` account per repository; empty keeps the active account. */
+  gitHubAccountRules: GitHubAccountRules.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sourceControlWriterModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -1476,6 +1502,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  gitHubAccountRules: Schema.optionalKey(GitHubAccountRules),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   observability: Schema.optionalKey(
     Schema.Struct({

@@ -29,11 +29,21 @@ import {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** Server-local credential scope; never put its value in RPC payloads or cache keys. */
-export const PinnedGitHubCredential = Context.Reference<{
+export interface PinnedGitHubCredentialValue {
   readonly host: string;
   readonly token: Redacted.Redacted<string>;
   readonly credentialFingerprint: string;
-} | null>("t3/sourceControl/PinnedGitHubCredential", { defaultValue: () => null });
+  /**
+   * `host` (the default) pins a credential a caller verified against an explicit host, so every
+   * command must name that host. `checkout` pins the account selected for the checkout's own
+   * remote, so host-less commands that read the remote from the working directory may run too.
+   */
+  readonly scope?: "host" | "checkout" | undefined;
+}
+export const PinnedGitHubCredential = Context.Reference<PinnedGitHubCredentialValue | null>(
+  "t3/sourceControl/PinnedGitHubCredential",
+  { defaultValue: () => null },
+);
 
 export const AllowGitHubReserve = Context.Reference<boolean>(
   "t3/sourceControl/AllowGitHubReserve",
@@ -67,9 +77,13 @@ function commandHosts(args: ReadonlyArray<string>): Array<string | null> {
   return hosts;
 }
 
-function targetsVerifiedHost(args: ReadonlyArray<string>, host: string): boolean {
+function pinAllowsCommand(
+  args: ReadonlyArray<string>,
+  credential: PinnedGitHubCredentialValue,
+): boolean {
   const hosts = commandHosts(args);
-  return hosts.length > 0 && hosts.every((target) => target === host);
+  if (hosts.length === 0) return credential.scope === "checkout";
+  return hosts.every((target) => target === credential.host);
 }
 
 const gitHubCliFailureFields = {
@@ -403,7 +417,7 @@ export const make = Effect.gen(function* () {
   const executeRaw: GitHubCli["Service"]["execute"] = Effect.fn("GitHubCli.executeRaw")(
     function* (input) {
       const credential = yield* PinnedGitHubCredential;
-      if (credential !== null && !targetsVerifiedHost(input.args, credential.host)) {
+      if (credential !== null && !pinAllowsCommand(input.args, credential)) {
         return yield* new GitHubCliCommandError({
           command: "gh",
           cwd: input.cwd,
@@ -472,7 +486,7 @@ export const make = Effect.gen(function* () {
       )
         return yield* executeRaw(input);
       const credential = yield* PinnedGitHubCredential;
-      if (credential !== null && !targetsVerifiedHost(input.args, credential.host))
+      if (credential !== null && !pinAllowsCommand(input.args, credential))
         return yield* executeRaw(input);
       const allowReserve = input.allowReserve ?? (yield* AllowGitHubReserve);
       const host = (

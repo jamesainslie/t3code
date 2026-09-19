@@ -12,8 +12,10 @@ import {
 } from "@t3tools/contracts";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -51,6 +53,21 @@ function samePullRequest(
 
 /** Startup lookups per settled thread before discovery gives up on it. */
 export const BACKFILL_ATTEMPTS = 5;
+/** Full passes between rollups of lookups that keep failing; one per hour at the minute cadence. */
+const FAILURE_ROLLUP_CYCLES = 60;
+
+/** One line that says how a lookup failed, so a repeat of the same failure can be recognised. */
+function failureTag(cause: Cause.Cause<unknown>): string {
+  const error = Cause.squash(cause);
+  const name =
+    typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
+      ? error._tag
+      : error instanceof Error
+        ? error.name
+        : typeof error;
+  const message = error instanceof Error ? error.message : String(error);
+  return `${name}: ${message.split("\n", 1)[0] ?? ""}`;
+}
 
 interface RefreshRequest {
   readonly threadId: ThreadId | null;
@@ -94,6 +111,51 @@ export const make = Effect.gen(function* () {
       else pendingBackfill.set(thread.id, remaining - 1);
     }
   };
+  // A checkout whose lookup keeps failing the same way (no gh, signed out, wrong account)
+  // would otherwise log a stack trace every minute. The first failure and every change of
+  // failure warn; repeats log at debug; groups still failing are rolled up every sixty full
+  // passes, which the periodic pass makes about once an hour.
+  const lookupFailures = new Map<
+    string,
+    { readonly tag: string; readonly count: number; readonly since: number }
+  >();
+  let cyclesSinceRollup = 0;
+  const reportLookupFailure = (
+    groupKey: string,
+    threadIds: ReadonlyArray<ThreadId>,
+    cause: Cause.Cause<unknown>,
+  ) =>
+    Effect.gen(function* () {
+      const tag = failureTag(cause);
+      const known = lookupFailures.get(groupKey);
+      if (known !== undefined && known.tag === tag) {
+        lookupFailures.set(groupKey, { ...known, count: known.count + 1 });
+        return yield* Effect.logDebug("thread branch pull request lookup still failing", {
+          threadIds,
+          failure: tag,
+          count: known.count + 1,
+        });
+      }
+      lookupFailures.set(groupKey, { tag, count: 1, since: yield* Clock.currentTimeMillis });
+      return yield* Effect.logWarning("thread branch pull request lookup failed", {
+        threadIds,
+        cause: Cause.pretty(cause),
+      });
+    });
+  const rollupLookupFailures = Effect.suspend(() => {
+    cyclesSinceRollup += 1;
+    if (cyclesSinceRollup < FAILURE_ROLLUP_CYCLES) return Effect.void;
+    cyclesSinceRollup = 0;
+    if (lookupFailures.size === 0) return Effect.void;
+    return Effect.logWarning("thread branch pull request lookups still failing", {
+      groups: [...lookupFailures].map(([key, failure]) => ({
+        key,
+        failure: failure.tag,
+        count: failure.count,
+        since: DateTime.formatIso(DateTime.makeUnsafe(failure.since)),
+      })),
+    });
+  });
 
   const synchronize = Effect.fn("ThreadPullRequestReactor.synchronize")(function* (
     request: RefreshRequest,
@@ -129,8 +191,8 @@ export const make = Effect.gen(function* () {
     );
 
     yield* Effect.forEach(
-      groups.values(),
-      (group) =>
+      groups,
+      ([groupKey, group]) =>
         Effect.gen(function* () {
           const first = group[0]!;
           const project = projects.get(first.projectId);
@@ -287,17 +349,28 @@ export const make = Effect.gen(function* () {
             { discard: true },
           );
         }).pipe(
+          // Any pass that reaches the end without failing clears the group's failure record,
+          // so the next failure warns again rather than hiding behind an old one.
+          Effect.tap(() => Effect.sync(() => lookupFailures.delete(groupKey))),
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
               ? Effect.failCause(cause)
-              : Effect.logWarning("thread branch pull request lookup failed", {
-                  threadIds: group.map((thread) => thread.id),
-                  cause: Cause.pretty(cause),
-                }).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
+              : reportLookupFailure(
+                  groupKey,
+                  group.map((thread) => thread.id),
+                  cause,
+                ).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
           ),
         ),
       { concurrency: 8, discard: true },
     );
+    // Only a full pass sees every group; a single-thread refresh must not forget the others.
+    if (request.threadId === null) {
+      for (const key of lookupFailures.keys()) {
+        if (!groups.has(key)) lookupFailures.delete(key);
+      }
+      yield* rollupLookupFailures;
+    }
   });
 
   const worker = yield* makeDrainableWorker((request: RefreshRequest) =>

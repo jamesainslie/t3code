@@ -369,6 +369,38 @@ describe("scoped settings writes", () => {
     ).toMatchObject({ serverWrites: [], unavailableReason: expect.stringContaining("update") });
   });
 
+  it("writes a project GitHub account override", () => {
+    const plan = planScopedSettingsPatch(project, [laptop, server], { gitHubAccount: "work" });
+    expect(plan.unavailableReason).toBeNull();
+    expect(plan.serverWrites).toEqual([
+      {
+        environmentId: server.environmentId,
+        label: server.label,
+        patch: { projectSettingsOverrides: { [projectId]: { gitHubAccount: "work" } } },
+      },
+      {
+        environmentId: laptop.environmentId,
+        label: laptop.label,
+        patch: { projectSettingsOverrides: { [laptopProjectId]: { gitHubAccount: "work" } } },
+      },
+    ]);
+  });
+
+  it("clears a project GitHub account override back to inherit", () => {
+    const withOverride = environment("Server", {
+      settings: { projectSettingsOverrides: { [projectId]: { gitHubAccount: "work" } } },
+    });
+    expect(
+      planScopedSettingsClear(checkout, [laptop, withOverride], ["gitHubAccount"]).serverWrites,
+    ).toEqual([
+      {
+        environmentId: server.environmentId,
+        label: server.label,
+        patch: { projectSettingsOverrides: { [projectId]: null } },
+      },
+    ]);
+  });
+
   it("clears overrides per member and removes an emptied entry", () => {
     const withOverrides = environment("Server", {
       settings: {

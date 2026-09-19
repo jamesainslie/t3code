@@ -8,6 +8,8 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useT3ProjectFileState } from "../../hooks/useT3ProjectFileScripts";
+import { useEnvironmentQuery } from "../../state/query";
+import { sourceControlEnvironment } from "../../state/sourceControl";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
 import {
   applyProviderInstanceSettings,
@@ -21,6 +23,7 @@ import { resolveEnvModeLabel } from "../BranchToolbar.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
 import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
+import { accountOptions, inheritedAccountLabel } from "./gitHubAccountSettings.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
@@ -35,6 +38,7 @@ import {
   SettingsSection,
 } from "./settingsLayout";
 import {
+  useClearScopedSettings,
   useScopedSettings,
   useScopedSettingsMixed,
   useScopedSettingSource,
@@ -78,6 +82,46 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const workspaceSource = useScopedSettingSource(["defaultThreadEnvMode"]);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const unavailable = connectedEnvironments.length === 0;
+  const clearSettings = useClearScopedSettings();
+  const mixedGitHubAccount = useScopedSettingsMixed(["gitHubAccount"]);
+  // The GitHub account row needs the representative environment's gh accounts and, at a
+  // project scope, that project's repository owner to say what "Inherit" resolves to.
+  const gitHubAccountSupported =
+    isProjectScope &&
+    connectedEnvironments.length > 0 &&
+    connectedEnvironments.every(
+      (environment) =>
+        environment.serverConfig?.environment.capabilities.gitHubAccountRouting === true,
+    );
+  const discovery = useEnvironmentQuery(
+    category === "source-control" && gitHubAccountSupported && target
+      ? sourceControlEnvironment.discovery({ environmentId: target.environmentId, input: {} })
+      : null,
+  );
+  const gitHubAccounts = discovery.data ? accountOptions(discovery.data) : [];
+  const gitHubProject =
+    scope.kind === "checkout"
+      ? scope.checkout
+      : scope.kind === "project"
+        ? (scope.members.find((member) => member.environmentId === target?.environmentId) ??
+          scope.members[0])
+        : undefined;
+  const gitHubAccountOverride =
+    target == null || target.projectId === null
+      ? undefined
+      : representative?.serverConfig?.settings.projectSettingsOverrides[target.projectId]
+          ?.gitHubAccount;
+  const gitHubOwner = gitHubProject?.repositoryIdentity?.owner;
+  const gitHubHost = gitHubProject?.repositoryIdentity?.canonicalKey?.split("/")[0];
+  const gitHubInheritLabel =
+    gitHubOwner === undefined || gitHubHost === undefined
+      ? "Applies to gh commands run in this project's checkouts."
+      : inheritedAccountLabel({
+          rules: settings.gitHubAccountRules,
+          host: gitHubHost,
+          owner: gitHubOwner,
+          accounts: gitHubAccounts,
+        });
 
   // A checkout's t3.json wins over the environment default when the project
   // has no override of its own; show which one "inherit" resolves to.
@@ -416,6 +460,50 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               </Select>
             }
           />
+          {gitHubAccountSupported && gitHubAccounts.length > 0 ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["gitHubAccount"]}
+              mixed={mixedGitHubAccount}
+              {...searchableSetting("github-account")}
+              description={
+                gitHubAccountOverride === undefined
+                  ? gitHubInheritLabel
+                  : `gh commands in this project's checkouts run as ${gitHubAccountOverride}.`
+              }
+              control={
+                <Select
+                  value={mixedGitHubAccount ? null : (gitHubAccountOverride ?? "inherit")}
+                  onValueChange={(value) => {
+                    if (value === "inherit") clearSettings(["gitHubAccount"]);
+                    else if (typeof value === "string") updateSettings({ gitHubAccount: value });
+                  }}
+                >
+                  <SelectTrigger size="sm" aria-label="GitHub account">
+                    <SelectValue>
+                      {(value: string | null) =>
+                        value === null ? "Mixed" : value === "inherit" ? "Inherit" : value
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    <SelectItem value="inherit">Inherit</SelectItem>
+                    {gitHubAccounts.map((account) => (
+                      <SelectItem key={account.login} value={account.login}>
+                        {account.active ? `${account.login} (active)` : account.login}
+                      </SelectItem>
+                    ))}
+                    {gitHubAccountOverride !== undefined &&
+                    !gitHubAccounts.some((account) => account.login === gitHubAccountOverride) ? (
+                      <SelectItem value={gitHubAccountOverride}>
+                        {`${gitHubAccountOverride} (not signed in)`}
+                      </SelectItem>
+                    ) : null}
+                  </SelectPopup>
+                </Select>
+              }
+            />
+          ) : null}
         </>
       ) : (
         <>

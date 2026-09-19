@@ -1,8 +1,10 @@
 import {
+  DEFAULT_SERVER_SETTINGS,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type EnvironmentId,
   type ProjectId,
   type ProjectScopedServerSettingKey,
+  type ProjectSettingsOverrides,
   type ServerSettings,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
@@ -12,6 +14,17 @@ import {
 } from "@t3tools/shared/projectSettings";
 
 import type { SettingsTarget } from "./settings-environment-filter";
+
+/** Environment settings plus the keys a project can override without an environment value. */
+export type MobileScopedSettingsPatch = ServerSettingsPatch &
+  Partial<
+    Pick<ProjectSettingsOverrides, Exclude<ProjectScopedServerSettingKey, keyof ServerSettings>>
+  >;
+
+// Override-only keys, such as the GitHub account, have no environment write to land in.
+const PROJECT_ONLY_KEYS = new Set<string>(
+  PROJECT_SCOPED_SERVER_SETTING_KEYS.filter((key) => !(key in DEFAULT_SERVER_SETTINGS)),
+);
 
 export interface ScopedMobileSettingsTarget {
   readonly environment: SettingsTarget;
@@ -48,10 +61,17 @@ export function resolveMobileSettingsTargets(
 export function planMobileScopedSettingsPatch(
   targets: readonly ScopedMobileSettingsTarget[],
   projectSelected: boolean,
-  patch: ServerSettingsPatch,
+  patch: MobileScopedSettingsPatch,
 ) {
   if (!projectSelected) {
-    return targets.map((target) => ({ environmentId: target.environment.environmentId, patch }));
+    const environmentPatch = Object.fromEntries(
+      Object.entries(patch).filter(([key]) => !PROJECT_ONLY_KEYS.has(key)),
+    ) as ServerSettingsPatch;
+    if (Object.keys(environmentPatch).length === 0) return [];
+    return targets.map((target) => ({
+      environmentId: target.environment.environmentId,
+      patch: environmentPatch,
+    }));
   }
   const keys = Object.keys(patch);
   if (

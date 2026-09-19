@@ -21,6 +21,7 @@ import { PullRequestOperationError } from "@t3tools/contracts";
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
 import { ForgejoCli } from "../sourceControl/ForgejoCli.ts";
@@ -192,6 +193,8 @@ function makeService(input: {
   readonly projects: ReadonlyArray<OrchestrationProjectShell>;
   readonly providers: ReadonlyArray<PullRequestProviderApi>;
   readonly resolveHandle?: SourceControlProviderRegistry.SourceControlProviderRegistry["Service"]["resolveHandle"];
+  /** The gh login selected per checkout root; unset checkouts use the active account. */
+  readonly accounts?: Readonly<Record<string, string>>;
 }) {
   // Built into the test's own scope rather than provided call by call: the marks store owns a
   // database, and `Effect.provide` would close it the moment the service was handed back.
@@ -203,6 +206,12 @@ function makeService(input: {
           resolveLink: () => undefined,
           resolveHandle:
             input.resolveHandle ?? (() => Effect.die("Unexpected provider refinement")),
+        }),
+        Layer.mock(GitHubAccountSelector.GitHubAccountSelector)({
+          forCheckout: ({ cwd }) => {
+            const login = input.accounts?.[cwd];
+            return Effect.succeed(login === undefined ? null : { host: "github.com", login });
+          },
         }),
         Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
           getProjectShells: (projectIds) =>
@@ -6541,5 +6550,109 @@ it.effect("keeps Azure continuation cursors separate for repositories with the s
     seen.length = 0;
     yield* service.list({ state: "open", cursors: { [key]: first.nextCursors[key]! } });
     assert.deepStrictEqual(seen, ["/org-b"]);
+  }),
+);
+
+it.effect("keeps viewers separate for two accounts on one host", () =>
+  Effect.gen(function* () {
+    const viewerFor: Record<string, string> = { "/work": "work-viewer", "/personal": "me" };
+    const service = yield* makeService({
+      projects: [
+        project({
+          id: "p1",
+          title: "work",
+          workspaceRoot: "/work",
+          repository: "geico-private/web",
+        }),
+        project({
+          id: "p2",
+          title: "personal",
+          workspaceRoot: "/personal",
+          repository: "acme/web",
+        }),
+      ],
+      providers: [
+        fakeProvider("github", {
+          getViewer: (input) => Effect.succeed(viewerFor[input.cwd] ?? "unknown"),
+          listChangeRequests: (input) =>
+            Effect.succeed({
+              items: [
+                changeRequest(input.viewer === "work-viewer" ? 1 : 2, "2026-07-02T00:00:00Z"),
+              ],
+              truncated: false,
+              continues: true,
+            }),
+        }),
+      ],
+      accounts: { "/work": "work" },
+    });
+
+    const result = yield* service.list({ state: "open" });
+
+    // Both repositories list, each read as its own account's viewer.
+    assert.deepStrictEqual(result.entries.map((entry) => entry.number).toSorted(), [1, 2]);
+    assert.strictEqual(
+      result.providers.filter((summary) => summary.host === "github.com").length,
+      1,
+    );
+  }),
+);
+
+it.effect("does not race checkouts selected for different accounts in one viewer lookup", () =>
+  Effect.gen(function* () {
+    const asked: string[] = [];
+    const service = yield* makeService({
+      projects: [
+        project({
+          id: "p1",
+          title: "work",
+          workspaceRoot: "/work",
+          repository: "geico-private/web",
+        }),
+        project({
+          id: "p2",
+          title: "work worktree",
+          workspaceRoot: "/work-worktree",
+          repository: "geico-private/web",
+        }),
+        project({
+          id: "p3",
+          title: "personal",
+          workspaceRoot: "/personal",
+          repository: "acme/web",
+        }),
+      ],
+      providers: [
+        fakeProvider("github", {
+          getViewer: (input) => {
+            asked.push(input.cwd);
+            return input.cwd === "/personal"
+              ? Effect.succeed("me")
+              : Effect.fail(unusable("github", "unauthenticated"));
+          },
+          listChangeRequests: () =>
+            Effect.succeed({
+              items: [changeRequest(1, "2026-07-02T00:00:00Z")],
+              truncated: false,
+              continues: true,
+            }),
+        }),
+      ],
+      accounts: { "/work": "work", "/work-worktree": "work" },
+    });
+
+    const result = yield* service.list({ state: "open" });
+
+    // The work checkouts were tried on their own and failed on their own: the personal checkout
+    // that succeeded on the same host never stood in for them, and vice versa.
+    assert.deepStrictEqual(asked.toSorted(), ["/personal", "/work", "/work-worktree"]);
+    assert.deepStrictEqual(
+      result.errors.map((error) => error.projectId),
+      ["p1"],
+    );
+    assert.deepStrictEqual(
+      result.entries.map((entry) => entry.projectId),
+      ["p3"],
+    );
   }),
 );

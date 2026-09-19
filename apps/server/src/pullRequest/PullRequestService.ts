@@ -74,6 +74,7 @@ import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/source
 import { AllowGitHubReserve } from "../sourceControl/GitHubCli.ts";
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
 import {
@@ -307,10 +308,21 @@ export interface SupportedProject {
   /** The host the repository lives on, which is the account boundary rather than the kind. */
   readonly host: string;
   /**
+   * The `gh` login selected for this checkout, or null for the host's active account. Together
+   * with `host` it is the account boundary: two checkouts on one host under different logins
+   * are two viewers and never share a lookup.
+   */
+  readonly account: string | null;
+  /**
    * The identity's canonical key, which is what this environment's own records are keyed by.
    * Unique where `repository` is not: Azure's is a bare name that repeats across an organisation.
    */
   readonly remote: string;
+}
+
+/** One key per (host, account) pair, which is what a viewer lookup answers for. */
+function viewerKeyOf(host: string, account: string | null): string {
+  return `${host}\0${account ?? ""}`;
 }
 
 /**
@@ -606,6 +618,7 @@ export const make = Effect.gen(function* () {
   const registry = yield* PullRequestProviderRegistry;
   const projections = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
+  const accounts = yield* GitHubAccountSelector.GitHubAccountSelector;
   const rateLimits = yield* SourceControlRateLimit.SourceControlRateLimit;
   const filesViewedStore = yield* PullRequestFilesViewed.PullRequestFilesViewedRepository;
   const readCache = yield* PullRequestReadCache.PullRequestReadCache;
@@ -707,7 +720,27 @@ export const make = Effect.gen(function* () {
           Effect.map((refinedProviders) => ({ refinedProviders, projects })),
         ),
       ),
-      Effect.map(({ refinedProviders, projects }) => {
+      // The account each GitHub checkout is routed to, read up front so the synchronous grouping
+      // below can key viewers and cursors by it.
+      Effect.flatMap(({ refinedProviders, projects }) =>
+        Effect.forEach(
+          projects,
+          (project) =>
+            project.repositoryIdentity?.provider === "github"
+              ? accounts
+                  .forCheckout({ cwd: project.workspaceRoot, projectId: project.id })
+                  .pipe(Effect.map((selected) => [project.id, selected?.login ?? null] as const))
+              : Effect.succeed([project.id, null] as const),
+          { concurrency: REPOSITORY_CONCURRENCY },
+        ).pipe(
+          Effect.map((entries) => ({
+            refinedProviders,
+            projects,
+            accountsByProject: new Map<string, string | null>(entries),
+          })),
+        ),
+      ),
+      Effect.map(({ refinedProviders, projects, accountsByProject }) => {
         const supported: SupportedProject[] = [];
         const unimplemented = new Map<
           string,
@@ -742,11 +775,13 @@ export const make = Effect.gen(function* () {
             continue;
           }
           const api = registry.get(kind);
+          const account = accountsByProject.get(project.id) ?? null;
+          const viewerKey = viewerKeyOf(host, account);
           // Recorded before the de-duplication below, so the viewer lookup keeps the alternates
           // the listing is about to drop.
           if (api !== null) {
-            const roots = viewerRoots.get(host);
-            if (roots === undefined) viewerRoots.set(host, [project.workspaceRoot]);
+            const roots = viewerRoots.get(viewerKey);
+            if (roots === undefined) viewerRoots.set(viewerKey, [project.workspaceRoot]);
             else if (!roots.includes(project.workspaceRoot)) roots.push(project.workspaceRoot);
           }
           const key = listCursorKey(
@@ -767,6 +802,7 @@ export const make = Effect.gen(function* () {
             api: withRateLimitBackoff(api, host, rateLimits),
             repository,
             host,
+            account,
             remote:
               kind === "azure-devops"
                 ? identity.canonicalKey
@@ -920,6 +956,7 @@ export const make = Effect.gen(function* () {
    */
   type ResolvedViewer = {
     readonly host: string;
+    readonly account: string | null;
     readonly kind: SourceControlProviderKind;
     readonly viewer: string | null;
     readonly error: PullRequestProviderError | null;
@@ -929,11 +966,13 @@ export const make = Effect.gen(function* () {
   // per read, three reads per page. Only a success is believed for a while: a failure is the
   // "is this host set up" answer the provider switcher shows, and holding it would keep saying
   // signed-out after the reader has signed in.
+  // Keyed by `viewerKeyOf(host, account)`: one answer per account on a host.
   const viewersByHost = new Map<string, { readonly at: number; readonly result: ResolvedViewer }>();
   const viewerFlights = yield* Cache.makeWith(
     (key: string): Effect.Effect<ResolvedViewer> => {
-      const [host, kind, roots] = JSON.parse(key) as [
+      const [host, account, kind, roots] = JSON.parse(key) as [
         string,
+        string | null,
         SourceControlProviderKind,
         ReadonlyArray<string>,
       ];
@@ -948,16 +987,20 @@ export const make = Effect.gen(function* () {
       return Effect.firstSuccessOf(roots.map((cwd) => api.getViewer({ cwd, host }))).pipe(
         Effect.map((viewer) => ({
           host,
+          account,
           kind,
           viewer: viewer as string | null,
           error: null as PullRequestProviderError | null,
         })),
         Effect.tap((result) =>
-          Effect.map(Clock.currentTimeMillis, (at) => viewersByHost.set(host, { at, result })),
+          Effect.map(Clock.currentTimeMillis, (at) =>
+            viewersByHost.set(viewerKeyOf(host, account), { at, result }),
+          ),
         ),
         Effect.catch((error) =>
           Effect.succeed({
             host,
+            account,
             kind,
             viewer: null,
             error,
@@ -980,23 +1023,30 @@ export const make = Effect.gen(function* () {
     options?: { readonly allowPaused: boolean },
   ) =>
     Effect.forEach(
-      [...new Set(projects.map(({ host }) => host))],
-      (host) =>
+      [
+        ...new Map(
+          projects.map((project) => [viewerKeyOf(project.host, project.account), project]),
+        ),
+      ],
+      ([viewerKey, { host, account }]) =>
         Effect.flatMap(Clock.currentTimeMillis, (now): Effect.Effect<ResolvedViewer> => {
-          const held = viewersByHost.get(host);
+          const held = viewersByHost.get(viewerKey);
           if (held !== undefined && now - held.at <= Duration.toMillis(VIEWER_CACHE_TTL)) {
             return Effect.succeed(held.result);
           }
-          const forHost = projects.filter((project) => project.host === host);
+          const forHost = projects.filter(
+            (project) => project.host === host && project.account === account,
+          );
           const api = forHost[0]!.api;
-          // Every checkout on the host, not just the ones that survived de-duplication: one
-          // unreadable worktree would otherwise report the whole host as signed out.
+          // Every checkout on the host under this account, not just the ones that survived
+          // de-duplication: one unreadable worktree would otherwise report the whole host as
+          // signed out. Checkouts routed to another account are another viewer entirely.
           const roots =
-            viewerRoots.get(host) ?? forHost.map(({ project }) => project.workspaceRoot);
+            viewerRoots.get(viewerKey) ?? forHost.map(({ project }) => project.workspaceRoot);
           // Nothing about the caller is in the key. A listing and a press for the same host and
           // roots are the same lookup, and putting them on separate flights would spawn two of
           // this host's CLIs on a cold page load, which is the coalescing this exists for.
-          const key = JSON.stringify([host, api.kind, [...new Set(roots)].sort()]);
+          const key = JSON.stringify([host, account, api.kind, [...new Set(roots)].sort()]);
           if (options?.allowPaused === true) return Cache.get(viewerFlights, key);
           // The pause is checked here rather than inside the lookup, so that it holds back the
           // callers nobody is waiting on without splitting the flight they share with a press.
@@ -1007,6 +1057,7 @@ export const make = Effect.gen(function* () {
             Effect.catch((error) =>
               Effect.succeed<ResolvedViewer>({
                 host,
+                account,
                 kind: api.kind,
                 viewer: null,
                 error: new PullRequestProviderError({
@@ -1125,15 +1176,31 @@ export const make = Effect.gen(function* () {
       }
 
       const viewerResults = yield* resolveViewers(projects, viewerRoots);
+      // The page sees one viewer per host; a host with several accounts shows the first that
+      // answered. Reads below use the viewer of the project's own account.
       const viewers: Record<string, string> = {};
+      const viewerByKey = new Map<string, string>();
       for (const result of viewerResults) {
-        if (result.viewer !== null) viewers[result.host] = result.viewer;
+        if (result.viewer === null) continue;
+        viewerByKey.set(viewerKeyOf(result.host, result.account), result.viewer);
+        viewers[result.host] ??= result.viewer;
       }
+      const viewerOfProject = (project: SupportedProject) =>
+        viewerByKey.get(viewerKeyOf(project.host, project.account));
+      const hostResults = [
+        ...new Map(
+          [...viewerResults]
+            .toSorted((left, right) =>
+              left.viewer === right.viewer ? 0 : left.viewer === null ? 1 : -1,
+            )
+            .map((result) => [result.host, result]),
+        ).values(),
+      ];
 
       // One summary per host, which is what the viewer lookup already answers for: two GitHub
       // hosts sign in separately, so collapsing them by kind would report one as the other.
       const providers: ReadonlyArray<PullRequestProviderSummary> = [
-        ...viewerResults.map((result) => ({
+        ...hostResults.map((result) => ({
           host: result.host,
           kind: result.kind,
           searchesOnHost:
@@ -1161,11 +1228,11 @@ export const make = Effect.gen(function* () {
         continuation === null
           ? projects
           : projects.filter(({ cursorKey }) => continuation.has(cursorKey));
-      const readable = selected.filter(({ host }) => viewers[host] !== undefined);
+      const readable = selected.filter((project) => viewerOfProject(project) !== undefined);
       // A host that could not be read still has projects, and they are absent from the list.
       // Reporting them keeps "N repositories were unavailable" honest instead of dropping them.
       const unreadable = selected
-        .filter(({ host }) => viewers[host] === undefined)
+        .filter((project) => viewerOfProject(project) === undefined)
         .map(({ project, repository }) => ({
           projectId: project.id,
           projectTitle: project.title,
@@ -1181,7 +1248,8 @@ export const make = Effect.gen(function* () {
         // nothing has asked for nothing, and a host it never mentioned being signed out is no
         // reason to refuse it.
         const errors = viewerResults.flatMap((result) =>
-          result.error === null || !selected.some(({ host }) => host === result.host)
+          result.error === null ||
+          !selected.some(({ host, account }) => host === result.host && account === result.account)
             ? []
             : [result.error],
         );
@@ -1210,7 +1278,7 @@ export const make = Effect.gen(function* () {
        */
       const readRepository = (project: SupportedProject): Effect.Effect<RepositoryBatch> => {
         {
-          const viewer = viewers[project.host]!;
+          const viewer = viewerOfProject(project)!;
           const key = project.cursorKey;
           const cursor = cursorOf(project);
           return project.api
@@ -1296,7 +1364,7 @@ export const make = Effect.gen(function* () {
         const separately = () =>
           Effect.forEach(chunk, readRepository, { concurrency: REPOSITORY_CONCURRENCY });
         if (readAcross === undefined) return separately();
-        const viewer = viewers[first.host]!;
+        const viewer = viewerOfProject(first)!;
         const cursor = cursorOf(first);
         return readAcross({
           cwd: first.project.workspaceRoot,
@@ -1400,7 +1468,7 @@ export const make = Effect.gen(function* () {
           separate.push(project);
           continue;
         }
-        const key = `${project.host}\n${cursorOf(project)?.updatedBefore ?? ""}`;
+        const key = `${viewerKeyOf(project.host, project.account)}\n${cursorOf(project)?.updatedBefore ?? ""}`;
         const group = together.get(key);
         if (group === undefined) together.set(key, [project]);
         else group.push(project);

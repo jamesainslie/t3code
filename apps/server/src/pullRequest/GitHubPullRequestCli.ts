@@ -12,6 +12,7 @@ import {
   resolvePullRequestAuthorFilter,
   PositiveInt,
   TrimmedNonEmptyString,
+  type ProjectId,
   type PullRequestAction,
   type PullRequestStackHead,
   type PullRequestActor,
@@ -32,6 +33,7 @@ import {
   type PullRequestUpdateMethod,
 } from "@t3tools/contracts";
 
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as GitHubCli from "../sourceControl/GitHubCli.ts";
 import * as GitHubGraphQlBudget from "../sourceControl/githubGraphQlBudget.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
@@ -443,7 +445,7 @@ export class GitHubPullRequestCli extends Context.Service<
   GitHubPullRequestCli,
   {
     readonly withVerifiedCredential: <A, E, R>(
-      input: { readonly cwd: string; readonly host: string },
+      input: { readonly cwd: string; readonly host: string; readonly projectId?: ProjectId },
       use: (identity: {
         readonly accountId: string;
         readonly viewer: string;
@@ -453,6 +455,7 @@ export class GitHubPullRequestCli extends Context.Service<
     readonly getRoutingIdentity: (input: {
       readonly cwd: string;
       readonly host: string;
+      readonly projectId?: ProjectId;
     }) => Effect.Effect<
       { readonly accountId: string; readonly viewer: string },
       GitHubPullRequestCliError
@@ -1059,6 +1062,7 @@ function actionArgs(
 export const make = Effect.gen(function* () {
   const github = yield* GitHubCli.GitHubCli;
   const graphQlBudget = yield* GitHubGraphQlBudget.GitHubGraphQlBudget;
+  const accounts = yield* GitHubAccountSelector.GitHubAccountSelector;
   const routingIdentities = new Map<
     string,
     {
@@ -1076,12 +1080,23 @@ export const make = Effect.gen(function* () {
     ),
   );
   const captureVerifiedCredential = Effect.fn("GitHubPullRequestCli.captureVerifiedCredential")(
-    function* (input: { readonly cwd: string; readonly host: string }) {
+    function* (input: {
+      readonly cwd: string;
+      readonly host: string;
+      readonly projectId?: ProjectId | undefined;
+    }) {
       const unavailable = () =>
         new GitHubViewerLoginUnavailableError({ command: "gh", cwd: input.cwd });
       const host = input.host.toLowerCase();
       const pinned = yield* GitHubCli.PinnedGitHubCredential;
       if (pinned !== null && pinned.host !== host) return yield* unavailable();
+      // The account selected for this checkout, if any; the token read names it so gh answers
+      // for that login rather than for whichever account happens to be active on the host.
+      const selected =
+        pinned !== null
+          ? null
+          : yield* accounts.forCheckout({ cwd: input.cwd, projectId: input.projectId });
+      const login = selected !== null && selected.host === host ? selected.login : null;
       // Only the digest is retained. Never attach credential lookup output to an error.
       const token =
         pinned !== null
@@ -1089,13 +1104,25 @@ export const make = Effect.gen(function* () {
           : (yield* github
               .execute({
                 cwd: input.cwd,
-                args: ["auth", "token", "--hostname", host],
+                args: [
+                  "auth",
+                  "token",
+                  "--hostname",
+                  host,
+                  ...(login === null ? [] : ["--user", login]),
+                ],
                 env: { GH_DEBUG: "" },
               })
               .pipe(Effect.mapError(unavailable))).stdout.trim();
       if (!token) return yield* unavailable();
-      const key = `${host}:${NodeCrypto.createHash("sha256").update(token).digest("hex")}`;
-      const credential = { host, token: Redacted.make(token), credentialFingerprint: key };
+      const digest = NodeCrypto.createHash("sha256").update(token).digest("hex");
+      const key = login === null ? `${host}:${digest}` : `${host}:${login}:${digest}`;
+      const credential = {
+        host,
+        token: Redacted.make(token),
+        credentialFingerprint: key,
+        scope: login === null ? ("host" as const) : ("checkout" as const),
+      };
       // A cold page may ask several times. Wait per credential and check again after the
       // first verification; cancellation releases the next waiter without losing its request.
       return yield* Effect.acquireUseRelease(
@@ -1150,13 +1177,14 @@ export const make = Effect.gen(function* () {
     use,
   ) =>
     captureVerifiedCredential(input).pipe(
-      Effect.flatMap(({ host, token, accountId, viewer, credentialFingerprint }) =>
+      Effect.flatMap(({ host, token, accountId, viewer, credentialFingerprint, scope }) =>
         use({ accountId, viewer, credentialFingerprint }).pipe(
           Effect.provideService(SourceControlRateLimit.CredentialScope, credentialFingerprint),
           Effect.provideService(GitHubCli.PinnedGitHubCredential, {
             host,
             token,
             credentialFingerprint,
+            scope,
           }),
         ),
       ),

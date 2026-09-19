@@ -1,6 +1,6 @@
 import { SettingsGroup } from "./SettingsGroup";
 import { InfoIcon, Undo2Icon } from "lucide-react";
-import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import * as Equal from "effect/Equal";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
@@ -28,6 +28,7 @@ import {
   listProjectOverrides,
   scopedSettingsAreMixed,
   scopedSettingsSource,
+  type ScopedSettingKey,
 } from "./scopedSettings";
 import { useClearProjectOverrides, useClearScopedSettings } from "./useScopedSettings";
 import {
@@ -36,7 +37,7 @@ import {
   type SettingOverridingProject,
 } from "./SettingInheritance";
 
-const EMPTY_SETTING_KEYS: readonly (keyof ServerSettings)[] = [];
+const EMPTY_SETTING_KEYS: readonly ScopedSettingKey[] = [];
 
 declare module "@tanstack/react-router" {
   interface HistoryState {
@@ -280,7 +281,7 @@ export function SettingsRow({
   onResetOverride?: () => void;
   control?: ReactNode;
   serverScoped?: boolean;
-  settingKeys?: readonly (keyof ServerSettings)[];
+  settingKeys?: readonly ScopedSettingKey[];
   mixed?: boolean;
   children?: ReactNode;
 }) {
@@ -399,7 +400,10 @@ export function SettingsRow({
         const environmentSettings = environmentSettingsById.get(candidate.environmentId);
         return (
           environmentSettings !== undefined &&
-          !Equal.equals(environmentSettings[key], DEFAULT_SERVER_SETTINGS[key])
+          !Equal.equals(
+            (environmentSettings as Record<string, unknown>)[key],
+            (DEFAULT_SERVER_SETTINGS as Record<string, unknown>)[key],
+          )
         );
       }),
     );

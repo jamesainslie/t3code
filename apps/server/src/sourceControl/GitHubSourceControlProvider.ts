@@ -60,24 +60,37 @@ function parseGitHubAuth(input: SourceControlAuthProbeInput) {
   const authStatus = parseGitHubAuthStatus(input.stdout);
   const authenticatedAccount = findAuthenticatedGitHubAccount(authStatus.accounts);
   const host = authenticatedAccount?.host;
+  // Every account the CLI knows, so clients can offer a choice between them.
+  const accounts = authStatus.accounts.map((entry) => ({
+    host: entry.host,
+    login: entry.account,
+    active: entry.active,
+    authenticated: entry.authenticated,
+  }));
 
   if (authenticatedAccount) {
-    return providerAuth({
-      status: "authenticated",
-      account: authenticatedAccount.account,
-      host,
-    });
+    return {
+      ...providerAuth({
+        status: "authenticated",
+        account: authenticatedAccount.account,
+        host,
+      }),
+      accounts,
+    };
   }
 
   const failedAccount = authStatus.accounts.find((entry) => entry.active) ?? authStatus.accounts[0];
   if (authStatus.parsed) {
-    return providerAuth({
-      status: "unauthenticated",
-      host: failedAccount?.host,
-      detail:
-        failedAccount?.error ??
-        "Run `gh auth login` to authenticate GitHub CLI with an active account.",
-    });
+    return {
+      ...providerAuth({
+        status: "unauthenticated",
+        host: failedAccount?.host,
+        detail:
+          failedAccount?.error ??
+          "Run `gh auth login` to authenticate GitHub CLI with an active account.",
+      }),
+      accounts,
+    };
   }
 
   // gh gained `auth status --json` in 2.81.0. Older versions reject the flag and exit

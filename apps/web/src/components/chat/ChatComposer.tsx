@@ -1242,6 +1242,12 @@ export interface ChatComposerHandle {
   toggleModelPicker: () => void;
   openControl: (command: KeybindingCommand) => void;
   isModelPickerOpen: () => boolean;
+  /** True while the prompt editor itself has DOM focus, so its own key handling applies. */
+  isEditorFocused: () => boolean;
+  /** True while a slash, mention, or similar inline menu is open in the editor. */
+  isMenuOpen: () => boolean;
+  /** Sends the current draft as a foreground turn, as the send button does. */
+  submit: () => void;
   compactContext: () => void;
   readSnapshot: () => {
     value: string;
@@ -5895,6 +5901,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       },
       compactContext: compactThreadContext,
       isModelPickerOpen: () => isComposerModelPickerOpen,
+      isEditorFocused: () => {
+        const active = document.activeElement;
+        return (
+          active instanceof Element &&
+          composerFormRef.current?.contains(active) === true &&
+          active.closest(
+            '[contenteditable="true"], [contenteditable="plaintext-only"], textarea',
+          ) !== null
+        );
+      },
+      isMenuOpen: () =>
+        composerMenuOpenRef.current || resolveActiveComposerTrigger().trigger !== null,
+      submit: () => submitComposer(undefined, "foreground"),
       readSnapshot: () => {
         return readComposerSnapshot();
       },
@@ -6034,6 +6053,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       getTimelineScrollableNode,
       isTimelineAtLogicalEnd,
       setIsComposerScrollCollapsed,
+      resolveActiveComposerTrigger,
+      submitComposer,
     ],
   );
 

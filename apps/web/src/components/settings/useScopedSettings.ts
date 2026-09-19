@@ -1,7 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   type ProjectScopedServerSettingKey,
-  type ServerSettings,
   type UnifiedSettings,
 } from "@t3tools/contracts";
 import { useCallback, useMemo } from "react";
@@ -23,6 +22,7 @@ import {
   scopedSettingsAreMixed,
   scopedSettingsSource,
   type ProjectOverrideEntry,
+  type ScopedSettingKey,
   type ScopedSettingsPatch,
 } from "./scopedSettings";
 
@@ -40,13 +40,13 @@ export function useScopedSettings<T = UnifiedSettings>(
   return useMemo(() => (selector ? selector(settings) : (settings as T)), [selector, settings]);
 }
 
-export function useScopedSettingsMixed(keys: readonly (keyof ServerSettings)[]): boolean {
+export function useScopedSettingsMixed(keys: readonly ScopedSettingKey[]): boolean {
   const { targets } = useSettingsScope();
   return scopedSettingsAreMixed(targets, keys);
 }
 
 /** Where the keys' effective values come from across the selected targets. */
-export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) {
+export function useScopedSettingSource(keys: readonly ScopedSettingKey[]) {
   const { targets } = useSettingsScope();
   return scopedSettingsSource(targets, keys);
 }

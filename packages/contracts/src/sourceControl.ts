@@ -118,11 +118,21 @@ export const SourceControlProviderAuthStatus = Schema.Literals([
 ]);
 export type SourceControlProviderAuthStatus = typeof SourceControlProviderAuthStatus.Type;
 
+export const SourceControlProviderAccount = Schema.Struct({
+  host: TrimmedNonEmptyString,
+  login: TrimmedNonEmptyString,
+  active: Schema.Boolean,
+  authenticated: Schema.Boolean,
+});
+export type SourceControlProviderAccount = typeof SourceControlProviderAccount.Type;
+
 export const SourceControlProviderAuth = Schema.Struct({
   status: SourceControlProviderAuthStatus,
   account: Schema.Option(TrimmedNonEmptyString),
   host: Schema.Option(TrimmedNonEmptyString),
   detail: Schema.Option(TrimmedNonEmptyString),
+  /** Every account the CLI knows for this provider; absent on servers that predate account selection. */
+  accounts: Schema.optionalKey(Schema.Array(SourceControlProviderAccount)),
 });
 export type SourceControlProviderAuth = typeof SourceControlProviderAuth.Type;
 

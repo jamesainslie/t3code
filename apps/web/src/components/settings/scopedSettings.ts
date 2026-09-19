@@ -20,7 +20,17 @@ import * as Equal from "effect/Equal";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
 
-export type ScopedSettingsPatch = ServerSettingsPatch & ClientSettingsPatch;
+/** Keys a project can override that have no environment-level value, such as the GitHub account. */
+type ProjectOnlyOverridesPatch = Partial<
+  Pick<ProjectSettingsOverrides, Exclude<ProjectScopedServerSettingKey, keyof ServerSettings>>
+>;
+
+/** A settings key a row can show: an environment setting or a project-only override key. */
+export type ScopedSettingKey = keyof ServerSettings | ProjectScopedServerSettingKey;
+
+export type ScopedSettingsPatch = ServerSettingsPatch &
+  ClientSettingsPatch &
+  ProjectOnlyOverridesPatch;
 
 interface ScopedSettingsEnvironment {
   readonly environmentId: EnvironmentId;
@@ -34,9 +44,11 @@ interface ScopedSettingsEnvironment {
   } | null;
 }
 
-const SERVER_KEYS = new Set<string>(Object.keys(ServerSettings.fields));
-const CLIENT_KEYS = new Set<string>(Object.keys(ClientSettingsSchema.fields));
+const ENVIRONMENT_KEYS = new Set<string>(Object.keys(ServerSettings.fields));
 const PROJECT_SCOPED_KEYS = new Set<string>(PROJECT_SCOPED_SERVER_SETTING_KEYS);
+// Project scopes also accept override-only keys, which no environment write can carry.
+const SERVER_KEYS = new Set<string>([...ENVIRONMENT_KEYS, ...PROJECT_SCOPED_KEYS]);
+const CLIENT_KEYS = new Set<string>(Object.keys(ClientSettingsSchema.fields));
 
 export function isProjectScopedSettingKey(key: string): key is ProjectScopedServerSettingKey {
   return PROJECT_SCOPED_KEYS.has(key);
@@ -122,13 +134,19 @@ export function resolveScopedSettingsTargets(
 
 export function scopedSettingsAreMixed(
   targets: readonly Pick<ScopedSettingsTarget, "settings">[],
-  keys: readonly (keyof ServerSettings)[],
+  keys: readonly ScopedSettingKey[],
 ): boolean {
   const first = targets[0];
   return (
     first !== undefined &&
     targets.some((candidate) =>
-      keys.some((key) => !Equal.equals(first.settings[key], candidate.settings[key])),
+      keys.some(
+        (key) =>
+          !Equal.equals(
+            (first.settings as Record<string, unknown>)[key],
+            (candidate.settings as Record<string, unknown>)[key],
+          ),
+      ),
     )
   );
 }
@@ -138,7 +156,7 @@ export type ScopedSettingSource = ProjectSettingSource | "mixed";
 /** Whether the keys are overridden on every target, inherited on every target, or split. */
 export function scopedSettingsSource(
   targets: readonly Pick<ScopedSettingsTarget, "sources">[],
-  keys: readonly (keyof ServerSettings)[],
+  keys: readonly ScopedSettingKey[],
 ): ScopedSettingSource {
   const scoped = keys.filter(isProjectScopedSettingKey);
   if (scoped.length === 0 || targets.length === 0) return "environment";
@@ -202,12 +220,14 @@ export function planScopedSettingsPatch(
   const clientPatch = Object.fromEntries(
     Object.entries(patch).filter(([key]) => CLIENT_KEYS.has(key)),
   ) as ClientSettingsPatch;
+  const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const serverPatch = Object.fromEntries(
-    Object.entries(patch).filter(([key]) => SERVER_KEYS.has(key)),
+    Object.entries(patch).filter(([key]) =>
+      (isProjectScope ? SERVER_KEYS : ENVIRONMENT_KEYS).has(key),
+    ),
   ) as ServerSettingsPatch;
   const serverKeys = Object.keys(serverPatch);
   const { connectedEnvironments } = selectScopedSettingsEnvironments(scope, environments, null);
-  const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const unscopableKeys = isProjectScope
     ? serverKeys.filter((key) => !isProjectScopedSettingKey(key))
     : [];
@@ -315,7 +335,7 @@ export interface ProjectOverrideEntry {
  */
 export function listProjectOverrides(
   environments: readonly ScopedSettingsEnvironment[],
-  keys: readonly (keyof ServerSettings)[],
+  keys: readonly ScopedSettingKey[],
 ): readonly ProjectOverrideEntry[] {
   const scoped = keys.filter(isProjectScopedSettingKey);
   if (scoped.length === 0) return [];

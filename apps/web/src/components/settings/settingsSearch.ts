@@ -661,6 +661,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment-defaults",
   },
   {
+    id: "github-account",
+    title: "GitHub account",
+    to: "/settings/source-control",
+    scope: "project-defaults",
+    searchTerms: ["gh login personal work inherit per project repository owner"],
+  },
+  {
+    id: "github-account-rules",
+    title: "GitHub accounts",
+    to: "/settings/source-control",
+    scope: "environment-defaults",
+    searchTerms: ["gh login multiple accounts owner pattern rules personal work"],
+  },
+  {
     id: "source-control-writing-style",
     title: "Source control writing style",
     to: "/settings/source-control",

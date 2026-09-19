@@ -1331,3 +1331,67 @@ describe("composer and pull request shortcuts", () => {
     });
   }
 });
+
+describe("send and stop defaults", () => {
+  it("sends the composer with mod+enter outside the terminal by default", () => {
+    const input = event({ key: "Enter", ctrlKey: true });
+    assert.strictEqual(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+      "composer.send",
+    );
+    assert.isNull(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: true },
+      }),
+    );
+    // Shift keeps its meaning: steer the queued message rather than send.
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "Enter", ctrlKey: true, shiftKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        { platform: "Linux", context: { terminalFocus: false } },
+      ),
+      "thread.steerQueuedMessage",
+    );
+  });
+
+  it("stops the running thread with Escape by default unless a terminal, preview, or picker owns it", () => {
+    const input = event({ key: "Escape" });
+    assert.strictEqual(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: {},
+      }),
+      "thread.stop",
+    );
+    for (const claimed of ["terminalFocus", "previewFocus", "modelPickerOpen"]) {
+      assert.isNull(
+        resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+          platform: "Linux",
+          context: { [claimed]: true },
+        }),
+      );
+    }
+  });
+
+  it("adds the send and stop defaults to a keybindings file that predates them", () => {
+    const older = DEFAULT_RESOLVED_KEYBINDINGS.filter(
+      (binding) => binding.command !== "composer.send" && binding.command !== "thread.stop",
+    );
+    const bindings = mergeWithDefaultKeybindings(older);
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Escape" }), bindings, { platform: "Linux" }),
+      "thread.stop",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Enter", ctrlKey: true }), bindings, {
+        platform: "Linux",
+      }),
+      "composer.send",
+    );
+  });
+});

@@ -4,7 +4,6 @@ import { AppText as Text } from "../../components/AppText";
 import {
   type ResponseStreamingMode,
   type ServerSettings,
-  type ServerSettingsPatch,
   type ThreadEnvMode,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type ProjectScopedServerSettingKey,
@@ -14,7 +13,9 @@ import { Alert, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { RUNTIME_MODE_CHOICES } from "../threads/thread-settings-options";
+import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
+import { sourceControlEnvironment } from "../../state/sourceControl";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
 import {
@@ -30,6 +31,7 @@ import {
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
+  type MobileScopedSettingsPatch,
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 
@@ -44,7 +46,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
 
 const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettingKey[]> = {
   "new-threads": ["defaultThreadEnvMode", "defaultRuntimeMode"],
-  "source-control": ["defaultAutoPull", "newWorktreesStartFromOrigin"],
+  "source-control": ["defaultAutoPull", "newWorktreesStartFromOrigin", "gitHubAccount"],
   "agent-behavior": ["responseStreamingMode", "enableAgentBrowserAccess"],
   maintenance: ["continueThreadsAfterServerUpdate"],
 };
@@ -126,11 +128,45 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     const value = reference.settings[key];
     return displayTargets.every((entry) => entry.settings[key] === value) ? value : null;
   };
+  // The GitHub account is an override-only key: read it from each target's raw override entry.
+  const gitHubAccountOf = (target: ScopedMobileSettingsTarget) =>
+    target.projectId === null
+      ? undefined
+      : target.environment.serverConfig.settings.projectSettingsOverrides[target.projectId]
+          ?.gitHubAccount;
+  const gitHubAccountUniform =
+    reference === null
+      ? { mixed: false, value: undefined }
+      : displayTargets.every((entry) => gitHubAccountOf(entry) === gitHubAccountOf(reference))
+        ? { mixed: false, value: gitHubAccountOf(reference) }
+        : { mixed: true, value: undefined };
+  const gitHubRules = reference === null ? [] : reference.settings.gitHubAccountRules;
+  const gitHubRulesUniform = displayTargets.every(
+    (entry) => JSON.stringify(entry.settings.gitHubAccountRules) === JSON.stringify(gitHubRules),
+  );
+  const supportsGitHubAccounts =
+    targets.length > 0 &&
+    targets.every(
+      (target) =>
+        target.environment.serverConfig.environment.capabilities.gitHubAccountRouting === true,
+    );
+  const discovery = useEnvironmentQuery(
+    props.page === "source-control" && projectSelected && supportsGitHubAccounts && reference
+      ? sourceControlEnvironment.discovery({
+          environmentId: reference.environment.environmentId,
+          input: {},
+        })
+      : null,
+  );
+  const gitHubAccounts =
+    discovery.data?.sourceControlProviders
+      .find((item) => item.kind === "github")
+      ?.auth.accounts?.filter((account) => account.authenticated) ?? [];
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
     label: "environment settings update",
     reportFailure: true,
   });
-  const write = (patch: ServerSettingsPatch) => {
+  const write = (patch: MobileScopedSettingsPatch) => {
     if (writeInFlight.current || !hasConnectedSelection) return;
     const writes = planMobileScopedSettingsPatch(targets, projectSelected, patch);
     if (writes.length === 0) return;
@@ -147,9 +183,11 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       setPendingWrites((count) => count - 1);
     });
   };
-  const clearProjectOverrides = () => {
+  const clearProjectOverrides = (
+    keys: readonly ProjectScopedServerSettingKey[] = PAGE_PROJECT_KEYS[props.page],
+  ) => {
     if (writeInFlight.current) return;
-    const writes = planMobileScopedSettingsClear(targets, PAGE_PROJECT_KEYS[props.page]);
+    const writes = planMobileScopedSettingsClear(targets, keys);
     if (writes.length === 0) return;
     writeInFlight.current = true;
     setPendingTargets(targets);
@@ -211,7 +249,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                   )}
                   supportsOverrides={supportsProjectOverrides}
                   pending={pendingWrites > 0}
-                  onClear={clearProjectOverrides}
+                  onClear={() => clearProjectOverrides()}
                 />
               ) : null}
               {props.page === "new-threads" ? (
@@ -281,6 +319,72 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       onValueChange={(value) => write({ newWorktreesStartFromOrigin: value })}
                     />
                   </SettingsSection>
+                  {projectSelected && supportsGitHubAccounts && gitHubAccounts.length > 0 ? (
+                    <SettingsSection
+                      title="GitHub account"
+                      trailing={
+                        pendingWrites === 0 && gitHubAccountUniform.mixed ? (
+                          <MixedValuesLabel projectSelected />
+                        ) : null
+                      }
+                    >
+                      <ChoiceRow
+                        label="Inherit"
+                        description="Use the environment's account rules, or the active gh account."
+                        selected={
+                          !gitHubAccountUniform.mixed && gitHubAccountUniform.value === undefined
+                        }
+                        separated={false}
+                        disabled={disabledFor("gitHubAccount")}
+                        onPress={() => clearProjectOverrides(["gitHubAccount"])}
+                      />
+                      {gitHubAccounts.map((account) => (
+                        <ChoiceRow
+                          key={account.login}
+                          label={account.login}
+                          description={
+                            account.active
+                              ? "The active gh account on this machine."
+                              : "Run gh commands in this project's checkouts as this account."
+                          }
+                          selected={
+                            !gitHubAccountUniform.mixed &&
+                            gitHubAccountUniform.value === account.login
+                          }
+                          separated
+                          disabled={disabledFor("gitHubAccount")}
+                          onPress={() => write({ gitHubAccount: account.login })}
+                        />
+                      ))}
+                    </SettingsSection>
+                  ) : null}
+                  {!projectSelected && supportsGitHubAccounts && gitHubRules.length > 0 ? (
+                    <SettingsSection
+                      title="GitHub account rules"
+                      trailing={
+                        gitHubRulesUniform ? null : <MixedValuesLabel projectSelected={false} />
+                      }
+                    >
+                      {gitHubRules.map((rule, index) => (
+                        <View
+                          key={`${rule.host}/${rule.owner}:${rule.login}`}
+                          className={
+                            index === 0
+                              ? "flex-row items-center gap-4 p-4"
+                              : "flex-row items-center gap-4 border-t border-border-subtle p-4"
+                          }
+                        >
+                          <Text className="min-w-0 flex-1 text-base text-foreground">
+                            {rule.owner}
+                          </Text>
+                          <Text className="text-base text-foreground-muted">{rule.login}</Text>
+                        </View>
+                      ))}
+                      <Text className="px-4 pb-4 text-sm text-foreground-muted">
+                        The first matching owner decides the account. Edit rules on web or desktop.
+                      </Text>
+                    </SettingsSection>
+                  ) : null}
                 </>
               ) : null}
 

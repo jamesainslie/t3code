@@ -14,6 +14,7 @@ import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import * as AzureDevOpsPullRequestProvider from "./AzureDevOpsPullRequestProvider.ts";
 import * as BitbucketPullRequestApi from "./BitbucketPullRequestApi.ts";
 import * as BitbucketPullRequestProvider from "./BitbucketPullRequestProvider.ts";
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as GitHubPullRequestCli from "./GitHubPullRequestCli.ts";
 import * as GitHubPullRequestProvider from "./GitHubPullRequestProvider.ts";
 import * as GitLabPullRequestCli from "./GitLabPullRequestCli.ts";
@@ -61,6 +62,7 @@ export const layer = Layer.effect(PullRequestProviderRegistry, make).pipe(
   Layer.provide(
     GitHubPullRequestCli.layer.pipe(
       Layer.provide(GitHubCli.layer),
+      Layer.provide(GitHubAccountSelector.layerLive),
       Layer.provide(GitHubGraphQlBudget.layer),
     ),
   ),

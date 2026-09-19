@@ -21,9 +21,11 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
+import * as References from "effect/References";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 
@@ -149,8 +151,18 @@ const makeHarness = Effect.fn("makeThreadPullRequestHarness")(function* (options
     ReadonlyArray<{ readonly cwd: string; readonly branch: string; readonly refresh: boolean }>
   >([]);
   const summaryCalls = yield* Ref.make<ReadonlyArray<PullRequestRef>>([]);
+  const logs: Array<{ readonly level: string; readonly message: string }> = [];
+  const logger = Logger.make(({ logLevel, message }) => {
+    logs.push({
+      level: logLevel,
+      message: String(Array.isArray(message) ? message[0] : message),
+    });
+  });
   let uuid = 0;
   const dependencies = Layer.mergeAll(
+    Logger.layer([logger], { mergeWithExisting: false }),
+    // Repeated failures log at debug, which the default level would filter out.
+    Layer.succeed(References.MinimumLogLevel, "Debug"),
     Layer.mock(ProjectionSnapshotQuery)({
       getShellSnapshot: () =>
         Ref.get(snapshots).pipe(Effect.tap(() => Queue.offer(reads, undefined))),
@@ -236,6 +248,7 @@ const makeHarness = Effect.fn("makeThreadPullRequestHarness")(function* (options
     commands,
     branchCalls,
     summaryCalls,
+    logs,
     publish: (event: OrchestrationEvent) => PubSub.publish(events, event),
     layer: ThreadPullRequestReactor.layer.pipe(Layer.provide(dependencies)),
   };
@@ -549,6 +562,90 @@ describe("ThreadPullRequestReactor", () => {
           }).pipe(Effect.provide(fixture.layer));
         }),
       ),
+  );
+
+  it.effect(
+    "warns once for a repeated identical failure and again after success then failure",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const online = yield* Ref.make(false);
+          const fixture = yield* makeHarness({
+            threads: [thread("flaky")],
+            branchPullRequest: ({ cwd }) =>
+              Ref.get(online).pipe(
+                Effect.flatMap((connected) =>
+                  connected
+                    ? Effect.succeed(branchPullRequest())
+                    : Effect.fail(
+                        new GitManagerError({
+                          operation: "branchPullRequest",
+                          cwd,
+                          detail: "No gh",
+                        }),
+                      ),
+                ),
+              ),
+          });
+          const warnings = () =>
+            fixture.logs.filter(
+              (log) =>
+                log.level === "Warn" && log.message === "thread branch pull request lookup failed",
+            );
+          yield* Effect.gen(function* () {
+            const reactor = yield* fixture.start();
+            const tick = Effect.gen(function* () {
+              yield* TestClock.adjust("1 minute");
+              yield* Queue.take(fixture.reads);
+              yield* reactor.drain;
+            });
+            yield* tick;
+            yield* tick;
+            yield* tick;
+            // The startup pass and three retries failed the same way: one warning, the rest debug.
+            expect(warnings()).toHaveLength(1);
+            expect(
+              fixture.logs.filter(
+                (log) => log.message === "thread branch pull request lookup still failing",
+              ),
+            ).toHaveLength(3);
+            yield* Ref.set(online, true);
+            yield* tick;
+            yield* Ref.set(online, false);
+            yield* tick;
+            expect(warnings()).toHaveLength(2);
+          }).pipe(Effect.provide(fixture.layer));
+        }),
+      ),
+  );
+
+  it.effect("logs a rollup of still-failing lookups after sixty cycles", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeHarness({
+          threads: [thread("flaky")],
+          branchPullRequest: ({ cwd }) =>
+            Effect.fail(
+              new GitManagerError({ operation: "branchPullRequest", cwd, detail: "No gh" }),
+            ),
+        });
+        const rollups = () =>
+          fixture.logs.filter(
+            (log) => log.message === "thread branch pull request lookups still failing",
+          );
+        yield* Effect.gen(function* () {
+          const reactor = yield* fixture.start();
+          // The startup pass is the first full pass, so the sixtieth lands on the 59th cycle.
+          for (let cycle = 1; cycle <= 60; cycle++) {
+            yield* TestClock.adjust("1 minute");
+            yield* Queue.take(fixture.reads);
+            yield* reactor.drain;
+            if (cycle < 59) expect(rollups()).toHaveLength(0);
+          }
+          expect(rollups()).toHaveLength(1);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
   );
 
   it.effect("stops retrying a settled backfill after repeated lookup failures", () =>
