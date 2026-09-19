@@ -182,7 +182,7 @@ export const make = Effect.gen(function* () {
   return GitHubAccountSelector.of({ forCheckout, pinFor, invalidate });
 });
 
-export const layer = Layer.effect(GitHubAccountSelector, make);
+const layer = Layer.effect(GitHubAccountSelector, make);
 
 /**
  * The selector with its own process, identity, and projection dependencies. Settings and the

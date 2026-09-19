@@ -54,7 +54,7 @@ function samePullRequest(
 /** Startup lookups per settled thread before discovery gives up on it. */
 export const BACKFILL_ATTEMPTS = 5;
 /** Full passes between rollups of lookups that keep failing; one per hour at the minute cadence. */
-export const FAILURE_ROLLUP_CYCLES = 60;
+const FAILURE_ROLLUP_CYCLES = 60;
 
 /** One line that says how a lookup failed, so a repeat of the same failure can be recognised. */
 function failureTag(cause: Cause.Cause<unknown>): string {
