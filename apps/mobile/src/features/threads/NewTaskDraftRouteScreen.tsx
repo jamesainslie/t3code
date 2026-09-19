@@ -20,6 +20,8 @@ type NewTaskDraftRouteParams = {
   readonly projectId?: string | string[];
   readonly branch?: string | null;
   readonly worktreePath?: string | null;
+  /** "Start a thread to unblock this": the thread waiting on this draft. */
+  readonly unblocksThreadId?: string | string[];
   readonly title?: string | string[];
   /** Set by Add Project when this draft opens while the project's clone runs. */
   readonly cloning?: string | string[];
@@ -50,6 +52,9 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
       projectId: Array.isArray(params.projectId) ? params.projectId[0] : params.projectId,
       branch: params.branch,
       worktreePath: params.worktreePath,
+      unblocksThreadId: Array.isArray(params.unblocksThreadId)
+        ? params.unblocksThreadId[0]
+        : params.unblocksThreadId,
       cloning: (Array.isArray(params.cloning) ? params.cloning[0] : params.cloning) === "1",
     }),
     [params],

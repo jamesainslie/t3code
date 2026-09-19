@@ -449,6 +449,32 @@ function AdaptiveWorkspaceLayoutContent(
     [navigation],
   );
 
+  const handleAddThreadDependency = useCallback(
+    (thread: EnvironmentThreadShell) => {
+      navigation.navigate("ThreadDependencyPicker", {
+        environmentId: String(thread.environmentId),
+        threadId: String(thread.id),
+      });
+    },
+    [navigation],
+  );
+
+  const handleNewThreadToUnblock = useCallback(
+    (thread: EnvironmentThreadShell) => {
+      navigation.navigate("NewTaskSheet", {
+        screen: "NewTaskDraft",
+        params: {
+          environmentId: String(thread.environmentId),
+          projectId: String(thread.projectId),
+          branch: thread.branch,
+          worktreePath: thread.worktreePath,
+          unblocksThreadId: String(thread.id),
+        },
+      });
+    },
+    [navigation],
+  );
+
   const handleNewThreadInProject = useCallback(
     (project: EnvironmentProject) => {
       navigation.navigate("NewTaskSheet", {
@@ -590,6 +616,8 @@ function AdaptiveWorkspaceLayoutContent(
                     onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
                     onNewThreadInProject={handleNewThreadInProject}
                     onNewThreadOnBranch={handleNewThreadOnBranch}
+                    onAddThreadDependency={handleAddThreadDependency}
+                    onNewThreadToUnblock={handleNewThreadToUnblock}
                     onSelectThread={handleSelectThread}
                     onSearchQueryChange={setPrimarySidebarSearchQuery}
                     searchQuery={primarySidebarSearchQuery}

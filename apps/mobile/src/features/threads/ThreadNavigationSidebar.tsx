@@ -78,6 +78,7 @@ import {
   ThreadListShowMoreRow,
 } from "./thread-list-items";
 import {
+  ThreadListV2BlockedShelfHeader,
   ThreadListV2PendingRow,
   ThreadListV2Row,
   ThreadListV2SettledShelfHeader,
@@ -111,6 +112,8 @@ interface ThreadNavigationSidebarProps {
   readonly onOpenSettings: () => void;
   readonly onOpenEnvironmentSettings: () => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
+  readonly onAddThreadDependency: (thread: EnvironmentThreadShell) => void;
+  readonly onNewThreadToUnblock: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
@@ -169,6 +172,7 @@ function ThreadNavigationSidebarPane(
     settleThread,
     snoozeThread,
     unsnoozeThread,
+    releaseThreadDependencies,
     unsettleThread,
     pinThread,
     unpinThread,
@@ -398,8 +402,10 @@ function ThreadNavigationSidebarPane(
   );
   const {
     loaded: shelfPreferencesLoaded,
+    blockedShelfExpanded,
     settledShelfExpanded,
     snoozedShelfExpanded,
+    toggleBlockedShelf,
     toggleSettledShelf,
     toggleSnoozedShelf,
   } = useThreadListV2ShelfPreferences();
@@ -432,6 +438,15 @@ function ThreadNavigationSidebarPane(
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadSnooze === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const dependencyEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (config.environment.capabilities.threadDependencies === true) {
         supported.add(environmentId);
       }
     }
@@ -505,6 +520,7 @@ function ThreadNavigationSidebarPane(
           now: new Date().toISOString(),
           settlementEnvironmentIds,
           snoozeEnvironmentIds,
+          dependencyEnvironmentIds,
           queuedThreadKeys,
         }),
       });
@@ -526,6 +542,8 @@ function ThreadNavigationSidebarPane(
         hiddenSettledCount: 0,
         snoozedCount: 0,
         snoozedShelfHeaderIndex: null,
+        blockedCount: 0,
+        blockedShelfHeaderIndex: null,
         settledCount: 0,
         settledShelfHeaderIndex: null,
         nextSnoozeWakeAt: null,
@@ -539,9 +557,11 @@ function ThreadNavigationSidebarPane(
       matchedThreadKeys,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
+      dependencyEnvironmentIds,
       queuedThreadKeys,
       settledLimit: settledVisibleCount,
       now: new Date().toISOString(),
+      blockedShelfExpanded,
       snoozedShelfExpanded,
       settledShelfExpanded,
       selectedThreadKey: props.selectedThreadKey ?? null,
@@ -551,6 +571,7 @@ function ThreadNavigationSidebarPane(
     queuedThreadKeys,
     nowMinute,
     snoozeWakeTick,
+    blockedShelfExpanded,
     snoozedShelfExpanded,
     settledShelfExpanded,
     props.selectedThreadKey,
@@ -560,6 +581,7 @@ function ThreadNavigationSidebarPane(
     settledVisibleCount,
     settlementEnvironmentIds,
     snoozeEnvironmentIds,
+    dependencyEnvironmentIds,
     threadListV2Enabled,
     threads,
     selectedProjectScope,
@@ -600,6 +622,9 @@ function ThreadNavigationSidebarPane(
     const items: SidebarListItem[] = buildThreadListV2ListItems({
       items: threadListV2Layout.items,
       pendingTasks: v2PendingTasks,
+      blockedCount: threadListV2Layout.blockedCount,
+      blockedShelfExpanded,
+      blockedShelfHeaderIndex: threadListV2Layout.blockedShelfHeaderIndex,
       snoozedCount: threadListV2Layout.snoozedCount,
       snoozedShelfExpanded,
       snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
@@ -623,6 +648,7 @@ function ThreadNavigationSidebarPane(
     pendingTasks,
     props.searchQuery,
     selectedProjectRefs,
+    blockedShelfExpanded,
     settledShelfExpanded,
     snoozedShelfExpanded,
     threadListV2Enabled,
@@ -821,6 +847,8 @@ function ThreadNavigationSidebarPane(
           previous.item.thread === item.item.thread &&
           previous.item.variant === item.item.variant &&
           previous.item.snoozed === item.item.snoozed &&
+          previous.item.blocked === item.item.blocked &&
+          previous.item.waitLabel === item.item.waitLabel &&
           previous.item.pinned === item.item.pinned &&
           previous.snoozeWakeLabelText === item.snoozeWakeLabelText
         );
@@ -837,6 +865,9 @@ function ThreadNavigationSidebarPane(
       if (previous.type === "v2-snoozed-shelf" && item.type === "v2-snoozed-shelf") {
         return previous.count === item.count && previous.expanded === item.expanded;
       }
+      if (previous.type === "v2-blocked-shelf" && item.type === "v2-blocked-shelf") {
+        return previous.count === item.count && previous.expanded === item.expanded;
+      }
       if (previous.type === "v2-settled-shelf" && item.type === "v2-settled-shelf") {
         return previous.count === item.count && previous.expanded === item.expanded;
       }
@@ -845,11 +876,13 @@ function ThreadNavigationSidebarPane(
         previous.type === "v2-show-more" ||
         previous.type === "v2-pending" ||
         previous.type === "v2-snoozed-shelf" ||
+        previous.type === "v2-blocked-shelf" ||
         previous.type === "v2-settled-shelf" ||
         item.type === "v2-thread" ||
         item.type === "v2-show-more" ||
         item.type === "v2-pending" ||
         item.type === "v2-snoozed-shelf" ||
+        item.type === "v2-blocked-shelf" ||
         item.type === "v2-settled-shelf"
       ) {
         return false;
@@ -916,6 +949,8 @@ function ThreadNavigationSidebarPane(
               variant={item.item.variant}
               hasQueuedMessages={queuedThreadKeys.has(`${thread.environmentId}:${thread.id}`)}
               snoozed={item.item.snoozed}
+              blocked={item.item.blocked}
+              waitLabel={item.item.waitLabel}
               pinned={item.item.pinned}
               snoozePresetMinute={nowMinute}
               snoozeWakeLabelText={item.snoozeWakeLabelText}
@@ -949,6 +984,7 @@ function ThreadNavigationSidebarPane(
               settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
               onSettleThread={settleThread}
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
+              dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
               reorderSupported={
                 item.item.pinned
@@ -959,6 +995,9 @@ function ThreadNavigationSidebarPane(
               canMoveDown={pendingOrder === null && movePlanner(movedId, "down") !== null}
               onSnoozeThread={snoozeThread}
               onUnsnoozeThread={unsnoozeThread}
+              onAddThreadDependency={props.onAddThreadDependency}
+              onNewThreadToUnblock={props.onNewThreadToUnblock}
+              onReleaseThreadDependencies={releaseThreadDependencies}
               onUnsettleThread={unsettleThread}
               onPinThread={pinThread}
               onUnpinThread={unpinThread}
@@ -969,6 +1008,16 @@ function ThreadNavigationSidebarPane(
             />
           );
         }
+        case "v2-blocked-shelf":
+          return (
+            <ThreadListV2BlockedShelfHeader
+              count={item.count}
+              disabled={!shelfPreferencesLoaded}
+              expanded={item.expanded}
+              onToggle={toggleBlockedShelf}
+              pane={Platform.OS === "android" ? "screen" : "sidebar"}
+            />
+          );
         case "v2-snoozed-shelf":
           return (
             <ThreadListV2SnoozedShelfHeader
@@ -1109,9 +1158,14 @@ function ThreadNavigationSidebarPane(
       showMoreSettled,
       sidebarScrollGesture,
       snoozeEnvironmentIds,
+      dependencyEnvironmentIds,
       snoozeThread,
+      releaseThreadDependencies,
+      props.onAddThreadDependency,
+      props.onNewThreadToUnblock,
       nowMinute,
       toggleSettledShelf,
+      toggleBlockedShelf,
       toggleSnoozedShelf,
       unpinThread,
       unsettleThread,

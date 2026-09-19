@@ -1,5 +1,8 @@
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import {
+  compareBlockedThreads,
+  dependencyWaitLabel,
+  effectiveBlocked,
   effectiveSnoozed,
   hasQueuedTurnStart,
   QUEUED_TURN_START_GRACE_MS,
@@ -35,7 +38,13 @@ export { snoozeWakeLabel };
  * unlabeled resting state.
  */
 export type ThreadListV2Status = "approval" | "input" | "working" | "failed" | "ready";
-export type ThreadListV2SwipeAction = "archive" | "settle" | "unsettle" | "snooze" | "unsnooze";
+export type ThreadListV2SwipeAction =
+  | "archive"
+  | "settle"
+  | "unsettle"
+  | "snooze"
+  | "unsnooze"
+  | "release";
 
 export function resolveThreadListV2SnoozeMenuSelection(input: {
   readonly event: string;
@@ -68,10 +77,17 @@ export function resolveThreadListV2SwipeActions(input: {
   readonly snoozable: boolean;
   /** Row is on the snoozed shelf. */
   readonly snoozed?: boolean;
+  /** Row is on the Depends on shelf. */
+  readonly blocked?: boolean;
 }): {
   readonly primary: Exclude<ThreadListV2SwipeAction, "snooze">;
   readonly secondary: "snooze" | null;
 } {
+  // Blocked outranks snoozed, matching how the list classifies rows. The two
+  // overlays only coexist for the tick an optimistic add is in flight.
+  if (input.blocked === true) {
+    return { primary: "release", secondary: null };
+  }
   if (input.snoozed === true) {
     return { primary: "unsnooze", secondary: null };
   }
@@ -179,6 +195,7 @@ export function getThreadListV2OrderedSection(input: {
   readonly now: string;
   readonly settlementEnvironmentIds?: ReadonlySet<EnvironmentId>;
   readonly snoozeEnvironmentIds?: ReadonlySet<EnvironmentId>;
+  readonly dependencyEnvironmentIds?: ReadonlySet<EnvironmentId>;
   readonly queuedThreadKeys?: ReadonlySet<string>;
 }): EnvironmentThreadShell[] {
   const threads = input.threads.filter((thread) => {
@@ -193,6 +210,12 @@ export function getThreadListV2OrderedSection(input: {
     if (
       (input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true) &&
       effectiveSnoozed(thread, { now: input.now })
+    ) {
+      return false;
+    }
+    if (
+      (input.dependencyEnvironmentIds?.has(thread.environmentId) ?? true) &&
+      effectiveBlocked(thread)
     ) {
       return false;
     }
@@ -214,6 +237,12 @@ export interface ThreadListV2Item {
   readonly variant: "card" | "slim";
   /** Snoozed-shelf row: shows the wake countdown and offers Wake. */
   readonly snoozed: boolean;
+  /** Depends on shelf row: shows the wait label and offers Wake. */
+  readonly blocked: boolean;
+  /** "Waiting on {title}" for a blocked row, null everywhere else. Resolved
+      against the unfiltered thread set so a dependency in another project
+      still reads by name. */
+  readonly waitLabel: string | null;
   /** Pinned-block row: renders the pin glyph and offers Unpin. */
   readonly pinned: boolean;
   readonly isLast: boolean;
@@ -225,6 +254,11 @@ export interface ThreadListV2Layout {
   readonly hiddenSettledCount: number;
   /** Snoozed threads matching the current filters. */
   readonly snoozedCount: number;
+  /** Blocked threads matching the current filters. */
+  readonly blockedCount: number;
+  /** Index in `items` where the Depends on shelf header belongs. The header
+      is still rendered when the shelf is collapsed and no rows exist. */
+  readonly blockedShelfHeaderIndex: number | null;
   /** Index in `items` where the Snoozed shelf header belongs. The header is
       still rendered when the shelf is collapsed and no snoozed rows exist. */
   readonly snoozedShelfHeaderIndex: number | null;
@@ -254,6 +288,13 @@ export interface ThreadListV2PendingListItem {
   readonly showPendingDivider: boolean;
 }
 
+export interface ThreadListV2BlockedShelfListItem {
+  readonly type: "v2-blocked-shelf";
+  readonly key: "v2-blocked-shelf";
+  readonly count: number;
+  readonly expanded: boolean;
+}
+
 export interface ThreadListV2SnoozedShelfListItem {
   readonly type: "v2-snoozed-shelf";
   readonly key: "v2-snoozed-shelf";
@@ -271,17 +312,22 @@ export interface ThreadListV2SettledShelfListItem {
 export type ThreadListV2ListItem =
   | ThreadListV2ThreadListItem
   | ThreadListV2PendingListItem
+  | ThreadListV2BlockedShelfListItem
   | ThreadListV2SnoozedShelfListItem
   | ThreadListV2SettledShelfListItem;
 
 /**
- * Builds the shared mobile order: active → pending → snoozed shelf → settled.
- * Pending tasks are waiting rather than asking, and parked work remains
- * reachable without competing with either the inbox or settled history.
+ * Builds the shared mobile order: active → pending → Depends on shelf →
+ * snoozed shelf → settled. Pending tasks are waiting rather than asking, and
+ * parked work remains reachable without competing with either the inbox or
+ * settled history.
  */
 export function buildThreadListV2ListItems(input: {
   readonly items: ReadonlyArray<ThreadListV2Item>;
   readonly pendingTasks: ReadonlyArray<PendingNewTask>;
+  readonly blockedCount?: number;
+  readonly blockedShelfExpanded?: boolean;
+  readonly blockedShelfHeaderIndex?: number | null;
   readonly snoozedCount?: number;
   readonly snoozedShelfExpanded?: boolean;
   readonly snoozedShelfHeaderIndex?: number | null;
@@ -305,13 +351,29 @@ export function buildThreadListV2ListItems(input: {
     pendingTask,
     showPendingDivider: index === 0,
   }));
+  const blockedCount = input.blockedCount ?? 0;
+  const blockedShelfHeaderIndex = input.blockedShelfHeaderIndex ?? null;
   const snoozedCount = input.snoozedCount ?? 0;
   const snoozedShelfHeaderIndex = input.snoozedShelfHeaderIndex ?? null;
   const settledCount = input.settledCount ?? 0;
   const settledShelfHeaderIndex = input.settledShelfHeaderIndex ?? null;
-  const activeEnd = snoozedShelfHeaderIndex ?? settledShelfHeaderIndex ?? threadItems.length;
+  const activeEnd =
+    blockedShelfHeaderIndex ??
+    snoozedShelfHeaderIndex ??
+    settledShelfHeaderIndex ??
+    threadItems.length;
+  const blockedEnd = snoozedShelfHeaderIndex ?? settledShelfHeaderIndex ?? threadItems.length;
   const snoozedEnd = settledShelfHeaderIndex ?? threadItems.length;
   const result: ThreadListV2ListItem[] = [...threadItems.slice(0, activeEnd), ...pendingItems];
+  if (blockedShelfHeaderIndex !== null && blockedCount > 0) {
+    result.push({
+      type: "v2-blocked-shelf",
+      key: "v2-blocked-shelf",
+      count: blockedCount,
+      expanded: input.blockedShelfExpanded === true,
+    });
+    result.push(...threadItems.slice(blockedShelfHeaderIndex, blockedEnd));
+  }
   if (snoozedShelfHeaderIndex !== null && snoozedCount > 0) {
     result.push({
       type: "v2-snoozed-shelf",
@@ -354,10 +416,16 @@ export function buildThreadListV2Items(input: {
   /** Environments whose server supports thread.snooze/unsnooze. Same
       contract as settlementEnvironmentIds. */
   readonly snoozeEnvironmentIds?: ReadonlySet<EnvironmentId>;
+  /** Environments whose server supports thread dependencies. Same contract
+      as settlementEnvironmentIds: threads elsewhere never classify blocked,
+      because the user could not release them. */
+  readonly dependencyEnvironmentIds?: ReadonlySet<EnvironmentId>;
   /** Max settled rows to render; the rest are counted, not built. */
   readonly settledLimit?: number;
   /** Second-precise clock used for time-based classification. */
   readonly now: string;
+  /** Expands the Depends on shelf into rows. Collapsed is the default. */
+  readonly blockedShelfExpanded?: boolean;
   /** Expands the snoozed shelf into rows. Collapsed is the default. */
   readonly snoozedShelfExpanded?: boolean;
   /** Expands the settled shelf into rows. Expanded is the default. */
@@ -391,6 +459,7 @@ export function buildThreadListV2Items(input: {
   const active: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
   const snoozed: EnvironmentThreadShell[] = [];
+  const blocked: EnvironmentThreadShell[] = [];
   let nextSnoozeWakeAt: string | null = null;
   for (const thread of input.threads) {
     // Callers pass live shells. The server stamps settledOverride for the tail.
@@ -415,7 +484,13 @@ export function buildThreadListV2Items(input: {
     }
     const supportsSettlement = input.settlementEnvironmentIds?.has(thread.environmentId) ?? true;
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
-    // Snooze outranks settlement and pinning until the thread wakes.
+    const supportsDependencies = input.dependencyEnvironmentIds?.has(thread.environmentId) ?? true;
+    // Blocked outranks snooze, which outranks settlement and pinning. Adding
+    // a link clears snooze server-side, so the two only race optimistically.
+    if (supportsDependencies && effectiveBlocked(thread)) {
+      blocked.push(thread);
+      continue;
+    }
     if (supportsSnooze && effectiveSnoozed(thread, { now })) {
       snoozed.push(thread);
       if (
@@ -439,11 +514,18 @@ export function buildThreadListV2Items(input: {
   }
 
   const orderedActive = applyPendingThreadOrder(sortThreadsForListV2(active), "active", pending);
+  const orderedBlocked = [...blocked].sort(compareBlockedThreads);
   const orderedSnoozed = [...snoozed].sort(
     (left, right) =>
       parseTimestampMs(left.snoozedUntil ?? "") - parseTimestampMs(right.snoozedUntil ?? ""),
   );
   const selectedThreadKey = input.selectedThreadKey ?? null;
+  const visibleBlocked =
+    input.blockedShelfExpanded === true
+      ? orderedBlocked
+      : orderedBlocked.filter(
+          (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
+        );
   const visibleSnoozed =
     input.snoozedShelfExpanded === true
       ? orderedSnoozed
@@ -469,6 +551,15 @@ export function buildThreadListV2Items(input: {
           (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
         );
 
+  // Wait labels name a dependency that the current filters may have hidden,
+  // so titles come from the unfiltered input rather than the built rows.
+  const titleByKey =
+    visibleBlocked.length > 0
+      ? new Map(
+          input.threads.map((thread) => [`${thread.environmentId}:${thread.id}`, thread.title]),
+        )
+      : null;
+
   const items: ThreadListV2Item[] = [];
   for (const thread of applyPendingThreadOrder(
     sortPinnedThreadsByOrderKey(pinned),
@@ -479,6 +570,8 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "card",
       snoozed: false,
+      blocked: false,
+      waitLabel: null,
       pinned: true,
       isLast: false,
     });
@@ -488,6 +581,23 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "card",
       snoozed: false,
+      blocked: false,
+      waitLabel: null,
+      pinned: false,
+      isLast: false,
+    });
+  }
+  const blockedShelfHeaderIndex = orderedBlocked.length > 0 ? items.length : null;
+  for (const thread of visibleBlocked) {
+    items.push({
+      thread,
+      variant: "slim",
+      snoozed: false,
+      blocked: true,
+      waitLabel: dependencyWaitLabel(
+        thread,
+        (threadId) => titleByKey?.get(`${thread.environmentId}:${threadId}`) ?? null,
+      ),
       pinned: false,
       isLast: false,
     });
@@ -498,6 +608,8 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "slim",
       snoozed: true,
+      blocked: false,
+      waitLabel: null,
       pinned: false,
       isLast: false,
     });
@@ -508,6 +620,8 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "slim",
       snoozed: false,
+      blocked: false,
+      waitLabel: null,
       pinned: false,
       isLast: false,
     });
@@ -521,6 +635,8 @@ export function buildThreadListV2Items(input: {
     hiddenSettledCount: orderedSettled.length - pagedSettled.length,
     snoozedCount: orderedSnoozed.length,
     snoozedShelfHeaderIndex,
+    blockedCount: orderedBlocked.length,
+    blockedShelfHeaderIndex,
     settledCount: orderedSettled.length,
     settledShelfHeaderIndex,
     nextSnoozeWakeAt,

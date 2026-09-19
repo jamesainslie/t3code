@@ -148,6 +148,8 @@ type NewTaskFlowContextValue = {
   readonly selectedBranchName: string | null;
   readonly selectedWorktreePath: string | null;
   readonly startFromOrigin: boolean;
+  /** Thread this draft will unblock once it becomes a real thread. */
+  readonly unblocksThreadId: ThreadId | null;
   readonly draftKey: string | null;
   readonly editingPendingTask: QueuedThreadMessage | null;
   readonly prompt: string;
@@ -191,6 +193,7 @@ type NewTaskFlowContextValue = {
   readonly setWorkspaceMode: (mode: WorkspaceMode) => void;
   readonly selectBranch: (branch: VcsRef) => void;
   readonly setStartFromOrigin: (value: boolean) => void;
+  readonly setUnblocksThreadId: (value: ThreadId | null) => void;
   readonly beginEditingPendingTask: (messageId: string) => boolean;
   readonly finishEditingPendingTask: () => void;
   readonly cancelEditingPendingTask: () => void;
@@ -270,10 +273,15 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   // Unrelated accepted writes still beat the dismissed session's CAS.
   const editingRevisionRef = useRef(Promise.resolve(0));
 
+  // Not a draft field: the link belongs to this trip through the flow, and a
+  // resumed draft in another project must not carry it along.
+  const [unblocksThreadId, setUnblocksThreadId] = useState<ThreadId | null>(null);
+
   const reset = useCallback(() => {
     setSelectedEnvironmentId(null);
     setSelectedProjectKey(null);
     setActiveDraftKey(null);
+    setUnblocksThreadId(null);
     setSubmitting(false);
     setBranchQuery("");
     setExpandedProvider(null);
@@ -748,6 +756,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       }
       setSelectedEnvironmentId(environmentId);
       setSelectedProjectKey(match ? scopedProjectKey(match.environmentId, match.id) : null);
+      // Threads in different environments cannot observe each other, so a
+      // pending link cannot survive an environment change.
+      setUnblocksThreadId(null);
     },
     [projects, selectedProject, carryDraftContentTo],
   );
@@ -1025,6 +1036,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
           ...((workspaceSelection?.startFromOrigin ?? startFromOrigin)
             ? { startFromOrigin: true }
             : {}),
+          ...(unblocksThreadId !== null ? { unblocksThreadId } : {}),
         },
         createdAt: metadata.createdAt,
       };
@@ -1040,6 +1052,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       legacyPlanModeEnabled,
       planModePreferenceLoaded,
       startFromOrigin,
+      unblocksThreadId,
       workspaceMode,
     ],
   );
@@ -1156,6 +1169,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedBranchName,
       selectedWorktreePath,
       startFromOrigin,
+      unblocksThreadId,
       draftKey: selectedProjectDraftKey,
       editingPendingTask,
       prompt,
@@ -1188,6 +1202,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       setWorkspaceMode,
       selectBranch,
       setStartFromOrigin,
+      setUnblocksThreadId,
       beginEditingPendingTask,
       finishEditingPendingTask,
       cancelEditingPendingTask,
@@ -1257,6 +1272,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       setWorkspaceMode,
       startFromOrigin,
       submitting,
+      unblocksThreadId,
       workspaceMode,
       appendAttachments,
       clearAttachments,

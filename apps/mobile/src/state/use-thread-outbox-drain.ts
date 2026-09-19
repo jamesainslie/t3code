@@ -544,6 +544,9 @@ async function preserveUploadedAttachmentsForEditor(
 
 export function useThreadOutboxDrain(): void {
   const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const addThreadDependency = useAtomCommand(threadEnvironment.addDependency, {
+    reportFailure: false,
+  });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -964,6 +967,27 @@ export function useThreadOutboxDrain(): void {
       if (failure?.action === "restore") {
         return restoreQueuedMessage(persistedMessage, failure.message);
       }
+      // The thread exists now, so "Start a thread to unblock this" can finally
+      // name it. A rejected link leaves the new thread alone: the user asked
+      // for the thread first and the link second, and only the link failed.
+      if (creation.unblocksThreadId !== undefined) {
+        const linkResult = await addThreadDependency({
+          environmentId: queuedMessage.environmentId,
+          input: {
+            threadId: creation.unblocksThreadId,
+            dependsOnThreadId: queuedMessage.threadId,
+          },
+        });
+        if (linkResult._tag === "Failure") {
+          const error = Cause.squash(linkResult.cause);
+          Alert.alert(
+            "Could not link the new thread",
+            error instanceof Error && error.message.trim().length > 0
+              ? error.message
+              : "The thread was created, but the waiting thread could not be linked to it.",
+          );
+        }
+      }
       // Recorded before the queue entry goes so the thread screen never sees a
       // gap between the queued creation and the server's shell.
       recordPendingThreadCreationOutcome({ kind: "delivered", message: persistedMessage });
@@ -981,7 +1005,7 @@ export function useThreadOutboxDrain(): void {
       }
       return outcome === "removed";
     },
-    [makeDeliveryHelpers, restoreQueuedMessage, startTurn],
+    [addThreadDependency, makeDeliveryHelpers, restoreQueuedMessage, startTurn],
   );
 
   // A creation outcome bridges setup until the server's shell has a turn.

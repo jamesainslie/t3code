@@ -42,6 +42,10 @@ const QueuedThreadCreationSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   startFromOrigin: Schema.optional(Schema.Boolean),
+  // "Start a thread to unblock this": the thread that waits on the one this
+  // creation makes. The link is dispatched once the create succeeds, so an
+  // abandoned draft leaves no trace.
+  unblocksThreadId: Schema.optional(ThreadId),
 });
 
 export const QueuedThreadMessageSchema = Schema.Struct({
@@ -73,6 +77,7 @@ export interface QueuedThreadCreation {
   readonly branch: string | null;
   readonly worktreePath: string | null;
   readonly startFromOrigin?: boolean;
+  readonly unblocksThreadId?: ThreadId;
 }
 
 export interface QueuedThreadMessage {

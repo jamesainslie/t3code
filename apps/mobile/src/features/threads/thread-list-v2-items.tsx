@@ -9,7 +9,11 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import type { EnvironmentMachineKind } from "@t3tools/contracts";
-import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  canAddDependency,
+  canSnooze,
+  resolveSnoozePresets,
+} from "@t3tools/client-runtime/state/thread-settled";
 import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
@@ -88,6 +92,13 @@ const SNOOZED_MENU_ACTIONS: MenuAction[] = [
   { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
 ];
 
+// The Depends on shelf offers the one way out plus the usual tail. Release
+// drops every link, so a blocked row needs no per-link surface.
+const BLOCKED_MENU_ACTIONS: MenuAction[] = [
+  { id: "release", title: "Wake thread", image: "link" },
+  { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
+];
+
 // Pre-settlement servers: no lifecycle items, archive fills the gap.
 const LEGACY_MENU_ACTIONS: MenuAction[] = [
   { id: "archive", title: "Archive", image: "archivebox" },
@@ -100,6 +111,7 @@ const SIDEBAR_V2_ROW_RADIUS = 12;
 function ThreadListV2Section(props: {
   readonly label: string;
   readonly pane?: "screen" | "sidebar";
+  /** "snoozed" is the parked treatment, shared by both parked shelves. */
   readonly tone?: "default" | "snoozed";
   readonly disclosure?: {
     readonly expanded: boolean;
@@ -174,21 +186,27 @@ type ThreadListV2ShelfHeaderProps = {
   readonly pane?: "screen" | "sidebar";
 };
 
+const SHELF_LABELS = {
+  snoozed: { label: "Snoozed", noun: "snoozed" },
+  settled: { label: "Settled", noun: "settled" },
+  blocked: { label: "Depends on", noun: "waiting" },
+} as const;
+
 function ThreadListV2ShelfHeader(
-  props: ThreadListV2ShelfHeaderProps & { readonly kind: "snoozed" | "settled" },
+  props: ThreadListV2ShelfHeaderProps & { readonly kind: keyof typeof SHELF_LABELS },
 ) {
-  const label = props.kind === "snoozed" ? "Snoozed" : "Settled";
+  const { label, noun } = SHELF_LABELS[props.kind];
   return (
     <ThreadListV2Section
       label={props.expanded ? label : `${label} (${props.count})`}
       pane={props.pane}
-      tone={props.kind === "snoozed" ? "snoozed" : "default"}
+      tone={props.kind === "settled" ? "default" : "snoozed"}
       disclosure={{
         expanded: props.expanded,
         disabled: props.disabled,
         onToggle: props.onToggle,
-        accessibilityLabel: `${props.count} ${props.kind} ${props.count === 1 ? "thread" : "threads"}`,
-        accessibilityHint: `${props.expanded ? "Collapses" : "Expands"} the ${props.kind} threads.`,
+        accessibilityLabel: `${props.count} ${noun} ${props.count === 1 ? "thread" : "threads"}`,
+        accessibilityHint: `${props.expanded ? "Collapses" : "Expands"} the ${noun} threads.`,
       }}
     />
   );
@@ -204,6 +222,12 @@ export const ThreadListV2SettledShelfHeader = memo(function ThreadListV2SettledS
   props: ThreadListV2ShelfHeaderProps,
 ) {
   return <ThreadListV2ShelfHeader {...props} kind="settled" />;
+});
+
+export const ThreadListV2BlockedShelfHeader = memo(function ThreadListV2BlockedShelfHeader(
+  props: ThreadListV2ShelfHeaderProps,
+) {
+  return <ThreadListV2ShelfHeader {...props} kind="blocked" />;
 });
 
 export const ThreadListV2ShowMoreRow = memo(function ThreadListV2ShowMoreRow(props: {
@@ -382,6 +406,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly hasQueuedMessages?: boolean;
   /** Snoozed-shelf row: shows its wake time and offers Wake. */
   readonly snoozed?: boolean;
+  /** Depends on shelf row: shows what it waits on and offers Wake. */
+  readonly blocked?: boolean;
+  /** "Waiting on {title}", resolved by the list against the full shell set. */
+  readonly waitLabel?: string | null;
   /** Pinned-block row: shows the pin glyph and offers Unpin. */
   readonly pinned?: boolean;
   /** Preformatted against the parent minute tick so this memoized row's
@@ -422,6 +450,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onSettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onSnoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => void;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => void;
+  /** Opens the dependency picker for this thread. */
+  readonly onAddThreadDependency: (thread: EnvironmentThreadShell) => void;
+  /** Starts a new thread in the same place, linked back to this one. */
+  readonly onNewThreadToUnblock: (thread: EnvironmentThreadShell) => void;
+  /** Drops every link so the thread returns to the active list. */
+  readonly onReleaseThreadDependencies: (thread: EnvironmentThreadShell) => void;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
   readonly onPinThread: (thread: EnvironmentThreadShell) => void;
@@ -431,6 +465,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly settlementSupported: boolean;
   /** False on servers that predate thread.snooze/unsnooze. */
   readonly snoozeSupported: boolean;
+  /** False on servers that predate thread dependencies. */
+  readonly dependenciesSupported: boolean;
   /** False on servers that predate thread.pin/unpin. */
   readonly pinningSupported: boolean;
   /** False on servers that predate thread title regeneration. */
@@ -465,6 +501,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onSettleThread,
     onSnoozeThread,
     onUnsnoozeThread,
+    onAddThreadDependency,
+    onNewThreadToUnblock,
+    onReleaseThreadDependencies,
     onUnsettleThread,
     onArchiveThread,
     onPinThread,
@@ -472,6 +511,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onMoveThread,
   } = props;
   const snoozedRow = props.snoozed === true;
+  const blockedRow = props.blocked === true;
   const pinnedRow = props.pinned === true;
 
   const pr = useThreadPr(thread);
@@ -518,6 +558,18 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     [onSnoozeThread, thread],
   );
   const handleUnsnooze = useCallback(() => onUnsnoozeThread(thread), [onUnsnoozeThread, thread]);
+  const handleDependsOn = useCallback(
+    () => onAddThreadDependency(thread),
+    [onAddThreadDependency, thread],
+  );
+  const handleNewThreadToUnblock = useCallback(
+    () => onNewThreadToUnblock(thread),
+    [onNewThreadToUnblock, thread],
+  );
+  const handleRelease = useCallback(
+    () => onReleaseThreadDependencies(thread),
+    [onReleaseThreadDependencies, thread],
+  );
   const handleUnsettle = useCallback(() => onUnsettleThread(thread), [onUnsettleThread, thread]);
   const handlePin = useCallback(() => onPinThread(thread), [onPinThread, thread]);
   const handleUnpin = useCallback(() => onUnpinThread(thread), [onUnpinThread, thread]);
@@ -544,6 +596,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     snoozeSupported: props.snoozeSupported,
     snoozable: canSnooze(thread, { now: new Date().toISOString() }),
     snoozed: snoozedRow,
+    blocked: blockedRow,
   });
   const snoozePresets = useMemo(
     () => (swipeActions.secondary === "snooze" ? resolveSnoozePresets(new Date()) : ([] as const)),
@@ -609,6 +662,27 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     ],
     [props.titleRegenerationSupported, thread.titleRegeneration],
   );
+  // Both entry points sit beside Snooze: parking on a thread and parking on
+  // a time are the same kind of decision. Disabled rather than hidden so the
+  // feature stays discoverable on a thread that is momentarily ineligible.
+  const dependencyMenuItems = useMemo<MenuAction[]>(() => {
+    if (!props.dependenciesSupported) return [];
+    const disabled = !canAddDependency(thread, { now: new Date().toISOString() });
+    return [
+      {
+        id: "depends-on",
+        title: "Depends on…",
+        image: "point.3.connected.trianglepath.dotted",
+        attributes: { disabled },
+      },
+      {
+        id: "new-thread-to-unblock",
+        title: "Start a thread to unblock this",
+        image: "square.and.pencil",
+        attributes: { disabled },
+      },
+    ];
+  }, [props.dependenciesSupported, snoozeGateTick, thread]);
   const snoozableCardMenuActions = useMemo<MenuAction[]>(
     () => [
       { id: "settle", title: "Settle", image: "checkmark" },
@@ -618,20 +692,22 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         image: "clock",
         subactions: snoozePresetActions,
       },
+      ...dependencyMenuItems,
       ...arrangementMenuItems,
       ...titleMenuItems,
       { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
     ],
-    [arrangementMenuItems, snoozePresetActions, titleMenuItems],
+    [arrangementMenuItems, dependencyMenuItems, snoozePresetActions, titleMenuItems],
   );
   const cardMenuActions = useMemo<MenuAction[]>(
     () => [
       CARD_MENU_ACTIONS[0]!,
+      ...dependencyMenuItems,
       ...arrangementMenuItems,
       ...titleMenuItems,
       ...CARD_MENU_ACTIONS.slice(1),
     ],
-    [arrangementMenuItems, titleMenuItems],
+    [arrangementMenuItems, dependencyMenuItems, titleMenuItems],
   );
   const slimMenuActions = useMemo<MenuAction[]>(
     () => [
@@ -646,6 +722,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   );
   const snoozedMenuActions = useMemo<MenuAction[]>(
     () => [SNOOZED_MENU_ACTIONS[0]!, ...titleMenuItems, SNOOZED_MENU_ACTIONS[1]!],
+    [titleMenuItems],
+  );
+  const blockedMenuActions = useMemo<MenuAction[]>(
+    () => [BLOCKED_MENU_ACTIONS[0]!, ...titleMenuItems, BLOCKED_MENU_ACTIONS[1]!],
     [titleMenuItems],
   );
   const legacyMenuActions = useMemo<MenuAction[]>(
@@ -663,6 +743,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
+      if (nativeEvent.event === "depends-on") handleDependsOn();
+      if (nativeEvent.event === "new-thread-to-unblock") handleNewThreadToUnblock();
+      if (nativeEvent.event === "release") handleRelease();
       if (nativeEvent.event === "pin") handlePin();
       if (nativeEvent.event === "unpin") handleUnpin();
       if (nativeEvent.event === "arrange") appAtomRegistry.set(threadArrangementOpenAtom, true);
@@ -695,6 +778,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       thread,
       handleArchive,
       handleDelete,
+      handleDependsOn,
+      handleNewThreadToUnblock,
+      handleRelease,
       handleRegenerateTitle,
       handleRename,
       handleMoveDown,
@@ -728,6 +814,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         onPress: handleUnsnooze,
       };
     }
+    if (swipeActions.primary === "release") {
+      return {
+        accessibilityLabel: `Wake ${thread.title} now`,
+        icon: "link" as const,
+        label: "Wake",
+        onPress: handleRelease,
+      };
+    }
     return swipeActions.primary === "unsettle"
       ? {
           accessibilityLabel: `Un-settle ${thread.title}`,
@@ -743,6 +837,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         };
   }, [
     handleArchive,
+    handleRelease,
     handleSettle,
     handleUnsettle,
     handleUnsnooze,
@@ -1103,22 +1198,29 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             ) : null}
           </View>
           {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
+          {/* A blocked row replaces the timestamp with what it waits on. It
+              is prose rather than a countdown, so it drops the mono face and
+              truncates instead of squeezing the title. */}
           <Text
             className={cn(
-              "text-sm tabular-nums",
+              "text-sm",
+              blockedRow && props.waitLabel != null ? "shrink" : "tabular-nums",
               selected
                 ? Platform.OS === "android"
                   ? "text-thread-selected-foreground-muted"
                   : "text-user-bubble-foreground-muted"
-                : snoozedRow
+                : snoozedRow || blockedRow
                   ? "text-foreground-secondary"
                   : "text-foreground-tertiary",
             )}
-            style={{ fontFamily: MONO_FONT }}
+            numberOfLines={1}
+            style={blockedRow && props.waitLabel != null ? undefined : { fontFamily: MONO_FONT }}
           >
-            {snoozedRow && props.snoozeWakeLabelText !== undefined
-              ? props.snoozeWakeLabelText
-              : timeLabel}
+            {blockedRow && props.waitLabel != null
+              ? props.waitLabel
+              : snoozedRow && props.snoozeWakeLabelText !== undefined
+                ? props.snoozeWakeLabelText
+                : timeLabel}
           </Text>
         </View>
       </RowPressable>
@@ -1150,7 +1252,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         onSwipeableWillOpen={props.onSwipeableWillOpen}
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
-        resetKey={`${thread.environmentId}:${thread.id}:${variant}:${snoozedRow}:${thread.settledAt}:${thread.unsettledAt}:${thread.snoozedUntil}`}
+        resetKey={`${thread.environmentId}:${thread.id}:${variant}:${snoozedRow}:${blockedRow}:${thread.settledAt}:${thread.unsettledAt}:${thread.snoozedUntil}`}
         simultaneousWithExternalGesture={props.simultaneousSwipeGesture}
         threadTitle={thread.title}
       >
@@ -1170,15 +1272,17 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   ]
                 : []),
               { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
-              ...(snoozedRow
-                ? snoozedMenuActions
-                : !props.settlementSupported
-                  ? legacyMenuActions
-                  : canUnsettle
-                    ? slimMenuActions
-                    : swipeActions.secondary === "snooze"
-                      ? snoozableCardMenuActions
-                      : cardMenuActions),
+              ...(blockedRow
+                ? blockedMenuActions
+                : snoozedRow
+                  ? snoozedMenuActions
+                  : !props.settlementSupported
+                    ? legacyMenuActions
+                    : canUnsettle
+                      ? slimMenuActions
+                      : swipeActions.secondary === "snooze"
+                        ? snoozableCardMenuActions
+                        : cardMenuActions),
             ]}
             onPressAction={handleMenuAction}
             shouldOpenOnLongPress

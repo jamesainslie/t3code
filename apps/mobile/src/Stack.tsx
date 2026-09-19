@@ -43,6 +43,7 @@ import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
 import { AddProjectSourceRoute } from "./features/projects/AddProjectSourceRoute";
 import { NewTaskDraftRouteScreen } from "./features/threads/NewTaskDraftRouteScreen";
+import { ThreadDependencyPickerRouteScreen } from "./features/threads/ThreadDependencyPickerScreen";
 import {
   NewTaskBranchPickerRouteScreen,
   NewTaskEnvironmentPickerRouteScreen,
@@ -743,6 +744,22 @@ export const RootStack = createNativeStackNavigator({
         ...FORM_SHEET_PRESENTATION_OPTIONS,
         sheetAllowedDetents: [0.55, 0.7],
         sheetGrabberVisible: true,
+      },
+    }),
+    ThreadDependencyPicker: createNativeStackScreen({
+      screen: ThreadDependencyPickerRouteScreen,
+      linking: "threads/:environmentId/:threadId/depends-on",
+      options: {
+        title: "Depends on",
+        // Same shape as Connections: a sheet on iOS, a full page on Android
+        // where the screen draws its own header.
+        ...(Platform.OS === "android"
+          ? { presentation: "card" as const, headerShown: false }
+          : {
+              ...FORM_SHEET_PRESENTATION_OPTIONS,
+              sheetAllowedDetents: [0.55, 0.9],
+              sheetGrabberVisible: true,
+            }),
       },
     }),
     NewTaskSheet: createNativeStackScreen({
