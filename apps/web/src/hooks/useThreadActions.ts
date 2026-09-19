@@ -5,7 +5,11 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { canSnooze, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  canAddDependency,
+  canSnooze,
+  threadWokeAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
@@ -29,6 +33,7 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
+  readEnvironmentSupportsDependencies,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentThreadRefs,
@@ -77,6 +82,30 @@ export class ThreadSnoozeUnsupportedError extends Schema.TaggedError<ThreadSnooz
 ) {
   override get message(): string {
     return "This environment's server does not support snoozing yet. Update the server to use Snooze.";
+  }
+}
+
+export class ThreadDependencyUnsupportedError extends Schema.TaggedError<ThreadDependencyUnsupportedError>()(
+  "ThreadDependencyUnsupportedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return "This environment's server does not support thread dependencies yet. Update the server to use Depends on.";
+  }
+}
+
+export class ThreadDependencyBlockedError extends Schema.TaggedError<ThreadDependencyBlockedError>()(
+  "ThreadDependencyBlockedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return "This thread is waiting on you. Answer it before parking it on another thread.";
   }
 }
 
@@ -202,6 +231,12 @@ export function useThreadActions() {
     reportFailure: false,
   });
   const reorderActiveThreadMutation = useAtomCommand(threadEnvironment.reorderActive, {
+    reportFailure: false,
+  });
+  const addThreadDependencyMutation = useAtomCommand(threadEnvironment.addDependency, {
+    reportFailure: false,
+  });
+  const removeThreadDependenciesMutation = useAtomCommand(threadEnvironment.removeDependencies, {
     reportFailure: false,
   });
   const snoozeThreadMutation = useAtomCommand(threadEnvironment.snooze, {
@@ -731,6 +766,69 @@ export function useThreadActions() {
     [unsnoozeThreadMutation],
   );
 
+  /** Park `target` on another thread in the same environment. */
+  const addThreadDependency = useCallback(
+    async (target: ScopedThreadRef, dependsOnThreadId: ThreadId) => {
+      // Version skew: never send the command to a server that predates it.
+      if (!readEnvironmentSupportsDependencies(target.environmentId)) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadDependencyUnsupportedError({
+              environmentId: target.environmentId,
+              threadId: target.threadId,
+            }),
+          ),
+        );
+      }
+      const resolved = resolveThreadTarget(target);
+      // Same pre-flight as snooze: blocked-on-you work and queued turns
+      // cannot be parked, so reject before the round trip.
+      if (resolved && !canAddDependency(resolved.thread, { now: new Date().toISOString() })) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadDependencyBlockedError({
+              environmentId: resolved.threadRef.environmentId,
+              threadId: resolved.threadRef.threadId,
+            }),
+          ),
+        );
+      }
+      return addThreadDependencyMutation({
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, dependsOnThreadId },
+      });
+    },
+    [addThreadDependencyMutation, resolveThreadTarget],
+  );
+
+  /** Wake a waiting thread by dropping every link it holds, satisfied or
+      not, so nothing is left to re-park it or to drive a stale Woke pill. */
+  const releaseThreadDependencies = useCallback(
+    async (target: ScopedThreadRef) => {
+      if (!readEnvironmentSupportsDependencies(target.environmentId)) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadDependencyUnsupportedError({
+              environmentId: target.environmentId,
+              threadId: target.threadId,
+            }),
+          ),
+        );
+      }
+      const [first, ...rest] = (readThreadShell(target)?.dependencies ?? []).map(
+        (link) => link.threadId,
+      );
+      // The command takes a non-empty array; nothing to remove is a no-op,
+      // not a failure, so callers can wake unconditionally.
+      if (first === undefined) return AsyncResult.success(undefined);
+      return removeThreadDependenciesMutation({
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, dependsOnThreadIds: [first, ...rest] },
+      });
+    },
+    [removeThreadDependenciesMutation],
+  );
+
   const confirmAndDeleteThread = useCallback(
     async (target: ScopedThreadRef) => {
       const localApi = readLocalApi();
@@ -770,6 +868,8 @@ export function useThreadActions() {
       unsettleThread,
       snoozeThread,
       unsnoozeThread,
+      addThreadDependency,
+      releaseThreadDependencies,
       pinThread,
       unpinThread,
       confirmAndUnpinThread,
@@ -777,11 +877,13 @@ export function useThreadActions() {
       reorderActiveThread,
     }),
     [
+      addThreadDependency,
       archiveThread,
       confirmAndDeleteThread,
       confirmAndUnpinThread,
       deleteThread,
       pinThread,
+      releaseThreadDependencies,
       reorderPinnedThread,
       reorderActiveThread,
       settleThread,

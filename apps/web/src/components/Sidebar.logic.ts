@@ -11,6 +11,9 @@ import type { AsyncResult } from "effect/unstable/reactivity";
 import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
 import {
   effectiveSnoozed,
+  threadUnblockedAt,
+  threadWokeAt,
+  type ThreadDependencyShell,
   type ThreadSnoozeShell,
 } from "@t3tools/client-runtime/state/thread-settled";
 import {
@@ -39,6 +42,23 @@ export function shouldNavigateAfterThreadPark(input: {
       ? input.thread.settledOverride === "settled"
       : effectiveSnoozed(input.thread, { now: input.now }))
   );
+}
+
+/**
+ * When a parked thread came back, for the row's Woke pill. A thread can
+ * return from a snooze and from a dependency, and the pill is dismissed by
+ * visiting, so the later wake wins: reporting the earlier one would let a
+ * visit made between the two suppress a signal the user never saw.
+ */
+export function resolveSidebarWokeAt(
+  thread: ThreadSnoozeShell & ThreadDependencyShell,
+  options: { readonly now: string },
+): string | null {
+  const snoozeWoke = threadWokeAt(thread, options);
+  const dependencyWoke = threadUnblockedAt(thread);
+  if (snoozeWoke === null) return dependencyWoke;
+  if (dependencyWoke === null) return snoozeWoke;
+  return Date.parse(dependencyWoke) > Date.parse(snoozeWoke) ? dependencyWoke : snoozeWoke;
 }
 
 const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
@@ -110,10 +130,11 @@ export const animateSidebarLayoutChanges: AnimateLayoutChanges = (args) =>
 // Rows and section markers share one sortable list. The separators resolve
 // the lifecycle action; Sidebar.drag previews the resulting layout. Pinned
 // and active threads keep the dragged position; settled threads use time
-// order. Snoozed rows can leave the shelf, but dropping into it is not
-// supported because snoozing requires a wake time.
+// order. Snoozed and blocked rows can leave their shelf, but dropping into
+// one is not supported: snoozing requires a wake time and waiting requires a
+// thread to wait on, and a drop supplies neither.
 
-export type SidebarSection = "pinned" | "active" | "snoozed" | "settled";
+export type SidebarSection = "pinned" | "active" | "blocked" | "snoozed" | "settled";
 
 /** Sortable ids: thread rows use their scoped key; structural items use a
     colon-free prefix: scoped thread keys always contain a colon. */
@@ -127,6 +148,7 @@ export type SidebarListMarker =
   | "settled-placeholder"
   /** The boundary between pinned and active rows. */
   | "pinned-divider"
+  | "blocked-header"
   | "snoozed-header"
   | "settled-header";
 
@@ -144,14 +166,15 @@ export function sidebarListItemId(item: SidebarListItem): string {
 
 /** The section a slot belongs to, read off the markers around it: from
     the top down, everything before the pinned divider is pinned, then the
-    inbox until the snoozed header, the shelf until the settled header,
-    then settled. */
+    inbox until the blocked header, each shelf until the next header, then
+    settled. */
 function sectionAtSidebarSlot(items: readonly SidebarListItem[], index: number): SidebarSection {
   let section: SidebarSection = "pinned";
   for (let i = 0; i < index && i < items.length; i += 1) {
     const item = items[i]!;
     if (item.kind !== "marker") continue;
     if (item.marker === "pinned-divider") section = "active";
+    else if (item.marker === "blocked-header") section = "blocked";
     else if (item.marker === "snoozed-header") section = "snoozed";
     else if (item.marker === "settled-header") section = "settled";
   }
@@ -159,7 +182,7 @@ function sectionAtSidebarSlot(items: readonly SidebarListItem[], index: number):
 }
 
 /** Resolve the destination section and manual order from an arrayMove across
- * the separators. The snoozed shelf is never a destination. */
+ * the separators. Neither shelf is ever a destination. */
 export type SidebarDropTarget = {
   readonly section: "pinned" | "active" | "settled";
   readonly pinnedOrder: readonly string[];
@@ -177,14 +200,20 @@ export function resolveSidebarDropTarget(
   const moved = items.filter((_, index) => index !== activeIndex);
   moved.splice(overIndex, 0, items[activeIndex]!);
   const section = sectionAtSidebarSlot(moved, overIndex);
-  if (section === "snoozed") return null;
+  if (section === "blocked" || section === "snoozed") return null;
   const pinnedOrder: string[] = [];
   const activeOrder: string[] = [];
   let currentSection: SidebarSection = "pinned";
   for (const item of moved) {
     if (item.kind === "marker") {
       if (item.marker === "pinned-divider") currentSection = "active";
-      else if (item.marker === "snoozed-header" || item.marker === "settled-header") break;
+      else if (
+        item.marker === "blocked-header" ||
+        item.marker === "snoozed-header" ||
+        item.marker === "settled-header"
+      ) {
+        break;
+      }
     } else if (currentSection === "pinned") pinnedOrder.push(item.key);
     else activeOrder.push(item.key);
   }
@@ -215,19 +244,22 @@ export type SidebarThreadDropPlan =
       readonly unpin: boolean;
       readonly unsettle: boolean;
       readonly unsnooze: boolean;
+      /** Dragged out of the Depends on shelf: drop every link it waits on. */
+      readonly release: boolean;
     }
   | { readonly kind: "settle" };
 
 /** What dropping in `to` does to a thread lifted from `from`, for the badge
     on the lifted row. Null while reordering inside one section and for the
-    snoozed shelf, which cannot be a drop target. */
+    two shelves, which cannot be drop targets. Leaving either shelf for the
+    inbox reads as the same "wake": the thread comes back now. */
 export type SidebarDropVerb = "pin" | "unpin" | "settle" | "unsettle" | "wake";
 
 export function resolveSidebarDropVerb(
   from: SidebarSection,
   to: SidebarSection | null,
 ): SidebarDropVerb | null {
-  if (to === null || to === from || to === "snoozed") return null;
+  if (to === null || to === from || to === "blocked" || to === "snoozed") return null;
   if (to === "pinned") return "pin";
   if (to === "settled") return "settle";
   if (from === "pinned") return "unpin";
@@ -292,6 +324,7 @@ export function planSidebarThreadDrop(input: {
         unpin: activePinned,
         unsettle: activeSettled,
         unsnooze: activeSection === "snoozed",
+        release: activeSection === "blocked",
       };
     }
     case "settled":

@@ -18,8 +18,10 @@ import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   canSnooze,
+  compareBlockedThreads,
+  dependencyWaitLabel,
+  effectiveBlocked,
   effectiveSnoozed,
-  threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
@@ -167,6 +169,7 @@ import {
   resolveSidebarDropVerb,
   type SidebarDropVerb,
   resolveSidebarThreadStatus,
+  resolveSidebarWokeAt,
   searchSidebarThreads,
   shouldCreateNewThreadInCurrentProject,
   shouldNavigateAfterThreadPark,
@@ -252,6 +255,7 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 // Fresh keys deliberately reset both shelves to collapsed for existing users.
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
+const BLOCKED_SHELF_EXPANDED_KEY = "t3code:sidebar:blocked-expanded";
 
 function compactSidebarTimeLabel(label: string): string {
   if (label === "just now") return "now";
@@ -646,7 +650,7 @@ function SidebarDragBoundary(props: {
 
 // Shelf headers stay visible and keep their measured height while dragging.
 function SidebarSectionHeader(props: {
-  marker: "snoozed-header" | "settled-header";
+  marker: "blocked-header" | "snoozed-header" | "settled-header";
   label: string;
   className?: string;
   // While dragging, the settled header reads at full strength and takes the
@@ -655,7 +659,8 @@ function SidebarSectionHeader(props: {
   isDropTarget?: boolean;
   toggle: { expanded: boolean; onToggle: () => void };
 }) {
-  const snoozed = props.marker === "snoozed-header";
+  // The two parked shelves read as siblings: same blue, same divider.
+  const snoozed = props.marker === "snoozed-header" || props.marker === "blocked-header";
   const className = cn(
     "flex h-full w-full items-center gap-2 px-2 text-left text-xs font-medium",
     snoozed ? "text-blue-600 dark:text-blue-400" : "text-sidebar-muted-foreground/60",
@@ -693,7 +698,7 @@ function SidebarSectionHeader(props: {
         type="button"
         onClick={props.toggle.onToggle}
         aria-expanded={props.toggle.expanded}
-        data-testid={`sidebar-${snoozed ? "snoozed" : "settled"}-shelf-toggle`}
+        data-testid={`sidebar-${props.marker.replace("-header", "")}-shelf-toggle`}
         className={cn(className, "cursor-pointer")}
       >
         {content}
@@ -967,14 +972,17 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
 const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   thread: SidebarThreadSummary;
   variant: "card" | "slim";
-  // Slim rows are either settled (action: un-settle) or merely quiet
-  // (seen Ready threads — action: settle).
-  variantAction: "settle" | "unsettle" | "unsnooze";
+  // Slim rows are either settled (action: un-settle), waiting on another
+  // thread (action: release) or merely quiet (seen Ready threads — action:
+  // settle).
+  variantAction: "settle" | "unsettle" | "unsnooze" | "release";
   // False on environments whose server predates thread.settle/unsettle:
   // the lifecycle affordances hide entirely rather than fail on click.
   settlementSupported: boolean;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
+  // Same contract for thread.dependency.add/remove.
+  dependenciesSupported: boolean;
   // Pinned threads show the same pin marker in active, settled, and snoozed
   // rows. The marker can unpin the thread when the server supports pinning.
   pinningSupported: boolean;
@@ -988,8 +996,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // the pinned section. Any other position shows the verb badge instead, and
   // the badge carries its own icon.
   dragOverPinned: boolean;
-  // Compact wake countdown ("2h") for rows in the snoozed shelf.
-  snoozeWakeLabelText: string | null;
+  // What a parked row says instead of its timestamp: a compact wake
+  // countdown ("2h") on the snoozed shelf, "Waiting on ..." on the blocked one.
+  parkedLabelText: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
   // the user visits the thread.
   wokeAt: string | null;
@@ -1016,6 +1025,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   onUnsettle: (threadRef: ScopedThreadRef) => void;
   onSnooze: (threadRef: ScopedThreadRef, preset: Pick<SnoozePreset, "snoozedUntil">) => void;
   onUnsnooze: (threadRef: ScopedThreadRef) => void;
+  onRelease: (threadRef: ScopedThreadRef) => void;
   onUnpin: (threadRef: ScopedThreadRef) => void;
   onAcknowledgeWoke: (threadRef: ScopedThreadRef, visitedAt: string) => void;
   /**
@@ -1040,6 +1050,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     onThreadClick,
     onUnsettle,
     onUnsnooze,
+    onRelease,
     onUnpin,
     openPullRequestsInRightPanel,
     renamingTitle,
@@ -1339,6 +1350,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       onUnsnooze(threadRef);
     },
     [onUnsnooze, threadRef],
+  );
+  const handleReleaseClick = useCallback(
+    (event: ReactMouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onRelease(threadRef);
+    },
+    [onRelease, threadRef],
   );
   const handleUnpinClick = useCallback(
     (event: ReactMouseEvent) => {
@@ -1645,11 +1664,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                     !isWoke && "group-hover/sidebar-row:opacity-0",
                   )}
                 >
-                  {variantAction === "unsnooze" && props.snoozeWakeLabelText !== null ? (
-                    // Snoozed rows show when they come BACK, not when they were
+                  {(variantAction === "unsnooze" || variantAction === "release") &&
+                  props.parkedLabelText !== null ? (
+                    // Parked rows show what brings them BACK, not when they were
                     // last touched — the return ticket is the row's whole story.
-                    <span className="text-xs text-blue-600 tabular-nums dark:text-blue-400">
-                      {props.snoozeWakeLabelText}
+                    // Capped so a long dependency title cannot eat the title.
+                    <span className="max-w-28 truncate text-xs text-blue-600 tabular-nums dark:text-blue-400">
+                      {props.parkedLabelText}
                     </span>
                   ) : isWoke ? (
                     // A wake can land straight in the settled tail (e.g. PR
@@ -1678,12 +1699,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                     </span>
                   )}
                 </span>
-                {variantAction === "unsnooze" ? (
-                  !props.snoozeSupported ? null : (
+                {variantAction === "unsnooze" || variantAction === "release" ? (
+                  (
+                    variantAction === "release"
+                      ? !props.dependenciesSupported
+                      : !props.snoozeSupported
+                  ) ? null : (
                     <button
                       type="button"
                       aria-label="Wake thread now"
-                      onClick={handleUnsnoozeClick}
+                      onClick={
+                        variantAction === "release" ? handleReleaseClick : handleUnsnoozeClick
+                      }
                       className={cn(
                         "pointer-events-none absolute inset-y-0 right-0 -mr-1 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/sidebar-row:pointer-events-auto group-hover/sidebar-row:opacity-100",
                         isWoke && "group-hover/sidebar-row:static",
@@ -2153,6 +2180,7 @@ export default function Sidebar() {
     unsettleThread,
     snoozeThread,
     unsnoozeThread,
+    releaseThreadDependencies,
     pinThread,
     unpinThread,
     confirmAndUnpinThread,
@@ -2510,6 +2538,7 @@ export default function Sidebar() {
     readonly section: "pinned" | "active" | "settled";
     readonly occurredAt: string;
     readonly clearsSnooze: boolean;
+    readonly clearsDependencies: boolean;
     /** Full destination order for pinned and active drops. */
     readonly order: readonly string[] | null;
     /** Destination order keys before the drop, to recognize concurrent writes. */
@@ -2523,6 +2552,8 @@ export default function Sidebar() {
     draggableThreadKeys,
     activeReorderableThreadKeys,
     activeThreads,
+    blockedThreads,
+    blockedWaitLabelByKey,
     snoozedThreads,
     settledThreads,
     snoozeNow,
@@ -2541,6 +2572,7 @@ export default function Sidebar() {
     );
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
+    const blocked: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
     const settled: EnvironmentThreadShell[] = [];
     const draggable = new Set<string>();
@@ -2553,6 +2585,7 @@ export default function Sidebar() {
       // strand rows in a tail with no working affordances.
       const supportsSettlement = capabilities?.threadSettlement === true;
       const supportsSnooze = capabilities?.threadSnooze === true;
+      const supportsDependencies = capabilities?.threadDependencies === true;
       const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
       if (capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
       // Older servers retain their existing drag actions. Active placement
@@ -2577,6 +2610,10 @@ export default function Sidebar() {
             ? projected
             : { ...projected, snoozedAt: thread.snoozedAt, snoozedUntil: thread.snoozedUntil },
         );
+      } else if (supportsDependencies && effectiveBlocked(thread)) {
+        // Waiting on another thread outranks every other classification:
+        // the row belongs in the Depends on shelf until its links clear.
+        blocked.push(thread);
       } else if (supportsSnooze && effectiveSnoozed(thread, { now: preciseNow })) {
         // Snooze outranks settlement and pinning until the thread wakes.
         snoozed.push(thread);
@@ -2595,6 +2632,24 @@ export default function Sidebar() {
     // web and mobile from the same data.
     const sortedPinned = sortPinnedThreadsForSidebar(pinned);
     const sortedActive = sortThreadsForSidebar(active);
+    // Wait labels name the threads being waited on, so they need titles from
+    // outside the current project scope. Built only when something waits.
+    const waitLabels = new Map<string, string>();
+    if (blocked.length > 0) {
+      const titleByRef = new Map<string, string>();
+      for (const thread of threads) {
+        titleByRef.set(`${thread.environmentId}:${thread.id}`, thread.title);
+      }
+      for (const thread of blocked) {
+        const label = dependencyWaitLabel(
+          thread,
+          (threadId) => titleByRef.get(`${thread.environmentId}:${threadId}`) ?? null,
+        );
+        if (label !== null) {
+          waitLabels.set(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), label);
+        }
+      }
+    }
     return {
       pinnedThreads:
         optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -2614,6 +2669,10 @@ export default function Sidebar() {
               preferredIds: optimisticDrop.order,
               getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
             }),
+      // Most recently parked first: the newest commitment is the one the
+      // user still has in mind.
+      blockedThreads: blocked.toSorted(compareBlockedThreads),
+      blockedWaitLabelByKey: waitLabels,
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -2630,8 +2689,14 @@ export default function Sidebar() {
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   const searchableThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...snoozedThreads, ...settledThreads],
-    [activeThreads, pinnedThreads, settledThreads, snoozedThreads],
+    () => [
+      ...pinnedThreads,
+      ...activeThreads,
+      ...blockedThreads,
+      ...snoozedThreads,
+      ...settledThreads,
+    ],
+    [activeThreads, blockedThreads, pinnedThreads, settledThreads, snoozedThreads],
   );
   const threadSearchResults = useMemo(
     () => searchSidebarThreads(searchableThreads, threadSearchQuery),
@@ -2748,9 +2813,43 @@ export default function Sidebar() {
     return routeThread === undefined ? EMPTY_THREADS : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
+  // The Depends on shelf behaves exactly like the snoozed one: collapsed by
+  // default, and the routed thread still renders so a deep link never opens a
+  // thread with no row.
+  const [blockedShelfExpanded, setBlockedShelfExpanded] = useLocalStorage(
+    BLOCKED_SHELF_EXPANDED_KEY,
+    false,
+    Schema.Boolean,
+  );
+  const toggleBlockedShelf = useCallback(
+    () => setBlockedShelfExpanded((value) => !value),
+    [setBlockedShelfExpanded],
+  );
+  const visibleBlockedThreads = useMemo(() => {
+    if (blockedShelfExpanded) return blockedThreads;
+    if (routeThreadKey === null) return EMPTY_THREADS;
+    const routeThread = blockedThreads.find(
+      (thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === routeThreadKey,
+    );
+    return routeThread === undefined ? EMPTY_THREADS : [routeThread];
+  }, [blockedShelfExpanded, blockedThreads, routeThreadKey]);
+
   const orderedThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+    () => [
+      ...pinnedThreads,
+      ...activeThreads,
+      ...visibleBlockedThreads,
+      ...visibleSnoozedThreads,
+      ...renderedSettledThreads,
+    ],
+    [
+      pinnedThreads,
+      activeThreads,
+      visibleBlockedThreads,
+      visibleSnoozedThreads,
+      renderedSettledThreads,
+    ],
   );
   const orderedThreadKeys = useMemo(
     () =>
@@ -3118,6 +3217,24 @@ export default function Sidebar() {
     },
     [unsnoozeThread],
   );
+  const attemptRelease = useCallback(
+    (threadRef: ScopedThreadRef) => {
+      void (async () => {
+        const result = await releaseThreadDependencies(threadRef);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to wake thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+      })();
+    },
+    [releaseThreadDependencies],
+  );
   const threadListRef = useRef<HTMLUListElement | null>(null);
   const dragLabelOffsetRef = useRef(0);
   const restrictBelowPins = useCallback<Modifier>(
@@ -3173,10 +3290,11 @@ export default function Sidebar() {
     };
     add(pinnedThreads, "pinned");
     add(activeThreads, "active");
+    add(blockedThreads, "blocked");
     add(snoozedThreads, "snoozed");
     add(settledThreads, "settled");
     return map;
-  }, [activeThreads, pinnedThreads, settledThreads, snoozedThreads]);
+  }, [activeThreads, blockedThreads, pinnedThreads, settledThreads, snoozedThreads]);
   const pinnedKeys = useMemo(
     () =>
       pinnedThreads.map((thread) =>
@@ -3204,13 +3322,15 @@ export default function Sidebar() {
       setOptimisticDrop(null);
       return;
     }
-    const canonicalSection = effectiveSnoozed(thread, { now: new Date().toISOString() })
-      ? "snoozed"
-      : thread.settledOverride === "settled"
-        ? "settled"
-        : thread.pinnedAt != null
-          ? "pinned"
-          : "active";
+    const canonicalSection = effectiveBlocked(thread)
+      ? "blocked"
+      : effectiveSnoozed(thread, { now: new Date().toISOString() })
+        ? "snoozed"
+        : thread.settledOverride === "settled"
+          ? "settled"
+          : thread.pinnedAt != null
+            ? "pinned"
+            : "active";
     if (
       canonicalSection !== optimisticDrop.sourceSection &&
       canonicalSection !== optimisticDrop.section
@@ -3224,7 +3344,8 @@ export default function Sidebar() {
       if (
         canonicalSection === optimisticDrop.section &&
         thread.pinnedAt == null &&
-        (!optimisticDrop.clearsSnooze || thread.snoozedUntil == null)
+        (!optimisticDrop.clearsSnooze || thread.snoozedUntil == null) &&
+        (!optimisticDrop.clearsDependencies || (thread.dependencies ?? []).length === 0)
       ) {
         setOptimisticDrop(null);
       }
@@ -3232,6 +3353,7 @@ export default function Sidebar() {
     }
     if (canonicalSection !== optimisticDrop.section) return;
     if (optimisticDrop.clearsSnooze && thread.snoozedUntil != null) return;
+    if (optimisticDrop.clearsDependencies && (thread.dependencies ?? []).length > 0) return;
     const destinationKeys = optimisticDrop.section === "pinned" ? pinnedKeys : activeKeys;
     const canonicalDestination = destinationKeys.flatMap((key) => {
       const canonical = canonicalByKey.get(key);
@@ -3343,6 +3465,7 @@ export default function Sidebar() {
     if (
       pinnedThreads.length +
         activeThreads.length +
+        blockedThreads.length +
         snoozedThreads.length +
         settledThreads.length ===
       0
@@ -3356,6 +3479,10 @@ export default function Sidebar() {
     const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
     items.push(...activeRows);
+    if (blockedThreads.length > 0) {
+      items.push({ kind: "marker", marker: "blocked-header" });
+      items.push(...rowsOf(visibleBlockedThreads, "blocked"));
+    }
     if (snoozedThreads.length > 0) {
       items.push({ kind: "marker", marker: "snoozed-header" });
       items.push(...rowsOf(visibleSnoozedThreads, "snoozed"));
@@ -3367,10 +3494,12 @@ export default function Sidebar() {
     return items;
   }, [
     activeThreads,
+    blockedThreads.length,
     pinnedThreads,
     renderedSettledThreads,
     settledThreads.length,
     snoozedThreads.length,
+    visibleBlockedThreads,
     visibleSnoozedThreads,
   ]);
   useEffect(() => {
@@ -3441,9 +3570,11 @@ export default function Sidebar() {
         settledExpanded: settledShelfExpanded,
         settledVisibleCount,
         routeThreadKey,
+        blockedThreadCount: blockedThreads.length,
         snoozedThreadCount: snoozedThreads.length,
       }),
     [
+      blockedThreads.length,
       draggedSettledOrder,
       routeThreadKey,
       settledShelfExpanded,
@@ -3568,6 +3699,12 @@ export default function Sidebar() {
           plan.kind === "pin" ||
           plan.kind === "settle" ||
           (plan.kind === "move-active" && plan.unsnooze),
+        // Pin and settle clear links server-side the same way they clear a
+        // snooze, so the preview must wait for those writes too.
+        clearsDependencies:
+          plan.kind === "pin" ||
+          plan.kind === "settle" ||
+          (plan.kind === "move-active" && plan.release),
         order: plan.kind === "settle" ? null : plan.order,
         keysAtDrop: target.section === "active" ? activeKeysById : pinnedKeysById,
         assignedKeys: new Map(assignments.map(({ id, orderKey }) => [id, orderKey])),
@@ -3625,8 +3762,21 @@ export default function Sidebar() {
               return;
             if (plan.unsnooze && !(await run(unsnoozeThread(threadRef), "Failed to wake thread")))
               return;
+            if (
+              plan.release &&
+              !(await run(releaseThreadDependencies(threadRef), "Failed to wake thread"))
+            )
+              return;
             break;
           case "pin":
+            // Leaving the Depends on shelf releases the thread wherever it
+            // lands. Settle clears links on the server; pin does not, so the
+            // release goes out first and the pin only follows if it lands.
+            if (
+              activeSection === "blocked" &&
+              !(await run(releaseThreadDependencies(threadRef), "Failed to wake thread"))
+            )
+              return;
             if (
               !(await run(
                 pinThread(
@@ -3671,6 +3821,7 @@ export default function Sidebar() {
       pinThread,
       pinnedKeys,
       planForwardNavigation,
+      releaseThreadDependencies,
       reorderPinnedThread,
       reorderActiveThread,
       sectionByThreadKey,
@@ -4670,13 +4821,15 @@ export default function Sidebar() {
                             key={`${threadKey}:${rowVariant}`}
                             thread={thread}
                             variant={rowVariant}
-                            // Snoozed rows wake, settled rows un-settle, and cards settle.
+                            // Parked rows wake, settled rows un-settle, and cards settle.
                             variantAction={
-                              section === "snoozed"
-                                ? "unsnooze"
-                                : section === "settled"
-                                  ? "unsettle"
-                                  : "settle"
+                              section === "blocked"
+                                ? "release"
+                                : section === "snoozed"
+                                  ? "unsnooze"
+                                  : section === "settled"
+                                    ? "unsettle"
+                                    : "settle"
                             }
                             settlementSupported={
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
@@ -4685,6 +4838,10 @@ export default function Sidebar() {
                             snoozeSupported={
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
                                 .threadSnooze === true
+                            }
+                            dependenciesSupported={
+                              serverConfigs.get(thread.environmentId)?.environment.capabilities
+                                .threadDependencies === true
                             }
                             pinningSupported={
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
@@ -4700,18 +4857,21 @@ export default function Sidebar() {
                             dragOverPinned={
                               dragState?.activeKey === threadKey && dragTargetSection === "pinned"
                             }
-                            snoozeWakeLabelText={
-                              section === "snoozed" && thread.snoozedUntil != null
-                                ? snoozeWakeLabel(thread.snoozedUntil, {
-                                    now: new Date().toISOString(),
-                                  })
-                                : null
+                            parkedLabelText={
+                              section === "blocked"
+                                ? (blockedWaitLabelByKey.get(threadKey) ?? null)
+                                : section === "snoozed" && thread.snoozedUntil != null
+                                  ? snoozeWakeLabel(thread.snoozedUntil, {
+                                      now: new Date().toISOString(),
+                                    })
+                                  : null
                             }
                             // All sections: a woken thread can classify straight
                             // into the settled tail (PR merged while snoozed), and
-                            // the wake signal must survive the trip. Still-snoozed
-                            // rows resolve to null on their own.
-                            wokeAt={threadWokeAt(thread, { now: snoozeNow })}
+                            // the wake signal must survive the trip. Still-parked
+                            // rows resolve to null on their own. A thread that was
+                            // both snoozed and waiting shows the later wake.
+                            wokeAt={resolveSidebarWokeAt(thread, { now: snoozeNow })}
                             isActive={routeThreadKey === threadKey}
                             openPullRequestsInRightPanel={routeThreadRef !== null}
                             jumpLabel={
@@ -4751,6 +4911,7 @@ export default function Sidebar() {
                             onUnsettle={attemptUnsettle}
                             onSnooze={attemptSnooze}
                             onUnsnooze={attemptUnsnooze}
+                            onRelease={attemptRelease}
                             onUnpin={attemptUnpin}
                             onAcknowledgeWoke={acknowledgeWoke}
                             onFileDropThreads={handleThreadFileDrop}
@@ -4833,12 +4994,30 @@ export default function Sidebar() {
                               />,
                             );
                             break;
+                          case "blocked-header":
+                            items.push(
+                              <SidebarSectionHeader
+                                key="blocked-shelf-header"
+                                marker="blocked-header"
+                                className="mt-auto"
+                                label={
+                                  blockedShelfExpanded
+                                    ? "Depends on"
+                                    : `Depends on (${blockedThreads.length})`
+                                }
+                                toggle={{
+                                  expanded: blockedShelfExpanded,
+                                  onToggle: toggleBlockedShelf,
+                                }}
+                              />,
+                            );
+                            break;
                           case "snoozed-header":
                             items.push(
                               <SidebarSectionHeader
                                 key="snoozed-shelf-header"
                                 marker="snoozed-header"
-                                className="mt-auto"
+                                className={cn(blockedThreads.length === 0 && "mt-auto")}
                                 label={
                                   snoozedShelfExpanded
                                     ? "Snoozed"
@@ -4856,7 +5035,9 @@ export default function Sidebar() {
                               <SidebarSectionHeader
                                 key="settled-shelf-header"
                                 marker="settled-header"
-                                className={cn(snoozedThreads.length === 0 && "mt-auto")}
+                                className={cn(
+                                  blockedThreads.length + snoozedThreads.length === 0 && "mt-auto",
+                                )}
                                 label={
                                   settledShelfExpanded
                                     ? "Settled"
