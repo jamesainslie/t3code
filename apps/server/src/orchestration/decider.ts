@@ -6,7 +6,11 @@ import {
   ThreadLinkedPullRequest,
   UserInputRequestedPayload,
   isImportedAgentSessionMessageId,
+  isSyncedThreadId,
+  threadDependencyWouldCycle,
+  unsatisfiedThreadDependencies,
   type OrchestrationCommand,
+  type ThreadDependencySatisfiedReason,
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationThread,
@@ -46,6 +50,7 @@ import {
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
 import { threadHasQueuedTurnStart } from "./ThreadSettlementPolicy.ts";
+import { settledTurnStateForSessionStatus } from "./sessionTurnState.ts";
 
 const monogramSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -169,6 +174,77 @@ function withEventBase(
 }
 
 type PlannedOrchestrationEvent = Omit<OrchestrationEvent, "sequence">;
+
+/**
+ * Companion events for every thread holding an open link to
+ * `dependencyThreadId`, produced by a command on the dependency (its session
+ * ending, a request opening, archive, delete). Each lands on the BLOCKED
+ * thread's aggregate. Callers return these BEFORE the command's own event:
+ * the engine records the command receipt against the last saved event's
+ * aggregate, so the command's own thread has to come last.
+ */
+const dependencySatisfiedEvents = Effect.fn("dependencySatisfiedEvents")(function* (input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly dependencyThreadId: OrchestrationThread["id"];
+  readonly reason: ThreadDependencySatisfiedReason;
+  readonly occurredAt: string;
+  readonly commandId: OrchestrationCommand["commandId"];
+}) {
+  const events: Array<PlannedOrchestrationEvent> = [];
+  for (const thread of input.readModel.threads) {
+    if (thread.deletedAt !== null) continue;
+    const waiting = unsatisfiedThreadDependencies(thread).some(
+      (link) => link.threadId === input.dependencyThreadId,
+    );
+    if (!waiting) continue;
+    events.push({
+      ...(yield* withEventBase({
+        aggregateKind: "thread",
+        aggregateId: thread.id,
+        occurredAt: input.occurredAt,
+        commandId: input.commandId,
+      })),
+      type: "thread.dependency-satisfied",
+      payload: {
+        threadId: thread.id,
+        dependsOnThreadId: input.dependencyThreadId,
+        satisfiedAt: input.occurredAt,
+        reason: input.reason,
+        updatedAt: input.occurredAt,
+      },
+    });
+  }
+  return events;
+});
+
+/**
+ * The blocked thread re-engaging (a message, a snooze, a settle) ends its
+ * wait: every link goes, mirroring how the same commands spend a snooze.
+ * Null when there is nothing to clear.
+ */
+const dependenciesClearedEvent = Effect.fn("dependenciesClearedEvent")(function* (input: {
+  readonly thread: OrchestrationThread;
+  readonly occurredAt: string;
+  readonly commandId: OrchestrationCommand["commandId"];
+}) {
+  const ids = (input.thread.dependencies ?? []).map((link) => link.threadId);
+  if (ids.length === 0) return null;
+  const event: PlannedOrchestrationEvent = {
+    ...(yield* withEventBase({
+      aggregateKind: "thread",
+      aggregateId: input.thread.id,
+      occurredAt: input.occurredAt,
+      commandId: input.commandId,
+    })),
+    type: "thread.dependencies-removed",
+    payload: {
+      threadId: input.thread.id,
+      dependsOnThreadIds: ids as [OrchestrationThread["id"], ...Array<OrchestrationThread["id"]>],
+      updatedAt: input.occurredAt,
+    },
+  };
+  return event;
+});
 
 type DecideOrchestrationCommandResult =
   | PlannedOrchestrationEvent
@@ -495,7 +571,15 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const occurredAt = yield* nowIso;
-      return {
+      // Nothing can wait on a thread that no longer exists.
+      const satisfiedEvents = yield* dependencySatisfiedEvents({
+        readModel,
+        dependencyThreadId: command.threadId,
+        reason: "deleted",
+        occurredAt,
+        commandId: command.commandId,
+      });
+      const deletedEvent: PlannedOrchestrationEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -508,6 +592,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           deletedAt: occurredAt,
         },
       };
+      return satisfiedEvents.length > 0 ? [...satisfiedEvents, deletedEvent] : deletedEvent;
     }
 
     case "thread.archive": {
@@ -517,7 +602,15 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const occurredAt = yield* nowIso;
-      return {
+      // An archived thread never runs again, so waiting on it is over.
+      const satisfiedEvents = yield* dependencySatisfiedEvents({
+        readModel,
+        dependencyThreadId: command.threadId,
+        reason: "archived",
+        occurredAt,
+        commandId: command.commandId,
+      });
+      const archivedEvent: PlannedOrchestrationEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -531,6 +624,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: occurredAt,
         },
       };
+      return satisfiedEvents.length > 0 ? [...satisfiedEvents, archivedEvent] : archivedEvent;
     }
 
     case "thread.unarchive": {
@@ -676,6 +770,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           },
         });
       }
+      const dependenciesCleared = yield* dependenciesClearedEvent({
+        thread,
+        occurredAt,
+        commandId: command.commandId,
+      });
+      if (dependenciesCleared !== null) {
+        companionEvents.push(dependenciesCleared);
+      }
       return companionEvents.length > 0 ? [settledEvent, ...companionEvents] : settledEvent;
     }
 
@@ -759,7 +861,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         thread.snoozedUntil === command.snoozedUntil && thread.snoozedAt != null
           ? thread.snoozedAt
           : null;
-      return {
+      const snoozedEvent: PlannedOrchestrationEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -774,6 +876,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: existingSnoozedAt !== null ? thread.updatedAt : occurredAt,
         },
       };
+      // A thread waits for a time or for other threads, never both.
+      const dependenciesCleared = yield* dependenciesClearedEvent({
+        thread,
+        occurredAt,
+        commandId: command.commandId,
+      });
+      return dependenciesCleared === null ? snoozedEvent : [dependenciesCleared, snoozedEvent];
     }
 
     case "thread.unsnooze": {
@@ -799,6 +908,142 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           threadId: command.threadId,
           reason: command.reason,
           updatedAt: alreadyAwake ? thread.updatedAt : occurredAt,
+        },
+      };
+    }
+
+    case "thread.dependency.add": {
+      const thread = yield* requireThreadNotArchived({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      if (command.dependsOnThreadId === command.threadId) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} cannot depend on itself`,
+          }),
+        );
+      }
+      const dependency = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.dependsOnThreadId,
+      });
+      // Waiting on a thread that can never finish a turn here is a wait that
+      // never ends: archived threads do not run, and synced threads belong to
+      // another environment whose turns this server never observes.
+      if (dependency.archivedAt !== null) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} cannot depend on archived thread ${command.dependsOnThreadId}`,
+          }),
+        );
+      }
+      if (isSyncedThreadId(dependency.id) || isSyncedThreadId(thread.id)) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `synced threads cannot take part in a dependency (${command.threadId} -> ${command.dependsOnThreadId})`,
+          }),
+        );
+      }
+      if (
+        threadDependencyWouldCycle(readModel.threads, command.threadId, command.dependsOnThreadId)
+      ) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} depending on ${command.dependsOnThreadId} would form a cycle`,
+          }),
+        );
+      }
+      // Same guards as snooze: blocked-on-you work and a queued turn start
+      // must not be parked out of sight.
+      if (openRequests(thread).size > 0) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} has a pending approval or user-input request and cannot wait on another thread`,
+          }),
+        );
+      }
+      if (hasQueuedTurnStartForThread(thread, occurredAt)) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} has a queued turn start and cannot wait on another thread`,
+          }),
+        );
+      }
+      // Re-adding an open link is a duplicate (double-click, raced clients):
+      // re-emit with the original linkedAt so the projection is a no-op. A
+      // satisfied link to the same thread is a fresh wait.
+      const existingLink = (thread.dependencies ?? []).find(
+        (link) => link.threadId === command.dependsOnThreadId && link.satisfiedAt === null,
+      );
+      const addedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.dependency-added",
+        payload: {
+          threadId: command.threadId,
+          dependsOnThreadId: command.dependsOnThreadId,
+          linkedAt: existingLink?.linkedAt ?? occurredAt,
+          updatedAt: existingLink !== undefined ? thread.updatedAt : occurredAt,
+        },
+      };
+      // A thread waits for a time or for other threads, never both.
+      if (thread.snoozedUntil == null) {
+        return addedEvent;
+      }
+      const unsnoozedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.unsnoozed",
+        payload: {
+          threadId: command.threadId,
+          reason: "user",
+          updatedAt: occurredAt,
+        },
+      };
+      return [unsnoozedEvent, addedEvent];
+    }
+
+    case "thread.dependency.remove": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      // Idempotent by re-emission (see thread.unsnooze): ids that are not
+      // linked change nothing, and updatedAt only moves when a link goes.
+      const linked = new Set((thread.dependencies ?? []).map((link) => link.threadId));
+      const changed = command.dependsOnThreadIds.some((id) => linked.has(id));
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.dependencies-removed",
+        payload: {
+          threadId: command.threadId,
+          dependsOnThreadIds: command.dependsOnThreadIds,
+          updatedAt: changed ? occurredAt : thread.updatedAt,
         },
       };
     }
@@ -1572,6 +1817,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           },
         });
       }
+      const dependenciesCleared = yield* dependenciesClearedEvent({
+        thread: targetThread,
+        occurredAt: command.createdAt,
+        commandId: command.commandId,
+      });
+      if (dependenciesCleared !== null) {
+        lifecycleResetEvents.push(dependenciesCleared);
+      }
       return [
         ...lifecycleResetEvents,
         ...(userMessageEvent ? [userMessageEvent] : []),
@@ -1969,9 +2222,26 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       // as snoozed, without spending the return ticket.
       const isSessionActivity =
         command.session.status === "starting" || command.session.status === "running";
+      // Leaving "running" is the turn-end signal (see the projector), and a
+      // fresh error is the other way a dependency stops working: either one
+      // releases every thread waiting on this one.
+      const turnEnded =
+        settledTurnStateForSessionStatus(command.session.status) !== null &&
+        thread.latestTurn?.state === "running";
+      const freshError = command.session.status === "error" && thread.session?.status !== "error";
+      const satisfiedEvents =
+        turnEnded || freshError
+          ? yield* dependencySatisfiedEvents({
+              readModel,
+              dependencyThreadId: command.threadId,
+              reason: command.session.status === "error" ? "session-error" : "turn-finished",
+              occurredAt: command.createdAt,
+              commandId: command.commandId,
+            })
+          : [];
       // Real activity resets ANY override (settled wakes, active unpins).
       if (thread.settledOverride === null || !isSessionActivity) {
-        return sessionSetEvent;
+        return satisfiedEvents.length > 0 ? [...satisfiedEvents, sessionSetEvent] : sessionSetEvent;
       }
       const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
@@ -1987,7 +2257,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: command.createdAt,
         },
       };
-      return [unsettledEvent, sessionSetEvent];
+      return [...satisfiedEvents, unsettledEvent, sessionSetEvent];
     }
 
     case "thread.message.assistant.delta":
@@ -2252,9 +2522,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       const wakesSettledThread =
         command.activity.kind === "approval.requested" ||
         command.activity.kind === "user-input.requested";
+      // A request is the dependency stopping to ask; threads waiting on it
+      // should come back now rather than after the answer.
+      const satisfiedEvents = wakesSettledThread
+        ? yield* dependencySatisfiedEvents({
+            readModel,
+            dependencyThreadId: command.threadId,
+            reason: "request-opened",
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })
+        : [];
       // Real activity resets ANY override (settled wakes, active unpins).
       if (thread.settledOverride === null || !wakesSettledThread) {
-        return activityAppendedEvent;
+        return satisfiedEvents.length > 0
+          ? [...satisfiedEvents, activityAppendedEvent]
+          : activityAppendedEvent;
       }
       const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
@@ -2270,7 +2553,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: command.createdAt,
         },
       };
-      return [unsettledEvent, activityAppendedEvent];
+      return [...satisfiedEvents, unsettledEvent, activityAppendedEvent];
     }
 
     default: {

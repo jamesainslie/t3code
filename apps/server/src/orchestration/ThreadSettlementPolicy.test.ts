@@ -7,7 +7,11 @@ import {
   type OrchestrationThreadShell,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import { type SettlementPullRequest, resolveAutoSettlementAt } from "./ThreadSettlementPolicy.ts";
+import {
+  type SettlementPullRequest,
+  isAutoSettlementCandidate,
+  resolveAutoSettlementAt,
+} from "./ThreadSettlementPolicy.ts";
 
 const NOW = "2026-08-28T12:00:00.000Z";
 const makeThread = (
@@ -288,5 +292,50 @@ describe("linked request settlement", () => {
     expect(decide(makeThread({ pullRequests: [missing, merged] }), null, { days: null })).toBe(
       true,
     );
+  });
+});
+
+describe("isAutoSettlementCandidate with dependencies", () => {
+  const LINKED_AT = "2026-08-21T00:00:00.000Z";
+  const dependency = ThreadId.make("thread-dep");
+  const openLink = {
+    threadId: dependency,
+    linkedAt: LINKED_AT,
+    satisfiedAt: null,
+    satisfiedReason: null,
+  };
+
+  it("does not settle a thread still waiting on another thread", () => {
+    expect(isAutoSettlementCandidate(makeThread({ dependencies: [openLink] }), NOW)).toBe(false);
+  });
+
+  it("settles once every link is satisfied", () => {
+    expect(
+      isAutoSettlementCandidate(
+        makeThread({
+          dependencies: [{ ...openLink, satisfiedAt: NOW, satisfiedReason: "turn-finished" }],
+        }),
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("a turn completed after the link outranks the wait", () => {
+    expect(
+      isAutoSettlementCandidate(
+        makeThread({
+          dependencies: [openLink],
+          latestTurn: {
+            turnId: TurnId.make("turn-1"),
+            state: "completed",
+            requestedAt: LINKED_AT,
+            startedAt: LINKED_AT,
+            completedAt: "2026-08-22T00:00:00.000Z",
+            assistantMessageId: null,
+          },
+        }),
+        NOW,
+      ),
+    ).toBe(true);
   });
 });

@@ -104,8 +104,12 @@ async function createOrchestrationSystem(
   );
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
   const snapshotQuery = await runtime.runPromise(Effect.service(ProjectionSnapshotQuery));
+  const receipts = await runtime.runPromise(
+    Effect.service(OrchestrationCommandReceipts.OrchestrationCommandReceiptRepository),
+  );
   return {
     engine,
+    receipts,
     readModel: () => runtime.runPromise(snapshotQuery.getSnapshot()),
     readThread: (threadId: ThreadId) =>
       runtime.runPromise(snapshotQuery.getThreadDetailById(threadId)),
@@ -2125,5 +2129,115 @@ describe("OrchestrationEngine", () => {
     expect(withoutOrigin?.metadata.origin).toBeUndefined();
 
     await system.dispose();
+  });
+});
+
+describe("OrchestrationEngine thread dependencies", () => {
+  it("persists the satisfied event on the blocked thread and receipts the dependency", async () => {
+    const system = await createOrchestrationSystem();
+    const projectId = ProjectId.make("deps-project");
+    const blocked = ThreadId.make("deps-blocked");
+    const dependency = ThreadId.make("deps-dependency");
+    const createThread = (threadId: ThreadId) =>
+      system.run(
+        system.engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`create-${threadId}`),
+          threadId,
+          projectId,
+          title: threadId,
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: now(),
+        }),
+      );
+    const setSession = (commandId: string, status: "running" | "ready") =>
+      system.run(
+        system.engine.dispatch({
+          type: "thread.session.set",
+          commandId: CommandId.make(commandId),
+          threadId: dependency,
+          createdAt: now(),
+          session: {
+            threadId: dependency,
+            status,
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: status === "running" ? asTurnId("turn-1") : null,
+            lastError: null,
+            updatedAt: now(),
+          },
+        }),
+      );
+    try {
+      await system.run(
+        system.engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.make("deps-project"),
+          projectId,
+          title: "Dependencies",
+          workspaceRoot: "/tmp/deps",
+          createdAt: now(),
+        }),
+      );
+      await createThread(blocked);
+      await createThread(dependency);
+      await system.run(
+        system.engine.dispatch({
+          type: "thread.dependency.add",
+          commandId: CommandId.make("deps-add"),
+          threadId: blocked,
+          dependsOnThreadId: dependency,
+        }),
+      );
+      // Start a turn on the dependency so a later status write ends it.
+      await system.run(
+        system.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("deps-turn"),
+          threadId: dependency,
+          message: {
+            messageId: asMessageId("deps-message"),
+            role: "user",
+            text: "go",
+            attachments: [],
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          createdAt: now(),
+        }),
+      );
+      await setSession("deps-session-running", "running");
+      const linked = await system.readModel();
+      expect(linked.threads.find((thread) => thread.id === blocked)?.dependencies).toMatchObject([
+        { threadId: dependency, satisfiedAt: null },
+      ]);
+
+      await setSession("deps-session-ready", "ready");
+
+      const after = await system.readModel();
+      const blockedAfter = after.threads.find((thread) => thread.id === blocked);
+      expect(blockedAfter?.dependencies).toMatchObject([
+        { threadId: dependency, satisfiedReason: "turn-finished" },
+      ]);
+      expect(blockedAfter?.dependencies?.[0]?.satisfiedAt).not.toBeNull();
+      const events = await system.run(Stream.runCollect(system.engine.readEvents(0)));
+      const commandEvents = Array.from(events).filter(
+        (event) => event.commandId === CommandId.make("deps-session-ready"),
+      );
+      expect(commandEvents.map((event) => [event.type, event.aggregateId])).toEqual([
+        ["thread.dependency-satisfied", blocked],
+        ["thread.session-set", dependency],
+      ]);
+      const receipt = await system.run(
+        system.receipts.getByCommandId({ commandId: CommandId.make("deps-session-ready") }),
+      );
+      expect(Option.isSome(receipt) ? receipt.value.aggregateId : null).toBe(dependency);
+    } finally {
+      await system.dispose();
+    }
   });
 });

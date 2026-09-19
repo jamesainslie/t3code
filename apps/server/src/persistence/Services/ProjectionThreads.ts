@@ -14,6 +14,7 @@ import {
   ProjectId,
   ProviderInteractionMode,
   RuntimeMode,
+  ThreadDependency,
   ThreadLinkedPullRequest,
   ThreadTitleState,
   ThreadId,
@@ -47,6 +48,8 @@ export const ProjectionThread = Schema.Struct({
   unsettledAt: Schema.NullOr(IsoDateTime),
   snoozedUntil: Schema.NullOr(IsoDateTime),
   snoozedAt: Schema.NullOr(IsoDateTime),
+  // Null in rows written before the column existed; readers treat it as [].
+  dependencies: Schema.optional(Schema.NullOr(Schema.Array(ThreadDependency))),
   pinnedAt: Schema.NullOr(IsoDateTime),
   pinOrderKey: Schema.optional(Schema.NullOr(Schema.String)),
   activeOrderKey: Schema.optional(Schema.NullOr(Schema.String)),
