@@ -753,3 +753,22 @@ describe("serverSettings helpers", () => {
     expect(resolved.pauseWhenOnBattery).toBe(false);
   });
 });
+
+describe("GitHub account rules", () => {
+  it("replaces GitHub account rules as a whole instead of merging by index", () => {
+    const ruleA = { host: "github.com", owner: "acme", login: "personal" };
+    const ruleB = { host: "github.com", owner: "geico-*", login: "work" };
+    const ruleC = { host: "github.com", owner: "*", login: "personal" };
+    const current = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      gitHubAccountRules: [ruleA, ruleC],
+    });
+    expect(current.gitHubAccountRules).toEqual([ruleA, ruleC]);
+    expect(
+      applyServerSettingsPatch(current, { gitHubAccountRules: [ruleB] }).gitHubAccountRules,
+    ).toEqual([ruleB]);
+    expect(applyServerSettingsPatch(current, {}).gitHubAccountRules).toEqual([ruleA, ruleC]);
+    expect(
+      applyServerSettingsPatch(current, { gitHubAccountRules: [] }).gitHubAccountRules,
+    ).toEqual([]);
+  });
+});

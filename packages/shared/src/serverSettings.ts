@@ -276,6 +276,8 @@ export function applyServerSettingsPatch(
     usagePriceOverrides: usagePriceOverridesPatch,
     // Entry replacement: deepMerge would keep keys the client meant to clear.
     projectSettingsOverrides: projectSettingsOverridesPatch,
+    // Ordered list: replaced whole, never merged by index.
+    gitHubAccountRules: gitHubAccountRulesPatch,
     // Already translated into `projectSettingsOverrides` above; the legacy
     // maps are derived views and must never be merged directly.
     projectAgentBrowserAccessOverrides: _legacyBrowserAccess,
@@ -371,6 +373,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }
+      : {}),
+    ...(gitHubAccountRulesPatch !== undefined
+      ? { gitHubAccountRules: gitHubAccountRulesPatch }
       : {}),
     ...(usageLimitSourcesPatch !== undefined
       ? {

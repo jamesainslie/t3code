@@ -7,6 +7,7 @@ import {
   ClientSettingsPatch,
   ClaudeSettings,
   DEFAULT_SERVER_SETTINGS,
+  PROJECT_SCOPED_SERVER_SETTING_KEYS,
   resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
@@ -952,4 +953,47 @@ it("validates remote device hosts and rejects ambiguous host ids", () => {
     decodeDeviceHostSettings({ deviceHosts: [{ ...host, target: "-oProxyCommand=bad" }] }),
   ).toThrow();
   expect(() => decodeDeviceHostSettings({ deviceHosts: [{ ...host, port: 0 }] })).toThrow();
+});
+
+describe("GitHub account settings", () => {
+  it("decodes GitHub account rules to an empty list by default", () => {
+    expect(decodeServerSettings({}).gitHubAccountRules).toEqual([]);
+    expect(DEFAULT_SERVER_SETTINGS.gitHubAccountRules).toEqual([]);
+  });
+
+  it("defaults a rule host to github.com", () => {
+    expect(
+      decodeServerSettings({ gitHubAccountRules: [{ owner: "geico-*", login: "work" }] })
+        .gitHubAccountRules,
+    ).toEqual([{ host: "github.com", owner: "geico-*", login: "work" }]);
+  });
+
+  it.each(["geico private", "geico/private", "a?b", ""])("rejects owner pattern %j", (owner) => {
+    expect(() =>
+      decodeServerSettings({ gitHubAccountRules: [{ owner, login: "work" }] }),
+    ).toThrow();
+  });
+
+  it("stores a per-project GitHub account override and lists it as project-scoped", () => {
+    expect(
+      decodeServerSettings({ projectSettingsOverrides: { project: { gitHubAccount: "work" } } })
+        .projectSettingsOverrides,
+    ).toEqual({ project: { gitHubAccount: "work" } });
+    expect(PROJECT_SCOPED_SERVER_SETTING_KEYS).toContain("gitHubAccount");
+    expect(() =>
+      decodeServerSettings({ projectSettingsOverrides: { project: { gitHubAccount: " " } } }),
+    ).toThrow();
+  });
+
+  it("patch accepts a full rule list and a project override entry", () => {
+    expect(
+      decodeServerSettingsPatch({
+        gitHubAccountRules: [{ host: "github.com", owner: "acme", login: "personal" }],
+        projectSettingsOverrides: { project: { gitHubAccount: "work" } },
+      }),
+    ).toEqual({
+      gitHubAccountRules: [{ host: "github.com", owner: "acme", login: "personal" }],
+      projectSettingsOverrides: { project: { gitHubAccount: "work" } },
+    });
+  });
 });
