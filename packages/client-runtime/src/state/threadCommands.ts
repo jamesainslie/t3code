@@ -7,7 +7,8 @@ import {
 } from "@t3tools/contracts";
 
 import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
-import { canSnooze } from "./threadSettled.ts";
+import { canAddDependency, canSnooze } from "./threadSettled.ts";
+import { applyThreadDependenciesRemoved, applyThreadDependencyAdded } from "@t3tools/contracts";
 
 import {
   createAtomCommandScheduler,
@@ -38,6 +39,8 @@ import {
   type UnpinThreadInput,
   type UnsettleThreadInput,
   type UnsnoozeThreadInput,
+  type AddThreadDependencyInput,
+  type RemoveThreadDependenciesInput,
   type UpdateThreadMetadataInput,
   archiveThread,
   createThread,
@@ -62,6 +65,8 @@ import {
   unpinThread,
   unsettleThread,
   unsnoozeThread,
+  addThreadDependency,
+  removeThreadDependencies,
   updateThreadMetadata,
 } from "../operations/commands.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -149,6 +154,18 @@ export function createThreadEnvironmentAtoms<R, E>(
     unsnooze: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:unsnooze",
       execute: (input: UnsnoozeThreadInput) => unsnoozeThread(input),
+      scheduler,
+      concurrency,
+    }),
+    addDependency: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:dependency-add",
+      execute: (input: AddThreadDependencyInput) => addThreadDependency(input),
+      scheduler,
+      concurrency,
+    }),
+    removeDependencies: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:dependency-remove",
+      execute: (input: RemoveThreadDependenciesInput) => removeThreadDependencies(input),
       scheduler,
       concurrency,
     }),
@@ -277,6 +294,7 @@ export function createThreadEnvironmentAtoms<R, E>(
             pinOrderKey: null,
             snoozedAt: null,
             snoozedUntil: null,
+            dependencies: [],
           },
     ),
     unsettle: optimistic.wrap(commands.unsettle, (thread, input, now) => ({
@@ -295,12 +313,32 @@ export function createThreadEnvironmentAtoms<R, E>(
             hasPendingUserInput: false,
             snoozedUntil: input.snoozedUntil,
             snoozedAt: thread.snoozedUntil === input.snoozedUntil ? (thread.snoozedAt ?? now) : now,
+            dependencies: [],
           },
     ),
     unsnooze: optimistic.wrap(commands.unsnooze, (thread) => ({
       ...thread,
       snoozedUntil: null,
       snoozedAt: null,
+    })),
+    addDependency: optimistic.wrap(commands.addDependency, (thread, input, now, accepted) =>
+      !accepted && !canAddDependency(thread, { now })
+        ? thread
+        : {
+            ...thread,
+            hasPendingApprovals: false,
+            hasPendingUserInput: false,
+            snoozedUntil: null,
+            snoozedAt: null,
+            dependencies: applyThreadDependencyAdded(thread.dependencies, {
+              dependsOnThreadId: input.dependsOnThreadId,
+              linkedAt: now,
+            }),
+          },
+    ),
+    removeDependencies: optimistic.wrap(commands.removeDependencies, (thread, input) => ({
+      ...thread,
+      dependencies: applyThreadDependenciesRemoved(thread.dependencies, input),
     })),
     pin: optimistic.wrap(commands.pin, (thread, input, now) => ({
       ...thread,

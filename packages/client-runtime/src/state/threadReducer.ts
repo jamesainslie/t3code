@@ -14,7 +14,12 @@ import type {
   TurnId,
 } from "@t3tools/contracts";
 import { threadPullRequestKeysEqual } from "@t3tools/shared/threadPullRequests";
-import { isImportedAgentSessionMessageId } from "@t3tools/contracts";
+import {
+  applyThreadDependenciesRemoved,
+  applyThreadDependencyAdded,
+  applyThreadDependencySatisfied,
+  isImportedAgentSessionMessageId,
+} from "@t3tools/contracts";
 import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
 
 export type ThreadDetailReducerResult =
@@ -133,6 +138,7 @@ export function applyThreadDetailEvent(
           activeOrderKey: null,
           snoozedUntil: null,
           snoozedAt: null,
+          dependencies: [],
           deletedAt: null,
           pullRequests: [],
           messages: [],
@@ -219,6 +225,36 @@ export function applyThreadDetailEvent(
           ...thread,
           snoozedUntil: null,
           snoozedAt: null,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.dependency-added":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          dependencies: applyThreadDependencyAdded(thread.dependencies, event.payload),
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.dependencies-removed":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          dependencies: applyThreadDependenciesRemoved(thread.dependencies, event.payload),
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.dependency-satisfied":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          dependencies: applyThreadDependencySatisfied(thread.dependencies, event.payload),
           updatedAt: event.payload.updatedAt,
         },
       };

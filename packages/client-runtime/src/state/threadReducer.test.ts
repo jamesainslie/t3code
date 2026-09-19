@@ -1686,3 +1686,66 @@ describe("applyThreadDetailEvent", () => {
     });
   });
 });
+
+describe("thread dependency events", () => {
+  const dependency = ThreadId.make("thread-dep");
+  const LINKED_AT = "2026-04-02T00:00:00.000Z";
+  const SATISFIED_AT = "2026-04-03T00:00:00.000Z";
+  const eventBase = {
+    ...baseEventFields,
+    sequence: 2,
+    occurredAt: LINKED_AT,
+    aggregateKind: "thread" as const,
+    aggregateId: baseThread.id,
+  };
+
+  it("adds, satisfies, and removes links", () => {
+    const added = applyThreadDetailEvent(baseThread, {
+      ...eventBase,
+      type: "thread.dependency-added",
+      payload: {
+        threadId: baseThread.id,
+        dependsOnThreadId: dependency,
+        linkedAt: LINKED_AT,
+        updatedAt: LINKED_AT,
+      },
+    });
+    expect(added.kind).toBe("updated");
+    if (added.kind !== "updated") return;
+    expect(added.thread.dependencies).toEqual([
+      { threadId: dependency, linkedAt: LINKED_AT, satisfiedAt: null, satisfiedReason: null },
+    ]);
+
+    const satisfied = applyThreadDetailEvent(added.thread, {
+      ...eventBase,
+      type: "thread.dependency-satisfied",
+      payload: {
+        threadId: baseThread.id,
+        dependsOnThreadId: dependency,
+        satisfiedAt: SATISFIED_AT,
+        reason: "turn-finished",
+        updatedAt: SATISFIED_AT,
+      },
+    });
+    expect(satisfied.kind).toBe("updated");
+    if (satisfied.kind !== "updated") return;
+    expect(satisfied.thread.dependencies?.[0]).toMatchObject({
+      satisfiedAt: SATISFIED_AT,
+      satisfiedReason: "turn-finished",
+    });
+    expect(satisfied.thread.updatedAt).toBe(SATISFIED_AT);
+
+    const removed = applyThreadDetailEvent(satisfied.thread, {
+      ...eventBase,
+      type: "thread.dependencies-removed",
+      payload: {
+        threadId: baseThread.id,
+        dependsOnThreadIds: [dependency],
+        updatedAt: SATISFIED_AT,
+      },
+    });
+    expect(removed.kind).toBe("updated");
+    if (removed.kind !== "updated") return;
+    expect(removed.thread.dependencies).toEqual([]);
+  });
+});

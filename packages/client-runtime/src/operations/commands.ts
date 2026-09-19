@@ -39,6 +39,8 @@ export type SettleThreadInput = CommandInput<"thread.settle">;
 export type UnsettleThreadInput = CommandInput<"thread.unsettle">;
 export type SnoozeThreadInput = CommandInput<"thread.snooze">;
 export type UnsnoozeThreadInput = CommandInput<"thread.unsnooze">;
+export type AddThreadDependencyInput = CommandInput<"thread.dependency.add">;
+export type RemoveThreadDependenciesInput = CommandInput<"thread.dependency.remove">;
 export type PinThreadInput = CommandInput<"thread.pin">;
 export type UnpinThreadInput = CommandInput<"thread.unpin">;
 export type ReorderPinnedThreadInput = CommandInput<"thread.pin.reorder">;
@@ -205,6 +207,25 @@ export const unsnoozeThread: (input: UnsnoozeThreadInput) => CommandEffect = Eff
     commandId: yield* commandId(input),
   });
 });
+
+export const addThreadDependency: (input: AddThreadDependencyInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.addThreadDependency",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "thread.dependency.add",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const removeThreadDependencies: (input: RemoveThreadDependenciesInput) => CommandEffect =
+  Effect.fn("EnvironmentCommands.removeThreadDependencies")(function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.dependency.remove",
+      commandId: yield* commandId(input),
+    });
+  });
 
 export const pinThread: (input: PinThreadInput) => CommandEffect = Effect.fn(
   "EnvironmentCommands.pinThread",
