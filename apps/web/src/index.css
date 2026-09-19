@@ -584,11 +584,19 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
     --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
     --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
+    /* Fork nightly art: the Ainslie tartan pigments (see components/ForkTartanArt.tsx). */
+    --stage-tartan-blue: oklch(0.394303 0.116629 268.320392);
+    --stage-tartan-black: oklch(0.173042 0 0);
+    --stage-tartan-red: oklch(0.50726 0.208156 29.233885);
+    --stage-tartan-white: oklch(0.906701 0 0);
+    --stage-tartan-scrim: oklch(0 0 0);
 
     @variant dark {
       --stage-art-top: oklch(0.581473 0.149124 256.9);
       --stage-art-mid: oklch(0.456509 0.159377 261.945);
       --stage-art-bottom: oklch(0.291327 0.136578 267.649);
+      --stage-tartan-red: oklch(0.46 0.19 29.233885);
+      --stage-tartan-white: oklch(0.84 0 0);
     }
   }
 
