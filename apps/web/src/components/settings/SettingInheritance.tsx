@@ -14,7 +14,11 @@ import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDeta
 import { Button, InlineButton } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import type { ProjectOverrideEntry, ScopedSettingsTarget } from "./scopedSettings";
+import type {
+  ProjectOverrideEntry,
+  ScopedSettingKey,
+  ScopedSettingsTarget,
+} from "./scopedSettings";
 import { isProjectScopedSettingKey } from "./scopedSettings";
 
 interface InheritanceLayer {
@@ -32,7 +36,7 @@ const WRITING_STYLE_LABELS: Record<string, string> = {
 };
 
 /** Human labels for the values the chain can show; falls back to a type summary. */
-function formatValue(key: keyof ServerSettings, value: unknown): string {
+function formatValue(key: ScopedSettingKey, value: unknown): string {
   if (value === null || value === undefined) {
     return key === "pullRequestMergeMethod"
       ? "Last selected"
@@ -79,10 +83,11 @@ function formatValue(key: keyof ServerSettings, value: unknown): string {
 export function settingInheritanceLayers(
   target: ScopedSettingsTarget,
   environmentSettings: ServerSettings,
-  key: keyof ServerSettings,
+  key: ScopedSettingKey,
 ): readonly InheritanceLayer[] {
-  const builtIn = DEFAULT_SERVER_SETTINGS[key];
-  const environmentValue = environmentSettings[key];
+  // An override-only key has no environment or built-in value, so both read as undefined.
+  const builtIn = (DEFAULT_SERVER_SETTINGS as Record<string, unknown>)[key];
+  const environmentValue = (environmentSettings as Record<string, unknown>)[key];
   const projectSource = isProjectScopedSettingKey(key) ? target.sources[key] : "environment";
   const environmentSet = !Equal.equals(environmentValue, builtIn);
   const layers: InheritanceLayer[] = [];
@@ -90,7 +95,10 @@ export function settingInheritanceLayers(
     layers.push({
       key: "project",
       label: "Project",
-      value: projectSource === "project" ? formatValue(key, target.settings[key]) : "Inherits",
+      value:
+        projectSource === "project"
+          ? formatValue(key, (target.settings as Record<string, unknown>)[key])
+          : "Inherits",
       effective: projectSource === "project",
       set: projectSource === "project",
     });
@@ -143,7 +151,7 @@ export function SettingInheritance({
   summary: string;
   targets: readonly ScopedSettingsTarget[];
   environments: readonly Pick<EnvironmentPresentation, "environmentId" | "serverConfig">[];
-  keys: readonly (keyof ServerSettings)[];
+  keys: readonly ScopedSettingKey[];
   /** At environment scope: projects whose own value hides the environment's. */
   overridingProjects?: readonly SettingOverridingProject[];
   onClearOverrides?: (entries: readonly ProjectOverrideEntry[]) => void;

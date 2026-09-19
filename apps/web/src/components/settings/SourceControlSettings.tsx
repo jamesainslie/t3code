@@ -57,6 +57,7 @@ import {
   type Icon,
 } from "../Icons";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
+import { GitHubAccountRulesSettings } from "./GitHubAccountRulesSettings";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import {
   PolicyTooltip,
@@ -600,6 +601,7 @@ export function SourceControlSettingsPanel() {
         />
       )}
 
+      {environmentId === null ? null : <GitHubAccountRulesSettings discovery={result} />}
       <SourceControlWritingSettingsSection />
     </SettingsPageContainer>
   );
