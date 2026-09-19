@@ -18,11 +18,7 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import {
-  useScopedSettings,
-  useScopedSettingsMixed,
-  useUpdateScopedSettings,
-} from "./useScopedSettings";
+import { useUpdateScopedSettingsOn } from "./useScopedSettings";
 
 const DEFAULT_HOST = "github.com";
 
@@ -86,35 +82,64 @@ function IconButton({
   );
 }
 
+const joinLabels = (labels: ReadonlyArray<string>) => labels.join(", ");
+
 /**
- * Environment-wide owner rules that pick a `gh` account per repository. Rendered only at an
- * environment scope: a project chooses its own account on the project row instead.
+ * Environment-wide owner rules that pick a `gh` account per repository. Like every other
+ * environment setting on the page, "All environments" edits every connected machine that
+ * supports the rules and one selected machine edits only itself, which is how a machine gets
+ * rules of its own. A project chooses its own account on the project row instead, so nothing
+ * renders at project scope.
  */
 export function GitHubAccountRulesSettings({
   discovery,
 }: {
   readonly discovery: SourceControlDiscoveryResult;
 }) {
-  const { scope, connectedEnvironments } = useSettingsScope();
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const mixed = useScopedSettingsMixed(["gitHubAccountRules"]);
+  const { scope, environment, connectedEnvironments } = useSettingsScope();
+  const supported = connectedEnvironments.filter(
+    (candidate) => candidate.serverConfig?.environment.capabilities.gitHubAccountRouting === true,
+  );
+  const unsupported = connectedEnvironments.filter((candidate) => !supported.includes(candidate));
+  const updateSettings = useUpdateScopedSettingsOn(supported);
   const [draft, setDraft] = useState<{ readonly owner: string; readonly login: string } | null>(
     null,
   );
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
-  const supported =
-    connectedEnvironments.length > 0 &&
-    connectedEnvironments.every(
-      (environment) =>
-        environment.serverConfig?.environment.capabilities.gitHubAccountRouting === true,
-    );
-  if (isProjectScope || !supported) return null;
+  if (isProjectScope || connectedEnvironments.length === 0) return null;
 
-  const accounts = accountOptions(discovery);
-  const rules = settings.gitHubAccountRules;
   const setting = searchableSetting("github-account-rules");
+  if (supported.length === 0) {
+    return (
+      <SettingsSection id={setting.id} title={setting.title}>
+        <SettingsRow
+          title="Update these machines"
+          description={`GitHub account rules need a newer server on ${joinLabels(unsupported.map((candidate) => candidate.label))}.`}
+        />
+      </SettingsSection>
+    );
+  }
+
+  // Only the machines that understand the rules take part in "mixed" and in
+  // what the editor shows; an older server cannot have any rules yet.
+  const ruleSets = new Set(
+    supported.map((candidate) =>
+      JSON.stringify(candidate.serverConfig?.settings.gitHubAccountRules ?? []),
+    ),
+  );
+  const mixed = ruleSets.size > 1;
+  const rules: ReadonlyArray<GitHubAccountRule> =
+    supported[0]!.serverConfig?.settings.gitHubAccountRules ?? [];
+  const accounts = accountOptions(discovery);
+  const bulk = scope.kind === "all" && connectedEnvironments.length > 1;
+  const excludedRow =
+    unsupported.length === 0 ? null : (
+      <SettingsRow
+        title="Not applied on older servers"
+        description={`${joinLabels(unsupported.map((candidate) => candidate.label))} run a server without account rules; update them to include them.`}
+      />
+    );
   const write = (next: ReadonlyArray<GitHubAccountRule>) =>
     updateSettings({ gitHubAccountRules: next });
   const setError = (key: string, message: string | null) =>
@@ -143,8 +168,9 @@ export function GitHubAccountRulesSettings({
       <SettingsSection id={setting.id} title={setting.title}>
         <SettingsRow
           title="One account per repository"
-          description="Sign in to a second GitHub account with `gh auth login` on this machine to choose an account per repository owner."
+          description={`Sign in to a second GitHub account with \`gh auth login\` on ${environment?.label ?? "this machine"} to choose an account per repository owner.`}
         />
+        {excludedRow}
       </SettingsSection>
     );
   }
@@ -154,8 +180,14 @@ export function GitHubAccountRulesSettings({
       <SettingsSection id={setting.id} title={setting.title}>
         <SettingsRow
           title="Rules differ between machines"
-          description="Choose one machine to edit its rules."
+          description="Choose one machine in the breadcrumb to edit its rules, or pick a value here to apply it everywhere."
+          control={
+            <Button size="xs" variant="outline" onClick={() => write(rules)}>
+              {`Use ${supported[0]!.label}'s rules everywhere`}
+            </Button>
+          }
         />
+        {excludedRow}
       </SettingsSection>
     );
   }
@@ -212,7 +244,11 @@ export function GitHubAccountRulesSettings({
     >
       <SettingsRow
         title="Owner rules"
-        description="The first rule whose owner pattern matches a repository decides which gh account its commands use. * matches any characters. Repositories with no match use the active gh account."
+        description={
+          bulk
+            ? `The first rule whose owner pattern matches a repository decides which gh account its commands use. * matches any characters; no match uses the active gh account. Rules apply to every connected machine; choose one machine in the breadcrumb to give it its own. Accounts are listed from ${environment?.label ?? "the selected machine"}.`
+            : "The first rule whose owner pattern matches a repository decides which gh account its commands use. * matches any characters. Repositories with no match use the active gh account."
+        }
       />
       {rules.map((rule, index) =>
         ruleRow(
@@ -257,6 +293,7 @@ export function GitHubAccountRulesSettings({
               <XIcon className="size-3" />
             </IconButton>,
           )}
+      {excludedRow}
     </SettingsSection>
   );
 }

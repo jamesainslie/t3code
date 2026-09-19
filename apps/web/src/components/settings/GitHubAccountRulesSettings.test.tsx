@@ -10,20 +10,43 @@ import type { ScopedSettingsPatch } from "./scopedSettings";
 const state = vi.hoisted(() => ({
   rules: [] as GitHubAccountRules,
   updateSettings: vi.fn<(patch: ScopedSettingsPatch) => void>(),
+  writeTargets: [] as ReadonlyArray<string>,
+  environments: [] as ReadonlyArray<{
+    readonly environmentId: string;
+    readonly label: string;
+    readonly connection: { readonly phase: "connected" };
+    readonly serverConfig: {
+      readonly settings: { readonly gitHubAccountRules: GitHubAccountRules };
+      readonly environment: { readonly capabilities: { readonly gitHubAccountRouting?: boolean } };
+    };
+  }>,
 }));
 
+const machine = (
+  label: string,
+  rules: GitHubAccountRules,
+  supported = true,
+): (typeof state.environments)[number] => ({
+  environmentId: label,
+  label,
+  connection: { phase: "connected" },
+  serverConfig: {
+    settings: { gitHubAccountRules: rules },
+    environment: { capabilities: supported ? { gitHubAccountRouting: true } : {} },
+  },
+});
+
 vi.mock("./useScopedSettings", () => ({
-  useScopedSettings: () => ({ ...DEFAULT_UNIFIED_SETTINGS, gitHubAccountRules: state.rules }),
-  useScopedSettingsMixed: () => false,
-  useUpdateScopedSettings: () => state.updateSettings,
+  useUpdateScopedSettingsOn: (environments: ReadonlyArray<{ readonly label: string }>) => {
+    state.writeTargets = environments.map((environment) => environment.label);
+    return state.updateSettings;
+  },
 }));
 vi.mock("./SettingsScopeContext", () => ({
   useSettingsScope: () => ({
     scope: { kind: "all", environmentIds: [] },
-    environment: null,
-    connectedEnvironments: [
-      { serverConfig: { environment: { capabilities: { gitHubAccountRouting: true } } } },
-    ],
+    environment: state.environments[0] ?? null,
+    connectedEnvironments: state.environments,
     targets: [],
   }),
 }));
@@ -123,6 +146,8 @@ function buttonByLabel(label: string) {
 describe("GitHubAccountRulesSettings", () => {
   beforeEach(() => {
     state.rules = [{ host: "github.com", owner: "acme", login: "personal" }];
+    state.environments = [machine("Mac", state.rules)];
+    state.writeTargets = [];
     state.updateSettings.mockReset();
   });
 
@@ -152,6 +177,7 @@ describe("GitHubAccountRulesSettings", () => {
       { host: "github.com", owner: "acme", login: "personal" },
       { host: "github.com", owner: "geico-*", login: "work" },
     ];
+    state.environments = [machine("Mac", state.rules)];
     render(["personal", "work"]);
     expect(buttonByLabel("Move rule 2 down").props.disabled).toBe(true);
     act(() => buttonByLabel("Move rule 1 down").props.onClick());
@@ -168,5 +194,38 @@ describe("GitHubAccountRulesSettings", () => {
     expect(renderer!.root.findAllByType("button")).toHaveLength(0);
     expect(renderer!.root.findAllByType("input")).toHaveLength(0);
     expect(JSON.stringify(renderer!.toJSON())).toContain("second GitHub account");
+  });
+
+  it("edits every machine that supports rules at All environments and names the rest", () => {
+    state.environments = [
+      machine("Mac", state.rules),
+      machine("hephaestus", state.rules),
+      machine("incus", [], false),
+    ];
+    render(["personal", "work"]);
+    const text = JSON.stringify(renderer!.toJSON());
+    expect(text).toContain("Rules apply to every connected machine");
+    expect(text).toContain("incus run a server without account rules");
+    act(() => buttonByLabel("Remove rule 1").props.onClick());
+    expect(state.writeTargets).toEqual(["Mac", "hephaestus"]);
+    expect(state.updateSettings).toHaveBeenCalledWith({ gitHubAccountRules: [] });
+  });
+
+  it("offers to apply one machine's rules everywhere when they differ", () => {
+    state.environments = [
+      machine("Mac", state.rules),
+      machine("hephaestus", [{ host: "github.com", owner: "geico-*", login: "work" }]),
+    ];
+    render(["personal", "work"]);
+    expect(renderer!.root.findAllByType("input")).toHaveLength(0);
+    act(() => buttonByLabel("Use Mac's rules everywhere").props.onClick());
+    expect(state.updateSettings).toHaveBeenCalledWith({ gitHubAccountRules: state.rules });
+  });
+
+  it("asks for a server update when no selected machine supports rules", () => {
+    state.environments = [machine("incus", [], false)];
+    render(["personal", "work"]);
+    expect(renderer!.root.findAllByType("input")).toHaveLength(0);
+    expect(JSON.stringify(renderer!.toJSON())).toContain("newer server on incus");
   });
 });

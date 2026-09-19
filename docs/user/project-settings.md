@@ -44,7 +44,8 @@ access. Source Control contains automatic pull, the default pull request merge m
 account and text generation. The same rows edit environment defaults or project overrides depending
 on the project crumb. The GitHub account row appears only while a project is selected and the
 environment's `gh` has more than one signed-in account; its environment-wide rules live under
-**GitHub accounts** on the Source Control page.
+**GitHub accounts** on the Source Control page. At **All environments** those rules edit every
+connected machine that supports them; choose one machine to give it rules of its own.
 
 The Project category, shown while a project is selected, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list

@@ -91,6 +91,22 @@ export function useUpdateScopedSettings() {
 }
 
 /**
+ * Same fan-out as `useUpdateScopedSettings`, restricted to `environments`: a
+ * setting that only newer servers understand writes to the machines that
+ * advertise it instead of failing on the ones that do not.
+ */
+export function useUpdateScopedSettingsOn(
+  environments: Parameters<typeof planScopedSettingsPatch>[1],
+) {
+  const { scope } = useSettingsScope();
+  const run = useRunScopedPlan();
+  return useCallback(
+    (patch: ScopedSettingsPatch) => run(planScopedSettingsPatch(scope, environments, patch)),
+    [environments, run, scope],
+  );
+}
+
+/**
  * Drop the project overrides for `keys` so the selected checkouts inherit
  * again. Rows also render outside the settings layout (provider cards,
  * dialogs), where there is no scope and nothing to clear.
