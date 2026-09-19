@@ -143,8 +143,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       assert.deepStrictEqual(linuxManifest.files, [
         "t3",
         "t3.exe",
-        "bin.mjs",
-        "claude-history-worker.mjs",
+        "*.mjs",
         "client",
         "resource-monitor",
         "node_modules",

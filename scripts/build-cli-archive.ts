@@ -10,9 +10,9 @@
  * archive stem):
  *
  *   t3 | t3.exe          the single-executable
- *   bin.mjs              the same server bundle as a script, for hosts whose libc
- *   claude-history-worker.mjs   cannot run the executable (NixOS, musl); the runner
- *                        then uses the host's own Node
+ *   *.mjs                the same server bundle as a script (bin.mjs, its worker,
+ *                        and shared chunks) for hosts whose libc cannot run the
+ *                        executable (NixOS, musl); the runner then uses the host Node
  *   client/              web app served by the server
  *   resource-monitor/    per-platform Rust helper, same paths as the npm package
  *   node_modules/        runtime externals (node-pty, msgpackr-extract, fff)
@@ -489,8 +489,8 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
       ? path.join(serverDir, "dist-exe", executableName)
       : targetExecutable;
   const webClient = path.join(serverDir, "dist/client");
-  const bundleEntry = path.join(serverDir, "dist/bin.mjs");
-  const historyWorker = path.join(serverDir, "dist/claude-history-worker.mjs");
+  const bundleDir = path.join(serverDir, "dist");
+  const bundleEntry = path.join(bundleDir, "bin.mjs");
   const resourceMonitorDir = Option.getOrElse(input.resourceMonitorDir, () =>
     path.join(serverDir, "dist/resource-monitor"),
   );
@@ -501,7 +501,6 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   );
   yield* requireInput(path.join(webClient, "index.html"), "Run `vp run --filter t3 build` first.");
   yield* requireInput(bundleEntry, "Run `vp run --filter t3 build` first.");
-  yield* requireInput(historyWorker, "Run `vp run --filter t3 build` first.");
   yield* requireInput(
     resourceMonitorDir,
     "Build the resource monitor or pass --resource-monitor-dir.",
@@ -514,10 +513,13 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
 
   yield* Effect.log(`[cli-archive] Staging ${stem}...`);
   yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
-  // The bundle resolves `client/`, `resource-monitor/`, and its worker beside
-  // itself, so it sits at the archive root next to the executable.
-  yield* fs.copyFile(bundleEntry, path.join(contentDir, "bin.mjs"));
-  yield* fs.copyFile(historyWorker, path.join(contentDir, "claude-history-worker.mjs"));
+  // The bundle resolves `client/`, `resource-monitor/`, its worker, and the
+  // chunks the bundler splits out beside itself, so every module of the build
+  // sits at the archive root next to the executable. Sourcemaps stay behind.
+  for (const entry of yield* fs.readDirectory(bundleDir)) {
+    if (!entry.endsWith(".mjs")) continue;
+    yield* fs.copyFile(path.join(bundleDir, entry), path.join(contentDir, entry));
+  }
   yield* stageWebClient(webClient, path.join(contentDir, "client"));
   yield* fs.copy(resourceMonitorDir, path.join(contentDir, "resource-monitor"));
   yield* stageRuntimeExternals({
