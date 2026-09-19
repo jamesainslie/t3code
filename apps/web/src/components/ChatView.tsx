@@ -682,6 +682,33 @@ function shouldRedirectInputToComposer(event: Event): boolean {
   return true;
 }
 
+/**
+ * Whether a bare Escape already has an owner: an open Base UI popup (which carries `data-open`),
+ * or an input outside the composer such as a rename field. The stop shortcut yields to them so
+ * Escape keeps closing what the user is looking at.
+ */
+function escapeIsClaimed(event: KeyboardEvent, composer: ChatComposerHandle | null): boolean {
+  if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+    return false;
+  }
+  if (
+    document.querySelector(
+      '[role="dialog"][data-open], [role="alertdialog"][data-open], [role="menu"][data-open], [role="listbox"][data-open]',
+    ) !== null
+  ) {
+    return true;
+  }
+  if (composer?.isMenuOpen()) return true;
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    target.closest(
+      'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]',
+    ) !== null &&
+    composer?.isEditorFocused() !== true
+  );
+}
+
 function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
   if (event.isComposing) return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
@@ -6899,9 +6926,21 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
+      if (command === "composer.send") {
+        // A focused editor already sends on this key with the send setting's own meaning
+        // (background start, steer while running); only an unfocused composer needs help.
+        if (composerRef.current?.isEditorFocused()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        composerRef.current?.focusAtEnd();
+        composerRef.current?.submit();
+        return;
+      }
+
       if (command === "thread.stop") {
         // An unavailable command should not shadow contextual shortcuts such as Escape to close a dialog.
-        if (!canInterruptRunningThread) return;
+        if (!canInterruptRunningThread || escapeIsClaimed(event, composerRef.current)) return;
         event.preventDefault();
         event.stopPropagation();
         if (event.repeat) return;

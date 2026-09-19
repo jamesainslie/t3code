@@ -8,6 +8,10 @@ also lists the command IDs and defaults available in your version.
 In **Settings → General → Send shortcut**, choose whether Enter sends, requires
 `mod+Enter` for multiline prompts, or always requires `mod+Enter`. `Shift+Enter`
 inserts a new line. This applies to the web and desktop composer at desktop widths.
+`mod+Enter` also sends the draft when the composer is not focused, so you can send
+after clicking elsewhere in the thread without reaching for the mouse (`composer.send`).
+Press Escape to stop the running turn (`thread.stop`); it leaves Escape to any open
+dialog, menu, or other text field first.
 
 **Follow-up behavior** chooses Queue or Steer while the agent runs. Use
 `mod+Enter` to do the opposite for one message. When sending requires `mod+Enter`,
@@ -107,8 +111,9 @@ a shortcut.
 
 ## Commands with special behavior
 
-`thread.stop` interrupts the running turn in the focused thread. It has no default
-shortcut; assign one in **Settings → Keybindings**.
+`thread.stop` interrupts the running turn in the focused thread. Escape is its default
+outside the terminal, the preview, and the model picker; change it in
+**Settings → Keybindings**.
 
 `chat.new` may ask you to choose a project when there is more than one.
 `chat.newLocal` skips that chooser. Both use your
