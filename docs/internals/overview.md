@@ -60,6 +60,12 @@ in one database transaction. The in-memory state changes and subscribers receive
 commit. This keeps command retries idempotent and prevents a persisted projection from getting
 ahead of the event log.
 
+A command may emit companion events for other aggregates when the fact is pure over the read
+model: a dependency thread ending its turn emits `thread.dependency-satisfied` on every thread
+waiting on it. The receipt for the command is recorded against the last saved event's aggregate, so
+the decider returns those companions first and the command's own event last. Put the command's
+thread anywhere else and a retry would replay against the wrong aggregate.
+
 Reactors perform side effects after intent has been recorded, then feed results back through
 commands. A command acknowledgement therefore means the intent committed, not that the provider,
 checkpoint, or other follow-up work finished. Keep external I/O out of the decider and the database
