@@ -1,3 +1,4 @@
+import { ThreadDependency, ThreadDependencySatisfiedReason } from "./threadDependencies.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
@@ -805,6 +806,12 @@ export const OrchestrationThread = Schema.Struct({
   // Optional so payloads from pre-snooze servers still decode.
   snoozedUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  // "Depends on" is the other overlay on the active lifecycle: the thread
+  // stays active and is kept out of the inbox until every link is satisfied
+  // (or it raises its hand). Satisfaction is written by the server, never
+  // derived, because turn state moves both ways. Optional so payloads from
+  // pre-dependency servers still decode.
+  dependencies: Schema.optional(Schema.Array(ThreadDependency)),
   // Active pinned threads render in the pinned block. Settled and snoozed
   // threads remain in their respective shelves even when pinned.
   // Optional so payloads from pre-pinning servers still decode.
@@ -887,6 +894,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   unsettledAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  dependencies: Schema.optional(Schema.Array(ThreadDependency)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -1173,6 +1181,22 @@ const ThreadUnsnoozeCommand = Schema.Struct({
   reason: Schema.Literal("user"),
 });
 
+const ThreadDependencyAddCommand = Schema.Struct({
+  type: Schema.Literal("thread.dependency.add"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  dependsOnThreadId: ThreadId,
+});
+
+const ThreadDependencyRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.dependency.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  // "Wake" sends every link; Undo on the link toast sends one. Ids that are
+  // not linked are ignored so the command is safe to repeat.
+  dependsOnThreadIds: Schema.NonEmptyArray(ThreadId),
+});
+
 const ThreadPinCommand = Schema.Struct({
   type: Schema.Literal("thread.pin"),
   commandId: CommandId,
@@ -1405,6 +1429,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadUnsettleCommand,
   ThreadSnoozeCommand,
   ThreadUnsnoozeCommand,
+  ThreadDependencyAddCommand,
+  ThreadDependencyRemoveCommand,
   ThreadPinCommand,
   ThreadUnpinCommand,
   ThreadPinReorderCommand,
@@ -1438,6 +1464,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadUnsettleCommand,
   ThreadSnoozeCommand,
   ThreadUnsnoozeCommand,
+  ThreadDependencyAddCommand,
+  ThreadDependencyRemoveCommand,
   ThreadPinCommand,
   ThreadUnpinCommand,
   ThreadPinReorderCommand,
@@ -1736,6 +1764,9 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.unsettled",
   "thread.snoozed",
   "thread.unsnoozed",
+  "thread.dependency-added",
+  "thread.dependencies-removed",
+  "thread.dependency-satisfied",
   "thread.pinned",
   "thread.unpinned",
   "thread.pin-reordered",
@@ -1854,6 +1885,31 @@ export const ThreadUnsnoozedPayload = Schema.Struct({
   // thread.unsettled's activity resets. Timer wakes emit no event: clients
   // derive them from snoozedUntil passing.
   reason: Schema.Literals(["user", "activity"]),
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadDependencyAddedPayload = Schema.Struct({
+  threadId: ThreadId,
+  dependsOnThreadId: ThreadId,
+  linkedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadDependenciesRemovedPayload = Schema.Struct({
+  threadId: ThreadId,
+  dependsOnThreadIds: Schema.NonEmptyArray(ThreadId),
+  updatedAt: IsoDateTime,
+});
+
+// Emitted on the BLOCKED thread by a command on the dependency (its session
+// ending, a request opening, archive, delete). The decider sees the whole
+// environment, so this is a pure companion event; the decider keeps the
+// command's own event last so the receipt lands on the right aggregate.
+export const ThreadDependencySatisfiedPayload = Schema.Struct({
+  threadId: ThreadId,
+  dependsOnThreadId: ThreadId,
+  satisfiedAt: IsoDateTime,
+  reason: ThreadDependencySatisfiedReason,
   updatedAt: IsoDateTime,
 });
 
@@ -2134,6 +2190,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.unsnoozed"),
     payload: ThreadUnsnoozedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.dependency-added"),
+    payload: ThreadDependencyAddedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.dependencies-removed"),
+    payload: ThreadDependenciesRemovedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.dependency-satisfied"),
+    payload: ThreadDependencySatisfiedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
