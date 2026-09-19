@@ -53,7 +53,13 @@ import {
 import { readPastedComposerContext } from "./composerInlineTokenPaste";
 import { isPasteAsTextShortcut } from "@t3tools/client-runtime/text-paste";
 import { type CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
-import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import { resolveSidebarWokeAt } from "./Sidebar.logic";
+import {
+  dependencyWaitLabel,
+  effectiveBlocked,
+  effectiveSnoozed,
+  threadUnblockedAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   parseCodexFeedbackCommand,
   submitCodexFeedback,
@@ -354,6 +360,7 @@ import { useProjectClone } from "../state/projectClones";
 import { projectCloneDisplayName, projectCloneProgressSummary } from "@t3tools/contracts";
 import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
 import {
+  readThreadShell,
   useProject,
   useProjects,
   useThread,
@@ -1502,7 +1509,14 @@ export default function ChatView(props: ChatViewProps) {
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
   const handleNewThread = useNewThreadHandler();
-  const { settleThread, pinThread, confirmAndUnpinThread } = useThreadActions();
+  const {
+    settleThread,
+    pinThread,
+    confirmAndUnpinThread,
+    addThreadDependency,
+    removeThreadDependency,
+    releaseThreadDependencies,
+  } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -6050,6 +6064,7 @@ export default function ChatView(props: ChatViewProps) {
   const pullRequestSurfaceAvailable = supportsPullRequests && linkedThreadPullRequest !== null;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
+  const supportsDependencies = serverConfig?.environment.capabilities.threadDependencies === true;
   const supportsPinning = serverConfig?.environment.capabilities.threadPinning === true;
   const activeThreadPinned = supportsPinning && activeThreadShell?.pinnedAt != null;
   const nowMinute = useNowMinute();
@@ -6060,9 +6075,31 @@ export default function ChatView(props: ChatViewProps) {
     effectiveSnoozed(activeThreadShell, { now: snoozeNow });
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
   void snoozeWakeTick;
+  // Waiting on other threads is the other way to park a thread, and it wins
+  // over snooze the same way it does in the sidebar.
+  const activeThreadBlocked =
+    activeThreadShell !== null && supportsDependencies && effectiveBlocked(activeThreadShell);
+  // Titles of the threads being waited on come from a point read: they are
+  // only shown while this thread is parked, and subscribing the whole chat
+  // view to every shell in the environment to keep them live is not worth
+  // the render cost.
+  const activeThreadWaitLabel =
+    activeThreadShell === null || !activeThreadBlocked
+      ? null
+      : dependencyWaitLabel(
+          activeThreadShell,
+          (dependencyThreadId) =>
+            readThreadShell(scopeThreadRef(environmentId, dependencyThreadId))?.title ?? null,
+        );
+  // Both overlays feed one Woke signal; the later wake wins so a visit
+  // between the two cannot suppress a signal the user never saw.
   const activeThreadWokeAt =
-    activeThreadShell !== null && supportsSnooze
-      ? threadWokeAt(activeThreadShell, { now: snoozeNow })
+    activeThreadShell !== null && (supportsSnooze || supportsDependencies)
+      ? resolveSidebarWokeAt(activeThreadShell, { now: snoozeNow })
+      : null;
+  const activeThreadUnblockedAt =
+    activeThreadShell !== null && supportsDependencies
+      ? threadUnblockedAt(activeThreadShell)
       : null;
   useEffect(() => {
     if (!activeThreadSnoozed) return;
@@ -6168,6 +6205,30 @@ export default function ChatView(props: ChatViewProps) {
       setUnsnoozingThreadKey((current) => (current === threadKey ? null : current));
     }
   }, [activeThreadRef, unsnoozeThreadMutation]);
+  // Keyed like the unsnooze pending state: a release resolving for thread A
+  // must not re-enable thread B's button.
+  const [releasingThreadKey, setReleasingThreadKey] = useState<string | null>(null);
+  const isReleasing = releasingThreadKey !== null && releasingThreadKey === activeThreadKey;
+  const handleReleaseActiveThread = useCallback(async () => {
+    if (!activeThreadRef) return;
+    const threadKey = scopedThreadKey(activeThreadRef);
+    setReleasingThreadKey(threadKey);
+    try {
+      const result = await releaseThreadDependencies(activeThreadRef);
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to wake thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    } finally {
+      setReleasingThreadKey((current) => (current === threadKey ? null : current));
+    }
+  }, [activeThreadRef, releaseThreadDependencies]);
   const [isRestoringThreadBranch, setIsRestoringThreadBranch] = useState(false);
   const [branchRestoreConfirmOpen, setBranchRestoreConfirmOpen] = useState(false);
   // Once revealed for a given mismatch, the banner stays mounted until the
@@ -6350,52 +6411,89 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadWokeVisible) {
       return null;
     }
+    // A dependency wake names what finished, so the user knows which thread
+    // to read before picking this one back up. A thread that raised its own
+    // hand while waiting also unblocks, and nothing finished for it, so only
+    // fully satisfied links get named.
+    const links = activeThreadShell?.dependencies ?? [];
+    const fromDependency =
+      activeThreadUnblockedAt !== null && activeThreadUnblockedAt === activeThreadWokeAt;
+    const finished =
+      fromDependency && links.length > 0 && links.every((link) => link.satisfiedAt !== null);
+    const finishedTitle =
+      !finished || links.length !== 1
+        ? null
+        : (readThreadShell(scopeThreadRef(environmentId, links[0]!.threadId))?.title ?? null);
     return {
       id: `thread-woke:${activeThread?.id ?? "unknown"}`,
       variant: "info",
       icon: <AlarmClockIcon />,
-      title: "Thread woke from snooze",
-      description: "Send a message to continue",
+      title: fromDependency ? "Thread woke" : "Thread woke from snooze",
+      description: !finished
+        ? "Send a message to continue"
+        : finishedTitle
+          ? `${finishedTitle} finished. Send a message to continue`
+          : "The threads it waited on finished.",
       dismissLabel: "Dismiss Woke notification",
       onDismiss: acknowledgeActiveThreadWoke,
     };
-  }, [acknowledgeActiveThreadWoke, activeThread?.id, activeThreadWokeVisible]);
+  }, [
+    acknowledgeActiveThreadWoke,
+    activeThread?.id,
+    activeThreadShell,
+    activeThreadUnblockedAt,
+    activeThreadWokeAt,
+    activeThreadWokeVisible,
+    environmentId,
+  ]);
   const parkedThreadBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
-    if (!activeThreadSnoozed && !activeThreadSettled) {
+    if (!activeThreadBlocked && !activeThreadSnoozed && !activeThreadSettled) {
       return null;
     }
-    const isSnoozed = activeThreadSnoozed;
+    // Waiting on another thread outranks snooze, matching how the sidebar
+    // classifies the row.
+    const parked = activeThreadBlocked ? "blocked" : activeThreadSnoozed ? "snoozed" : "settled";
+    const wakes = parked !== "settled";
+    const pending =
+      parked === "blocked" ? isReleasing : parked === "snoozed" ? isUnsnoozing : isUnsettling;
     return {
-      id: `thread-${isSnoozed ? "snoozed" : "settled"}:${activeThread?.id ?? "unknown"}`,
+      id: `thread-${parked}:${activeThread?.id ?? "unknown"}`,
       variant: "info",
-      icon: isSnoozed ? <AlarmClockIcon /> : <CheckCircle2Icon />,
-      title: `This thread is ${isSnoozed ? "snoozed" : "settled"}`,
-      description: `Send a message to ${isSnoozed ? "wake" : "unsettle"}`,
+      icon: wakes ? <AlarmClockIcon /> : <CheckCircle2Icon />,
+      title:
+        parked === "blocked"
+          ? // dependencyWaitLabel already counts ("Waiting on 3 threads"), so
+            // the banner only re-cases its first letter.
+            `This thread is ${(activeThreadWaitLabel ?? "Waiting on another thread").replace(/^W/, "w")}`
+          : `This thread is ${parked}`,
+      description: `Send a message to ${wakes ? "wake" : "unsettle"}`,
       actions: (
         <Button
           size="xs"
           variant="ghost"
-          disabled={isSnoozed ? isUnsnoozing : isUnsettling}
+          disabled={pending}
           onClick={() =>
-            void (isSnoozed ? handleUnsnoozeActiveThread() : handleUnsettleActiveThread())
+            void (parked === "blocked"
+              ? handleReleaseActiveThread()
+              : parked === "snoozed"
+                ? handleUnsnoozeActiveThread()
+                : handleUnsettleActiveThread())
           }
         >
-          {isSnoozed
-            ? isUnsnoozing
-              ? "Waking..."
-              : "Wake now"
-            : isUnsettling
-              ? "Un-settling..."
-              : "Un-settle"}
+          {wakes ? (pending ? "Waking..." : "Wake now") : pending ? "Un-settling..." : "Un-settle"}
         </Button>
       ),
     };
   }, [
     activeThread?.id,
+    activeThreadBlocked,
     activeThreadSettled,
     activeThreadSnoozed,
+    activeThreadWaitLabel,
+    handleReleaseActiveThread,
     handleUnsnoozeActiveThread,
     handleUnsettleActiveThread,
+    isReleasing,
     isUnsnoozing,
     isUnsettling,
   ]);
@@ -8644,6 +8742,55 @@ export default function ChatView(props: ChatViewProps) {
           );
         }
       }
+    }
+    // The draft was started to unblock another thread, and that thread now
+    // exists: park the waiting thread on it. The new thread stands whatever
+    // the link does, so a rejection only toasts.
+    const unblocksThreadId = isLocalDraftThread ? (draftThread?.unblocksThreadId ?? null) : null;
+    if (turnStartSucceeded && unblocksThreadId) {
+      const blockedRef = scopeThreadRef(environmentId, unblocksThreadId);
+      const blockedTitle = readThreadShell(blockedRef)?.title ?? "That thread";
+      const linked = await addThreadDependency(blockedRef, threadIdForSend);
+      if (linked._tag === "Failure") {
+        if (!isAtomCommandInterrupted(linked)) {
+          const error = squashAtomCommandFailure(linked);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not link the threads",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+      } else {
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: `${blockedTitle} now waits on this thread`,
+            timeout: 5_000,
+            actionProps: {
+              children: "Undo",
+              onClick: () => {
+                void removeThreadDependency(blockedRef, threadIdForSend).then((undone) => {
+                  if (undone._tag === "Failure" && !isAtomCommandInterrupted(undone)) {
+                    const error = squashAtomCommandFailure(undone);
+                    toastManager.add(
+                      stackedThreadToast({
+                        type: "error",
+                        title: "Could not undo",
+                        description: error instanceof Error ? error.message : "An error occurred.",
+                      }),
+                    );
+                  }
+                });
+              },
+            },
+          }),
+        );
+      }
+      // One send, one link attempt: a surviving draft record must not try
+      // again on the next message.
+      setDraftThreadContext(composerDraftTarget, { unblocksThreadId: null });
     }
     sendInFlightRef.current = false;
     if (!turnStartSucceeded) {

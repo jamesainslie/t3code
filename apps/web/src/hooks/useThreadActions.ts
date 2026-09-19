@@ -801,6 +801,27 @@ export function useThreadActions() {
     [addThreadDependencyMutation, resolveThreadTarget],
   );
 
+  /** Drop one link, for undoing a single "Depends on" the user just added. */
+  const removeThreadDependency = useCallback(
+    async (target: ScopedThreadRef, dependsOnThreadId: ThreadId) => {
+      if (!readEnvironmentSupportsDependencies(target.environmentId)) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadDependencyUnsupportedError({
+              environmentId: target.environmentId,
+              threadId: target.threadId,
+            }),
+          ),
+        );
+      }
+      return removeThreadDependenciesMutation({
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, dependsOnThreadIds: [dependsOnThreadId] },
+      });
+    },
+    [removeThreadDependenciesMutation],
+  );
+
   /** Wake a waiting thread by dropping every link it holds, satisfied or
       not, so nothing is left to re-park it or to drive a stale Woke pill. */
   const releaseThreadDependencies = useCallback(
@@ -869,6 +890,7 @@ export function useThreadActions() {
       snoozeThread,
       unsnoozeThread,
       addThreadDependency,
+      removeThreadDependency,
       releaseThreadDependencies,
       pinThread,
       unpinThread,
@@ -884,6 +906,7 @@ export function useThreadActions() {
       deleteThread,
       pinThread,
       releaseThreadDependencies,
+      removeThreadDependency,
       reorderPinnedThread,
       reorderActiveThread,
       settleThread,

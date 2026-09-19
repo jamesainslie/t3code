@@ -17,6 +17,7 @@ import { SortableContext, useSortable } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  canAddDependency,
   canSnooze,
   compareBlockedThreads,
   dependencyWaitLabel,
@@ -119,7 +120,11 @@ import {
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
+import {
+  isCommandPaletteOpen,
+  openCommandPalette,
+  openThreadDependencyPicker,
+} from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
@@ -2905,6 +2910,17 @@ export default function Sidebar() {
   );
   const snoozedThreadKeysRef = useRef(snoozedThreadKeys);
   snoozedThreadKeysRef.current = snoozedThreadKeys;
+  const blockedThreadKeys = useMemo(
+    () =>
+      new Set(
+        blockedThreads.map((thread) =>
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ),
+      ),
+    [blockedThreads],
+  );
+  const blockedThreadKeysRef = useRef(blockedThreadKeys);
+  blockedThreadKeysRef.current = blockedThreadKeys;
 
   const jumpLabelByKey = useMemo(() => {
     const mapping = new Map<string, string>();
@@ -4195,9 +4211,13 @@ export default function Sidebar() {
         const supportsTitleRegeneration =
           serverConfigs.get(thread.environmentId)?.environment.capabilities
             .threadTitleRegeneration === true;
+        const supportsDependencies =
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadDependencies ===
+          true;
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
+        const isBlocked = blockedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
@@ -4223,6 +4243,8 @@ export default function Sidebar() {
               isSettled,
               isSnoozed,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+              isBlocked,
+              canAddDependencyNow: canAddDependency(thread, { now: new Date().toISOString() }),
               isRegeneratingTitle,
               isRunning:
                 thread.session?.status === "running" && thread.session.activeTurnId != null,
@@ -4231,6 +4253,7 @@ export default function Sidebar() {
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
                 titleRegeneration: supportsTitleRegeneration,
+                dependencies: supportsDependencies,
               },
               snoozePresets,
             }),
@@ -4284,6 +4307,37 @@ export default function Sidebar() {
             }
             return;
           }
+          case "new-thread-to-unblock": {
+            // Same carry-over as "New thread on branch"; the draft also
+            // remembers the thread it unblocks, and the link is made once
+            // that thread exists on first send.
+            const result = await settlePromise(() =>
+              handleNewThreadRef.current(scopeProjectRef(thread.environmentId, thread.projectId), {
+                branch: thread.branch,
+                worktreePath: thread.worktreePath,
+                envMode: thread.worktreePath ? "worktree" : "local",
+                startFromOrigin: false,
+                unblocksThreadId: thread.id,
+              }),
+            );
+            if (result._tag === "Failure") {
+              const error = squashAtomCommandFailure(result);
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not create thread",
+                  description: error instanceof Error ? error.message : "An error occurred.",
+                }),
+              );
+            }
+            return;
+          }
+          case "depends-on":
+            openThreadDependencyPicker(threadRef);
+            return;
+          case "release":
+            attemptRelease(threadRef);
+            return;
           case "settle":
             attemptSettle(threadRef);
             return;
@@ -4407,6 +4461,7 @@ export default function Sidebar() {
     [
       archiveThread,
       attemptPin,
+      attemptRelease,
       attemptSettle,
       attemptSnooze,
       attemptUnpin,

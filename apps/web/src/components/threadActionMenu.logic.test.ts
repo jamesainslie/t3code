@@ -9,9 +9,17 @@ const baseState: ThreadActionMenuState = {
   isSettled: false,
   isSnoozed: false,
   canSnoozeNow: true,
+  isBlocked: false,
+  canAddDependencyNow: true,
   isRegeneratingTitle: false,
   isRunning: false,
-  supports: { settlement: true, snooze: true, pinning: true, titleRegeneration: true },
+  supports: {
+    settlement: true,
+    snooze: true,
+    pinning: true,
+    titleRegeneration: true,
+    dependencies: true,
+  },
   snoozePresets: [
     { id: "hour", label: "In 1 hour", whenLabel: "3:00 PM", snoozedUntil: "2026-08-07T15:00:00Z" },
   ],
@@ -32,7 +40,13 @@ describe("buildThreadActionMenuItems", () => {
     expect(
       ids({
         ...baseState,
-        supports: { settlement: false, snooze: false, pinning: false, titleRegeneration: false },
+        supports: {
+          settlement: false,
+          snooze: false,
+          pinning: false,
+          titleRegeneration: false,
+          dependencies: false,
+        },
       }),
     ).toEqual(["rename", "mark-unread", "copy", "project-settings", "archive", "delete"]);
   });
@@ -92,6 +106,47 @@ describe("buildThreadActionMenuItems", () => {
     expect(snooze?.children?.map((child) => child.id)).toEqual(["snooze:hour", "snooze:custom"]);
   });
 
+  it("offers the dependency entries directly after snooze", () => {
+    const items = buildThreadActionMenuItems(baseState);
+    const snoozeIndex = items.findIndex((item) => item.id === "snooze");
+    expect(items[snoozeIndex + 1]).toMatchObject({ id: "depends-on", label: "Depends on…" });
+    expect(items[snoozeIndex + 2]).toMatchObject({
+      id: "new-thread-to-unblock",
+      label: "Start a thread to unblock this",
+    });
+  });
+
+  it("disables the dependency entries when the thread cannot take one", () => {
+    const items = buildThreadActionMenuItems({ ...baseState, canAddDependencyNow: false });
+    expect(items.find((item) => item.id === "depends-on")?.disabled).toBe(true);
+    expect(items.find((item) => item.id === "new-thread-to-unblock")?.disabled).toBe(true);
+  });
+
+  it("hides the dependency entries when the environment lacks the capability", () => {
+    const withoutDependencies = ids({
+      ...baseState,
+      supports: { ...baseState.supports, dependencies: false },
+    });
+    expect(withoutDependencies).not.toContain("depends-on");
+    expect(withoutDependencies).not.toContain("new-thread-to-unblock");
+    expect(withoutDependencies).toContain("snooze");
+  });
+
+  it("offers wake in place of the parking entries on a blocked thread", () => {
+    const items = ids({ ...baseState, isBlocked: true });
+    expect(items).toContain("release");
+    expect(items).not.toContain("depends-on");
+    expect(items).not.toContain("new-thread-to-unblock");
+    expect(items).not.toContain("snooze");
+  });
+
+  it("labels the blocked wake entry like the snoozed one", () => {
+    const release = buildThreadActionMenuItems({ ...baseState, isBlocked: true }).find(
+      (item) => item.id === "release",
+    );
+    expect(release).toMatchObject({ label: "Wake thread", icon: "clock" });
+  });
+
   it("disables title regeneration while one is in flight", () => {
     const item = buildThreadActionMenuItems({ ...baseState, isRegeneratingTitle: true }).find(
       (candidate) => candidate.id === "regenerate-title",
@@ -117,7 +172,13 @@ describe("buildThreadActionMenuItems", () => {
     expect(
       ids({
         ...baseState,
-        supports: { settlement: false, snooze: false, pinning: false, titleRegeneration: false },
+        supports: {
+          settlement: false,
+          snooze: false,
+          pinning: false,
+          titleRegeneration: false,
+          dependencies: false,
+        },
       }),
     ).toContain("archive");
   });

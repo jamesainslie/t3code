@@ -4,6 +4,7 @@ import {
   type EnvironmentId,
   type FilesystemBrowseEntry,
   type KeybindingCommand,
+  type ScopedThreadRef,
   THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import { filterFilesystemBrowseEntries } from "@t3tools/client-runtime/state/filesystem";
@@ -62,6 +63,10 @@ export type SearchOverlayMode = "command" | "files" | "content";
 
 export type CommandPaletteOpenIntent =
   | { readonly kind: "add-project" | "new-thread-in" | "change-theme" }
+  // The picker parks one thread, so the waiting thread rides with the intent
+  // rather than being read from the route: the menu can be opened from a
+  // sidebar row for a thread that is not the one on screen.
+  | { readonly kind: "depends-on"; readonly blockedThreadRef: ScopedThreadRef }
   | {
       readonly kind: "search";
       readonly query: string;
@@ -85,6 +90,7 @@ export type CommandPaletteUiAction =
   | { readonly _tag: "OpenAddProject" }
   | { readonly _tag: "OpenNewThreadIn" }
   | { readonly _tag: "OpenChangeTheme" }
+  | { readonly _tag: "OpenDependsOn"; readonly blockedThreadRef: ScopedThreadRef }
   | { readonly _tag: "ClearOpenIntent" };
 
 export function reduceCommandPaletteUiState(
@@ -116,6 +122,12 @@ export function reduceCommandPaletteUiState(
       return { open: true, mode: "command", openIntent: { kind: "new-thread-in" } };
     case "OpenChangeTheme":
       return { open: true, mode: "command", openIntent: { kind: "change-theme" } };
+    case "OpenDependsOn":
+      return {
+        open: true,
+        mode: "command",
+        openIntent: { kind: "depends-on", blockedThreadRef: action.blockedThreadRef },
+      };
     case "ClearOpenIntent":
       return state.openIntent ? { ...state, openIntent: null } : state;
   }

@@ -1,4 +1,5 @@
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
+import { openThreadDependencyPicker } from "../commandPaletteBus";
 import { scopeProjectRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   type AtomCommandResult,
@@ -6,7 +7,12 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  canAddDependency,
+  canSnooze,
+  effectiveBlocked,
+  effectiveSnoozed,
+} from "@t3tools/client-runtime/state/thread-settled";
 import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
@@ -20,6 +26,7 @@ import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
+  readEnvironmentSupportsDependencies,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
@@ -86,6 +93,7 @@ export function useThreadActionMenu(input: {
     unsettleThread,
     snoozeThread,
     unsnoozeThread,
+    releaseThreadDependencies,
     pinThread,
     confirmAndUnpinThread,
     archiveThread,
@@ -135,6 +143,7 @@ export function useThreadActionMenu(input: {
           snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
           pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
+          dependencies: readEnvironmentSupportsDependencies(threadRef.environmentId),
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
@@ -147,6 +156,8 @@ export function useThreadActionMenu(input: {
           isSettled: supports.settlement && thread.settledOverride === "settled",
           isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
           canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
+          isBlocked: supports.dependencies && effectiveBlocked(thread),
+          canAddDependencyNow: canAddDependency(thread, { now: now.toISOString() }),
           isRegeneratingTitle,
           isRunning: thread.session?.status === "running" && thread.session.activeTurnId != null,
           supports,
@@ -227,6 +238,44 @@ export function useThreadActionMenu(input: {
             if (result._tag === "Failure") {
               failureToast("Could not create thread", squashAtomCommandFailure(result));
             }
+            return;
+          }
+          case "new-thread-to-unblock": {
+            // Same carry-over as "New thread on branch"; the draft also
+            // remembers which thread it unblocks, and the link is made once
+            // the new thread actually exists (first send).
+            const result = await settlePromise(() =>
+              handleNewThread(scopeProjectRef(threadRef.environmentId, thread.projectId), {
+                branch: thread.branch,
+                worktreePath: thread.worktreePath,
+                envMode: thread.worktreePath ? "worktree" : "local",
+                startFromOrigin: false,
+                unblocksThreadId: thread.id,
+              }),
+            );
+            if (result._tag === "Failure") {
+              failureToast("Could not create thread", squashAtomCommandFailure(result));
+            }
+            return;
+          }
+          case "depends-on":
+            openThreadDependencyPicker(threadRef);
+            return;
+          case "release": {
+            const released = await releaseThreadDependencies(threadRef);
+            if (released._tag === "Failure") {
+              if (!isAtomCommandInterrupted(released)) {
+                failureToast("Failed to wake thread", squashAtomCommandFailure(released));
+              }
+              return;
+            }
+            toastManager.add(
+              stackedThreadToast({
+                type: "success",
+                title: "Thread woke",
+                timeout: 5_000,
+              }),
+            );
             return;
           }
           case "settle":
@@ -352,6 +401,7 @@ export function useThreadActionMenu(input: {
       projectCwd,
       projectGroupingSettings,
       projects,
+      releaseThreadDependencies,
       router,
       settleThread,
       snoozeThread,
