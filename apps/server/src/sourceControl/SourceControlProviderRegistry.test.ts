@@ -4,6 +4,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { VcsRepositoryDetectionError } from "@t3tools/contracts";
 
@@ -16,6 +17,7 @@ import * as BitbucketApi from "./BitbucketApi.ts";
 import * as GitHubCli from "./GitHubCli.ts";
 import * as GitLabCli from "./GitLabCli.ts";
 import * as ForgejoCli from "./ForgejoCli.ts";
+import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
@@ -43,6 +45,7 @@ function makeRegistry(input: {
   readonly github?: Partial<GitHubCli.GitHubCli["Service"]>;
   readonly gitlab?: Partial<GitLabCli.GitLabCli["Service"]>;
   readonly resolve?: VcsDriverRegistry.VcsDriverRegistry["Service"]["resolve"];
+  readonly accounts?: Partial<GitHubAccountSelector.GitHubAccountSelector["Service"]>;
 }) {
   const driver = {
     listRemotes: () =>
@@ -97,6 +100,10 @@ function makeRegistry(input: {
         Layer.mock(GitHubCli.GitHubCli)(input.github ?? {}),
         Layer.mock(GitLabCli.GitLabCli)(input.gitlab ?? {}),
         Layer.mock(ForgejoCli.ForgejoCli)({ listLogins: () => Effect.succeed([]) }),
+        Layer.mock(GitHubAccountSelector.GitHubAccountSelector)({
+          pinFor: () => Effect.succeed(null),
+          ...input.accounts,
+        }),
         ServerConfig.layerTest(process.cwd(), {
           prefix: "t3-source-control-registry-test-",
         }).pipe(Layer.provide(NodeServices.layer)),
@@ -344,4 +351,65 @@ it.effect(
         );
       }
     }).pipe(Effect.scoped),
+);
+
+it.effect("provides the checkout's pinned credential to GitHub provider calls", () =>
+  Effect.gen(function* () {
+    const seen: Array<string | null> = [];
+    const pinRequests: string[] = [];
+    const registry = yield* makeRegistry({
+      remotes: [{ name: "origin", url: "git@github.com:geico-private/web.git" }],
+      github: {
+        getDefaultBranch: () =>
+          Effect.gen(function* () {
+            const pin = yield* GitHubCli.PinnedGitHubCredential;
+            seen.push(pin?.credentialFingerprint ?? null);
+            return "main";
+          }),
+      },
+      accounts: {
+        pinFor: ({ cwd }) =>
+          Effect.sync(() => {
+            pinRequests.push(cwd);
+            return {
+              host: "github.com",
+              token: Redacted.make("token-work"),
+              credentialFingerprint: "github.com:work:digest",
+              scope: "checkout" as const,
+            };
+          }),
+      },
+    });
+
+    const provider = yield* registry.resolve({ cwd: "/repo" });
+    yield* provider.getDefaultBranch({ cwd: "/repo" });
+
+    assert.deepStrictEqual(seen, ["github.com:work:digest"]);
+    assert.deepStrictEqual(pinRequests, ["/repo"]);
+  }),
+);
+
+it.effect("leaves non-GitHub providers unpinned", () =>
+  Effect.gen(function* () {
+    let pinRequests = 0;
+    const registry = yield* makeRegistry({
+      remotes: [{ name: "origin", url: "git@gitlab.com:group/project.git" }],
+      gitlab: {
+        getDefaultBranch: () => Effect.succeed("main"),
+      },
+      accounts: {
+        pinFor: () =>
+          Effect.sync(() => {
+            pinRequests += 1;
+            return null;
+          }),
+      },
+    });
+
+    const provider = yield* registry.resolve({ cwd: "/repo" });
+    yield* provider.getDefaultBranch({ cwd: "/repo" });
+
+    assert.strictEqual(provider.kind, "gitlab");
+    assert.strictEqual(pinRequests, 0);
+  }),
 );

@@ -229,6 +229,7 @@ export const make = Effect.gen(function* () {
       projectWorktreeCleanup: true,
       threadRestartContinuation: true,
       projectSettingsOverrides: true,
+      gitHubAccountRouting: true,
       threadSnooze: true,
       environmentThemes: true,
       usageLimitSources: true,

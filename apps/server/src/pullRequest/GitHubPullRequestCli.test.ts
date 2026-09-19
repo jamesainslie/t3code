@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as GitHubCli from "../sourceControl/GitHubCli.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
@@ -21,6 +22,12 @@ const mockedStackMemberships = vi.fn<GitHubCli.GitHubCli["Service"]["execute"]>(
   Effect.succeed(output('{"data":{}}')),
 );
 const mockedGetPullRequest = vi.fn<GitHubCli.GitHubCli["Service"]["getPullRequest"]>();
+const mockedForCheckout = vi.fn<
+  GitHubAccountSelector.GitHubAccountSelector["Service"]["forCheckout"]
+>(() => Effect.succeed(null));
+const accountSelectorLayer = Layer.mock(GitHubAccountSelector.GitHubAccountSelector)({
+  forCheckout: (input) => mockedForCheckout(input),
+});
 
 const layer = it.layer(
   GitHubPullRequestCli.layer.pipe(
@@ -33,6 +40,7 @@ const layer = it.layer(
         getPullRequest: mockedGetPullRequest,
       }),
     ),
+    Layer.provide(accountSelectorLayer),
     Layer.provide(GitHubGraphQlBudget.layer),
   ),
 );
@@ -216,7 +224,7 @@ it.effect(
       );
       const cli = yield* GitHubPullRequestCli.make.pipe(
         Effect.provideService(GitHubCli.GitHubCli, github),
-        Effect.provide(GitHubGraphQlBudget.layer),
+        Effect.provide(Layer.merge(accountSelectorLayer, GitHubGraphQlBudget.layer)),
       );
       const input = { cwd: "/repo", host: "github.com" };
       const first = yield* cli.withVerifiedCredential(input, (identity) =>
@@ -3902,6 +3910,90 @@ layer("GitHubPullRequestCli.layer", (it) => {
       }
 
       assert.strictEqual(lookupsOf.get(HOT), 1);
+    }),
+  );
+});
+
+layer("GitHubPullRequestCli account selection", (it) => {
+  afterEach(() => {
+    mockedForCheckout.mockReset();
+    mockedForCheckout.mockImplementation(() => Effect.succeed(null));
+  });
+
+  it.effect("asks gh for the selected account's token", () =>
+    Effect.gen(function* () {
+      mockedForCheckout.mockImplementation(() =>
+        Effect.succeed({ host: "github.com", login: "work" }),
+      );
+      mockedExecute.mockImplementation((input) =>
+        input.args[0] === "auth"
+          ? Effect.succeed(output("work-credential"))
+          : Effect.succeed(output('{"id":7,"login":"work"}')),
+      );
+      const cli = yield* GitHubPullRequestCli.GitHubPullRequestCli;
+      const identity = yield* cli.withVerifiedCredential(
+        { cwd: "/work", host: "github.com" },
+        Effect.succeed,
+      );
+      expect(identity.viewer).toBe("work");
+      expect(identity.credentialFingerprint).toMatch(/^github\.com:work:/);
+      expect(
+        mockedExecute.mock.calls.find(([input]) => input.args[0] === "auth")?.[0].args,
+      ).toEqual(["auth", "token", "--hostname", "github.com", "--user", "work"]);
+      expect(mockedForCheckout).toHaveBeenCalledWith({ cwd: "/work", projectId: undefined });
+    }),
+  );
+
+  it.effect("keeps asking for the active account on unselected checkouts", () =>
+    Effect.gen(function* () {
+      mockedExecute.mockImplementation((input) =>
+        input.args[0] === "auth"
+          ? Effect.succeed(output("active-credential"))
+          : Effect.succeed(output('{"id":1,"login":"active"}')),
+      );
+      const cli = yield* GitHubPullRequestCli.GitHubPullRequestCli;
+      const identity = yield* cli.withVerifiedCredential(
+        { cwd: "/plain", host: "github.com" },
+        Effect.succeed,
+      );
+      expect(identity.credentialFingerprint).toMatch(/^github\.com:[0-9a-f]{64}$/);
+      expect(
+        mockedExecute.mock.calls.find(([input]) => input.args[0] === "auth")?.[0].args,
+      ).toEqual(["auth", "token", "--hostname", "github.com"]);
+    }),
+  );
+
+  it.effect("fingerprints two accounts on one host separately", () =>
+    Effect.gen(function* () {
+      mockedForCheckout.mockImplementation(({ cwd }) =>
+        Effect.succeed({ host: "github.com", login: cwd === "/work" ? "work" : "personal" }),
+      );
+      mockedExecute.mockImplementation((input) => {
+        if (input.args[0] === "auth") {
+          return Effect.succeed(output(`${input.args[5]}-credential`));
+        }
+        return Effect.succeed(
+          output(
+            input.env?.GH_TOKEN === "work-credential"
+              ? '{"id":7,"login":"work"}'
+              : '{"id":8,"login":"personal"}',
+          ),
+        );
+      });
+      const cli = yield* GitHubPullRequestCli.GitHubPullRequestCli;
+      const work = yield* cli.getRoutingIdentity({ cwd: "/work", host: "github.com" });
+      const personal = yield* cli.getRoutingIdentity({ cwd: "/personal", host: "github.com" });
+      expect(work).toEqual({ accountId: "7", viewer: "work" });
+      expect(personal).toEqual({ accountId: "8", viewer: "personal" });
+      const fingerprints = yield* Effect.all([
+        cli.withVerifiedCredential({ cwd: "/work", host: "github.com" }, (identity) =>
+          Effect.succeed(identity.credentialFingerprint),
+        ),
+        cli.withVerifiedCredential({ cwd: "/personal", host: "github.com" }, (identity) =>
+          Effect.succeed(identity.credentialFingerprint),
+        ),
+      ]);
+      expect(fingerprints[0]).not.toBe(fingerprints[1]);
     }),
   );
 });

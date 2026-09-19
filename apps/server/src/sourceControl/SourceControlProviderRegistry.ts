@@ -16,6 +16,8 @@ import * as BitbucketSourceControlProvider from "./BitbucketSourceControlProvide
 import * as GitHubSourceControlProvider from "./GitHubSourceControlProvider.ts";
 import * as GitLabSourceControlProvider from "./GitLabSourceControlProvider.ts";
 import * as ForgejoSourceControlProvider from "./ForgejoSourceControlProvider.ts";
+import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
+import * as GitHubCli from "./GitHubCli.ts";
 import * as SourceControlProvider from "./SourceControlProvider.ts";
 import {
   probeSourceControlProvider,
@@ -152,48 +154,80 @@ function selectProviderContext(
   );
 }
 
+/**
+ * Runs a GitHub provider call under the account selected for the checkout. The token is fetched
+ * only when a call actually runs, and a checkout with no selection runs exactly as before.
+ */
+const withPin =
+  (pin: Effect.Effect<GitHubCli.PinnedGitHubCredentialValue | null>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.flatMap(pin, (credential) =>
+      credential === null
+        ? effect
+        : Effect.provideService(effect, GitHubCli.PinnedGitHubCredential, credential),
+    );
+
 function bindProviderContext(
   provider: SourceControlProvider.SourceControlProvider["Service"],
   context: SourceControlProvider.SourceControlProviderContext | null,
+  pin: Effect.Effect<GitHubCli.PinnedGitHubCredentialValue | null>,
 ): SourceControlProvider.SourceControlProvider["Service"] {
   if (context === null) {
     return provider;
   }
+  // Only GitHub has accounts to choose between; other providers pass through untouched.
+  const pinned =
+    context.provider.kind === "github"
+      ? withPin(pin)
+      : <A, E, R>(effect: Effect.Effect<A, E, R>) => effect;
 
   return SourceControlProvider.SourceControlProvider.of({
     kind: provider.kind,
     ...(provider.resolveLink ? { resolveLink: provider.resolveLink } : {}),
     listChangeRequests: (input) =>
-      provider.listChangeRequests({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.listChangeRequests({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
     getChangeRequest: (input) =>
-      provider.getChangeRequest({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.getChangeRequest({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
     createChangeRequest: (input) =>
-      provider.createChangeRequest({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.createChangeRequest({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
     getRepositoryCloneUrls: (input) =>
-      provider.getRepositoryCloneUrls({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.getRepositoryCloneUrls({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
+    // A new repository has no checkout to select an account for; it uses gh's active account.
     createRepository: (input) => provider.createRepository(input),
     getDefaultBranch: (input) =>
-      provider.getDefaultBranch({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.getDefaultBranch({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
     checkoutChangeRequest: (input) =>
-      provider.checkoutChangeRequest({
-        ...input,
-        context: input.context ?? context,
-      }),
+      pinned(
+        provider.checkoutChangeRequest({
+          ...input,
+          context: input.context ?? context,
+        }),
+      ),
   });
 }
 
@@ -203,6 +237,7 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
     const config = yield* ServerConfig;
     const process = yield* VcsProcess.VcsProcess;
     const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
+    const accounts = yield* GitHubAccountSelector.GitHubAccountSelector;
     const providers = new Map<
       SourceControlProviderKind,
       SourceControlProvider.SourceControlProvider["Service"]
@@ -272,7 +307,7 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
           const kind = context?.provider.kind ?? "unknown";
           const provider = providers.get(kind) ?? unsupportedProvider(kind);
           return {
-            provider: bindProviderContext(provider, context),
+            provider: bindProviderContext(provider, context, accounts.pinFor({ cwd: input.cwd })),
             context,
           } satisfies SourceControlProviderHandle;
         }),

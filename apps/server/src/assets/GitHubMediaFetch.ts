@@ -12,6 +12,7 @@ import {
   type HttpClientResponse,
 } from "effect/unstable/http";
 
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as GitHubCli from "../sourceControl/GitHubCli.ts";
 
 /**
@@ -63,14 +64,18 @@ const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inlin
  */
 const tokenCache = new Map<string, { readonly at: number; readonly token: Redacted.Redacted }>();
 
-const githubToken = Effect.fn("GitHubMediaFetch.githubToken")(function* (input: {
+/** @internal Exported for tests. */
+export const githubToken = Effect.fn("GitHubMediaFetch.githubToken")(function* (input: {
   readonly cwd: string;
   readonly host: string;
 }) {
-  // `gh` stores a token per host, not per repository, so the directory it runs in is not part
-  // of the answer and must not fragment the cache a client could otherwise churn. This route
-  // pins no credential; if it ever does, the pin belongs in this key.
-  const key = input.host;
+  // `gh` stores a token per host and login, not per repository, so the directory it runs in is
+  // not part of the answer and must not fragment the cache a client could otherwise churn. The
+  // account selected for the checkout is, because it decides which token `gh` prints.
+  const accounts = yield* GitHubAccountSelector.GitHubAccountSelector;
+  const selected = yield* accounts.forCheckout({ cwd: input.cwd });
+  const login = selected !== null && selected.host === input.host ? selected.login : null;
+  const key = login === null ? input.host : `${input.host}\0${login}`;
   const now = yield* Clock.currentTimeMillis;
   const cached = tokenCache.get(key);
   if (cached !== undefined && now - cached.at < TOKEN_CACHE_TTL_MS) return cached.token;
@@ -80,7 +85,13 @@ const githubToken = Effect.fn("GitHubMediaFetch.githubToken")(function* (input: 
   const token = yield* github
     .execute({
       cwd: input.cwd,
-      args: ["auth", "token", "--hostname", input.host],
+      args: [
+        "auth",
+        "token",
+        "--hostname",
+        input.host,
+        ...(login === null ? [] : ["--user", login]),
+      ],
       env: { GH_DEBUG: "" },
     })
     .pipe(

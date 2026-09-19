@@ -23,6 +23,7 @@ import {
 } from "../src/textGeneration/ThreadTitleContext.ts";
 import * as ThreadTitleLinks from "../src/textGeneration/ThreadTitleLinks.ts";
 import * as SourceControlProviderRegistry from "../src/sourceControl/SourceControlProviderRegistry.ts";
+import * as GitHubAccountSelector from "../src/sourceControl/GitHubAccountSelector.ts";
 import * as GitHubCli from "../src/sourceControl/GitHubCli.ts";
 import * as GitLabCli from "../src/sourceControl/GitLabCli.ts";
 import * as ForgejoCli from "../src/sourceControl/ForgejoCli.ts";
@@ -156,6 +157,7 @@ await Effect.runPromise(
               ForgejoCli.layer,
               AzureDevOpsCli.layer,
               BitbucketApi.layer,
+              GitHubAccountSelector.layerUnselected,
             ),
           ),
           Layer.provide(VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer))),

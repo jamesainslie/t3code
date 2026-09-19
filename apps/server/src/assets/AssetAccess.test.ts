@@ -27,6 +27,7 @@ import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.t
 import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { openMediaFile } from "./MediaFile.ts";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import * as GitHubCli from "../sourceControl/GitHubCli.ts";
 import { githubMediaResponse } from "./GitHubMediaFetch.ts";
 
@@ -67,16 +68,19 @@ describe("AssetAccess", () => {
       expect(authorizations).toEqual([undefined, "Bearer signed-in", "Bearer signed-in"]);
     }).pipe(
       Effect.provide(
-        Layer.mock(GitHubCli.GitHubCli)({
-          execute: () =>
-            Effect.sync(() => ({
-              exitCode: ChildProcessSpawner.ExitCode(0),
-              stdout: ++lookups === 1 ? "" : "signed-in",
-              stderr: "",
-              stdoutTruncated: false,
-              stderrTruncated: false,
-            })),
-        }),
+        Layer.merge(
+          Layer.mock(GitHubCli.GitHubCli)({
+            execute: () =>
+              Effect.sync(() => ({
+                exitCode: ChildProcessSpawner.ExitCode(0),
+                stdout: ++lookups === 1 ? "" : "signed-in",
+                stderr: "",
+                stdoutTruncated: false,
+                stderrTruncated: false,
+              })),
+          }),
+          GitHubAccountSelector.layerUnselected,
+        ),
       ),
       Effect.provideService(
         HttpClient.HttpClient,

@@ -637,3 +637,70 @@ describe("GitHubCli.layer", () => {
     }).pipe(Effect.provide(layer)),
   );
 });
+
+describe("GitHubCli pin scopes", () => {
+  const makeCli = (seen: Array<string | undefined>) =>
+    GitHubCli.make.pipe(
+      Effect.provide(Layer.merge(GitHubGraphQlBudget.layer, SourceControlRateLimit.layer)),
+      Effect.provideService(VcsProcess.VcsProcess, {
+        run: (input) =>
+          Effect.sync(() => {
+            if (input.args[1] === "rate_limit") return quotaOutput();
+            seen.push(input.env?.GH_TOKEN);
+            return processOutput("[]");
+          }),
+      }),
+    );
+  const pin = (scope: "host" | "checkout" | undefined) => ({
+    host: "github.com",
+    token: Redacted.make(`token-${scope ?? "default"}`),
+    credentialFingerprint: `fingerprint-${scope ?? "default"}`,
+    ...(scope === undefined ? {} : { scope }),
+  });
+
+  it.effect("runs host-less commands under a checkout-scoped pin", () =>
+    Effect.gen(function* () {
+      const seen: Array<string | undefined> = [];
+      const gh = yield* makeCli(seen);
+      yield* gh
+        .execute({ cwd: "/repo", args: ["pr", "list", "--json", "number"] })
+        .pipe(Effect.provideService(GitHubCli.PinnedGitHubCredential, pin("checkout")));
+      assert.deepStrictEqual(seen, ["token-checkout"]);
+    }),
+  );
+
+  it.effect("rejects host-less commands under a host-scoped pin", () =>
+    Effect.gen(function* () {
+      const seen: Array<string | undefined> = [];
+      const gh = yield* makeCli(seen);
+      for (const scope of ["host", undefined] as const) {
+        const error = yield* gh
+          .execute({ cwd: "/repo", args: ["pr", "list", "--json", "number"] })
+          .pipe(Effect.provideService(GitHubCli.PinnedGitHubCredential, pin(scope)), Effect.flip);
+        assert.strictEqual(error._tag, "GitHubCliCommandError");
+      }
+      assert.deepStrictEqual(seen, []);
+    }),
+  );
+
+  it.effect("rejects a checkout pin whose argv names another host", () =>
+    Effect.gen(function* () {
+      const seen: Array<string | undefined> = [];
+      const gh = yield* makeCli(seen);
+      const error = yield* gh
+        .execute({
+          cwd: "/repo",
+          args: ["pr", "list", "--repo", "github.geico.net/acme/web", "--json", "number"],
+        })
+        .pipe(
+          Effect.provideService(GitHubCli.PinnedGitHubCredential, pin("checkout")),
+          Effect.flip,
+        );
+      assert.strictEqual(error._tag, "GitHubCliCommandError");
+      yield* gh
+        .execute({ cwd: "/repo", args: ["pr", "list", "--repo", "github.com/acme/web"] })
+        .pipe(Effect.provideService(GitHubCli.PinnedGitHubCredential, pin("checkout")));
+      assert.deepStrictEqual(seen, ["token-checkout"]);
+    }),
+  );
+});

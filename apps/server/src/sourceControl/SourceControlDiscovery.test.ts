@@ -16,6 +16,7 @@ import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 import * as BitbucketApi from "./BitbucketApi.ts";
+import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
 import * as GitHubCli from "./GitHubCli.ts";
 import * as GitLabCli from "./GitLabCli.ts";
 import * as ForgejoCli from "./ForgejoCli.ts";
@@ -40,6 +41,7 @@ const sourceControlProviderRegistryTestLayer = (input: {
         Layer.mock(GitHubCli.GitHubCli)({}),
         Layer.mock(GitLabCli.GitLabCli)({}),
         Layer.mock(ForgejoCli.ForgejoCli)({ listLogins: () => Effect.succeed([]) }),
+        GitHubAccountSelector.layerUnselected,
         Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({}),
         Layer.mock(VcsProcess.VcsProcess)(input.process),
       ),
@@ -61,6 +63,29 @@ const processOutput = (
 });
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
+/** `gh auth status --json hosts` output for the given accounts; `state` defaults to success. */
+function gitHubAuthStatusJson(
+  accounts: ReadonlyArray<{
+    readonly host: string;
+    readonly login: string;
+    readonly active: boolean;
+    readonly state?: string;
+  }>,
+): string {
+  const hosts: Record<string, Array<Record<string, unknown>>> = {};
+  for (const account of accounts) {
+    (hosts[account.host] ??= []).push({
+      state: account.state ?? "success",
+      active: account.active,
+      host: account.host,
+      login: account.login,
+      tokenSource: "keyring",
+      gitProtocol: "ssh",
+    });
+  }
+  return encodeJson({ hosts });
+}
 const encodeJsonEffect = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 
 it.effect("submits a Forgejo review without sending its summary in the preliminary GET", () => {
@@ -380,20 +405,11 @@ it.effect("reports implemented tools separately from locally available executabl
       if (input.command === "gh" && input.args.join(" ") === "auth status --json hosts") {
         return Effect.succeed(
           processOutput(
-            encodeJson({
-              hosts: {
-                "github.com": [
-                  {
-                    state: "success",
-                    active: true,
-                    host: "github.com",
-                    login: "juliusmarminge",
-                    tokenSource: "keyring",
-                    gitProtocol: "ssh",
-                  },
-                ],
-              },
-            }),
+            gitHubAuthStatusJson([
+              { host: "github.com", login: "juliusmarminge", active: true },
+              { host: "github.com", login: "julius-work", active: false },
+              { host: "github.com", login: "expired", active: false, state: "error" },
+            ]),
           ),
         );
       }
@@ -447,6 +463,12 @@ it.effect("reports implemented tools separately from locally available executabl
         { kind: "jj", implemented: false, status: "missing" },
       ],
     );
+    // Every gh account is listed, with the active one flagged, so clients can offer a choice.
+    assert.deepStrictEqual(result.sourceControlProviders[0]?.auth.accounts, [
+      { host: "github.com", login: "juliusmarminge", active: true, authenticated: true },
+      { host: "github.com", login: "julius-work", active: false, authenticated: true },
+      { host: "github.com", login: "expired", active: false, authenticated: false },
+    ]);
     assert.deepStrictEqual(
       result.sourceControlProviders.map((item) => ({
         kind: item.kind,
