@@ -113,7 +113,15 @@ export function npmPlatformPackageManifest(
     repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
     os: [os],
     cpu: [cpu],
-    files: ["t3", "t3.exe", "client", "resource-monitor", "node_modules"],
+    files: [
+      "t3",
+      "t3.exe",
+      "bin.mjs",
+      "claude-history-worker.mjs",
+      "client",
+      "resource-monitor",
+      "node_modules",
+    ],
     preferUnplugged: true,
     dependencies: Object.fromEntries(bundleDependencies.map((name) => [name, bundled[name]])),
     bundleDependencies,
@@ -196,6 +204,7 @@ export function npmLauncherPackageManifest(
 export const NPM_LAUNCHER_SCRIPT = `#!/usr/bin/env node
 "use strict";
 const { spawnSync } = require("node:child_process");
+const { existsSync } = require("node:fs");
 const { constants } = require("node:os");
 const { dirname, join } = require("node:path");
 
@@ -219,7 +228,16 @@ try {
 }
 
 const executable = join(packageDir, process.platform === "win32" ? "t3.exe" : "t3");
-const result = spawnSync(executable, process.argv.slice(2), { stdio: "inherit" });
+let result = spawnSync(executable, process.argv.slice(2), { stdio: "inherit" });
+if (result.error) {
+  // A host whose libc cannot load the executable (NixOS, musl) reports ENOENT
+  // or EACCES from exec. This launcher already runs under a Node that can run
+  // the same bundle as a script, so use it.
+  const bundle = join(packageDir, "bin.mjs");
+  if (existsSync(bundle)) {
+    result = spawnSync(process.execPath, [bundle, ...process.argv.slice(2)], { stdio: "inherit" });
+  }
+}
 if (result.error) {
   process.stderr.write("${FORK_IDENTITY.cliBin}: failed to start " + executable + ": " + result.error.message + "\\n");
   process.exit(1);

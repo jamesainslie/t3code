@@ -446,6 +446,14 @@ if [ -z "$T3_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
+# A host that installs the fork CLI itself (for example a Nix package on PATH)
+# is honored when it is the exact release this app runs; any other version
+# falls through to the release archive so both sides always match.
+if command -v ${FORK_IDENTITY.cliBin} >/dev/null 2>&1; then
+  case "$(${FORK_IDENTITY.cliBin} --version 2>/dev/null)" in
+    *"$T3_ARCHIVE_VERSION"*) exec ${FORK_IDENTITY.cliBin} "$@" ;;
+  esac
+fi
 # Self-contained release archive: no Node, npm, or compiler on the remote.
 # Unpacked into the pinned-runtime layout so \`t3 service install\` reuses it.
 T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
@@ -526,10 +534,16 @@ if ! t3_runtime_ready; then
   fi
   tar -xzf "$T3_STAGING/$T3_ARCHIVE" -C "$T3_STAGING" --strip-components=1
   rm -f "$T3_STAGING/$T3_ARCHIVE" "$T3_STAGING/SHA256SUMS"
-  # Prove the binary runs here (libc, arch) before marking it ready, or every
-  # later launch would exec a broken install instead of retrying.
-  if ! "$T3_STAGING/t3" --version >/dev/null 2>&1; then
-    printf 'The t3 %s executable does not run on this host.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
+  # Prove the runtime runs here before marking it ready, or every later launch
+  # would exec a broken install instead of retrying. The executable is
+  # preferred; a host whose libc cannot load it (NixOS, musl) runs the same
+  # bundle with its own Node instead, recorded so later launches skip the probe.
+  if "$T3_STAGING/t3" --version >/dev/null 2>&1; then
+    printf 'exe\\n' > "$T3_STAGING/.launcher"
+  elif ensure_remote_node_path && node "$T3_STAGING/bin.mjs" --version >/dev/null 2>&1; then
+    printf 'node\\n' > "$T3_STAGING/.launcher"
+  else
+    printf 'The t3 %s executable does not run on this host, and no compatible node is on PATH to run it as a script.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
   fi
   printf '%s\\n' "$T3_ARCHIVE_VERSION" > "$T3_STAGING/.install-complete"
   rm -rf "$T3_RUNTIME_DIR"
@@ -538,6 +552,10 @@ fi
 if [ -n "\${T3_LOCK:-}" ]; then
   rm -rf "$T3_LOCK"
   trap - EXIT
+fi
+if [ "$(cat "$T3_RUNTIME_DIR/.launcher" 2>/dev/null)" = "node" ]; then
+  ensure_remote_node_path || true
+  exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"
 fi
 exec "$T3_RUNTIME_DIR/t3" "$@"
 `;

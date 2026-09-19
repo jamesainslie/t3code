@@ -124,6 +124,19 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
+    // A host that cannot load the executable records the fallback once and
+    // runs the bundled script with its own Node on every later launch.
+    assert.include(script, 'node "$T3_STAGING/bin.mjs" --version');
+    assert.include(script, `printf 'node\\n' > "$T3_STAGING/.launcher"`);
+    assert.include(script, 'exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"');
+    // A host-installed t3f at the exact release is used instead of the archive.
+    assert.include(script, "if command -v t3f >/dev/null 2>&1; then");
+    assert.include(script, `*"$T3_ARCHIVE_VERSION"*) exec t3f "$@" ;;`);
+    assert.isBelow(script.indexOf('exec t3f "$@"'), script.indexOf("T3_RUNTIME_DIR="));
+    assert.isBelow(
+      script.indexOf('"$T3_STAGING/t3" --version'),
+      script.indexOf('node "$T3_STAGING/bin.mjs" --version'),
+    );
     assert.notInclude(script, "npx");
     assert.notInclude(script, "npm exec");
     assert.notInclude(script, "t3@latest");
@@ -150,9 +163,9 @@ describe("ssh tunnel scripts", () => {
       script.indexOf('"$T3_STAGING/t3" --version'),
       script.indexOf('> "$T3_STAGING/.install-complete"'),
     );
-    // Node discovery is defined for the dev path but only ever invoked inside
-    // the node-script branch, which the archive path skips entirely.
-    assert.equal(script.split("ensure_remote_node_path || true").length - 1, 1);
+    // Node discovery runs in the node-script branch, and in the archive path
+    // only when the executable cannot run and the bundled script is used.
+    assert.equal(script.split("ensure_remote_node_path || true").length - 1, 2);
     assert.isBelow(
       script.indexOf("ensure_remote_node_path || true"),
       script.indexOf('exec node "$T3_NODE_SCRIPT_PATH" "$@"'),

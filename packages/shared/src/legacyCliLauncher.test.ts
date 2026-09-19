@@ -61,3 +61,47 @@ process.send({ args: process.argv.slice(2) });
     }
   },
 );
+
+// A host whose libc cannot load the executable fails exec with ENOENT; a file
+// without the execute bit fails the same way with EACCES and stands in for it.
+it.skipIf(hostPlatform === "win32")(
+  "runs the bundled script with Node when the executable cannot start",
+  async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-legacy-launcher-"));
+    const entry = NodePath.join(root, `node_modules/${FORK_IDENTITY.npmPackageName}/dist/bin.mjs`);
+    const packageDir = NodePath.join(
+      root,
+      `node_modules/${forkPlatformPackageName(`${hostPlatform}-${hostArch}`)}`,
+    );
+    await NodeFSP.mkdir(NodePath.dirname(entry), { recursive: true });
+    await NodeFSP.mkdir(packageDir, { recursive: true });
+    await NodeFSP.writeFile(NodePath.join(packageDir, "package.json"), '{"type":"commonjs"}');
+    await NodeFSP.writeFile(entry, legacyCliLauncherScript());
+    await NodeFSP.writeFile(NodePath.join(packageDir, "t3"), "not an executable\n", {
+      mode: 0o644,
+    });
+    await NodeFSP.writeFile(
+      NodePath.join(packageDir, "bin.mjs"),
+      `process.on("message", (message) => process.send({ reply: message }));
+process.send({ args: process.argv.slice(2), runtime: "node" });
+`,
+    );
+    const child = NodeChildProcess.fork(entry, ["serve", "--port", "1"], { silent: true });
+    try {
+      expect((await NodeEvents.EventEmitter.once(child, "message"))[0]).toEqual({
+        args: ["serve", "--port", "1"],
+        runtime: "node",
+      });
+      const reply = NodeEvents.EventEmitter.once(child, "message");
+      child.send({ type: "ping" });
+      expect((await reply)[0]).toEqual({ reply: { type: "ping" } });
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exit = NodeEvents.EventEmitter.once(child, "exit");
+        child.kill("SIGTERM");
+        await exit;
+      }
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  },
+);

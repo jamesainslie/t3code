@@ -96,7 +96,12 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
   }
   const contentDir = path.join(scratch, root);
   const executable = path.join(contentDir, platform === "win32" ? "t3.exe" : "t3");
-  for (const required of [executable, path.join(contentDir, "client/index.html")]) {
+  for (const required of [
+    executable,
+    path.join(contentDir, "bin.mjs"),
+    path.join(contentDir, "claude-history-worker.mjs"),
+    path.join(contentDir, "client/index.html"),
+  ]) {
     if (!(yield* fs.exists(required))) {
       return yield* new CliArchiveSmokeError({
         step: "checking the archive layout",
@@ -110,6 +115,19 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
     return yield* new CliArchiveSmokeError({
       step: "running --version",
       detail: `exit ${String(version.exitCode)}\n${version.stdout}${version.stderr}`,
+    });
+  }
+  // Hosts that cannot load the executable run the bundle with their own Node.
+  // Prove the script resolves its externals from the archive layout.
+  const scriptVersion = yield* runExecutable(
+    process.execPath,
+    [path.join(contentDir, "bin.mjs"), "--version"],
+    contentDir,
+  );
+  if (scriptVersion.exitCode !== 0 || !scriptVersion.stdout.includes(input.expectVersion)) {
+    return yield* new CliArchiveSmokeError({
+      step: "running node bin.mjs --version",
+      detail: `exit ${String(scriptVersion.exitCode)}\n${scriptVersion.stdout}${scriptVersion.stderr}`,
     });
   }
 

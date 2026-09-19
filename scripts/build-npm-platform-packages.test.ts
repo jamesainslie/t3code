@@ -77,6 +77,11 @@ const makeFakeArchives = Effect.fn("test.makeFakeArchives")(function* () {
       `#!/bin/sh\necho "stub ${key} $*"\nexit 7\n`,
     );
     yield* fs.chmod(path.join(contentDir, "t3"), 0o755);
+    yield* fs.writeFileString(
+      path.join(contentDir, "bin.mjs"),
+      `console.log("script ${key} " + process.argv.slice(2).join(" "));\nprocess.exit(9);\n`,
+    );
+    yield* fs.writeFileString(path.join(contentDir, "claude-history-worker.mjs"), "");
     const exit = yield* run("tar", ["-czf", path.join(archivesDir, `${stem}.tar.gz`), stem], {
       cwd: stage,
     });
@@ -138,6 +143,8 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       assert.deepStrictEqual(linuxManifest.files, [
         "t3",
         "t3.exe",
+        "bin.mjs",
+        "claude-history-worker.mjs",
         "client",
         "resource-monitor",
         "node_modules",
@@ -238,6 +245,24 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
           },
         );
         assert.equal(unpack.exitCode, 0, unpack.stderr);
+        // Strip the execute bit so spawnSync fails the way a foreign-libc host
+        // does; the launcher must then run the bundled script under this Node.
+        const stub = path.join(
+          fixture.outputDir,
+          `@jamesainslie/t3code-${hostPlatform}-${hostArch}/t3`,
+        );
+        yield* fs.chmod(stub, 0o644);
+        const scripted = yield* run(process.execPath, ["bin/t3.js", "serve", "--port", "1234"], {
+          cwd: launcherDir,
+          env,
+        });
+        yield* fs.chmod(stub, 0o755);
+        assert.equal(
+          scripted.stdout.trim(),
+          `script ${hostPlatform}-${hostArch} serve --port 1234`,
+        );
+        assert.equal(scripted.exitCode, 9);
+
         const legacy = yield* run(
           process.execPath,
           [

@@ -99,7 +99,12 @@ const resolveDesktopSshCliRunner = (
       nodeEngineRange: serverPackageJson.engines.node,
     };
   }
-  return { archiveVersion: environment.appVersion };
+  // The engine range only matters when the remote falls back to its own Node
+  // because the archive's executable cannot run there.
+  return {
+    archiveVersion: environment.appVersion,
+    nodeEngineRange: serverPackageJson.engines.node,
+  };
 };
 
 const desktopSshEnvironmentLayer = Layer.unwrap(

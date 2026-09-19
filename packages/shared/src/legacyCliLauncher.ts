@@ -19,26 +19,43 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const executableName = process.platform === "win32" ? "t3.exe" : "t3";
-const executable = join(dirname(require.resolve("${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}" + process.platform + "-" + process.arch + "/package.json")), executableName);
+const packageDir = dirname(require.resolve("${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}" + process.platform + "-" + process.arch + "/package.json"));
+const executable = join(packageDir, executableName);
+const args = process.argv.slice(2);
 const ipc = process.send !== undefined;
-const child = spawn(executable, process.argv.slice(2), {
-  stdio: ipc ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
-});
+const stdio = ipc ? ["inherit", "inherit", "inherit", "ipc"] : "inherit";
+let child;
 const fail = (error) => {
   if (!error) return;
   process.stderr.write("${FORK_IDENTITY.cliBin}: " + error.message + "\\n");
   child.kill("SIGTERM");
   process.exitCode = 1;
 };
+const attach = (started) => {
+  child = started;
+  if (ipc) {
+    child.on("message", (message) => { if (process.connected) process.send(message, fail); });
+  }
+  child.on("exit", (code, signal) => process.exit(code ?? 128 + (constants.signals[signal] || 1)));
+};
 if (ipc) {
   process.on("message", (message) => { if (child.connected) child.send(message, fail); });
-  child.on("message", (message) => { if (process.connected) process.send(message, fail); });
   process.on("disconnect", () => { if (child.connected) child.disconnect(); });
 }
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, () => child.kill(signal));
 }
-child.on("error", (error) => { fail(error); process.exit(1); });
-child.on("exit", (code, signal) => process.exit(code ?? 128 + (constants.signals[signal] || 1)));
+attach(spawn(executable, args, { stdio }));
+child.on("error", (error) => {
+  // A host whose libc cannot load the executable (NixOS, musl) reports ENOENT
+  // or EACCES from exec. The bundle beside it runs under this Node instead.
+  if (error.code === "ENOENT" || error.code === "EACCES") {
+    attach(spawn(process.execPath, [join(packageDir, "bin.mjs"), ...args], { stdio }));
+    child.on("error", (fallbackError) => { fail(fallbackError); process.exit(1); });
+    return;
+  }
+  fail(error);
+  process.exit(1);
+});
 `;
 }
