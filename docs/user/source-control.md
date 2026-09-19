@@ -17,6 +17,23 @@ Install [GitHub CLI](https://cli.github.com/) 2.81.0 or newer, then sign in:
 gh auth login
 ```
 
+#### Several GitHub accounts
+
+`gh` can hold more than one account for a host, for example a personal and a work login. Sign in
+to each with `gh auth login` on the machine that runs the server. T3 Code then lets you choose
+which account a repository uses instead of always using the account `gh` has active.
+
+Open **Settings → Source Control** with that environment selected and add rules under
+**GitHub accounts**. A rule maps a repository owner to an account; `*` matches any characters, so
+`acme-*` covers every owner that starts with `acme-`. The first matching rule wins, so keep the
+specific rules above the general ones. A project can also pick an account directly: choose the
+project and set **GitHub account** under its Source Control settings, or leave it on **Inherit** to
+follow the rules. Without a match, T3 Code uses the account `gh` has active, which is what happens
+with a single account.
+
+The choice covers the `gh` commands T3 Code runs for that repository, such as reading and creating
+pull requests. Pushes and pulls still use Git's own credential helper.
+
 ### Forgejo and Gitea
 
 Install [Forgejo CLI (`fj`)](https://codeberg.org/forgejo-contrib/forgejo-cli) or
