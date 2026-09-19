@@ -1117,6 +1117,16 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           },
         });
       }
+      // Pinning is a promotion into the active list, which a wait would
+      // immediately override: clear the links the way snooze is cleared.
+      const dependenciesCleared = yield* dependenciesClearedEvent({
+        thread,
+        occurredAt,
+        commandId: command.commandId,
+      });
+      if (dependenciesCleared !== null) {
+        promotionEvents.push(dependenciesCleared);
+      }
       return promotionEvents.length > 0 ? [pinnedEvent, ...promotionEvents] : pinnedEvent;
     }
 

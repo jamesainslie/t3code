@@ -353,6 +353,7 @@ export function createThreadEnvironmentAtoms<R, E>(
         : {}),
       snoozedUntil: null,
       snoozedAt: null,
+      dependencies: [],
     })),
     unpin: optimistic.wrap(commands.unpin, (thread) => ({
       ...thread,

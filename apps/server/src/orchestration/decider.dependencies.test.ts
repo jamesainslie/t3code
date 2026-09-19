@@ -492,4 +492,16 @@ it.layer(NodeServices.layer)("thread dependency satisfaction", (it) => {
       expect(events.map((event) => event.type)).toContain("thread.dependencies-removed");
     }),
   );
+
+  it.effect("pinning a blocked thread clears its links", () =>
+    Effect.gen(function* () {
+      const events = asArray(
+        yield* decideOrchestrationCommand({
+          command: { type: "thread.pin", commandId: CommandId.make("cmd-pin"), threadId: A },
+          readModel: makeReadModel([{ id: A, dependencies: [link(B)] }, { id: B }]),
+        }),
+      );
+      expect(events.map((event) => event.type)).toContain("thread.dependencies-removed");
+    }),
+  );
 });
