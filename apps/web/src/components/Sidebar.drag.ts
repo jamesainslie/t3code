@@ -100,6 +100,7 @@ export function createSidebarSortingStrategy(input: {
   settledExpanded: boolean;
   settledVisibleCount?: number;
   routeThreadKey?: string | null;
+  blockedThreadCount?: number;
   snoozedThreadCount?: number;
   cardHeight?: number;
   slimHeight?: number;
@@ -121,6 +122,7 @@ export function createSidebarSortingStrategy(input: {
     const groups: Record<SidebarSection, ThreadItem[]> = {
       pinned: [],
       active: [],
+      blocked: [],
       snoozed: [],
       settled: [],
     };
@@ -129,7 +131,11 @@ export function createSidebarSortingStrategy(input: {
     let headerScale: number | undefined;
     for (const [index, item] of items.entries()) {
       if (item.kind === "marker") {
-        if (item.marker === "settled-header" || item.marker === "snoozed-header") {
+        if (
+          item.marker === "settled-header" ||
+          item.marker === "snoozed-header" ||
+          item.marker === "blocked-header"
+        ) {
           const height = rects[index]?.height;
           if (height) headerScale ??= height / 32;
         }
@@ -180,6 +186,16 @@ export function createSidebarSortingStrategy(input: {
     projected.push(...groups.pinned);
     marker("pinned-divider");
     section("active");
+    // A shelf header stays while its last row is lifted only when other
+    // rows remain behind it; otherwise the whole shelf goes with the row.
+    if (
+      groups.blocked.length > 0 ||
+      ((active.section !== "blocked" || (input.blockedThreadCount ?? 0) > 1) &&
+        items.some((item) => item.kind === "marker" && item.marker === "blocked-header"))
+    ) {
+      marker("blocked-header");
+      projected.push(...groups.blocked);
+    }
     if (
       groups.snoozed.length > 0 ||
       ((active.section !== "snoozed" || (input.snoozedThreadCount ?? 0) > 1) &&
@@ -210,7 +226,9 @@ export function createSidebarSortingStrategy(input: {
     const firstShelf = items.findIndex(
       (item) =>
         item.kind === "marker" &&
-        (item.marker === "snoozed-header" || item.marker === "settled-header"),
+        (item.marker === "blocked-header" ||
+          item.marker === "snoozed-header" ||
+          item.marker === "settled-header"),
     );
     const shelfRect = rects[firstShelf];
     const beforeShelf = rects[firstShelf - 1];

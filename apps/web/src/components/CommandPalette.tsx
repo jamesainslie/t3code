@@ -14,6 +14,7 @@ import {
 } from "@t3tools/client-runtime/operations/projects";
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
+import { isDependencyCandidate } from "@t3tools/client-runtime/state/thread-settled";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   canPreloadBrowsePath,
@@ -32,6 +33,7 @@ import {
   type EnvironmentMachineKind,
   type FilesystemBrowseResult,
   type ProjectId,
+  type ScopedThreadRef,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
   type SourceControlRepositoryInfo,
@@ -74,6 +76,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useThreadActions } from "../hooks/useThreadActions";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { useClientSettings } from "../hooks/useSettings";
@@ -146,6 +149,7 @@ import {
   buildLinkedThreadActionItems,
   enumerateCommandPaletteItems,
   type CommandPaletteActionItem,
+  type CommandPaletteGroup,
   type CommandPaletteOpenIntent,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
@@ -481,6 +485,10 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   );
   const openAddProject = useCallback(() => dispatch({ _tag: "OpenAddProject" }), []);
   const openNewThreadIn = useCallback(() => dispatch({ _tag: "OpenNewThreadIn" }), []);
+  const openDependsOn = useCallback(
+    (blockedThreadRef: ScopedThreadRef) => dispatch({ _tag: "OpenDependsOn", blockedThreadRef }),
+    [],
+  );
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { theme, themeHalves, resolvedTheme, appearanceMode, setAppearanceMode } = useTheme();
@@ -590,6 +598,8 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           openNewThreadIn();
         } else if (detail.open === "add-project") {
           openAddProject();
+        } else if (detail.open === "depends-on" && detail.blockedThreadRef) {
+          openDependsOn(detail.blockedThreadRef);
         } else if (detail.query !== undefined) {
           dispatch({
             _tag: "OpenSearch",
@@ -600,7 +610,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           setOpen(true);
         }
       }),
-    [openAddProject, openNewThreadIn, setOpen],
+    [openAddProject, openDependsOn, openNewThreadIn, setOpen],
   );
 
   return (
@@ -690,6 +700,11 @@ function OpenCommandPaletteDialog(props: {
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
   const [linkedThreadSearch, setLinkedThreadSearch] = useState(
     openIntent?.kind === "search" ? openIntent : null,
+  );
+  // The thread the "Depends on" view parks. Held here rather than read from
+  // the intent because the intent is cleared as soon as the view is pushed.
+  const [dependsOnThreadRef, setDependsOnThreadRef] = useState<ScopedThreadRef | null>(
+    openIntent?.kind === "depends-on" ? openIntent.blockedThreadRef : null,
   );
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
@@ -1735,6 +1750,98 @@ function OpenCommandPaletteDialog(props: {
     pushPaletteView,
   ]);
 
+  const { addThreadDependency, removeThreadDependency } = useThreadActions();
+  // Candidates are recomputed from live shells rather than frozen into the
+  // pushed view: a thread that finishes, is archived, or gets linked while
+  // the picker is open must leave the list.
+  const dependsOnGroups = useMemo<ReadonlyArray<CommandPaletteGroup>>(() => {
+    if (dependsOnThreadRef === null) return [];
+    const environmentThreads = threads.filter(
+      (thread) => thread.environmentId === dependsOnThreadRef.environmentId,
+    );
+    const blocked = environmentThreads.find((thread) => thread.id === dependsOnThreadRef.threadId);
+    if (!blocked) return [];
+    return [
+      {
+        value: "depends-on",
+        label: "Depends on",
+        items: buildThreadActionItems({
+          threads: environmentThreads.filter((candidate) =>
+            isDependencyCandidate(environmentThreads, blocked, candidate),
+          ),
+          projectTitleById,
+          sortOrder: clientSettings.sidebarThreadSortOrder,
+          icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+          runThread: async (candidate) => {
+            const title =
+              environmentThreads.find((thread) => thread.id === candidate.id)?.title ??
+              "another thread";
+            const result = await addThreadDependency(dependsOnThreadRef, candidate.id);
+            if (result._tag === "Failure") {
+              if (!isAtomCommandInterrupted(result)) {
+                const error = squashAtomCommandFailure(result);
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Could not wait on that thread",
+                    description: error instanceof Error ? error.message : "An error occurred.",
+                  }),
+                );
+              }
+              return;
+            }
+            toastManager.add(
+              stackedThreadToast({
+                type: "success",
+                title: `Waiting on ${title}`,
+                timeout: 5_000,
+                actionProps: {
+                  children: "Undo",
+                  onClick: () => {
+                    void removeThreadDependency(dependsOnThreadRef, candidate.id).then((undone) => {
+                      if (undone._tag === "Failure" && !isAtomCommandInterrupted(undone)) {
+                        const error = squashAtomCommandFailure(undone);
+                        toastManager.add(
+                          stackedThreadToast({
+                            type: "error",
+                            title: "Could not undo",
+                            description:
+                              error instanceof Error ? error.message : "An error occurred.",
+                          }),
+                        );
+                      }
+                    });
+                  },
+                },
+              }),
+            );
+          },
+        }),
+      },
+    ];
+  }, [
+    addThreadDependency,
+    clientSettings.sidebarThreadSortOrder,
+    dependsOnThreadRef,
+    projectTitleById,
+    removeThreadDependency,
+    threads,
+  ]);
+
+  useLayoutEffect(() => {
+    if (openIntent?.kind !== "depends-on") return;
+    clearOpenIntent();
+    browseNavigation.invalidate();
+    setAddProjectCloneFlow(null);
+    setViewStack([]);
+    setQuery("");
+    setDependsOnThreadRef(openIntent.blockedThreadRef);
+    pushPaletteView({
+      addonIcon: <LinkIcon className={ADDON_ICON_CLASS} />,
+      groups: [{ value: "depends-on", label: "Depends on", items: [] }],
+    });
+  }, [browseNavigation, clearOpenIntent, openIntent, pushPaletteView]);
+
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
 
   if (projects.length > 0) {
@@ -2113,7 +2220,9 @@ function OpenCommandPaletteDialog(props: {
         ? changeThemeItem.groups
         : currentView?.groups[0]?.value === "appearance"
           ? changeAppearanceItem.groups
-          : (currentView?.groups ?? rootGroups);
+          : currentView?.groups[0]?.value === "depends-on"
+            ? dependsOnGroups
+            : (currentView?.groups ?? rootGroups);
 
   const filteredGroups = filterCommandPaletteGroups({
     activeGroups,

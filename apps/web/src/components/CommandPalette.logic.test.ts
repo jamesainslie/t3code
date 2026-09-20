@@ -253,6 +253,23 @@ describe("reduceCommandPaletteUiState", () => {
     });
   });
 
+  it("opens the Depends on picker for one waiting thread at a time", () => {
+    const blockedThreadRef = {
+      environmentId: EnvironmentId.make("local"),
+      threadId: ThreadId.make("waiting"),
+    };
+    const opened = reduceCommandPaletteUiState(
+      { open: true, mode: "files", openIntent: null },
+      { _tag: "OpenDependsOn", blockedThreadRef },
+    );
+    expect(opened).toEqual({
+      open: true,
+      mode: "command",
+      openIntent: { kind: "depends-on", blockedThreadRef },
+    });
+    expect(reduceCommandPaletteUiState(opened, { _tag: "ClearOpenIntent" }).openIntent).toBeNull();
+  });
+
   it("preserves the mode on close and resets it on open", () => {
     const filesOpen = reduceCommandPaletteUiState(closedState, {
       _tag: "ToggleMode",

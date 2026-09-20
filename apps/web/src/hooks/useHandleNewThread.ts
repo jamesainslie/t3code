@@ -41,6 +41,8 @@ interface NewThreadWorkspaceOptions {
   worktreePath?: string | null;
   envMode?: DraftThreadEnvMode;
   startFromOrigin?: boolean;
+  /** Thread this draft is meant to unblock, linked on first send. Null clears one. */
+  unblocksThreadId?: ThreadId | null;
 }
 
 // The workspace options the caller passed explicitly, shaped for the draft
@@ -52,6 +54,9 @@ function pickExplicitWorkspaceOptions(options: NewThreadWorkspaceOptions | undef
     ...(options?.worktreePath !== undefined ? { worktreePath: options.worktreePath } : {}),
     ...(options?.envMode !== undefined ? { envMode: options.envMode } : {}),
     ...(options?.startFromOrigin !== undefined ? { startFromOrigin: options.startFromOrigin } : {}),
+    // Always stated: a new-thread request that does not unblock anything
+    // must clear a link left on a reused draft by an abandoned one.
+    unblocksThreadId: options?.unblocksThreadId ?? null,
   };
 }
 
@@ -72,6 +77,7 @@ export function useNewThreadHandler() {
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
+        unblocksThreadId?: ThreadId;
         replace?: boolean;
       },
       // Which draft the thread ended up in, so a caller that has something to put in it — a
@@ -257,6 +263,7 @@ export function useNewThreadHandler() {
             workspaceContext = {
               branch: null,
               worktreePath: null,
+              unblocksThreadId: null,
               envMode: defaultEnvMode,
               startFromOrigin: resolveNewDraftStartFromOrigin({
                 envMode: defaultEnvMode,
@@ -417,6 +424,7 @@ export function useNewThreadHandler() {
               envMode: initialEnvMode,
               newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
             }),
+          ...(options?.unblocksThreadId ? { unblocksThreadId: options.unblocksThreadId } : {}),
           runtimeMode: defaultRuntimeMode,
           ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
         });

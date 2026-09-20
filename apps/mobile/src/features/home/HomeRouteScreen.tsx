@@ -51,6 +51,7 @@ export function HomeRouteScreen() {
     settleThread,
     snoozeThread,
     unsnoozeThread,
+    releaseThreadDependencies,
     pinThread,
     unpinThread,
     moveThread,
@@ -217,6 +218,25 @@ export function HomeRouteScreen() {
           onSettleThread={settleThread}
           onSnoozeThread={snoozeThread}
           onUnsnoozeThread={unsnoozeThread}
+          onReleaseThreadDependencies={releaseThreadDependencies}
+          onAddThreadDependency={(thread) => {
+            navigation.navigate("ThreadDependencyPicker", {
+              environmentId: String(thread.environmentId),
+              threadId: String(thread.id),
+            });
+          }}
+          onNewThreadToUnblock={(thread) => {
+            navigation.navigate("NewTaskSheet", {
+              screen: "NewTaskDraft",
+              params: {
+                environmentId: String(thread.environmentId),
+                projectId: String(thread.projectId),
+                branch: thread.branch,
+                worktreePath: thread.worktreePath,
+                unblocksThreadId: String(thread.id),
+              },
+            });
+          }}
           onUnsettleThread={unsettleThread}
           onPinThread={pinThread}
           onUnpinThread={unpinThread}

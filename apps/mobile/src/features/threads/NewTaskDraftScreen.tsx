@@ -31,6 +31,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   resolveEnvironmentMachineKind,
+  ThreadId,
 } from "@t3tools/contracts";
 
 import {
@@ -170,6 +171,8 @@ export function NewTaskDraftScreen(props: {
     readonly projectId?: string;
     readonly branch?: string | null;
     readonly worktreePath?: string | null;
+    /** Thread that waits on the thread this draft becomes. */
+    readonly unblocksThreadId?: string;
     /** The project was just added by a clone that is still running. */
     readonly cloning?: boolean;
   };
@@ -619,6 +622,15 @@ export function NewTaskDraftScreen(props: {
   // A new navigation to this mounted screen delivers a fresh initialProjectRef
   // reference — treat it as a new request and let it apply again.
   const lastInitialProjectRefRef = useRef(props.initialProjectRef);
+
+  // The route names the blocked thread; the flow holds it until the create
+  // succeeds. A plain New task navigation clears it by passing nothing.
+  const setUnblocksThreadId = flow.setUnblocksThreadId;
+  const routeUnblocksThreadId = props.initialProjectRef?.unblocksThreadId;
+  useEffect(() => {
+    if (props.pendingTaskId || props.draftId) return;
+    setUnblocksThreadId(routeUnblocksThreadId ? ThreadId.make(routeUnblocksThreadId) : null);
+  }, [props.draftId, props.pendingTaskId, routeUnblocksThreadId, setUnblocksThreadId]);
 
   useEffect(() => {
     // Pending-task editing and draft resumption own project selection (and

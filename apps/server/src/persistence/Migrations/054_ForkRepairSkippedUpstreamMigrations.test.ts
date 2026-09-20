@@ -70,7 +70,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layerMemory()))("054 on a fork database", 
 
       assert.deepStrictEqual(
         executed.map(([id]) => id),
-        [51, 52, 53, 54],
+        [51, 52, 53, 54, 55],
       );
       const state = yield* readState;
       assert.deepStrictEqual(state.pullRequests, [{ threadId: "thread-linked", number: 42 }]);
@@ -91,7 +91,9 @@ it.layer(Layer.fresh(NodeSqliteClient.layerMemory()))("054 on an upstream databa
       yield* runMigrations({ toMigrationInclusive: 53 });
       const before = yield* readState;
 
-      const executed = yield* runMigrations();
+      // Stop at 054 itself: later migrations legitimately add columns and
+      // would mask whether 054 alone changed anything.
+      const executed = yield* runMigrations({ toMigrationInclusive: 54 });
 
       assert.deepStrictEqual(
         executed.map(([id]) => id),

@@ -8,6 +8,9 @@ import type {
   ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import {
+  applyThreadDependenciesRemoved,
+  applyThreadDependencyAdded,
+  applyThreadDependencySatisfied,
   isImportedAgentSessionMessageId,
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
@@ -26,6 +29,7 @@ import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
 
 import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
+import { settledTurnStateForSessionStatus } from "./sessionTurnState.ts";
 import {
   MessageSentPayloadSchema,
   ProjectCreatedPayload,
@@ -46,6 +50,9 @@ import {
   ThreadPullRequestSyncedPayload,
   ThreadPullRequestUnlinkedPayload,
   ThreadSnoozedPayload,
+  ThreadDependencyAddedPayload,
+  ThreadDependenciesRemovedPayload,
+  ThreadDependencySatisfiedPayload,
   ThreadUnpinnedPayload,
   ThreadUnarchivedPayload,
   ThreadUnsettledPayload,
@@ -91,29 +98,6 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
   if (status === "error") return "error" as const;
   // Match SQL and client projections: a missing git ref is not an interruption.
   return "completed" as const;
-}
-
-/**
- * Turn state to settle a still-running latest turn with when its session
- * leaves the "running" status, or null while the session is (re)starting or
- * running and the turn must stay unsettled.
- */
-function settledTurnStateForSessionStatus(
-  status: OrchestrationSession["status"],
-): "completed" | "interrupted" | "error" | null {
-  switch (status) {
-    case "idle":
-    case "ready":
-      return "completed";
-    case "error":
-      return "error";
-    case "interrupted":
-    case "stopped":
-      return "interrupted";
-    case "starting":
-    case "running":
-      return null;
-  }
 }
 
 function updateThread(
@@ -442,6 +426,7 @@ export function projectEvent(
             activeOrderKey: null,
             snoozedUntil: null,
             snoozedAt: null,
+            dependencies: [],
             deletedAt: null,
             messages: [],
             activities: [],
@@ -563,6 +548,69 @@ export function projectEvent(
             snoozedAt: null,
             updatedAt: payload.updatedAt,
           }),
+        })),
+      );
+
+    case "thread.dependency-added":
+      return decodeForEvent(
+        ThreadDependencyAddedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: nextBase.threads.map((thread) =>
+            thread.id === payload.threadId
+              ? {
+                  ...thread,
+                  dependencies: applyThreadDependencyAdded(thread.dependencies, payload),
+                  updatedAt: payload.updatedAt,
+                }
+              : thread,
+          ),
+        })),
+      );
+
+    case "thread.dependencies-removed":
+      return decodeForEvent(
+        ThreadDependenciesRemovedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: nextBase.threads.map((thread) =>
+            thread.id === payload.threadId
+              ? {
+                  ...thread,
+                  dependencies: applyThreadDependenciesRemoved(thread.dependencies, payload),
+                  updatedAt: payload.updatedAt,
+                }
+              : thread,
+          ),
+        })),
+      );
+
+    case "thread.dependency-satisfied":
+      return decodeForEvent(
+        ThreadDependencySatisfiedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: nextBase.threads.map((thread) =>
+            thread.id === payload.threadId
+              ? {
+                  ...thread,
+                  dependencies: applyThreadDependencySatisfied(thread.dependencies, payload),
+                  updatedAt: payload.updatedAt,
+                }
+              : thread,
+          ),
         })),
       );
 

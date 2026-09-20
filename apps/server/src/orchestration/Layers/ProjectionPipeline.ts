@@ -1,4 +1,7 @@
 import {
+  applyThreadDependencyAdded,
+  applyThreadDependenciesRemoved,
+  applyThreadDependencySatisfied,
   ApprovalRequestId,
   isImportedAgentSessionMessageId,
   UserInputAttachmentAnswerPayload,
@@ -643,6 +646,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             unsettledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
+            dependencies: [],
             pinnedAt: null,
             pinOrderKey: null,
             activeOrderKey: null,
@@ -756,6 +760,60 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             snoozedUntil: null,
             snoozedAt: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.dependency-added": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            dependencies: applyThreadDependencyAdded(
+              existingRow.value.dependencies ?? [],
+              event.payload,
+            ),
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.dependencies-removed": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            dependencies: applyThreadDependenciesRemoved(
+              existingRow.value.dependencies ?? [],
+              event.payload,
+            ),
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.dependency-satisfied": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            dependencies: applyThreadDependencySatisfied(
+              existingRow.value.dependencies ?? [],
+              event.payload,
+            ),
             updatedAt: event.payload.updatedAt,
           });
           return;

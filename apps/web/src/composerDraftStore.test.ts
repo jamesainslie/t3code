@@ -1755,6 +1755,46 @@ describe("composerDraftStore project draft thread mapping", () => {
     });
   });
 
+  it("remembers which thread a draft unblocks and lets the caller clear it", () => {
+    const store = useComposerDraftStore.getState();
+    const blockedThreadId = ThreadId.make("thread-waiting");
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      unblocksThreadId: blockedThreadId,
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.unblocksThreadId).toBe(
+      blockedThreadId,
+    );
+
+    // An unrelated context update must not drop the pending link.
+    store.setDraftThreadContext(draftId, { branch: "feature/unblock" });
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.unblocksThreadId).toBe(
+      blockedThreadId,
+    );
+
+    store.setDraftThreadContext(draftId, { unblocksThreadId: null });
+    expect(
+      useComposerDraftStore.getState().getDraftThread(draftId)?.unblocksThreadId,
+    ).toBeUndefined();
+  });
+
+  it("drops the pending unblock link when the draft moves to another environment", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      unblocksThreadId: ThreadId.make("thread-waiting"),
+    });
+
+    store.setLogicalProjectDraftThreadId(scopedProjectKey(projectRef), remoteProjectRef, draftId, {
+      threadId,
+    });
+
+    expect(
+      useComposerDraftStore.getState().getDraftThread(draftId)?.unblocksThreadId,
+    ).toBeUndefined();
+  });
+
   it("clears branch and worktree but keeps env mode when remapping a draft to another environment", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {

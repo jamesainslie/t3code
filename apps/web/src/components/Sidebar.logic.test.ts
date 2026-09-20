@@ -50,6 +50,7 @@ import {
   type SidebarListMarker,
   type SidebarSection,
   resolveSidebarDropVerb,
+  resolveSidebarWokeAt,
 } from "./Sidebar.logic";
 import {
   EnvironmentId,
@@ -1200,6 +1201,147 @@ describe("resolveSidebarDropTarget", () => {
   });
 });
 
+describe("resolveSidebarWokeAt", () => {
+  const now = "2026-09-19T12:00:00.000Z";
+  const base = {
+    snoozedAt: null,
+    snoozedUntil: null,
+    dependencies: [],
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    latestTurn: null,
+    session: null,
+  } satisfies Parameters<typeof resolveSidebarWokeAt>[0];
+  const satisfied = (satisfiedAt: string) => [
+    {
+      threadId: ThreadId.make("thread-dependency"),
+      linkedAt: "2026-09-19T09:00:00.000Z",
+      satisfiedAt,
+      satisfiedReason: "turn-finished" as const,
+    },
+  ];
+
+  it("is null when the thread neither snoozed nor waited", () => {
+    expect(resolveSidebarWokeAt(base, { now })).toBeNull();
+  });
+
+  it("reports an elapsed snooze on its own", () => {
+    expect(
+      resolveSidebarWokeAt(
+        {
+          ...base,
+          snoozedAt: "2026-09-19T09:00:00.000Z",
+          snoozedUntil: "2026-09-19T11:00:00.000Z",
+        },
+        { now },
+      ),
+    ).toBe("2026-09-19T11:00:00.000Z");
+  });
+
+  it("reports a satisfied dependency on its own", () => {
+    expect(
+      resolveSidebarWokeAt(
+        { ...base, dependencies: satisfied("2026-09-19T10:00:00.000Z") },
+        { now },
+      ),
+    ).toBe("2026-09-19T10:00:00.000Z");
+  });
+
+  it("keeps the later of the two wakes so a visit clears both", () => {
+    const shell = {
+      ...base,
+      snoozedAt: "2026-09-19T08:00:00.000Z",
+      snoozedUntil: "2026-09-19T10:30:00.000Z",
+      dependencies: satisfied("2026-09-19T11:30:00.000Z"),
+    };
+    expect(resolveSidebarWokeAt(shell, { now })).toBe("2026-09-19T11:30:00.000Z");
+    expect(
+      resolveSidebarWokeAt(
+        { ...shell, dependencies: satisfied("2026-09-19T09:30:00.000Z") },
+        { now },
+      ),
+    ).toBe("2026-09-19T10:30:00.000Z");
+  });
+
+  it("stays null while the thread is still waiting", () => {
+    expect(
+      resolveSidebarWokeAt(
+        {
+          ...base,
+          dependencies: [
+            {
+              threadId: ThreadId.make("thread-dependency"),
+              linkedAt: "2026-09-19T09:00:00.000Z",
+              satisfiedAt: null,
+              satisfiedReason: null,
+            },
+          ],
+        },
+        { now },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("the blocked shelf as a drag section", () => {
+  const thread = (key: string, section: SidebarSection): SidebarListItem => ({
+    kind: "thread",
+    key,
+    section,
+  });
+  const marker = (marker: SidebarListMarker): SidebarListItem => ({ kind: "marker", marker });
+  // Pinned p1 | Active a1 | Depends on b1 | Snoozed z1 | Settled s1
+  const items: readonly SidebarListItem[] = [
+    marker("pinned-header"),
+    thread("p1", "pinned"),
+    marker("pinned-divider"),
+    thread("a1", "active"),
+    marker("blocked-header"),
+    thread("b1", "blocked"),
+    marker("snoozed-header"),
+    thread("z1", "snoozed"),
+    marker("settled-header"),
+    thread("s1", "settled"),
+  ];
+  const resolve = (activeKey: string, overId: string) =>
+    resolveSidebarDropTarget(items, activeKey, overId);
+
+  it("never lands in the blocked shelf", () => {
+    expect(resolve("a1", "b1")).toBeNull();
+    expect(resolve("a1", sidebarMarkerId("blocked-header"))).toBeNull();
+    expect(resolve("p1", "b1")).toBeNull();
+  });
+
+  it("keeps the snoozed shelf below the blocked one out of reach too", () => {
+    expect(resolve("b1", "z1")).toBeNull();
+    expect(resolve("b1", sidebarMarkerId("snoozed-header"))).toBeNull();
+  });
+
+  it("lets a blocked row leave for another section", () => {
+    expect(resolve("b1", "a1")).toEqual({
+      section: "active",
+      pinnedOrder: ["p1"],
+      activeOrder: ["b1", "a1"],
+    });
+    expect(resolve("b1", "p1")).toEqual({
+      section: "pinned",
+      pinnedOrder: ["b1", "p1"],
+      activeOrder: ["a1"],
+    });
+    expect(resolve("b1", "s1")?.section).toBe("settled");
+  });
+
+  it("stops collecting manual order at the blocked header", () => {
+    // Nothing at or below the blocked header belongs to a manual order, so
+    // neither the shelf rows nor the settled tail can leak into it.
+    expect(resolve("a1", "p1")).toEqual({
+      section: "pinned",
+      pinnedOrder: ["a1", "p1"],
+      activeOrder: [],
+    });
+  });
+});
+
 describe("planSidebarThreadDrop", () => {
   const pinnedKeysById = new Map<string, string | null>([
     ["p1", "f"],
@@ -1214,7 +1356,7 @@ describe("planSidebarThreadDrop", () => {
   const plan = (
     overrides: Partial<Omit<Parameters<typeof planSidebarThreadDrop>[0], "target">> & {
       activeKey: string;
-      activeSection: "pinned" | "active" | "snoozed" | "settled";
+      activeSection: "pinned" | "active" | "blocked" | "snoozed" | "settled";
       target: Omit<Parameters<typeof planSidebarThreadDrop>[0]["target"], "activeOrder"> & {
         activeOrder?: readonly string[];
       };
@@ -1272,9 +1414,38 @@ describe("planSidebarThreadDrop", () => {
   });
 
   it.each([
-    { key: "p2", section: "pinned" as const, unpin: true, unsettle: false, unsnooze: false },
-    { key: "s1", section: "settled" as const, unpin: false, unsettle: true, unsnooze: false },
-    { key: "z1", section: "snoozed" as const, unpin: false, unsettle: false, unsnooze: true },
+    {
+      key: "p2",
+      section: "pinned" as const,
+      unpin: true,
+      unsettle: false,
+      unsnooze: false,
+      release: false,
+    },
+    {
+      key: "s1",
+      section: "settled" as const,
+      unpin: false,
+      unsettle: true,
+      unsnooze: false,
+      release: false,
+    },
+    {
+      key: "z1",
+      section: "snoozed" as const,
+      unpin: false,
+      unsettle: false,
+      unsnooze: true,
+      release: false,
+    },
+    {
+      key: "b1",
+      section: "blocked" as const,
+      unpin: false,
+      unsettle: false,
+      unsnooze: false,
+      release: true,
+    },
   ])("moves a $section thread to the chosen Active slot", (source) => {
     const order = ["a1", source.key, "a2", "a3"];
     const result = plan({
@@ -1289,6 +1460,7 @@ describe("planSidebarThreadDrop", () => {
       unpin: source.unpin,
       unsettle: source.unsettle,
       unsnooze: source.unsnooze,
+      release: source.release,
     });
     if (result.kind !== "move-active") return;
     const key = result.assignments[0]!.orderKey;
@@ -1319,6 +1491,7 @@ describe("planSidebarThreadDrop", () => {
       unpin: hiddenState.activePinned,
       unsettle: hiddenState.activeSettled,
       unsnooze: true,
+      release: false,
     });
   });
 
@@ -1337,7 +1510,7 @@ describe("planSidebarThreadDrop", () => {
     });
     expect(first.kind).toBe("move-active");
     if (first.kind !== "move-active") return;
-    expect(first.unpin || first.unsettle || first.unsnooze).toBe(false);
+    expect(first.unpin || first.unsettle || first.unsnooze || first.release).toBe(false);
     const savedKeys = new Map(first.assignments.map(({ id, orderKey }) => [id, orderKey]));
     const savedRows = rows.map((row) => ({
       ...row,
@@ -2499,6 +2672,17 @@ describe("resolveSidebarDropVerb", () => {
     expect(resolveSidebarDropVerb("pinned", "pinned")).toBeNull();
     expect(resolveSidebarDropVerb("active", null)).toBeNull();
     expect(resolveSidebarDropVerb("active", "snoozed")).toBeNull();
+  });
+
+  it("wakes a thread dragged out of the blocked shelf", () => {
+    expect(resolveSidebarDropVerb("blocked", "active")).toBe("wake");
+    expect(resolveSidebarDropVerb("blocked", "pinned")).toBe("pin");
+    expect(resolveSidebarDropVerb("blocked", "settled")).toBe("settle");
+  });
+
+  it("has no verb for dropping into the blocked shelf", () => {
+    expect(resolveSidebarDropVerb("active", "blocked")).toBeNull();
+    expect(resolveSidebarDropVerb("blocked", "blocked")).toBeNull();
   });
 });
 

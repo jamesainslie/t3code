@@ -1,4 +1,8 @@
-import type { EnvironmentId, PullRequestLinkedThreadsResult } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PullRequestLinkedThreadsResult,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 
 export interface CommandPaletteLinkedThreads {
   readonly environmentId: EnvironmentId;
@@ -10,9 +14,16 @@ export interface CommandPaletteLinkedThreads {
 const COMMAND_PALETTE_OPEN_EVENT = "t3code:open-command-palette";
 
 export interface CommandPaletteOpenDetail {
-  readonly open?: "add-project" | "new-thread-in";
+  readonly open?: "add-project" | "new-thread-in" | "depends-on";
   readonly query?: string;
   readonly linkedThreads?: CommandPaletteLinkedThreads;
+  /** The waiting thread the "Depends on" picker parks. Required for that mode. */
+  readonly blockedThreadRef?: ScopedThreadRef;
+}
+
+/** Open the palette on the "Depends on" picker for a thread that should wait. */
+export function openThreadDependencyPicker(blockedThreadRef: ScopedThreadRef): void {
+  openCommandPalette({ open: "depends-on", blockedThreadRef });
 }
 
 export function openCommandPalette(detail?: CommandPaletteOpenDetail): void {

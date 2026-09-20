@@ -1,6 +1,11 @@
 import type { ThreadMoveDestination } from "../threads/threadOrder";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  canAddDependency,
+  canSnooze,
+  effectiveSnoozed,
+} from "@t3tools/client-runtime/state/thread-settled";
+import type { ThreadId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";
@@ -42,6 +47,15 @@ function environmentSupportsSnooze(environmentId: EnvironmentThreadShell["enviro
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadSnooze === true
+  );
+}
+
+export function environmentSupportsDependencies(
+  environmentId: EnvironmentThreadShell["environmentId"],
+) {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadDependencies === true
   );
 }
 
@@ -234,6 +248,11 @@ export function useThreadListActions(): {
   readonly settleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly snoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => Promise<boolean>;
   readonly unsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly addThreadDependency: (
+    thread: EnvironmentThreadShell,
+    dependsOnThreadId: ThreadId,
+  ) => Promise<boolean>;
+  readonly releaseThreadDependencies: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unsettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly pinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
@@ -252,7 +271,14 @@ export function useThreadListActions(): {
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const addDependencyMutation = useAtomCommand(threadEnvironment.addDependency, {
+    reportFailure: false,
+  });
+  const removeDependenciesMutation = useAtomCommand(threadEnvironment.removeDependencies, {
+    reportFailure: false,
+  });
   const snoozeInFlightThreadKeys = useRef(new Set<string>());
+  const dependencyInFlightThreadKeys = useRef(new Set<string>());
   const titleRegenerationInFlightThreadKeys = useRef(new Set<string>());
 
   const archiveThread = useCallback(
@@ -362,6 +388,112 @@ export function useThreadListActions(): {
       }
     },
     [unsnoozeMutation],
+  );
+  // "Depends on" parks a thread the way snooze does, so it borrows the same
+  // dismissal animation, in-flight guard, and alert voice.
+  const addThreadDependency = useCallback(
+    async (thread: EnvironmentThreadShell, dependsOnThreadId: ThreadId) => {
+      const key = scopedThreadKey(thread.environmentId, thread.id);
+      if (dependencyInFlightThreadKeys.current.has(key)) {
+        return false;
+      }
+      dependencyInFlightThreadKeys.current.add(key);
+      try {
+        if (!environmentSupportsDependencies(thread.environmentId)) {
+          Alert.alert(
+            "Could not wait on that thread",
+            "This environment's server does not support thread dependencies yet. Update the server to use Depends on.",
+          );
+          return false;
+        }
+        if (!canAddDependency(thread, { now: new Date().toISOString() })) {
+          Alert.alert(
+            "Could not wait on that thread",
+            thread.hasPendingApprovals || thread.hasPendingUserInput
+              ? "This thread is waiting on you. Respond to the pending request before parking it."
+              : "This thread is still starting a turn. Try again once it's running.",
+          );
+          return false;
+        }
+
+        selectionHaptic();
+        const result = await withThreadDismissal(
+          key,
+          () =>
+            addDependencyMutation({
+              environmentId: thread.environmentId,
+              input: { threadId: thread.id, dependsOnThreadId },
+            }),
+          (result) => result._tag === "Success",
+        );
+        if (result._tag === "Failure") {
+          const error = Cause.squash(result.cause);
+          Alert.alert(
+            "Could not wait on that thread",
+            error instanceof Error && error.message.trim().length > 0
+              ? error.message
+              : "The thread could not be parked on that thread.",
+          );
+          return false;
+        }
+        return true;
+      } finally {
+        dependencyInFlightThreadKeys.current.delete(key);
+      }
+    },
+    [addDependencyMutation],
+  );
+  // Wake drops every link, satisfied ones included: they are history kept
+  // only until the user re-engages, which is exactly what this is.
+  const releaseThreadDependencies = useCallback(
+    async (thread: EnvironmentThreadShell) => {
+      const key = scopedThreadKey(thread.environmentId, thread.id);
+      if (dependencyInFlightThreadKeys.current.has(key)) {
+        return false;
+      }
+      const links = thread.dependencies ?? [];
+      const [firstLink, ...restLinks] = links;
+      if (firstLink === undefined) return false;
+      const dependsOnThreadIds = [
+        firstLink.threadId,
+        ...restLinks.map((link) => link.threadId),
+      ] as const;
+      dependencyInFlightThreadKeys.current.add(key);
+      try {
+        if (!environmentSupportsDependencies(thread.environmentId)) {
+          Alert.alert(
+            "Could not wake thread",
+            "This environment's server does not support thread dependencies yet. Update the server to wake this thread.",
+          );
+          return false;
+        }
+
+        selectionHaptic();
+        const result = await withThreadDismissal(
+          key,
+          () =>
+            removeDependenciesMutation({
+              environmentId: thread.environmentId,
+              input: { threadId: thread.id, dependsOnThreadIds },
+            }),
+          (result) => result._tag === "Success",
+        );
+        if (result._tag === "Failure") {
+          const error = Cause.squash(result.cause);
+          Alert.alert(
+            "Could not wake thread",
+            error instanceof Error && error.message.trim().length > 0
+              ? error.message
+              : "The thread could not be woken.",
+          );
+          return false;
+        }
+        return true;
+      } finally {
+        dependencyInFlightThreadKeys.current.delete(key);
+      }
+    },
+    [removeDependenciesMutation],
   );
   const unsettleThread = useCallback(
     async (thread: EnvironmentThreadShell) => (await executeAction("unsettle", thread)) === true,
@@ -695,6 +827,8 @@ export function useThreadListActions(): {
     settleThread,
     snoozeThread,
     unsnoozeThread,
+    addThreadDependency,
+    releaseThreadDependencies,
     unsettleThread,
     pinThread,
     unpinThread,

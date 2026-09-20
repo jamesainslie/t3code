@@ -276,6 +276,31 @@ describe("resolveThreadListV2SwipeActions", () => {
       }),
     ).toEqual({ primary: "unsnooze", secondary: null });
   });
+
+  it("offers release and no snooze on a blocked row", () => {
+    expect(
+      resolveThreadListV2SwipeActions({
+        variant: "slim",
+        settlementSupported: true,
+        snoozeSupported: true,
+        snoozable: true,
+        blocked: true,
+      }),
+    ).toEqual({ primary: "release", secondary: null });
+  });
+
+  it("prefers release over wake when both overlays race in optimistic state", () => {
+    expect(
+      resolveThreadListV2SwipeActions({
+        variant: "slim",
+        settlementSupported: true,
+        snoozeSupported: true,
+        snoozable: true,
+        snoozed: true,
+        blocked: true,
+      }),
+    ).toEqual({ primary: "release", secondary: null });
+  });
 });
 
 describe("resolveThreadListV2SnoozeGateExpiryMs", () => {
@@ -1054,6 +1079,283 @@ describe("buildThreadListV2ListItems", () => {
     expect(threadJumpTarget(items, "thread.jump.1")?.id).toBe("active");
     expect(threadJumpTarget(items, "thread.jump.2")?.id).toBe("settled");
     expect(threadJumpTarget(items, "thread.jump.3")).toBeNull();
+  });
+});
+
+describe("depends on shelf", () => {
+  function link(threadId: string, linkedAt: string) {
+    return {
+      threadId: ThreadId.make(threadId),
+      linkedAt,
+      satisfiedAt: null,
+      satisfiedReason: null,
+    };
+  }
+
+  const dependency = makeThread({ id: ThreadId.make("dependency"), title: "The blocker" });
+
+  it("builds blocked rows between active and snoozed when the shelf is expanded", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("active"), title: "Active" }),
+        dependency,
+        makeThread({
+          id: ThreadId.make("older"),
+          title: "Parked first",
+          dependencies: [link("dependency", "2026-06-01T10:00:00.000Z")],
+        }),
+        makeThread({
+          id: ThreadId.make("newer"),
+          title: "Parked last",
+          dependencies: [link("dependency", "2026-06-01T12:00:00.000Z")],
+        }),
+        makeThread({
+          id: ThreadId.make("snoozed"),
+          title: "Snoozed",
+          snoozedUntil: "2026-06-03T09:00:00.000Z",
+          snoozedAt: "2026-06-01T12:00:00.000Z",
+        }),
+        makeThread({
+          id: ThreadId.make("settled"),
+          title: "Settled",
+          settledOverride: "settled",
+          settledAt: NOW,
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      blockedShelfExpanded: true,
+      snoozedShelfExpanded: true,
+    });
+
+    expect(layout.items.map((item) => item.thread.id)).toEqual([
+      "active",
+      "dependency",
+      "newer",
+      "older",
+      "snoozed",
+      "settled",
+    ]);
+    expect(layout.items.map((item) => item.blocked)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(layout.blockedShelfHeaderIndex).toBe(2);
+    expect(layout.blockedCount).toBe(2);
+  });
+
+  it("labels a blocked row with what it waits on", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        dependency,
+        makeThread({
+          id: ThreadId.make("one"),
+          title: "Waits on one",
+          dependencies: [link("dependency", "2026-06-01T10:00:00.000Z")],
+        }),
+        makeThread({
+          id: ThreadId.make("two"),
+          title: "Waits on two",
+          dependencies: [
+            link("dependency", "2026-06-01T10:00:00.000Z"),
+            link("missing", "2026-06-01T11:00:00.000Z"),
+          ],
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      blockedShelfExpanded: true,
+    });
+
+    const labels = new Map(layout.items.map((item) => [item.thread.id, item.waitLabel]));
+    expect(labels.get(ThreadId.make("one"))).toBe("Waiting on The blocker");
+    expect(labels.get(ThreadId.make("two"))).toBe("Waiting on 2 threads");
+    expect(labels.get(ThreadId.make("dependency"))).toBeNull();
+  });
+
+  it("collapses to a header-only shelf and keeps the selected thread visible", () => {
+    const threads = [
+      dependency,
+      makeThread({
+        id: ThreadId.make("open"),
+        title: "Open",
+        dependencies: [link("dependency", "2026-06-01T10:00:00.000Z")],
+      }),
+      makeThread({
+        id: ThreadId.make("other"),
+        title: "Other",
+        dependencies: [link("dependency", "2026-06-01T11:00:00.000Z")],
+      }),
+    ];
+
+    const collapsed = buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+    expect(collapsed.items.map((item) => item.thread.id)).toEqual(["dependency"]);
+    expect(collapsed.blockedCount).toBe(2);
+    expect(collapsed.blockedShelfHeaderIndex).toBe(1);
+
+    const withSelection = buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      selectedThreadKey: `${environmentId}:open`,
+    });
+    expect(withSelection.items.map((item) => item.thread.id)).toEqual(["dependency", "open"]);
+  });
+
+  it("keeps a thread active when its server does not support dependencies", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        dependency,
+        makeThread({
+          id: ThreadId.make("blocked"),
+          title: "Blocked",
+          dependencies: [link("dependency", "2026-06-01T10:00:00.000Z")],
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      dependencyEnvironmentIds: new Set(),
+    });
+
+    expect(layout.blockedCount).toBe(0);
+    expect(layout.blockedShelfHeaderIndex).toBeNull();
+    expect(layout.items.map((item) => item.blocked)).toEqual([false, false]);
+  });
+
+  it("returns a satisfied thread to the active block", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        dependency,
+        makeThread({
+          id: ThreadId.make("woke"),
+          title: "Woke",
+          dependencies: [
+            {
+              threadId: ThreadId.make("dependency"),
+              linkedAt: "2026-06-01T10:00:00.000Z",
+              satisfiedAt: "2026-06-01T11:00:00.000Z",
+              satisfiedReason: "turn-finished",
+            },
+          ],
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(layout.blockedCount).toBe(0);
+    expect(layout.items.map((item) => item.thread.id)).toEqual(["dependency", "woke"]);
+  });
+
+  it("places the blocked shelf after queued tasks and before the snoozed shelf", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("active"), title: "active" }),
+        makeThread({
+          id: ThreadId.make("blocked"),
+          title: "blocked",
+          dependencies: [link("active", "2026-06-01T10:00:00.000Z")],
+        }),
+        makeThread({
+          id: ThreadId.make("snoozed"),
+          title: "snoozed",
+          snoozedUntil: "2026-06-03T09:00:00.000Z",
+          snoozedAt: "2026-06-01T12:00:00.000Z",
+        }),
+        makeThread({
+          id: ThreadId.make("settled"),
+          title: "settled",
+          settledOverride: "settled",
+          settledAt: NOW,
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+    const items = buildThreadListV2ListItems({
+      items: layout.items,
+      pendingTasks: [makePendingTask("queued")],
+      blockedCount: layout.blockedCount,
+      blockedShelfExpanded: false,
+      blockedShelfHeaderIndex: layout.blockedShelfHeaderIndex,
+      snoozedCount: layout.snoozedCount,
+      snoozedShelfExpanded: false,
+      snoozedShelfHeaderIndex: layout.snoozedShelfHeaderIndex,
+      settledCount: layout.settledCount,
+      settledShelfHeaderIndex: layout.settledShelfHeaderIndex,
+    });
+
+    expect(items.map((item) => item.type)).toEqual([
+      "v2-thread",
+      "v2-pending",
+      "v2-blocked-shelf",
+      "v2-snoozed-shelf",
+      "v2-settled-shelf",
+      "v2-thread",
+    ]);
+    expect(items.find((item) => item.type === "v2-blocked-shelf")).toEqual({
+      type: "v2-blocked-shelf",
+      key: "v2-blocked-shelf",
+      count: 1,
+      expanded: false,
+    });
+  });
+
+  it("renders expanded blocked rows between the shelf header and the snoozed shelf", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("active"), title: "active" }),
+        makeThread({
+          id: ThreadId.make("blocked"),
+          title: "blocked",
+          dependencies: [link("active", "2026-06-01T10:00:00.000Z")],
+        }),
+        makeThread({
+          id: ThreadId.make("snoozed"),
+          title: "snoozed",
+          snoozedUntil: "2026-06-03T09:00:00.000Z",
+          snoozedAt: "2026-06-01T12:00:00.000Z",
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      blockedShelfExpanded: true,
+      snoozedShelfExpanded: true,
+    });
+    const items = buildThreadListV2ListItems({
+      items: layout.items,
+      pendingTasks: [],
+      blockedCount: layout.blockedCount,
+      blockedShelfExpanded: true,
+      blockedShelfHeaderIndex: layout.blockedShelfHeaderIndex,
+      snoozedCount: layout.snoozedCount,
+      snoozedShelfExpanded: true,
+      snoozedShelfHeaderIndex: layout.snoozedShelfHeaderIndex,
+    });
+
+    expect(items.map((item) => item.key)).toEqual([
+      `v2-thread:${environmentId}:active`,
+      "v2-blocked-shelf",
+      `v2-thread:${environmentId}:blocked`,
+      "v2-snoozed-shelf",
+      `v2-thread:${environmentId}:snoozed`,
+    ]);
   });
 });
 

@@ -1,4 +1,8 @@
-import { isSyncedThreadId, type OrchestrationThreadShell } from "@t3tools/contracts";
+import {
+  isSyncedThreadId,
+  unsatisfiedThreadDependencies,
+  type OrchestrationThreadShell,
+} from "@t3tools/contracts";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
 export interface SettlementPullRequest {
@@ -122,16 +126,36 @@ export function isAutoSettlementCandidate(thread: OrchestrationThreadShell, now:
   if (thread.session?.status === "starting" || thread.session?.status === "running") return false;
   if (thread.backgroundLiveness != null) return false;
   if (threadHasQueuedTurnStart(thread, now)) return false;
+  // A thread waiting on other threads is parked the same way a snoozed one
+  // is, and only a raised hand since the latest link puts it back in play.
+  const openLinks = unsatisfiedThreadDependencies(thread);
+  if (openLinks.length > 0) {
+    const latestLinkedAt = openLinks.reduce(
+      (latest, link) => (Date.parse(link.linkedAt) > Date.parse(latest) ? link.linkedAt : latest),
+      openLinks[0]!.linkedAt,
+    );
+    if (!threadRaisedHandSince(thread, latestLinkedAt)) return false;
+  }
   if (thread.snoozedUntil == null || Date.parse(thread.snoozedUntil) <= Date.parse(now))
     return true;
+  return threadRaisedHandSince(thread, thread.snoozedAt ?? null);
+}
+
+/**
+ * Server twin of the client raised-hand rule: a fresh session error, or a
+ * turn that completed after the reference time, outranks a snooze or a wait.
+ */
+function threadRaisedHandSince(
+  thread: OrchestrationThreadShell,
+  referenceAt: string | null,
+): boolean {
   const wokeOnError =
     thread.session?.status === "error" &&
-    (thread.snoozedAt == null ||
-      Date.parse(thread.session.updatedAt) > Date.parse(thread.snoozedAt));
+    (referenceAt == null || Date.parse(thread.session.updatedAt) > Date.parse(referenceAt));
   const wokeOnCompletion =
-    thread.snoozedAt != null &&
+    referenceAt != null &&
     thread.latestTurn?.state === "completed" &&
     thread.latestTurn.completedAt != null &&
-    Date.parse(thread.latestTurn.completedAt) > Date.parse(thread.snoozedAt);
+    Date.parse(thread.latestTurn.completedAt) > Date.parse(referenceAt);
   return wokeOnError || wokeOnCompletion;
 }

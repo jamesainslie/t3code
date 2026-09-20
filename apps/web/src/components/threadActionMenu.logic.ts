@@ -17,6 +17,9 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "depends-on"
+  | "new-thread-to-unblock"
+  | "release"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -42,6 +45,9 @@ export interface ThreadActionMenuState {
   readonly isSettled: boolean;
   readonly isSnoozed: boolean;
   readonly canSnoozeNow: boolean;
+  /** Waiting on another thread, so the only parking action left is the way out. */
+  readonly isBlocked: boolean;
+  readonly canAddDependencyNow: boolean;
   readonly isRegeneratingTitle: boolean;
   /** Archive rejects a thread with an active turn, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
@@ -50,6 +56,7 @@ export interface ThreadActionMenuState {
     readonly snooze: boolean;
     readonly pinning: boolean;
     readonly titleRegeneration: boolean;
+    readonly dependencies: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
 }
@@ -89,25 +96,51 @@ export function buildThreadActionMenuItems(
             : { id: "settle" as const, label: "Settle thread", icon: "circle-check" },
         ]
       : []),
-    ...(state.supports.snooze
-      ? [
-          state.isSnoozed
-            ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
-            : {
-                id: "snooze" as const,
-                label: "Snooze",
-                icon: "clock",
-                disabled: !state.canSnoozeNow,
-                children: [
-                  ...state.snoozePresets.map((preset) => ({
-                    id: `snooze:${preset.id}` as const,
-                    label: `${preset.label} (${preset.whenLabel})`,
-                  })),
-                  { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
-                ],
-              },
-        ]
-      : []),
+    // A thread waits either for a time or for other threads, never both, so
+    // the parking group shows one set at a time: the way out while it waits,
+    // otherwise snooze beside the two ways to park it on another thread.
+    ...(state.supports.dependencies && state.isBlocked
+      ? [{ id: "release" as const, label: "Wake thread", icon: "clock" }]
+      : [
+          ...(state.supports.snooze
+            ? [
+                state.isSnoozed
+                  ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
+                  : {
+                      id: "snooze" as const,
+                      label: "Snooze",
+                      icon: "clock",
+                      disabled: !state.canSnoozeNow,
+                      children: [
+                        ...state.snoozePresets.map((preset) => ({
+                          id: `snooze:${preset.id}` as const,
+                          label: `${preset.label} (${preset.whenLabel})`,
+                        })),
+                        { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
+                      ],
+                    },
+              ]
+            : []),
+          // Disabled rather than hidden for the same reason as snooze: the
+          // thread is asking the user something, and hiding the item would
+          // read as the feature being unavailable here.
+          ...(state.supports.dependencies
+            ? [
+                {
+                  id: "depends-on" as const,
+                  label: "Depends on…",
+                  icon: "link",
+                  disabled: !state.canAddDependencyNow,
+                },
+                {
+                  id: "new-thread-to-unblock" as const,
+                  label: "Start a thread to unblock this",
+                  icon: "message-square-plus",
+                  disabled: !state.canAddDependencyNow,
+                },
+              ]
+            : []),
+        ]),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
     ...(state.supports.titleRegeneration
       ? [

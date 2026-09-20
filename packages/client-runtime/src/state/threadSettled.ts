@@ -1,5 +1,12 @@
 // @effect-diagnostics globalDate:off -- UI snooze presets use local calendar boundaries and Intl labels.
 import type { OrchestrationThreadShell } from "@t3tools/contracts";
+import {
+  isSyncedThreadId,
+  threadDependencyWouldCycle,
+  unsatisfiedThreadDependencies,
+  type ThreadDependency,
+  type ThreadDependencyHolder,
+} from "@t3tools/contracts";
 
 /**
  * A queued turn start lives for at most this long: session adoption takes
@@ -69,26 +76,171 @@ export type ThreadSnoozeShell = Pick<
  * the thread from classifying as snoozed.
  */
 export function threadRaisedHandWhileSnoozed(shell: ThreadSnoozeShell): boolean {
+  return threadRaisedHandSince(shell, shell.snoozedAt ?? null);
+}
+
+/**
+ * The raised-hand rule shared by snooze and "depends on": pending approval
+ * or input, a session error newer than `referenceAt`, or a turn that
+ * completed after it. Only a FRESH failure counts: a thread parked while
+ * already failed stays parked, since parking it was the user saying "I saw
+ * it, not now". session.updatedAt stamps the status edge.
+ */
+function threadRaisedHandSince(
+  shell: Pick<
+    OrchestrationThreadShell,
+    "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
+  >,
+  referenceAt: string | null,
+): boolean {
   if (shell.hasPendingApprovals || shell.hasPendingUserInput) return true;
-  // Only a FRESH failure raises the hand: a thread snoozed while already
-  // failed stays snoozed — that snooze was the user saying "I saw it, not
-  // now". session.updatedAt stamps the status edge, so an error newer than
-  // the snooze is new information.
   if (
     shell.session?.status === "error" &&
-    (shell.snoozedAt == null || Date.parse(shell.session.updatedAt) > Date.parse(shell.snoozedAt))
+    (referenceAt == null || Date.parse(shell.session.updatedAt) > Date.parse(referenceAt))
   ) {
     return true;
   }
   if (
-    shell.snoozedAt != null &&
+    referenceAt != null &&
     shell.latestTurn?.state === "completed" &&
     shell.latestTurn.completedAt != null &&
-    Date.parse(shell.latestTurn.completedAt) > Date.parse(shell.snoozedAt)
+    Date.parse(shell.latestTurn.completedAt) > Date.parse(referenceAt)
   ) {
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// "Depends on": the other overlay on the active lifecycle. A thread with an
+// open link waits in the Depends on shelf until the server marks every link
+// satisfied (the dependency finished, errored, asked, or went away) or the
+// thread raises its own hand. Nothing here is derived from the dependency's
+// live state: satisfaction is a persisted fact, so the classification never
+// flips back when the dependency starts its next turn.
+// ---------------------------------------------------------------------------
+
+export type ThreadDependencyShell = Pick<
+  OrchestrationThreadShell,
+  "dependencies" | "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
+>;
+
+function latestLinkedAt(links: ReadonlyArray<ThreadDependency>): string | null {
+  let latest: string | null = null;
+  for (const link of links) {
+    if (latest === null || Date.parse(link.linkedAt) > Date.parse(latest)) latest = link.linkedAt;
+  }
+  return latest;
+}
+
+/** The time the newest open link was made, the reference for a raised hand. */
+function latestDependencyLinkedAt(shell: ThreadDependencyHolder): string | null {
+  return latestLinkedAt(unsatisfiedThreadDependencies(shell));
+}
+
+/** Blocked: at least one open link and no raised hand since the newest one. */
+export function effectiveBlocked(shell: ThreadDependencyShell): boolean {
+  const open = unsatisfiedThreadDependencies(shell);
+  if (open.length === 0) return false;
+  return !threadRaisedHandSince(shell, latestLinkedAt(open));
+}
+
+/**
+ * When a thread that waited on other threads came back, or null if it never
+ * waited or is still waiting. Feeds the same Woke indicator as
+ * threadWokeAt: the later of the two wins on the row.
+ */
+export function threadUnblockedAt(shell: ThreadDependencyShell): string | null {
+  const links = shell.dependencies ?? [];
+  if (links.length === 0) return null;
+  const open = links.filter((link) => link.satisfiedAt === null);
+  if (open.length > 0) {
+    const referenceAt = latestLinkedAt(open);
+    if (!threadRaisedHandSince(shell, referenceAt)) return null;
+    if (
+      referenceAt != null &&
+      shell.latestTurn?.state === "completed" &&
+      shell.latestTurn.completedAt != null &&
+      Date.parse(shell.latestTurn.completedAt) > Date.parse(referenceAt)
+    ) {
+      return shell.latestTurn.completedAt;
+    }
+    return shell.session?.updatedAt ?? referenceAt;
+  }
+  let latest: string | null = null;
+  for (const link of links) {
+    if (
+      link.satisfiedAt !== null &&
+      (latest === null || Date.parse(link.satisfiedAt) > Date.parse(latest))
+    ) {
+      latest = link.satisfiedAt;
+    }
+  }
+  return latest;
+}
+
+/**
+ * A thread may wait on another unless the same things that block snooze
+ * apply, or it is a synced conversation owned by another environment.
+ */
+export function canAddDependency(
+  shell: Pick<
+    OrchestrationThreadShell,
+    | "id"
+    | "hasPendingApprovals"
+    | "hasPendingUserInput"
+    | "latestUserMessageAt"
+    | "latestTurn"
+    | "session"
+  >,
+  options: { readonly now: string },
+): boolean {
+  if (isSyncedThreadId(shell.id)) return false;
+  return canSnooze(shell, options);
+}
+
+/**
+ * Whether `candidate` may be offered as a dependency for `blocked`: not
+ * itself, not archived or synced, not already linked, and not a cycle.
+ * Shared by the web and mobile pickers.
+ */
+export function isDependencyCandidate(
+  threads: ReadonlyArray<ThreadDependencyHolder & { readonly id: OrchestrationThreadShell["id"] }>,
+  blocked: ThreadDependencyHolder & { readonly id: OrchestrationThreadShell["id"] },
+  candidate: Pick<OrchestrationThreadShell, "id" | "archivedAt">,
+): boolean {
+  if (candidate.id === blocked.id) return false;
+  if (candidate.archivedAt !== null) return false;
+  if (isSyncedThreadId(candidate.id)) return false;
+  if (unsatisfiedThreadDependencies(blocked).some((link) => link.threadId === candidate.id)) {
+    return false;
+  }
+  return !threadDependencyWouldCycle(threads, blocked.id, candidate.id);
+}
+
+/** Row copy for a waiting thread: "Waiting on {title}" or "Waiting on N threads". */
+export function dependencyWaitLabel(
+  shell: ThreadDependencyHolder,
+  resolveTitle: (threadId: ThreadDependency["threadId"]) => string | null,
+): string | null {
+  const open = unsatisfiedThreadDependencies(shell);
+  if (open.length === 0) return null;
+  if (open.length > 1) return `Waiting on ${open.length} threads`;
+  const title = resolveTitle(open[0]!.threadId);
+  return title === null ? "Waiting on another thread" : `Waiting on ${title}`;
+}
+
+/** Shelf order: the most recently parked thread first. */
+export function compareBlockedThreads(
+  left: ThreadDependencyHolder,
+  right: ThreadDependencyHolder,
+): number {
+  const leftAt = latestDependencyLinkedAt(left);
+  const rightAt = latestDependencyLinkedAt(right);
+  if (leftAt === rightAt) return 0;
+  if (leftAt === null) return 1;
+  if (rightAt === null) return -1;
+  return Date.parse(rightAt) - Date.parse(leftAt);
 }
 
 /**

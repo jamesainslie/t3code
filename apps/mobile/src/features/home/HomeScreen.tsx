@@ -51,6 +51,7 @@ import {
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
+  ThreadListV2BlockedShelfHeader,
   ThreadListV2SettledShelfHeader,
   ThreadListV2ShowMoreRow,
   ThreadListV2SnoozedShelfHeader,
@@ -120,6 +121,9 @@ interface HomeScreenProps {
     snoozedUntil: string,
   ) => Promise<boolean>;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly onAddThreadDependency: (thread: EnvironmentThreadShell) => void;
+  readonly onNewThreadToUnblock: (thread: EnvironmentThreadShell) => void;
+  readonly onReleaseThreadDependencies: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
   readonly onPinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
@@ -521,6 +525,12 @@ export function HomeScreen(props: HomeScreenProps) {
     },
     [props.onUnsnoozeThread],
   );
+  const handleReleaseThreadDependencies = useCallback(
+    (thread: EnvironmentThreadShell) => {
+      void props.onReleaseThreadDependencies(thread);
+    },
+    [props.onReleaseThreadDependencies],
+  );
   const handlePinThread = useCallback(
     (thread: EnvironmentThreadShell) => {
       void props.onPinThread(thread);
@@ -568,8 +578,10 @@ export function HomeScreen(props: HomeScreenProps) {
   );
   const {
     loaded: shelfPreferencesLoaded,
+    blockedShelfExpanded,
     settledShelfExpanded,
     snoozedShelfExpanded,
+    toggleBlockedShelf,
     toggleSettledShelf,
     toggleSnoozedShelf,
   } = useThreadListV2ShelfPreferences();
@@ -604,6 +616,15 @@ export function HomeScreen(props: HomeScreenProps) {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadSnooze === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const dependencyEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (config.environment.capabilities.threadDependencies === true) {
         supported.add(environmentId);
       }
     }
@@ -677,6 +698,7 @@ export function HomeScreen(props: HomeScreenProps) {
           now: new Date().toISOString(),
           settlementEnvironmentIds,
           snoozeEnvironmentIds,
+          dependencyEnvironmentIds,
           queuedThreadKeys,
         }),
       });
@@ -698,6 +720,8 @@ export function HomeScreen(props: HomeScreenProps) {
         hiddenSettledCount: 0,
         snoozedCount: 0,
         snoozedShelfHeaderIndex: null,
+        blockedCount: 0,
+        blockedShelfHeaderIndex: null,
         settledCount: 0,
         settledShelfHeaderIndex: null,
         nextSnoozeWakeAt: null,
@@ -713,9 +737,11 @@ export function HomeScreen(props: HomeScreenProps) {
       matchedThreadKeys,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
+      dependencyEnvironmentIds,
       queuedThreadKeys,
       settledLimit: settledVisibleCount,
       now: new Date().toISOString(),
+      blockedShelfExpanded,
       snoozedShelfExpanded,
       settledShelfExpanded,
       selectedThreadKey: null,
@@ -725,11 +751,13 @@ export function HomeScreen(props: HomeScreenProps) {
     queuedThreadKeys,
     nowMinute,
     snoozeWakeTick,
+    blockedShelfExpanded,
     snoozedShelfExpanded,
     settledShelfExpanded,
     settledVisibleCount,
     settlementEnvironmentIds,
     snoozeEnvironmentIds,
+    dependencyEnvironmentIds,
     props.searchQuery,
     props.selectedEnvironmentId,
     props.threads,
@@ -776,6 +804,9 @@ export function HomeScreen(props: HomeScreenProps) {
       buildThreadListV2ListItems({
         items: threadListV2Layout.items,
         pendingTasks: v2PendingTasks,
+        blockedCount: threadListV2Layout.blockedCount,
+        blockedShelfExpanded,
+        blockedShelfHeaderIndex: threadListV2Layout.blockedShelfHeaderIndex,
         snoozedCount: threadListV2Layout.snoozedCount,
         snoozedShelfExpanded,
         snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
@@ -784,7 +815,14 @@ export function HomeScreen(props: HomeScreenProps) {
         settledShelfHeaderIndex: threadListV2Layout.settledShelfHeaderIndex,
         snoozeLabelNow: `${nowMinute}:00.000Z`,
       }),
-    [settledShelfExpanded, snoozedShelfExpanded, threadListV2Layout, v2PendingTasks],
+    [
+      blockedShelfExpanded,
+      nowMinute,
+      settledShelfExpanded,
+      snoozedShelfExpanded,
+      threadListV2Layout,
+      v2PendingTasks,
+    ],
   );
 
   useThreadJumpShortcuts(
@@ -822,6 +860,16 @@ export function HomeScreen(props: HomeScreenProps) {
           />
         );
       }
+      if (item.type === "v2-blocked-shelf") {
+        return (
+          <ThreadListV2BlockedShelfHeader
+            count={item.count}
+            disabled={!shelfPreferencesLoaded}
+            expanded={item.expanded}
+            onToggle={toggleBlockedShelf}
+          />
+        );
+      }
       if (item.type === "v2-snoozed-shelf") {
         return (
           <ThreadListV2SnoozedShelfHeader
@@ -852,6 +900,8 @@ export function HomeScreen(props: HomeScreenProps) {
           variant={item.item.variant}
           hasQueuedMessages={queuedThreadKeys.has(movedId)}
           snoozed={item.item.snoozed}
+          blocked={item.item.blocked}
+          waitLabel={item.item.waitLabel}
           pinned={item.item.pinned}
           snoozePresetMinute={nowMinute}
           snoozeWakeLabelText={item.snoozeWakeLabelText}
@@ -885,6 +935,7 @@ export function HomeScreen(props: HomeScreenProps) {
           settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
           onSettleThread={handleSettleThread}
           snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
+          dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
           reorderSupported={
             item.item.pinned
@@ -895,6 +946,9 @@ export function HomeScreen(props: HomeScreenProps) {
           canMoveDown={pendingOrder === null && movePlanner(movedId, "down") !== null}
           onSnoozeThread={handleSnoozeThread}
           onUnsnoozeThread={handleUnsnoozeThread}
+          onAddThreadDependency={props.onAddThreadDependency}
+          onNewThreadToUnblock={props.onNewThreadToUnblock}
+          onReleaseThreadDependencies={handleReleaseThreadDependencies}
           onUnsettleThread={handleUnsettleThread}
           onPinThread={handlePinThread}
           onUnpinThread={handleUnpinThread}
@@ -918,6 +972,7 @@ export function HomeScreen(props: HomeScreenProps) {
       handleSnoozeThread,
       handleUnpinThread,
       handleUnsnoozeThread,
+      handleReleaseThreadDependencies,
       handleSwipeableClose,
       handleSwipeableWillOpen,
       handleUnsettleThread,
@@ -930,14 +985,18 @@ export function HomeScreen(props: HomeScreenProps) {
       props.onSelectPendingTask,
       props.onSelectThread,
       props.onNewThreadOnBranch,
+      props.onAddThreadDependency,
+      props.onNewThreadToUnblock,
       props.savedConnectionsById,
       serverConfigs,
       shelfPreferencesLoaded,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
+      dependencyEnvironmentIds,
       threadListV2Items,
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
+      toggleBlockedShelf,
       toggleSettledShelf,
       toggleSnoozedShelf,
       v2ProjectTitleByProjectKey,
