@@ -86,7 +86,7 @@ export function threadRaisedHandWhileSnoozed(shell: ThreadSnoozeShell): boolean 
  * already failed stays parked, since parking it was the user saying "I saw
  * it, not now". session.updatedAt stamps the status edge.
  */
-export function threadRaisedHandSince(
+function threadRaisedHandSince(
   shell: Pick<
     OrchestrationThreadShell,
     "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
@@ -134,7 +134,7 @@ function latestLinkedAt(links: ReadonlyArray<ThreadDependency>): string | null {
 }
 
 /** The time the newest open link was made, the reference for a raised hand. */
-export function latestDependencyLinkedAt(shell: ThreadDependencyHolder): string | null {
+function latestDependencyLinkedAt(shell: ThreadDependencyHolder): string | null {
   return latestLinkedAt(unsatisfiedThreadDependencies(shell));
 }
 
