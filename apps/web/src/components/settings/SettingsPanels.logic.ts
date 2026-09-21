@@ -85,6 +85,7 @@ type TypographySettings = Pick<
   | "fontSizePrompt"
   | "fontSizeCode"
   | "fontSizeTerminal"
+  | "fontSizePanel"
 >;
 
 /** Labels the font rows whose family or size differs from the defaults. */
@@ -105,6 +106,9 @@ export function getChangedTypographySettingLabels(settings: TypographySettings):
     ...(settings.fontFamilyTerminal !== DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal ||
     settings.fontSizeTerminal !== DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal
       ? ["Terminal font"]
+      : []),
+    ...(settings.fontSizePanel !== DEFAULT_UNIFIED_SETTINGS.fontSizePanel
+      ? ["Panel font size"]
       : []),
   ];
 }

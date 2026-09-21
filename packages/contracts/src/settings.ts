@@ -150,6 +150,20 @@ export const TerminalFontSize = Schema.Int.check(
 export type TerminalFontSize = typeof TerminalFontSize.Type;
 const DEFAULT_TERMINAL_FONT_SIZE: TerminalFontSize = 12;
 
+/**
+ * The right panel (browser, terminal, files, diff, and pull request
+ * surfaces) scales its text from this size instead of the interface size, so
+ * it can stay compact beside a larger chat or grow without the rest of the
+ * app following.
+ */
+export const MIN_PANEL_FONT_SIZE = 12;
+export const MAX_PANEL_FONT_SIZE = 20;
+export const PanelFontSize = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_PANEL_FONT_SIZE, maximum: MAX_PANEL_FONT_SIZE }),
+);
+export type PanelFontSize = typeof PanelFontSize.Type;
+export const DEFAULT_PANEL_FONT_SIZE: PanelFontSize = 16;
+
 export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill", "none"]);
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
@@ -376,6 +390,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   fontSizeTerminal: TerminalFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TERMINAL_FONT_SIZE)),
+  ),
+  fontSizePanel: PanelFontSize.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANEL_FONT_SIZE)),
   ),
   fontFamilyCode: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilyComposer: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -1568,6 +1585,7 @@ export const ClientSettingsPatch = Schema.Struct({
   fontSizePrompt: Schema.optionalKey(PromptFontSize),
   fontSizeCode: Schema.optionalKey(CodeFontSize),
   fontSizeTerminal: Schema.optionalKey(TerminalFontSize),
+  fontSizePanel: Schema.optionalKey(PanelFontSize),
   fontFamilyCode: Schema.optionalKey(FontFamilyPreference),
   fontFamilyComposer: Schema.optionalKey(FontFamilyPreference),
   fontFamilySans: Schema.optionalKey(FontFamilyPreference),

@@ -247,6 +247,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["typography family size monospace output"],
   },
   {
+    id: "panel-font",
+    title: "Panel font size",
+    to: "/settings/appearance",
+    searchTerms: ["typography right panel surfaces tabs files pull requests agents text"],
+  },
+  {
     id: "font-smoothing",
     title: "Font smoothing",
     to: "/settings/appearance",

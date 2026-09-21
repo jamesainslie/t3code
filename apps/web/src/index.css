@@ -1612,6 +1612,23 @@ code {
   font-size: var(--font-size-code, inherit);
 }
 
+/* The right panel takes its text size from the panel font size preference
+   instead of the interface size. Tailwind's text-* utilities resolve through
+   these variables, so redefining them on the panel root rescales every text
+   utility inside it while the rem-based root size keeps driving the rest of
+   the app. Ratios follow Tailwind's default type scale; the unitless
+   line-height variables need no change. Code, diffs, the terminal, and
+   browser previews keep their own sizes. */
+.right-panel-text-scale {
+  --font-size-tree: calc(var(--font-size-panel, 1rem) * 0.75);
+  --text-xs: calc(var(--font-size-panel, 1rem) * 0.75);
+  --text-sm: calc(var(--font-size-panel, 1rem) * 0.875);
+  --text-base: var(--font-size-panel, 1rem);
+  --text-lg: calc(var(--font-size-panel, 1rem) * 1.125);
+  --text-xl: calc(var(--font-size-panel, 1rem) * 1.25);
+  --text-2xl: calc(var(--font-size-panel, 1rem) * 1.5);
+}
+
 /* @pierre/diffs surfaces (diffs, file previews, annotatable code, search
    lines) render inside shadow roots but consult these hooks with their own
    literal stacks as fallback. Custom properties inherit across the shadow

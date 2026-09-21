@@ -30,6 +30,9 @@ describe("typography settings restore", () => {
         fontFamilyCode: "Fira Code",
       }),
     ).toEqual(["Interface font", "Code font"]);
+    expect(
+      getChangedTypographySettingLabels({ ...DEFAULT_UNIFIED_SETTINGS, fontSizePanel: 14 }),
+    ).toEqual(["Panel font size"]);
   });
 });
 
