@@ -29,6 +29,7 @@ import {
   MAX_GLASS_OPACITY,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PANEL_ANIMATION_DURATION_MS,
+  MAX_PANEL_FONT_SIZE,
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
@@ -37,6 +38,7 @@ import {
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
+  MIN_PANEL_FONT_SIZE,
   MIN_PROMPT_FONT_SIZE,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   type ResponseStreamingMode,
@@ -663,6 +665,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontFamilyTerminal,
       settings.fontSizeCode,
       settings.fontSizeInterface,
+      settings.fontSizePanel,
       settings.fontSizePrompt,
       settings.fontSizeTerminal,
       settings.glassOpacity,
@@ -794,6 +797,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       fontSizePrompt: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
       fontSizeCode: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
       fontSizeTerminal: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
+      fontSizePanel: DEFAULT_UNIFIED_SETTINGS.fontSizePanel,
       browserDefaultViewport: DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
       browserDefaultZoomFactor: DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor,
       browserDefaultAppearance: DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance,
@@ -1491,6 +1495,26 @@ function InterfaceFontRow({ preview }: { preview?: ReactNode }) {
   );
 }
 
+function PanelFontRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  return (
+    <FontSizeSettingsRow
+      {...searchableSetting("panel-font")}
+      description="Tabs, files, pull requests, and agents in the right panel. Code and the terminal keep their own sizes."
+      size={{
+        label: "Panel font size",
+        min: MIN_PANEL_FONT_SIZE,
+        max: MAX_PANEL_FONT_SIZE,
+        value: settings.fontSizePanel,
+        defaultValue: DEFAULT_UNIFIED_SETTINGS.fontSizePanel,
+        onChange: (fontSizePanel) => updateSettings({ fontSizePanel }),
+      }}
+      onReset={() => updateSettings({ fontSizePanel: DEFAULT_UNIFIED_SETTINGS.fontSizePanel })}
+    />
+  );
+}
+
 function PromptFontRow() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
@@ -1663,6 +1687,7 @@ function FontSettingsGroup() {
   return (
     <>
       <InterfaceFontRow />
+      <PanelFontRow />
       <PromptFontRow />
       <CodeFontRow />
       <TerminalFontRow />
@@ -1709,6 +1734,7 @@ function SimpleFontRows() {
 // Font smoothing only renders on macOS, so a search jump to it elsewhere
 // must not flip the section - the target would never mount to be scrolled to.
 const ADVANCED_TYPOGRAPHY_TARGET_IDS: ReadonlySet<string> = new Set([
+  "panel-font",
   "prompt-font",
   "terminal-font",
   ...(typeof navigator !== "undefined" && isMacPlatform(navigator.platform)
@@ -1761,6 +1787,72 @@ function TypographySection() {
   );
 }
 
+interface FontSizeControl {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  defaultValue: number;
+  onChange: (v: number) => void;
+}
+
+function FontSizeSelect({ size }: { size: FontSizeControl }) {
+  return (
+    <Select
+      value={String(size.value)}
+      onValueChange={(next) => {
+        if (typeof next !== "string") return;
+        const parsed = Number(next);
+        if (Number.isInteger(parsed) && parsed >= size.min && parsed <= size.max) {
+          size.onChange(parsed);
+        }
+      }}
+    >
+      <SelectTrigger size="sm" className="w-22 shrink-0" aria-label={size.label}>
+        <SelectValue>{size.value} px</SelectValue>
+      </SelectTrigger>
+      <SelectPopup align="end" alignItemWithTrigger={false}>
+        {Array.from({ length: size.max - size.min + 1 }, (_, index) => size.min + index).map(
+          (px) => (
+            <SelectItem hideIndicator key={px} value={String(px)}>
+              {px} px
+            </SelectItem>
+          ),
+        )}
+      </SelectPopup>
+    </Select>
+  );
+}
+
+/** A size-only typography row for a surface that keeps the interface family. */
+function FontSizeSettingsRow({
+  id,
+  title,
+  description,
+  size,
+  onReset,
+}: {
+  id?: string;
+  title: string;
+  description: string;
+  size: FontSizeControl;
+  onReset: () => void;
+}) {
+  return (
+    <SettingsRow
+      {...(id !== undefined ? { id } : {})}
+      title={title}
+      description={description}
+      resetAction={
+        size.value !== size.defaultValue ? (
+          <SettingResetButton label={title.toLowerCase()} onClick={onReset} />
+        ) : null
+      }
+      control={<FontSizeSelect size={size} />}
+    />
+  );
+}
+
 function FontFamilySettingsRow({
   id,
   title,
@@ -1786,14 +1878,7 @@ function FontFamilySettingsRow({
   onValueChange: (value: string) => void;
   onReset: () => void;
   requireMonospace?: boolean;
-  size: {
-    label: string;
-    min: number;
-    max: number;
-    value: number;
-    defaultValue: number;
-    onChange: (v: number) => void;
-  };
+  size: FontSizeControl;
 }) {
   const trimmed = value.trim();
   // The fallback input edits a draft; the preference only commits once typing
@@ -1921,29 +2006,7 @@ function FontFamilySettingsRow({
   const control = (
     <div className="flex w-full items-center gap-2 sm:w-auto">
       <div className="min-w-0 flex-1 sm:w-44 sm:flex-none">{familyControl}</div>
-      <Select
-        value={String(size.value)}
-        onValueChange={(next) => {
-          if (typeof next !== "string") return;
-          const parsed = Number(next);
-          if (Number.isInteger(parsed) && parsed >= size.min && parsed <= size.max) {
-            size.onChange(parsed);
-          }
-        }}
-      >
-        <SelectTrigger size="sm" className="w-22 shrink-0" aria-label={size.label}>
-          <SelectValue>{size.value} px</SelectValue>
-        </SelectTrigger>
-        <SelectPopup align="end" alignItemWithTrigger={false}>
-          {Array.from({ length: size.max - size.min + 1 }, (_, index) => size.min + index).map(
-            (px) => (
-              <SelectItem hideIndicator key={px} value={String(px)}>
-                {px} px
-              </SelectItem>
-            ),
-          )}
-        </SelectPopup>
-      </Select>
+      <FontSizeSelect size={size} />
     </div>
   );
   return (

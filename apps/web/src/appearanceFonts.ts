@@ -8,12 +8,15 @@
 import {
   DEFAULT_CODE_FONT_SIZE,
   DEFAULT_INTERFACE_FONT_SIZE,
+  DEFAULT_PANEL_FONT_SIZE,
   DEFAULT_PROMPT_FONT_SIZE,
   MAX_CODE_FONT_SIZE,
   MAX_INTERFACE_FONT_SIZE,
+  MAX_PANEL_FONT_SIZE,
   MAX_PROMPT_FONT_SIZE,
   MIN_CODE_FONT_SIZE,
   MIN_INTERFACE_FONT_SIZE,
+  MIN_PANEL_FONT_SIZE,
   MIN_PROMPT_FONT_SIZE,
 } from "@t3tools/contracts";
 
@@ -78,6 +81,8 @@ export interface AppearanceFontPreferences {
   readonly sizeInterface: number;
   readonly sizePrompt: number;
   readonly sizeCode: number;
+  /** Base size for the right panel's text; `.right-panel-text-scale` in index.css reads it. */
+  readonly sizePanel: number;
   /** Grayscale `antialiased` rendering; false keeps the heavier platform default. */
   readonly smoothing: boolean;
 }
@@ -87,8 +92,8 @@ export interface AppearanceFontPreferences {
  * override so the stylesheet defaults (and theme changes) stay in charge.
  *
  * Sizes are always written: the interface size drives the root font size (and
- * with it every rem-based dimension), while the prompt and code sizes stay in
- * absolute pixels so they do not scale twice.
+ * with it every rem-based dimension), while the prompt, code, and panel sizes
+ * stay in absolute pixels so they do not scale twice.
  */
 export function applyAppearanceFontVariables(
   root: HTMLElement,
@@ -115,6 +120,8 @@ export function applyAppearanceFontVariables(
   root.style.setProperty("--font-size-code", `${code}px`);
   // The @pierre/diffs surfaces read their own hook for code text.
   root.style.setProperty("--diffs-font-size", `${code}px`);
+  const panel = clampPanelFontSize(preferences.sizePanel);
+  root.style.setProperty("--font-size-panel", `${panel}px`);
 
   // Inherited from the root; only macOS engines honor the property, so no
   // platform gate is needed here. Smoothing on means grayscale `antialiased`
@@ -147,6 +154,10 @@ export function clampPromptFontSize(value: number): number {
 
 export function clampCodeFontSize(value: number): number {
   return clampFontSize(value, MIN_CODE_FONT_SIZE, MAX_CODE_FONT_SIZE, DEFAULT_CODE_FONT_SIZE);
+}
+
+export function clampPanelFontSize(value: number): number {
+  return clampFontSize(value, MIN_PANEL_FONT_SIZE, MAX_PANEL_FONT_SIZE, DEFAULT_PANEL_FONT_SIZE);
 }
 
 const FONT_PROBE_TEXT = "mmmmmmmmMMWli1O0@# fjord";
