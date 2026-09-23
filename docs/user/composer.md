@@ -83,6 +83,11 @@ delete it like other inline context. Copying, reloading, and restoring a
 with its quote, and sending tells the agent which words were quoted and which comment you wrote.
 The quoted text and comment count toward the message limit.
 
+You can quote a Markdown file the same way. In the file panel's rendered view, select a
+passage and choose **Cite**, or right-click the selection and choose **Cite in chat**. The
+agent receives the file path and line range with the quote, and selecting the chip opens
+the file at those lines.
+
 Mobile displays saved quotes and comments, but does not create citations or
 navigate to their sources.
 

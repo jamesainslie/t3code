@@ -840,6 +840,18 @@ describe("ChatMarkdown documents", () => {
     expect(html).toContain('id="user-content-phase-1-foundation"');
   });
 
+  it("marks blocks with their source lines, including drawn code blocks", () => {
+    const text = "Intro line\n\n```ts\nconst a = 1;\n```\n\n$$\nx^2\n$$";
+    const html = renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text={text} asDocument />);
+
+    expect(html).toContain('<p data-source-start="1" data-source-end="1">Intro line</p>');
+    expect(html).toMatch(/data-source-start="3" data-source-end="5"/);
+    expect(html).toMatch(/data-source-start="7" data-source-end="9"/);
+    expect(renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text={text} />)).not.toContain(
+      "data-source-start",
+    );
+  });
+
   it("highlights inline code that names its language", async () => {
     const json = await renderDocument("Call `const answer = 42{:ts}` first.");
 

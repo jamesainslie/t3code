@@ -9903,6 +9903,7 @@ export default function ChatView(props: ChatViewProps) {
           projectName={activeProject?.title ?? ""}
           threadRef={activeThreadRef}
           composerDraftTarget={composerDraftTarget}
+          onCiteText={citeText}
           keybindings={keybindings}
           availableEditors={availableEditors}
           relativePath={

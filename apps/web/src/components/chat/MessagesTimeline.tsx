@@ -14,8 +14,9 @@ import {
 import {
   COMPOSER_CONTEXT_KINDS,
   type AssistantCitation,
+  type Citation,
   type EnvironmentId,
-  type MessageId,
+  MessageId,
   type ScopedThreadRef,
   type ServerProviderSkill,
   type ToolActivityIcon,
@@ -164,7 +165,7 @@ import {
 import { MessageCopyButton } from "./MessageCopyButton";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { inferEntryKindFromPath } from "../../pierre-icons";
-import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
+import { SelectionCitationToolbar, type CapturedSelection } from "./SelectionCitationToolbar";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import {
   AssistantCitationSource,
@@ -400,7 +401,7 @@ interface MessagesTimelineProps {
   citationRequest?: AssistantCitationRequest | null;
   citationHistoryLoading?: boolean;
   onCiteAssistantText?: (
-    citation: AssistantCitation,
+    citation: Citation,
     sourceAnchor: AssistantCitationSourceAnchor,
   ) => boolean;
   agentPanelModel?: AgentPanelModel;
@@ -584,6 +585,19 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     });
   }, []);
   const citationThreadRef = useMemo(() => parseScopedThreadKey(routeThreadKey), [routeThreadKey]);
+  const assistantCitationFromSelection = useCallback(
+    ({ source, selector }: CapturedSelection): AssistantCitation | null => {
+      const messageId = source.dataset.assistantCitationSource;
+      if (!citationThreadRef || !messageId) return null;
+      return {
+        version: 1,
+        ...citationThreadRef,
+        messageId: MessageId.make(messageId),
+        ...selector,
+      };
+    },
+    [citationThreadRef],
+  );
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
   const expandCitedTurn = useCallback((turnId: TurnId) => {
     setExpandedTurnIds((current) =>
@@ -1272,9 +1286,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           data-assistant-citation-viewport="true"
         >
           {onCiteAssistantText && citationThreadRef ? (
-            <AssistantSelectionToolbar
+            <SelectionCitationToolbar
               viewport={timelineViewportElement}
-              threadRef={citationThreadRef}
+              toCitation={assistantCitationFromSelection}
               onCite={onCiteAssistantText}
             />
           ) : null}

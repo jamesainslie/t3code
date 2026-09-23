@@ -93,7 +93,7 @@ import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
-import { parseInlineCodeLanguage, remarkHeadingIds } from "../markdown-document";
+import { parseInlineCodeLanguage, rehypeSourceLines, remarkHeadingIds } from "../markdown-document";
 import { MarkdownMath } from "./chat/MarkdownMath";
 import {
   artifactTemplateFromHastProperties,
@@ -523,6 +523,15 @@ const CHAT_MARKDOWN_REHYPE_PLUGINS = [
   rehypePreserveImageSourceMeta,
   [rehypeSanitize, CHAT_MARKDOWN_SANITIZE_SCHEMA],
 ] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
+
+// Source lines go on after sanitizing, which would strip the attributes.
+const DOCUMENT_REHYPE_PLUGINS = [
+  ...CHAT_MARKDOWN_REHYPE_PLUGINS,
+  rehypeSourceLines,
+] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
+const DOCUMENT_LITERAL_REHYPE_PLUGINS = [rehypeSourceLines] satisfies NonNullable<
+  ReactMarkdownOptions["rehypePlugins"]
+>;
 
 /** GitHub's own five alert kinds, in its colors: the glyph names the urgency, the title says it. */
 const GITHUB_ALERT_PRESENTATIONS: Record<
@@ -3332,10 +3341,23 @@ const CHAT_MARKDOWN_COMPONENTS = {
       return <pre {...props}>{children}</pre>;
     }
 
+    // Drawn blocks replace the `pre`, so a layout-free wrapper carries its source lines.
+    const sourceLined = (block: ReactNode) =>
+      asDocument && node?.position ? (
+        <div
+          className="contents"
+          data-source-start={node.position.start.line}
+          data-source-end={node.position.end.line}
+        >
+          {block}
+        </div>
+      ) : (
+        block
+      );
     const language = extractFenceLanguage(codeBlock.className);
     // `$$…$$` and a ```math fence both arrive as `language-math`, as on GitHub.
     if (asDocument && language === "math") {
-      return <MarkdownMath source={codeBlock.code.replace(/\n$/, "")} display />;
+      return sourceLined(<MarkdownMath source={codeBlock.code.replace(/\n$/, "")} display />);
     }
     if (language?.toLowerCase() === "mermaid") {
       const start = node?.position?.start.offset;
@@ -3344,17 +3366,17 @@ const CHAT_MARKDOWN_COMPONENTS = {
         start !== undefined &&
         end !== undefined &&
         isMermaidFenceComplete(text.slice(start, end), codeBlock.code);
-      return (
+      return sourceLined(
         <MermaidDiagram
           source={codeBlock.code.replace(/\n$/, "")}
           theme={resolvedTheme}
           pending={isStreaming && !complete}
           onRepair={onRepairMermaid}
-        />
+        />,
       );
     }
     const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
-    return (
+    return sourceLined(
       <MarkdownCodeBlock
         code={codeBlock.code}
         language={language}
@@ -3382,7 +3404,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
             />
           </Suspense>
         </RenderErrorBoundary>
-      </MarkdownCodeBlock>
+      </MarkdownCodeBlock>,
     );
   },
 } satisfies Components;
@@ -3434,7 +3456,15 @@ function ChatMarkdown({
       <ChatMarkdownRendererContext value={componentState}>
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
-          rehypePlugins={parseRawHtml ? CHAT_MARKDOWN_REHYPE_PLUGINS : undefined}
+          rehypePlugins={
+            props.asDocument
+              ? parseRawHtml
+                ? DOCUMENT_REHYPE_PLUGINS
+                : DOCUMENT_LITERAL_REHYPE_PLUGINS
+              : parseRawHtml
+                ? CHAT_MARKDOWN_REHYPE_PLUGINS
+                : undefined
+          }
           skipHtml={false}
           components={CHAT_MARKDOWN_COMPONENTS}
           urlTransform={markdownUrlTransform}

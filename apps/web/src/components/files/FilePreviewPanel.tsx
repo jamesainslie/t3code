@@ -1,6 +1,8 @@
 import { Spinner } from "~/components/ui/spinner";
 import type {
   ChatFileAttachment,
+  Citation,
+  DocumentCitation,
   EditorId,
   EnvironmentId,
   ResolvedKeybindingsConfig,
@@ -57,6 +59,12 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { SelectionCitationToolbar, type CapturedSelection } from "../chat/SelectionCitationToolbar";
+import {
+  DOCUMENT_CITATION_SOURCE_SELECTOR,
+  type AssistantCitationSourceAnchor,
+} from "~/lib/assistantTextSelection";
+import { sourceLinesBetween, sourceLineSpanAt } from "~/markdown-document";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -107,6 +115,8 @@ interface FilePreviewPanelProps {
   onPendingChange: (relativePath: string, pending: boolean) => void;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
+  /** Quotes a selection from the rendered document into the composer. */
+  onCiteText?: (citation: Citation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
@@ -844,6 +854,7 @@ function RenderedMarkdownSurface({
   threadRef,
   readOnly,
   onPendingChange,
+  onCiteText,
 }: Omit<
   EditableFileSurfaceProps,
   | "resolvedTheme"
@@ -855,6 +866,7 @@ function RenderedMarkdownSurface({
 > & {
   threadRef: ScopedThreadRef;
   readOnly: boolean;
+  onCiteText: FilePreviewPanelProps["onCiteText"];
 }) {
   const saveCoordinator = useFileSaveCoordinator({
     environmentId,
@@ -862,9 +874,38 @@ function RenderedMarkdownSurface({
     relativePath,
     onPendingChange,
   });
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const documentCitationFromSelection = useCallback(
+    ({ range, selector }: CapturedSelection): DocumentCitation | null => {
+      const lines = sourceLinesBetween(
+        sourceLineSpanAt(range.startContainer),
+        sourceLineSpanAt(range.endContainer),
+      );
+      if (!lines) return null;
+      return {
+        version: 1,
+        kind: "document",
+        environmentId: threadRef.environmentId,
+        threadId: threadRef.threadId,
+        filePath: relativePath,
+        ...lines,
+        ...selector,
+      };
+    },
+    [relativePath, threadRef.environmentId, threadRef.threadId],
+  );
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <ScrollArea ref={setViewport} className="min-h-0 flex-1" data-document-citation-viewport="">
+      {onCiteText ? (
+        <SelectionCitationToolbar
+          viewport={viewport}
+          sourceSelector={DOCUMENT_CITATION_SOURCE_SELECTOR}
+          toCitation={documentCitationFromSelection}
+          onCite={onCiteText}
+          contextMenu
+        />
+      ) : null}
       <FileMarkdownPreview
         text={contents}
         cwd={cwd}
@@ -919,6 +960,7 @@ export default function FilePreviewPanel({
   onPendingChange,
   selectedFilePending,
   workspaceMutationId,
+  onCiteText,
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
@@ -1248,6 +1290,7 @@ export default function FilePreviewPanel({
                 contents={file.data.contents}
                 readOnly={isHostFile}
                 onPendingChange={onPendingChange}
+                onCiteText={onCiteText}
               />
             ) : tableDelimiter && renderTable ? (
               <DelimitedTablePreview

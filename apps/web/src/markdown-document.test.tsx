@@ -3,7 +3,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseInlineCodeLanguage, remarkHeadingIds } from "./markdown-document";
+import {
+  parseInlineCodeLanguage,
+  rehypeSourceLines,
+  remarkHeadingIds,
+  sourceLinesBetween,
+} from "./markdown-document";
 
 function renderMarkdown(markdown: string): string {
   return renderToStaticMarkup(
@@ -53,5 +58,48 @@ describe("parseInlineCodeLanguage", () => {
     expect(parseInlineCodeLanguage("const x = 1")).toBeNull();
     expect(parseInlineCodeLanguage("{:ts}")).toBeNull();
     expect(parseInlineCodeLanguage("map{: ts}")).toBeNull();
+  });
+});
+
+describe("rehypeSourceLines", () => {
+  function renderWithLines(markdown: string): string {
+    return renderToStaticMarkup(
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSourceLines]}>
+        {markdown}
+      </ReactMarkdown>,
+    );
+  }
+
+  it("stamps each block with the source lines it came from", () => {
+    const html = renderWithLines("# Title\n\nFirst line\nsecond line\n\n- one\n- two");
+
+    expect(html).toContain('<h1 data-source-start="1" data-source-end="1">');
+    expect(html).toContain('<p data-source-start="3" data-source-end="4">');
+    expect(html).toContain('<li data-source-start="7" data-source-end="7">');
+  });
+
+  it("leaves inline elements unstamped", () => {
+    const html = renderWithLines("Some **bold** and `code`.");
+
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toContain("<code>code</code>");
+  });
+});
+
+describe("sourceLinesBetween", () => {
+  it("spans from the first block's start to the last block's end", () => {
+    expect(sourceLinesBetween({ start: 3, end: 4 }, { start: 7, end: 9 })).toEqual({
+      startLine: 3,
+      endLine: 9,
+    });
+  });
+
+  it("orders blocks and tolerates a missing end", () => {
+    expect(sourceLinesBetween({ start: 7, end: 9 }, { start: 3, end: 4 })).toEqual({
+      startLine: 3,
+      endLine: 9,
+    });
+    expect(sourceLinesBetween({ start: 5, end: 6 }, null)).toEqual({ startLine: 5, endLine: 6 });
+    expect(sourceLinesBetween(null, null)).toBeNull();
   });
 });
