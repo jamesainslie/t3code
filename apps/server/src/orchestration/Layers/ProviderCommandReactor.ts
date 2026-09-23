@@ -13,7 +13,7 @@ import {
   type RuntimeMode,
   type TurnId,
 } from "@t3tools/contracts";
-import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
+import { citationsToPlainText } from "@t3tools/shared/assistantCitations";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
 import * as Cache from "effect/Cache";
@@ -1349,7 +1349,7 @@ const make = Effect.gen(function* () {
           projects: project ? [project] : [],
         }) ?? process.cwd();
       const generationInput = {
-        messageText: assistantCitationsToPlainText(message.text),
+        messageText: citationsToPlainText(message.text),
         ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
         ...(event.payload.titleSeed !== undefined ? { titleSeed: event.payload.titleSeed } : {}),
       };

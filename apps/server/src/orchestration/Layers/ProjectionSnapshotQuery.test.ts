@@ -6,7 +6,9 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ThreadDocumentCommentAnchor,
   ThreadId,
+  type ThreadDocumentComment,
   type ThreadPullRequestLink,
   ThreadLinkedPullRequest,
   TurnId,
@@ -45,6 +47,9 @@ const encodeThreadLinkedPullRequest = Schema.encodeSync(
 );
 const encodeMessageContext = Schema.encodeEffect(
   Schema.fromJsonString(OrchestrationMessageContext),
+);
+const encodeDocumentCommentAnchor = Schema.encodeEffect(
+  Schema.fromJsonString(ThreadDocumentCommentAnchor),
 );
 
 it.effect("reads project shells without loading threads or resolving excluded projects", () => {
@@ -545,6 +550,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             lastError: null,
             updatedAt: "2026-02-24T00:00:07.000Z",
           },
+          documentComments: [],
         },
       ]);
 
@@ -3506,6 +3512,92 @@ it.effect("omits foreign-host PRs from legacy snapshots while preserving native 
     }
   }).pipe(Effect.provide(layer));
 });
+
+it.effect("puts document comments on thread detail reads but never on shells", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const query = yield* ProjectionSnapshotQuery;
+    const threadId = ThreadId.make("thread-comments");
+    yield* sql`INSERT INTO projection_projects (project_id, title, workspace_root, scripts_json, created_at, updated_at)
+      VALUES ('project-1', 'Project', '/repo', '[]', '2026-09-09T00:00:00Z', '2026-09-09T00:00:00Z')`;
+    yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, created_at, updated_at)
+      VALUES ('thread-comments', 'project-1', 'Thread', '{"provider":"codex","model":"gpt-5"}', 'full-access', 'default', '2026-09-09T00:00:00Z', '2026-09-09T00:00:00Z')`;
+    const anchor = {
+      text: "passage",
+      start: 0,
+      end: 7,
+      prefix: "",
+      suffix: " follows",
+      startLine: 4,
+      endLine: 5,
+    };
+    const anchorJson = yield* encodeDocumentCommentAnchor(anchor);
+    // Inserted newest first: reads order by creation time.
+    yield* sql`INSERT INTO projection_thread_document_comments (thread_id, comment_id, file_path, anchor_json, body, status, resolution, created_at, updated_at, resolved_at)
+      VALUES ('thread-comments', 'comment-b', 'docs/plan.md', ${anchorJson}, 'Second', 'resolved', 'Fixed it.', '2026-09-09T00:00:02.000Z', '2026-09-09T00:00:03.000Z', '2026-09-09T00:00:03.000Z')`;
+    yield* sql`INSERT INTO projection_thread_document_comments (thread_id, comment_id, file_path, anchor_json, body, status, resolution, created_at, updated_at, resolved_at)
+      VALUES ('thread-comments', 'comment-a', 'docs/plan.md', ${anchorJson}, 'First', 'open', NULL, '2026-09-09T00:00:01.000Z', '2026-09-09T00:00:01.000Z', NULL)`;
+
+    const expected: ReadonlyArray<ThreadDocumentComment> = [
+      {
+        id: "comment-a",
+        filePath: "docs/plan.md",
+        anchor,
+        body: "First",
+        status: "open",
+        resolution: null,
+        createdAt: "2026-09-09T00:00:01.000Z",
+        updatedAt: "2026-09-09T00:00:01.000Z",
+        resolvedAt: null,
+      },
+      {
+        id: "comment-b",
+        filePath: "docs/plan.md",
+        anchor,
+        body: "Second",
+        status: "resolved",
+        resolution: "Fixed it.",
+        createdAt: "2026-09-09T00:00:02.000Z",
+        updatedAt: "2026-09-09T00:00:03.000Z",
+        resolvedAt: "2026-09-09T00:00:03.000Z",
+      },
+    ];
+    const full = yield* query.getSnapshot();
+    const commandReadModel = yield* query.getCommandReadModel();
+    const detail = Option.getOrThrow(yield* query.getThreadDetailById(threadId));
+    const detailSnapshot = Option.getOrThrow(yield* query.getThreadDetailSnapshot(threadId));
+    const windowed = Option.getOrThrow(
+      yield* query.getThreadDetailSnapshot(threadId, { turnLimit: 1 }),
+    );
+    for (const thread of [
+      full.threads[0],
+      commandReadModel.threads[0],
+      detail,
+      detailSnapshot.thread,
+      windowed.thread,
+    ]) {
+      assert.deepEqual(thread?.documentComments, expected);
+    }
+    assert.deepEqual(yield* query.listThreadDocumentComments(threadId), expected);
+    assert.deepEqual(yield* query.listThreadDocumentComments(ThreadId.make("thread-none")), []);
+
+    const shell = yield* query.getShellSnapshot();
+    const individual = Option.getOrThrow(yield* query.getThreadShellById(threadId));
+    for (const thread of [shell.threads[0], individual]) {
+      assert.isFalse(thread !== undefined && "documentComments" in thread);
+    }
+  }).pipe(
+    Effect.provide(
+      OrchestrationProjectionSnapshotQueryLive.pipe(
+        Layer.provide(ThreadBackgroundLiveness.layer),
+        Layer.provide(ThreadPlanProgress.layer),
+        Layer.provideMerge(RepositoryIdentityResolver.layer),
+        Layer.provideMerge(SqlitePersistenceMemory),
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
+  ),
+);
 
 projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
   it.effect("lists one kind across active threads only, without hydrating the threads", () =>

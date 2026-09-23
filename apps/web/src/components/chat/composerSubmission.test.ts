@@ -5,10 +5,7 @@ import {
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ThreadId,
 } from "@t3tools/contracts";
-import {
-  expandAssistantCitationsForProvider,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
+import { expandCitationsForProvider, serializeCitation } from "@t3tools/shared/assistantCitations";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { submitComposerDraft } from "./composerSubmission";
@@ -141,12 +138,10 @@ describe("submitComposerDraft", () => {
   it.each(["draft", "composed provider input"])(
     "blocks a %s when citation expansion exceeds the shared limit",
     (source) => {
-      const citation = serializeAssistantCitation(assistantCitation);
+      const citation = serializeCitation(assistantCitation);
       const followUp = `Explain ${citation}\n\nTerminal context`;
       const providerInput = `${"x".repeat(
-        PROVIDER_SEND_TURN_MAX_INPUT_CHARS -
-          expandAssistantCitationsForProvider(followUp).length +
-          1,
+        PROVIDER_SEND_TURN_MAX_INPUT_CHARS - expandCitationsForProvider(followUp).length + 1,
       )}${followUp}`;
       const onSend = vi.fn();
       const preventDefault = vi.fn();
@@ -171,7 +166,7 @@ describe("submitComposerDraft", () => {
   );
 
   it("keeps the encoded-message limit when citation expansion is shorter", () => {
-    const citation = serializeAssistantCitation({
+    const citation = serializeCitation({
       ...assistantCitation,
       text: "é".repeat(ASSISTANT_CITATION_MAX_TEXT_LENGTH),
       end: ASSISTANT_CITATION_MAX_TEXT_LENGTH,
@@ -181,7 +176,7 @@ describe("submitComposerDraft", () => {
     )}${citation}`;
     const onSend = vi.fn();
 
-    expect(expandAssistantCitationsForProvider(draft).length).toBeLessThan(
+    expect(expandCitationsForProvider(draft).length).toBeLessThan(
       PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
     );
     const result = submitComposerDraft({
@@ -200,9 +195,9 @@ describe("submitComposerDraft", () => {
   });
 
   it("sends canonical citations when expanded input fits exactly after trimming", () => {
-    const citation = serializeAssistantCitation(assistantCitation);
+    const citation = serializeCitation(assistantCitation);
     const draft = ` ${"x".repeat(
-      PROVIDER_SEND_TURN_MAX_INPUT_CHARS - expandAssistantCitationsForProvider(citation).length,
+      PROVIDER_SEND_TURN_MAX_INPUT_CHARS - expandCitationsForProvider(citation).length,
     )}${citation} \n`;
     const dispatchedDrafts: string[] = [];
 
@@ -274,11 +269,11 @@ describe("submitComposerDraft", () => {
   });
 
   it("does not apply citation-expanded prompt limits to pending user input answers", () => {
-    const citation = serializeAssistantCitation(assistantCitation);
+    const citation = serializeCitation(assistantCitation);
     const answer = `${"x".repeat(PROVIDER_SEND_TURN_MAX_INPUT_CHARS - citation.length)}${citation}`;
     const onSend = vi.fn();
 
-    expect(expandAssistantCitationsForProvider(answer).length).toBeGreaterThan(
+    expect(expandCitationsForProvider(answer).length).toBeGreaterThan(
       PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
     );
     const result = submitComposerDraft({

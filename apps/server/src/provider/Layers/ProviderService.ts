@@ -35,7 +35,7 @@ import {
   type ProviderSession,
   type ServerSettings as ServerSettingsValue,
 } from "@t3tools/contracts";
-import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
+import { expandCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
@@ -906,7 +906,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const agentAccessCapabilities = Effect.fn("ProviderService.agentAccessCapabilities")(function* (
     threadId: ThreadId,
   ) {
-    const capabilities = new Set<McpInvocationContext.McpCapability>(["pull-requests"]);
+    const capabilities = new Set<McpInvocationContext.McpCapability>([
+      "pull-requests",
+      "document-comments",
+    ]);
     const access = yield* agentAccessSettings(threadId);
     if (access.browser) capabilities.add("preview");
     if (access.device) capabilities.add("device");
@@ -1642,7 +1645,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     }
 
     const inputTextWithCitations =
-      parsed.input === undefined ? undefined : expandAssistantCitationsForProvider(parsed.input);
+      parsed.input === undefined ? undefined : expandCitationsForProvider(parsed.input);
     if (inputTextWithCitations !== parsed.input) {
       yield* decodeInputOrValidationError({
         operation: "ProviderService.sendTurn",

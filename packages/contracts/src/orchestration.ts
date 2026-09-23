@@ -5,6 +5,10 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Struct from "effect/Struct";
 import { OrchestrationMessageContext } from "./composerContext.ts";
+import {
+  ASSISTANT_CITATION_CONTEXT_LENGTH,
+  ASSISTANT_CITATION_MAX_TEXT_LENGTH,
+} from "./assistantCitations.ts";
 import { ProviderOptionSelections } from "./model.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
@@ -778,6 +782,58 @@ export const ThreadPullRequestLink = Schema.Struct({
 });
 export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
 
+export const THREAD_DOCUMENT_COMMENT_MAX_BODY_LENGTH = 8_000;
+const THREAD_DOCUMENT_COMMENT_MAX_PATH_LENGTH = 4_096;
+
+export const ThreadDocumentCommentId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
+export type ThreadDocumentCommentId = typeof ThreadDocumentCommentId.Type;
+
+/**
+ * Where a document comment points. Lines are 1-based source lines as of when the
+ * comment was made. Like a citation, `text` with its rendered-text offsets and
+ * surrounding context finds the passage again after the file changes.
+ */
+export const ThreadDocumentCommentAnchor = Schema.Struct({
+  text: Schema.String.check(
+    Schema.isNonEmpty(),
+    Schema.isMaxLength(ASSISTANT_CITATION_MAX_TEXT_LENGTH),
+  ),
+  start: NonNegativeInt,
+  end: NonNegativeInt,
+  prefix: Schema.String.check(Schema.isMaxLength(ASSISTANT_CITATION_CONTEXT_LENGTH)),
+  suffix: Schema.String.check(Schema.isMaxLength(ASSISTANT_CITATION_CONTEXT_LENGTH)),
+  startLine: PositiveInt,
+  endLine: PositiveInt,
+});
+export type ThreadDocumentCommentAnchor = typeof ThreadDocumentCommentAnchor.Type;
+
+export const ThreadDocumentCommentStatus = Schema.Literals(["open", "resolved"]);
+export type ThreadDocumentCommentStatus = typeof ThreadDocumentCommentStatus.Type;
+
+const ThreadDocumentCommentBody = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(THREAD_DOCUMENT_COMMENT_MAX_BODY_LENGTH),
+);
+
+/**
+ * A user's margin comment on a rendered workspace file, kept per thread and
+ * never written into the file. The agent resolves it once addressed.
+ */
+export const ThreadDocumentComment = Schema.Struct({
+  id: ThreadDocumentCommentId,
+  filePath: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(THREAD_DOCUMENT_COMMENT_MAX_PATH_LENGTH),
+  ),
+  anchor: ThreadDocumentCommentAnchor,
+  body: ThreadDocumentCommentBody,
+  status: ThreadDocumentCommentStatus,
+  // The agent's note on how it addressed the comment.
+  resolution: Schema.NullOr(ThreadDocumentCommentBody),
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  resolvedAt: Schema.NullOr(IsoDateTime),
+});
+export type ThreadDocumentComment = typeof ThreadDocumentComment.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -847,6 +903,9 @@ export const OrchestrationThread = Schema.Struct({
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
+  // Detail-only: comments reach a client with the thread open, never the shell
+  // list. Optional so payloads from pre-comment servers still decode.
+  documentComments: Schema.optional(Schema.Array(ThreadDocumentComment)),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
@@ -1007,6 +1066,12 @@ export const OrchestrationSubscribeThreadInput = Schema.Struct({
   threadId: ThreadId,
   /** Opt in to reasoning roles; older clients receive system messages instead. */
   reasoningMessages: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Opt in to thread.document-comment-* events. Older clients cannot decode
+   * them, so they are withheld unless requested. Servers that predate comments
+   * ignore the key, so clients may always send it.
+   */
+  documentComments: Schema.optionalKey(Schema.Boolean),
   /**
    * When provided, the server skips the initial snapshot frame and instead
    * replays events after this sequence before streaming live events. Clients
@@ -1287,6 +1352,46 @@ const ThreadPullRequestUnlinkCommand = Schema.Struct({
   ...ThreadPullRequestKey.fields,
 });
 
+const ThreadDocumentCommentAddCommand = Schema.Struct({
+  type: Schema.Literal("thread.document-comment.add"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  filePath: ThreadDocumentComment.fields.filePath,
+  anchor: ThreadDocumentCommentAnchor,
+  body: ThreadDocumentCommentBody,
+});
+
+const ThreadDocumentCommentUpdateCommand = Schema.Struct({
+  type: Schema.Literal("thread.document-comment.update"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  body: ThreadDocumentCommentBody,
+});
+
+const ThreadDocumentCommentDeleteCommand = Schema.Struct({
+  type: Schema.Literal("thread.document-comment.delete"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+});
+
+const ThreadDocumentCommentResolveCommand = Schema.Struct({
+  type: Schema.Literal("thread.document-comment.resolve"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  resolution: Schema.NullOr(ThreadDocumentCommentBody),
+});
+
+const ThreadDocumentCommentReopenCommand = Schema.Struct({
+  type: Schema.Literal("thread.document-comment.reopen"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+});
+
 const ThreadRuntimeModeSetCommand = Schema.Struct({
   type: Schema.Literal("thread.runtime-mode.set"),
   commandId: CommandId,
@@ -1460,6 +1565,11 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
   ThreadPullRequestUnlinkCommand,
+  ThreadDocumentCommentAddCommand,
+  ThreadDocumentCommentUpdateCommand,
+  ThreadDocumentCommentDeleteCommand,
+  ThreadDocumentCommentResolveCommand,
+  ThreadDocumentCommentReopenCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ThreadTurnStartCommand,
@@ -1496,6 +1606,11 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
   ThreadPullRequestUnlinkCommand,
+  ThreadDocumentCommentAddCommand,
+  ThreadDocumentCommentUpdateCommand,
+  ThreadDocumentCommentDeleteCommand,
+  ThreadDocumentCommentResolveCommand,
+  ThreadDocumentCommentReopenCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
@@ -1798,6 +1913,11 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.pull-request-linked",
   "thread.pull-request-unlinked",
   "thread.pull-request-synced",
+  "thread.document-comment-added",
+  "thread.document-comment-updated",
+  "thread.document-comment-deleted",
+  "thread.document-comment-resolved",
+  "thread.document-comment-reopened",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
   "thread.message-sent",
@@ -2000,6 +2120,42 @@ export const ThreadPullRequestUnlinkedPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 export type ThreadPullRequestUnlinkedPayload = typeof ThreadPullRequestUnlinkedPayload.Type;
+
+export const ThreadDocumentCommentAddedPayload = Schema.Struct({
+  threadId: ThreadId,
+  comment: ThreadDocumentComment,
+});
+export type ThreadDocumentCommentAddedPayload = typeof ThreadDocumentCommentAddedPayload.Type;
+
+export const ThreadDocumentCommentUpdatedPayload = Schema.Struct({
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  body: ThreadDocumentCommentBody,
+  updatedAt: IsoDateTime,
+});
+export type ThreadDocumentCommentUpdatedPayload = typeof ThreadDocumentCommentUpdatedPayload.Type;
+
+export const ThreadDocumentCommentDeletedPayload = Schema.Struct({
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  deletedAt: IsoDateTime,
+});
+export type ThreadDocumentCommentDeletedPayload = typeof ThreadDocumentCommentDeletedPayload.Type;
+
+export const ThreadDocumentCommentResolvedPayload = Schema.Struct({
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  resolution: Schema.NullOr(ThreadDocumentCommentBody),
+  resolvedAt: IsoDateTime,
+});
+export type ThreadDocumentCommentResolvedPayload = typeof ThreadDocumentCommentResolvedPayload.Type;
+
+export const ThreadDocumentCommentReopenedPayload = Schema.Struct({
+  threadId: ThreadId,
+  commentId: ThreadDocumentCommentId,
+  reopenedAt: IsoDateTime,
+});
+export type ThreadDocumentCommentReopenedPayload = typeof ThreadDocumentCommentReopenedPayload.Type;
 
 export const ThreadPullRequestSyncedPayload = Schema.Struct({
   threadId: ThreadId,
@@ -2275,6 +2431,31 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.pull-request-synced"),
     payload: ThreadPullRequestSyncedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.document-comment-added"),
+    payload: ThreadDocumentCommentAddedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.document-comment-updated"),
+    payload: ThreadDocumentCommentUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.document-comment-deleted"),
+    payload: ThreadDocumentCommentDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.document-comment-resolved"),
+    payload: ThreadDocumentCommentResolvedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.document-comment-reopened"),
+    payload: ThreadDocumentCommentReopenedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

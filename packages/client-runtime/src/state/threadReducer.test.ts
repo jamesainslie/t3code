@@ -338,6 +338,92 @@ describe("applyThreadDetailEvent", () => {
     });
   });
 
+  describe("thread document comments", () => {
+    const comment = {
+      id: "comment-1",
+      filePath: "docs/plan.md",
+      anchor: {
+        text: "passage",
+        start: 0,
+        end: 7,
+        prefix: "",
+        suffix: "",
+        startLine: 2,
+        endLine: 2,
+      },
+      body: "Tighten this.",
+      status: "open" as const,
+      resolution: null,
+      createdAt: "2026-04-01T08:00:00.000Z",
+      updatedAt: "2026-04-01T08:00:00.000Z",
+      resolvedAt: null,
+    };
+    const eventFields = {
+      ...baseEventFields,
+      sequence: 8,
+      occurredAt: "2026-04-01T09:00:00.000Z",
+      aggregateKind: "thread" as const,
+      aggregateId: ThreadId.make("thread-1"),
+    };
+
+    it("adds to a thread from a server without comments, leaving updatedAt alone", () => {
+      const result = applyThreadDetailEvent(baseThread, {
+        ...eventFields,
+        type: "thread.document-comment-added",
+        payload: { threadId: ThreadId.make("thread-1"), comment },
+      });
+      expect(result).toEqual({
+        kind: "updated",
+        thread: { ...baseThread, documentComments: [comment] },
+      });
+    });
+
+    it("resolves, reopens, and deletes a comment", () => {
+      const withComment = { ...baseThread, documentComments: [comment] };
+      const resolved = applyThreadDetailEvent(withComment, {
+        ...eventFields,
+        type: "thread.document-comment-resolved",
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          commentId: "comment-1",
+          resolution: "Split it.",
+          resolvedAt: "2026-04-01T09:00:00.000Z",
+        },
+      });
+      expect(resolved.kind === "updated" && resolved.thread.documentComments?.[0]).toMatchObject({
+        status: "resolved",
+        resolution: "Split it.",
+      });
+
+      const deleted = applyThreadDetailEvent(withComment, {
+        ...eventFields,
+        type: "thread.document-comment-deleted",
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          commentId: "comment-1",
+          deletedAt: "2026-04-01T09:00:00.000Z",
+        },
+      });
+      expect(deleted.kind === "updated" && deleted.thread.documentComments).toEqual([]);
+    });
+
+    it("reports a no-op, such as reopening an open comment, as unchanged", () => {
+      const result = applyThreadDetailEvent(
+        { ...baseThread, documentComments: [comment] },
+        {
+          ...eventFields,
+          type: "thread.document-comment-reopened",
+          payload: {
+            threadId: ThreadId.make("thread-1"),
+            commentId: "comment-1",
+            reopenedAt: "2026-04-01T09:00:00.000Z",
+          },
+        },
+      );
+      expect(result.kind).toBe("unchanged");
+    });
+  });
+
   describe("thread.meta-updated", () => {
     it.each(["f", null] as const)(
       "updates the active key to %s without activity",

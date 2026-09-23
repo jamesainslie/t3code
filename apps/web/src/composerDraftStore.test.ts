@@ -19,10 +19,7 @@ import {
   type ProviderOptionSelection,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import {
-  collectAssistantCitations,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
+import { collectCitations, serializeCitation } from "@t3tools/shared/assistantCitations";
 
 // The composer draft's `modelSelectionByProvider` and
 // `stickyModelSelectionByProvider` maps are keyed by `ProviderInstanceId`
@@ -218,20 +215,16 @@ describe("composerDraftStore assistant citations", () => {
         prefix: "Before. ",
         suffix: " After.",
       };
-      const prompt = `Explain ${serializeAssistantCitation(citation)} further.`;
+      const prompt = `Explain ${serializeCitation(citation)} further.`;
       useComposerDraftStore.getState().setPrompt(threadRef, prompt);
       await vi.advanceTimersByTimeAsync(300);
       resetComposerDraftStore();
       await useComposerDraftStore.persist.rehydrate();
       const restored = draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt ?? "";
       expect(restored).toBe(prompt);
-      expect(collectAssistantCitations(restored).map((entry) => entry.citation)).toEqual([
-        citation,
-      ]);
+      expect(collectCitations(restored).map((entry) => entry.citation)).toEqual([citation]);
       useComposerDraftStore.getState().clearComposerContent(threadRef);
-      expect(
-        collectAssistantCitations(draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt ?? ""),
-      ).toEqual([]);
+      expect(collectCitations(draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt ?? "")).toEqual([]);
     } finally {
       await useComposerDraftStore.persist.clearStorage();
       vi.useRealTimers();

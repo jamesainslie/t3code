@@ -1,5 +1,5 @@
 import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
-import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
+import { serializeCitation } from "@t3tools/shared/assistantCitations";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -100,13 +100,13 @@ describe("splitPromptIntoComposerSegments", () => {
   });
 
   it("keeps multiple assistant citations atomic next to punctuation and Unicode", () => {
-    const source = serializeAssistantCitation(citation);
+    const source = serializeCitation(citation);
     const otherCitation = {
       ...citation,
       messageId: MessageId.make("message-2"),
       text: "A second quote",
     };
-    const otherSource = serializeAssistantCitation(otherCitation);
+    const otherSource = serializeCitation(otherCitation);
 
     expect(splitPromptIntoComposerSegments(`前(${source}),${otherSource}後`)).toEqual([
       { type: "text", text: "前(" },
@@ -118,7 +118,7 @@ describe("splitPromptIntoComposerSegments", () => {
   });
 
   it("preserves exact citation source encoding for adjacent chips at the end of a prompt", () => {
-    const source = serializeAssistantCitation(citation).replaceAll("+", "%20");
+    const source = serializeCitation(citation).replaceAll("+", "%20");
 
     expect(splitPromptIntoComposerSegments(`${source}${source}`)).toEqual([
       { type: "citation", citation, source },
@@ -129,7 +129,7 @@ describe("splitPromptIntoComposerSegments", () => {
   it.each(["@", "@AGENTS.md"])(
     "keeps a citation after the unfinished mention %s intact",
     (prefix) => {
-      const source = serializeAssistantCitation(citation);
+      const source = serializeCitation(citation);
 
       expect(splitPromptIntoComposerSegments(`${prefix}${source}`)).toEqual([
         { type: "text", text: prefix },
@@ -139,7 +139,7 @@ describe("splitPromptIntoComposerSegments", () => {
   );
 
   it("parses citations alongside file mentions, skills, and context references", () => {
-    const source = serializeAssistantCitation(citation);
+    const source = serializeCitation(citation);
     const reference = formatTerminalContextReference({
       id: "ctx-1",
       terminalLabel: "Terminal 1",
@@ -293,7 +293,7 @@ describe("splitPromptIntoComposerSegments", () => {
 
 describe("selectionTouchesMentionBoundary", () => {
   it("does not treat text before a citation as an overlapping file mention", () => {
-    const prompt = `before @${serializeAssistantCitation(citation)}`;
+    const prompt = `before @${serializeCitation(citation)}`;
 
     expect(selectionTouchesMentionBoundary(prompt, "before".length, "before ".length)).toBe(false);
   });

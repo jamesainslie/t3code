@@ -558,6 +558,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   ::highlight(t3-assistant-citation-comment) {
     background-color: color-mix(in oklab, var(--primary) 45%, transparent);
   }
+  /* Passages with open margin comments; the one being read is stronger. */
+  ::highlight(t3-document-comment) {
+    background-color: color-mix(in oklab, var(--warning) 22%, transparent);
+  }
+  ::highlight(t3-document-comment-active) {
+    background-color: color-mix(in oklab, var(--warning) 45%, transparent);
+  }
   :root {
     /* Keep the original T3 Code artwork palettes as the defaults. Built-in
        themes override them with their own pigments in the components layer. */
@@ -1978,6 +1985,90 @@ code {
 .chat-markdown .chat-markdown-table-container[data-expanded="true"] td {
   max-width: 24rem;
   overflow-wrap: anywhere;
+}
+
+/* KaTeX lays formulas out itself; the root's break-anywhere rules would split them. */
+.chat-markdown .katex {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.chat-markdown .chat-markdown-math {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+
+.chat-markdown .chat-markdown-math .katex-display {
+  margin: 0;
+}
+
+/* A markdown file read as a document rather than a message: a heading scale
+   that reads at a glance, GitHub's rules under the top two levels, and more
+   room between blocks. Sizes are em so they follow the panel font size. */
+.chat-markdown-document {
+  line-height: 1.7;
+}
+
+.chat-markdown-document p,
+.chat-markdown-document ul,
+.chat-markdown-document ol,
+.chat-markdown-document blockquote,
+.chat-markdown-document pre,
+.chat-markdown-document .chat-markdown-table-container {
+  margin: 0.9em 0;
+}
+
+.chat-markdown-document :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.8em 0 0.7em;
+  line-height: 1.25;
+  scroll-margin-top: 1rem;
+}
+
+.chat-markdown-document h1 {
+  border-bottom: 1px solid var(--contrast-border);
+  padding-bottom: 0.3em;
+  font-size: 1.85em;
+  letter-spacing: -0.015em;
+}
+
+.chat-markdown-document h2 {
+  border-bottom: 1px solid color-mix(in srgb, var(--contrast-border) 70%, transparent);
+  padding-bottom: 0.3em;
+  font-size: 1.45em;
+  letter-spacing: -0.01em;
+}
+
+.chat-markdown-document h3 {
+  font-size: 1.2em;
+}
+
+.chat-markdown-document h4 {
+  font-size: 1.05em;
+}
+
+.chat-markdown-document h5,
+.chat-markdown-document h6 {
+  font-size: 0.95em;
+}
+
+.chat-markdown-document hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--contrast-border);
+}
+
+.chat-markdown-document li + li {
+  margin-top: 0.35em;
+}
+
+.chat-markdown-document :not(pre) > code {
+  font-size: 0.85em;
+}
+
+.chat-markdown-document table {
+  font-size: 0.9em;
 }
 
 /* Prompt-stash save acknowledgement: the new count fades up from just below

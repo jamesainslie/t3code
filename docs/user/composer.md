@@ -83,8 +83,27 @@ delete it like other inline context. Copying, reloading, and restoring a
 with its quote, and sending tells the agent which words were quoted and which comment you wrote.
 The quoted text and comment count toward the message limit.
 
+You can quote a Markdown file the same way. In the file panel's rendered view, select a
+passage and choose **Cite**, or right-click the selection and choose **Cite in chat**. The
+agent receives the file path and line range with the quote, and selecting the chip opens
+the file at those lines.
+
 Mobile displays saved quotes and comments, but does not create citations or
 navigate to their sources.
+
+## Comment on a document
+
+On web and desktop, you can mark up a Markdown file before handing it to the agent. In the file
+panel's rendered view, select a passage and choose **Comment**, or right-click it and choose
+**Add comment**. Comments appear beside the passage in the margin, or as numbered markers when
+the panel is narrow; select one to read, edit, resolve, or delete it.
+
+Comments belong to the thread and stay until you delete them. Nothing is sent while you mark up.
+When you are done, choose **Add comments to chat** in the file header to place every open
+comment in the composer, then send it with any instructions. The agent resolves each comment as
+it addresses it and leaves a short note on what changed; **Show resolved comments** brings those
+back, and **Reopen** returns one to the open list. If an edit removes a commented passage, its
+comment moves to the top of the margin with the original quote.
 
 ## Recall a sent prompt
 
@@ -194,7 +213,10 @@ files show the copy that was attached to the message.
 ## Attached files
 
 Select a file chip in your draft or a sent message to preview it. Code and JSON use syntax
-highlighting; Markdown, HTML, CSV, and TSV offer rendered and raw views. Audio files have
+highlighting; Markdown, HTML, CSV, and TSV offer rendered and raw views. On web and desktop,
+rendered Markdown typesets TeX math written as `$…$`, `$$…$$`, or a `math` code block, draws
+Mermaid diagrams, and highlights inline code that ends in a language marker, such as
+`` `const x = 1{:ts}` ``. Audio files have
 playback controls. Large text files show a limited preview; save the file to read it in full.
 
 On web and desktop, files open beside the conversation with the same controls as a workspace

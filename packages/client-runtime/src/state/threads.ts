@@ -834,6 +834,8 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
           ...(canResume ? { afterSequence: sequence } : {}),
           ...(supportsCompletionMarker ? { requestCompletionMarker: true as const } : {}),
           ...(supportsReasoningMessages ? { reasoningMessages: true as const } : {}),
+          // Pre-comment servers ignore the key, so this needs no capability gate.
+          documentComments: true,
           // The WS fallback snapshot (sent when afterSequence is missing or
           // the gap is too large) should be windowed the same as the HTTP
           // path; without this a resume failure re-downloads the full thread.

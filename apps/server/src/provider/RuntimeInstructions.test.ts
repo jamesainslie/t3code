@@ -10,6 +10,13 @@ describe("buildRuntimeInstructions", () => {
     expect(instructions).toContain("call list_thread_pull_requests and link any PR");
   });
 
+  it("tells the agent to address and resolve the user's document comments", () => {
+    const instructions = buildRuntimeInstructions({ harness: "Codex" });
+    expect(instructions).toContain("review comments whose section reads `Document comment <id>`");
+    expect(instructions).toContain("call resolve_document_comment with that id");
+    expect(instructions).toContain("list_document_comments shows the open ones");
+  });
+
   it("keeps known model and effort metadata on one line", () => {
     expect(
       buildRuntimeInstructions({

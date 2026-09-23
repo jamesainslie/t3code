@@ -8,6 +8,7 @@ import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
+import { loadKatex } from "./chat/MarkdownMath";
 
 vi.mock("@t3tools/client-runtime/mermaid-renderer", () => ({
   renderMermaid: vi.fn(
@@ -786,6 +787,77 @@ describe("ChatMarkdown heading levels", () => {
     const html = renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text="# Top" />);
 
     expect(html).toContain("<h1>Top</h1>");
+  });
+});
+
+describe("ChatMarkdown documents", () => {
+  async function renderDocument(text: string, asDocument = true) {
+    await loadKatex();
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let renderer: ReactTestRenderer | undefined;
+    await act(async () => {
+      renderer = create(<ChatMarkdown cwd="/tmp/project" text={text} asDocument={asDocument} />);
+    });
+    const json = JSON.stringify(renderer!.toJSON());
+    await act(async () => renderer?.unmount());
+    vi.unstubAllGlobals();
+    return json;
+  }
+
+  it("typesets inline and display TeX", async () => {
+    const json = await renderDocument(
+      "Energy is $E = mc^2$ here.\n\n$$\n\\int_0^1 x\\,dx\n$$\n\n```math\n\\sqrt{2}\n```",
+    );
+
+    expect(json.match(/class=\\"katex\\"/g)?.length).toBe(3);
+    expect(json.match(/katex-display/g)?.length).toBe(2);
+    expect(json).toContain("Energy is ");
+  });
+
+  it("shows invalid TeX instead of dropping it", async () => {
+    const json = await renderDocument("$\\frac{1}{$");
+
+    expect(json).toContain("katex-error");
+  });
+
+  it("leaves dollar signs alone in chat", async () => {
+    const json = await renderDocument("It costs $5 and $10 today.", false);
+
+    expect(json).toContain("It costs $5 and $10 today.");
+    expect(json).not.toContain("katex");
+  });
+
+  it("anchors headings so the document's own links resolve", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown
+        cwd="/tmp/project"
+        text={"- [Phase 1](#phase-1-foundation)\n\n## Phase 1: Foundation"}
+        asDocument
+      />,
+    );
+
+    expect(html).toContain('href="#phase-1-foundation"');
+    expect(html).toContain('id="user-content-phase-1-foundation"');
+  });
+
+  it("marks blocks with their source lines, including drawn code blocks", () => {
+    const text = "Intro line\n\n```ts\nconst a = 1;\n```\n\n$$\nx^2\n$$";
+    const html = renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text={text} asDocument />);
+
+    expect(html).toContain('<p data-source-start="1" data-source-end="1">Intro line</p>');
+    expect(html).toMatch(/data-source-start="3" data-source-end="5"/);
+    expect(html).toMatch(/data-source-start="7" data-source-end="9"/);
+    expect(renderToStaticMarkup(<ChatMarkdown cwd="/tmp/project" text={text} />)).not.toContain(
+      "data-source-start",
+    );
+  });
+
+  it("highlights inline code that names its language", async () => {
+    const json = await renderDocument("Call `const answer = 42{:ts}` first.");
+
+    expect(json).toContain("chat-markdown-inline-shiki");
+    expect(json).toContain("answer");
+    expect(json).not.toContain("{:ts}");
   });
 });
 

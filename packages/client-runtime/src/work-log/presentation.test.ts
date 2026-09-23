@@ -234,6 +234,18 @@ describe("resolveWorkEntryToolPresentation", () => {
     });
   });
 
+  it("labels document comment tools", () => {
+    expect(
+      resolveWorkEntryToolPresentation({
+        label: "mcp__t3-code__resolve_document_comment",
+        toolLifecycleStatus: "completed",
+      }),
+    ).toEqual({ displayName: "Resolved a document comment", icon: "t3-code" });
+    expect(resolveWorkEntryToolPresentation({ label: "t3-code · list_document_comments" })).toEqual(
+      { displayName: "Listing document comments", icon: "t3-code" },
+    );
+  });
+
   it("uses structured MCP identity when the provider supplies a custom title", () => {
     expect(
       resolveWorkEntryToolPresentation({

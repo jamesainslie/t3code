@@ -24,7 +24,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
+import { serializeCitation } from "@t3tools/shared/assistantCitations";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -1914,7 +1914,7 @@ describe("ProviderCommandReactor", () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
     const quoteText = "界".repeat(1_000);
-    const citation = serializeAssistantCitation({
+    const citation = serializeCitation({
       ...assistantCitation,
       text: quoteText,
       end: quoteText.length,
@@ -2543,7 +2543,7 @@ describe("ProviderCommandReactor", () => {
     const now = "2026-01-01T00:00:00.000Z";
     const seededTitle = "Fix reconnect spinner on resume";
     const harness = await createHarness({ initialTitle: seededTitle });
-    const prompt = `[effort:high]\\n\\nFix reconnect spinner on resume ${serializeAssistantCitation(assistantCitation)}`;
+    const prompt = `[effort:high]\\n\\nFix reconnect spinner on resume ${serializeCitation(assistantCitation)}`;
     harness.generateThreadTitle.mockReturnValue(
       Effect.succeed({
         title: "Reconnect spinner resume bug",
@@ -2600,7 +2600,7 @@ describe("ProviderCommandReactor", () => {
   it("generates a worktree branch name for the first turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
-    const prompt = `Add a safer reconnect backoff. ${serializeAssistantCitation(assistantCitation)}`;
+    const prompt = `Add a safer reconnect backoff. ${serializeCitation(assistantCitation)}`;
     const statusRefreshed = await harness.runEffect(Deferred.make<void>());
     const refreshStatus = harness.refreshStatus.getMockImplementation()!;
     harness.refreshStatus.mockImplementation((cwd) =>

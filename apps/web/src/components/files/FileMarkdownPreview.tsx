@@ -4,6 +4,7 @@ import ChatMarkdown from "~/components/ChatMarkdown";
 import { resolvePathLinkTarget } from "~/terminal-links";
 
 export function FileMarkdownPreview(props: {
+  readonly sourceRef?: ((element: HTMLDivElement | null) => void) | undefined;
   readonly cwd: string;
   readonly relativePath: string;
   readonly text: string;
@@ -21,14 +22,23 @@ export function FileMarkdownPreview(props: {
       ? resolvePathLinkTarget(props.relativePath.slice(0, lastSeparator), props.cwd)
       : props.cwd;
 
+  // The citation source attributes let a selection here become a document quote.
   return (
-    <ChatMarkdown
-      text={props.text}
-      cwd={props.cwd}
-      imageBaseDir={imageBaseDir}
-      threadRef={props.threadRef}
-      className="mx-auto max-w-4xl px-6 py-5"
-      onTaskListChange={props.onTaskListChange}
-    />
+    <div
+      ref={props.sourceRef}
+      data-document-citation-source={props.relativePath}
+      data-document-citation-environment={props.threadRef.environmentId}
+      data-document-citation-thread={props.threadRef.threadId}
+    >
+      <ChatMarkdown
+        text={props.text}
+        cwd={props.cwd}
+        imageBaseDir={imageBaseDir}
+        threadRef={props.threadRef}
+        asDocument
+        className="chat-markdown-document mx-auto max-w-4xl px-8 py-7"
+        onTaskListChange={props.onTaskListChange}
+      />
+    </div>
   );
 }

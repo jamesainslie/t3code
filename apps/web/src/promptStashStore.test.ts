@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import {
-  collectAssistantCitations,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
+import { collectCitations, serializeCitation } from "@t3tools/shared/assistantCitations";
 
 import { removeLocalStorageItem } from "./hooks/useLocalStorage";
 
@@ -120,7 +117,7 @@ describe("promptStashStore", () => {
       prefix: "",
       suffix: " Next.",
     };
-    const prompt = `Revisit ${serializeAssistantCitation(citation)}`;
+    const prompt = `Revisit ${serializeCitation(citation)}`;
     writePromptStashStorageForTest(
       JSON.stringify({
         version: 2,
@@ -129,9 +126,9 @@ describe("promptStashStore", () => {
     );
     const restored = usePromptStashStore.getState().takeEntry("citation-stash").entry;
     expect(restored?.prompt).toBe(prompt);
-    expect(
-      collectAssistantCitations(restored?.prompt ?? "").map((entry) => entry.citation),
-    ).toEqual([citation]);
+    expect(collectCitations(restored?.prompt ?? "").map((entry) => entry.citation)).toEqual([
+      citation,
+    ]);
     expect(usePromptStashStore.getState().takeEntry("citation-stash").entry).toBeNull();
   });
 

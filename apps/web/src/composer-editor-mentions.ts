@@ -1,5 +1,5 @@
-import type { AssistantCitation } from "@t3tools/contracts";
-import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
+import type { Citation } from "@t3tools/contracts";
+import { collectCitations } from "@t3tools/shared/assistantCitations";
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import {
   collectComposerInlineTokens,
@@ -23,7 +23,7 @@ export type ComposerPromptSegment =
     }
   | {
       type: "citation";
-      citation: AssistantCitation;
+      citation: Citation;
       source: string;
     }
   | {
@@ -77,7 +77,7 @@ function forEachMentionMatch(
 
 export function collectComposerPromptInlineTokens(text: string) {
   const tokens = collectComposerInlineTokens(text);
-  const citations = collectAssistantCitations(text);
+  const citations = collectCitations(text);
   const references = collectComposerContextReferences(text);
   if (citations.length === 0 && references.length === 0) return tokens;
 

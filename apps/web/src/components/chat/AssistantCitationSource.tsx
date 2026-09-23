@@ -1,5 +1,5 @@
 import type { LegendListRef } from "@legendapp/list/react";
-import type { AssistantCitation, MessageId, ScopedThreadRef } from "@t3tools/contracts";
+import type { AssistantCitation, Citation, MessageId, ScopedThreadRef } from "@t3tools/contracts";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   resolveAssistantCitationRange,
@@ -25,7 +25,7 @@ export function observeAssistantCitationCommentSource({
   onUnavailable,
 }: {
   anchor: AssistantCitationSourceAnchor;
-  citation: AssistantCitation;
+  citation: Citation;
   onUnavailable: () => void;
 }): () => void {
   const { source, range, viewport } = anchor;

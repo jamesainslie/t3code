@@ -982,6 +982,194 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
   },
 );
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-document-comments-")))(
+  "OrchestrationProjectionPipeline document comments",
+  (it) => {
+    it.effect("projects comment add, edit, resolve, reopen, delete and thread delete", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const threadId = ThreadId.make("thread-comments");
+        const t0 = "2026-01-01T00:00:00.000Z";
+        let counter = 0;
+        const base = (occurredAt: string) => {
+          counter += 1;
+          return {
+            eventId: EventId.make(`evt-comment-${counter}`),
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            occurredAt,
+            commandId: CommandId.make(`cmd-comment-${counter}`),
+            causationEventId: null,
+            correlationId: CommandId.make(`cmd-comment-${counter}`),
+            metadata: {},
+          } as const;
+        };
+        const readComments = () =>
+          sql<{
+            readonly commentId: string;
+            readonly filePath: string;
+            readonly anchorJson: string;
+            readonly body: string;
+            readonly status: string;
+            readonly resolution: string | null;
+            readonly updatedAt: string;
+            readonly resolvedAt: string | null;
+          }>`
+            SELECT
+              comment_id AS "commentId",
+              file_path AS "filePath",
+              anchor_json AS "anchorJson",
+              body,
+              status,
+              resolution,
+              updated_at AS "updatedAt",
+              resolved_at AS "resolvedAt"
+            FROM projection_thread_document_comments
+            WHERE thread_id = ${threadId}
+            ORDER BY created_at ASC, comment_id ASC
+          `;
+        const readThreadUpdatedAt = () =>
+          sql<{ readonly updatedAt: string }>`
+            SELECT updated_at AS "updatedAt" FROM projection_threads WHERE thread_id = ${threadId}
+          `;
+        const anchor = {
+          text: "passage",
+          start: 4,
+          end: 11,
+          prefix: "the ",
+          suffix: " here",
+          startLine: 3,
+          endLine: 3,
+        };
+        const comment = (id: string, createdAt: string) => ({
+          id,
+          filePath: "docs/plan.md",
+          anchor,
+          body: `Body ${id}`,
+          status: "open" as const,
+          resolution: null,
+          createdAt,
+          updatedAt: createdAt,
+          resolvedAt: null,
+        });
+
+        yield* eventStore.append({
+          ...base(t0),
+          type: "thread.created",
+          payload: {
+            threadId,
+            projectId: ProjectId.make("project-comments"),
+            title: "Thread comments",
+            modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt: t0,
+            updatedAt: t0,
+          },
+        });
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:01.000Z"),
+          type: "thread.document-comment-added",
+          payload: { threadId, comment: comment("comment-a", "2026-01-01T00:00:01.000Z") },
+        });
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:02.000Z"),
+          type: "thread.document-comment-added",
+          payload: { threadId, comment: comment("comment-b", "2026-01-01T00:00:02.000Z") },
+        });
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:03.000Z"),
+          type: "thread.document-comment-updated",
+          payload: {
+            threadId,
+            commentId: "comment-a",
+            body: "Edited",
+            updatedAt: "2026-01-01T00:00:03.000Z",
+          },
+        });
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:04.000Z"),
+          type: "thread.document-comment-resolved",
+          payload: {
+            threadId,
+            commentId: "comment-b",
+            resolution: "Reworded it.",
+            resolvedAt: "2026-01-01T00:00:04.000Z",
+          },
+        });
+        // A repeated resolve keeps the first note.
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:05.000Z"),
+          type: "thread.document-comment-resolved",
+          payload: {
+            threadId,
+            commentId: "comment-b",
+            resolution: null,
+            resolvedAt: "2026-01-01T00:00:05.000Z",
+          },
+        });
+        yield* projectionPipeline.bootstrap;
+
+        const projected = yield* readComments();
+        assert.deepEqual(
+          projected.map(({ anchorJson: _anchorJson, ...row }) => row),
+          [
+            {
+              commentId: "comment-a",
+              filePath: "docs/plan.md",
+              body: "Edited",
+              status: "open",
+              resolution: null,
+              updatedAt: "2026-01-01T00:00:03.000Z",
+              resolvedAt: null,
+            },
+            {
+              commentId: "comment-b",
+              filePath: "docs/plan.md",
+              body: "Body comment-b",
+              status: "resolved",
+              resolution: "Reworded it.",
+              updatedAt: "2026-01-01T00:00:04.000Z",
+              resolvedAt: "2026-01-01T00:00:04.000Z",
+            },
+          ],
+        );
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        assert.deepEqual(JSON.parse(projected[0]?.anchorJson ?? "null"), anchor);
+        // Comments are detail-only and never bump the thread row.
+        assert.deepEqual(yield* readThreadUpdatedAt(), [{ updatedAt: t0 }]);
+
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:06.000Z"),
+          type: "thread.document-comment-reopened",
+          payload: { threadId, commentId: "comment-b", reopenedAt: "2026-01-01T00:00:06.000Z" },
+        });
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:07.000Z"),
+          type: "thread.document-comment-deleted",
+          payload: { threadId, commentId: "comment-a", deletedAt: "2026-01-01T00:00:07.000Z" },
+        });
+        yield* projectionPipeline.bootstrap;
+        assert.deepEqual(
+          (yield* readComments()).map((row) => [row.commentId, row.status, row.resolution]),
+          [["comment-b", "open", null]],
+        );
+
+        yield* eventStore.append({
+          ...base("2026-01-01T00:00:08.000Z"),
+          type: "thread.deleted",
+          payload: { threadId, deletedAt: "2026-01-01T00:00:08.000Z" },
+        });
+        yield* projectionPipeline.bootstrap;
+        assert.deepEqual(yield* readComments(), []);
+      }),
+    );
+  },
+);
+
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-safe-")))(
   "OrchestrationProjectionPipeline",
   (it) => {

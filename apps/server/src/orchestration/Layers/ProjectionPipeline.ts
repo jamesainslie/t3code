@@ -11,6 +11,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
+import { applyThreadDocumentCommentEvent } from "@t3tools/shared/threadDocumentComments";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -40,6 +41,7 @@ import {
   ProjectionThreadProposedPlanRepository,
 } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import * as ProjectionThreadPullRequests from "../../persistence/ProjectionThreadPullRequests.ts";
+import * as ProjectionThreadDocumentComments from "../../persistence/ProjectionThreadDocumentComments.ts";
 import { ProjectionThreadSessionRepository } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import {
   type ProjectionTurn,
@@ -490,6 +492,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadProposedPlanRepository = yield* ProjectionThreadProposedPlanRepository;
     const projectionThreadPullRequestRepository =
       yield* ProjectionThreadPullRequests.ProjectionThreadPullRequestRepository;
+    const projectionThreadDocumentCommentRepository =
+      yield* ProjectionThreadDocumentComments.ProjectionThreadDocumentCommentRepository;
     const projectionThreadActivityRepository = yield* ProjectionThreadActivityRepository;
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
@@ -1020,6 +1024,49 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        // Comments are detail-only: they never touch the thread row, so the
+        // shell stream and sidebar order stay put.
+        case "thread.document-comment-added": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadDocumentCommentRepository.upsert({
+            threadId: event.payload.threadId,
+            ...event.payload.comment,
+          });
+          return;
+        }
+
+        case "thread.document-comment-deleted": {
+          yield* projectionThreadDocumentCommentRepository.delete({
+            threadId: event.payload.threadId,
+            commentId: event.payload.commentId,
+          });
+          return;
+        }
+
+        case "thread.document-comment-updated":
+        case "thread.document-comment-resolved":
+        case "thread.document-comment-reopened": {
+          const existingComment = yield* projectionThreadDocumentCommentRepository.getById({
+            threadId: event.payload.threadId,
+            commentId: event.payload.commentId,
+          });
+          if (Option.isNone(existingComment)) {
+            return;
+          }
+          const { threadId, ...comment } = existingComment.value;
+          const [next] = applyThreadDocumentCommentEvent([comment], event);
+          if (next === undefined || next === comment) {
+            return;
+          }
+          yield* projectionThreadDocumentCommentRepository.upsert({ threadId, ...next });
+          return;
+        }
+
         case "thread.runtime-mode-set": {
           const existingRow = yield* projectionThreadRepository.getById({
             threadId: event.payload.threadId,
@@ -1065,6 +1112,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           }
           // A tombstoned thread must not show up as linked to a pull request.
           yield* projectionThreadPullRequestRepository.deleteByThreadId({
+            threadId: event.payload.threadId,
+          });
+          yield* projectionThreadDocumentCommentRepository.deleteByThreadId({
             threadId: event.payload.threadId,
           });
           const existingRow = yield* projectionThreadRepository.getById({
@@ -2286,6 +2336,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),
   Layer.provideMerge(ProjectionThreadPullRequests.layer),
+  Layer.provideMerge(ProjectionThreadDocumentComments.layer),
   Layer.provideMerge(ProjectionThreadActivityRepositoryLive),
   Layer.provideMerge(ProjectionThreadSessionRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),
