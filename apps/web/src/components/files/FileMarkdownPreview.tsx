@@ -4,6 +4,7 @@ import ChatMarkdown from "~/components/ChatMarkdown";
 import { resolvePathLinkTarget } from "~/terminal-links";
 
 export function FileMarkdownPreview(props: {
+  readonly sourceRef?: ((element: HTMLDivElement | null) => void) | undefined;
   readonly cwd: string;
   readonly relativePath: string;
   readonly text: string;
@@ -24,6 +25,7 @@ export function FileMarkdownPreview(props: {
   // The citation source attributes let a selection here become a document quote.
   return (
     <div
+      ref={props.sourceRef}
       data-document-citation-source={props.relativePath}
       data-document-citation-environment={props.threadRef.environmentId}
       data-document-citation-thread={props.threadRef.threadId}

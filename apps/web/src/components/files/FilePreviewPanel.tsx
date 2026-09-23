@@ -7,6 +7,7 @@ import type {
   EnvironmentId,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
+  ThreadDocumentComment,
 } from "@t3tools/contracts";
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
 import {
@@ -23,7 +24,16 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { Code2, Eye, FolderTree, Globe2, Table2, WrapTextIcon } from "lucide-react";
+import {
+  Code2,
+  Eye,
+  FolderTree,
+  Globe2,
+  ListChecksIcon,
+  MessageSquareShareIcon,
+  Table2,
+  WrapTextIcon,
+} from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -39,7 +49,7 @@ import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hoo
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -65,6 +75,10 @@ import {
   type AssistantCitationSourceAnchor,
 } from "~/lib/assistantTextSelection";
 import { sourceLinesBetween, sourceLineSpanAt } from "~/markdown-document";
+import { useServerConfigs, useThreadDetail } from "~/state/entities";
+import { DocumentCommentsMargin, type DocumentCommentDraft } from "./DocumentCommentsMargin";
+import { documentCommentReviewContext, documentCommentsForFile } from "./documentComments.logic";
+import { useDocumentCommentActions } from "./useDocumentCommentActions";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -123,6 +137,8 @@ const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
 const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
+// Below this width the comment rail would squeeze the document, so comments collapse to markers.
+const DOCUMENT_COMMENT_RAIL_MIN_WIDTH = 880;
 type FilePostRender = NonNullable<FileOptions<unknown>["onPostRender"]>;
 
 function WorkspaceImagePreview(props: {
@@ -855,6 +871,7 @@ function RenderedMarkdownSurface({
   readOnly,
   onPendingChange,
   onCiteText,
+  comments,
 }: Omit<
   EditableFileSurfaceProps,
   | "resolvedTheme"
@@ -867,6 +884,8 @@ function RenderedMarkdownSurface({
   threadRef: ScopedThreadRef;
   readOnly: boolean;
   onCiteText: FilePreviewPanelProps["onCiteText"];
+  /** This file's margin comments, or null where the server cannot store them. */
+  comments: ReadonlyArray<ThreadDocumentComment> | null;
 }) {
   const saveCoordinator = useFileSaveCoordinator({
     environmentId,
@@ -875,6 +894,31 @@ function RenderedMarkdownSurface({
     onPendingChange,
   });
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const [source, setSource] = useState<HTMLDivElement | null>(null);
+  const [draft, setDraft] = useState<DocumentCommentDraft | null>(null);
+  const [wide, setWide] = useState(false);
+  const commentActions = useDocumentCommentActions(threadRef, relativePath);
+  useEffect(() => {
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWide(entry.contentRect.width >= DOCUMENT_COMMENT_RAIL_MIN_WIDTH);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [container]);
+  const beginComment = useCallback(
+    (citation: Citation, sourceAnchor: AssistantCitationSourceAnchor) => {
+      if (!("kind" in citation)) return;
+      const { text, start, end, prefix, suffix, startLine, endLine } = citation;
+      setDraft({
+        id: randomUUID(),
+        anchor: { text, start, end, prefix, suffix, startLine, endLine },
+        range: sourceAnchor.range.cloneRange(),
+      });
+    },
+    [],
+  );
   const documentCitationFromSelection = useCallback(
     ({ range, selector }: CapturedSelection): DocumentCitation | null => {
       const lines = sourceLinesBetween(
@@ -903,28 +947,50 @@ function RenderedMarkdownSurface({
           sourceSelector={DOCUMENT_CITATION_SOURCE_SELECTOR}
           toCitation={documentCitationFromSelection}
           onCite={onCiteText}
+          onComment={comments ? beginComment : undefined}
           contextMenu
         />
       ) : null}
-      <FileMarkdownPreview
-        text={contents}
-        cwd={cwd}
-        relativePath={relativePath}
-        threadRef={threadRef}
-        onTaskListChange={
-          readOnly
-            ? undefined
-            : ({ markerOffset, checked }) => {
-                const currentContents =
-                  getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)?.contents ??
-                  contents;
-                const nextContents = setMarkdownTaskChecked(currentContents, markerOffset, checked);
-                if (nextContents === currentContents) return;
-                setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
-                saveCoordinator.change(nextContents);
-              }
-        }
-      />
+      <div ref={setContainer} className="relative flex min-h-full">
+        <div className="min-w-0 flex-1">
+          <FileMarkdownPreview
+            sourceRef={setSource}
+            text={contents}
+            cwd={cwd}
+            relativePath={relativePath}
+            threadRef={threadRef}
+            onTaskListChange={
+              readOnly
+                ? undefined
+                : ({ markerOffset, checked }) => {
+                    const currentContents =
+                      getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)
+                        ?.contents ?? contents;
+                    const nextContents = setMarkdownTaskChecked(
+                      currentContents,
+                      markerOffset,
+                      checked,
+                    );
+                    if (nextContents === currentContents) return;
+                    setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
+                    saveCoordinator.change(nextContents);
+                  }
+            }
+          />
+        </div>
+        {comments && (comments.length > 0 || draft) ? (
+          <DocumentCommentsMargin
+            container={container}
+            source={source}
+            contents={contents}
+            comments={comments}
+            draft={draft}
+            wide={wide}
+            actions={commentActions}
+            onDraftDone={() => setDraft(null)}
+          />
+        ) : null}
+      </div>
     </ScrollArea>
   );
 }
@@ -1046,6 +1112,37 @@ export default function FilePreviewPanel({
   const canToggleRendered =
     previewPath !== null && attachment === undefined && renderedMode !== null;
   const updateClientSettings = useUpdateClientSettings();
+  // Margin comments live on workspace files in a thread whose server stores them.
+  const commentsSupported =
+    useServerConfigs().get(environmentId)?.environment.capabilities.threadDocumentComments ===
+      true &&
+    attachment === undefined &&
+    !isHostFile &&
+    isMarkdown;
+  const threadDetail = useThreadDetail(commentsSupported ? threadRef : null);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
+  const allFileComments = useMemo(
+    () =>
+      commentsSupported && previewPath
+        ? documentCommentsForFile(threadDetail?.documentComments ?? [], previewPath, true)
+        : [],
+    [commentsSupported, previewPath, threadDetail?.documentComments],
+  );
+  const visibleFileComments = useMemo(
+    () =>
+      showResolvedComments
+        ? allFileComments
+        : allFileComments.filter((comment) => comment.status === "open"),
+    [allFileComments, showResolvedComments],
+  );
+  const openFileComments = allFileComments.filter((comment) => comment.status === "open");
+  const hasResolvedComments = openFileComments.length < allFileComments.length;
+  const addCommentsToChat = () => {
+    for (const comment of openFileComments) {
+      addReviewComment(composerDraftTarget, documentCommentReviewContext(comment));
+    }
+  };
   // Word wrap only reaches the text bodies. A rendered Markdown document, a table and the
   // browser frame all lay themselves out, so the toggle stays hidden rather than inert.
   const showsRawText =
@@ -1183,6 +1280,25 @@ export default function FilePreviewPanel({
               )}
             </FileSurfaceAction>
           ) : null}
+          {renderMarkdown && hasResolvedComments ? (
+            <FileSurfaceAction
+              label={showResolvedComments ? "Hide resolved comments" : "Show resolved comments"}
+              pressed={showResolvedComments}
+              onPress={() => setShowResolvedComments((current) => !current)}
+            >
+              <ListChecksIcon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
+          {renderMarkdown && openFileComments.length > 0 ? (
+            <FileSurfaceAction
+              label={`Add ${openFileComments.length} ${
+                openFileComments.length === 1 ? "comment" : "comments"
+              } to chat`}
+              onPress={addCommentsToChat}
+            >
+              <MessageSquareShareIcon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
           {showsRawText ? (
             <FileSurfaceAction
               label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
@@ -1291,6 +1407,7 @@ export default function FilePreviewPanel({
                 readOnly={isHostFile}
                 onPendingChange={onPendingChange}
                 onCiteText={onCiteText}
+                comments={commentsSupported ? visibleFileComments : null}
               />
             ) : tableDelimiter && renderTable ? (
               <DelimitedTablePreview

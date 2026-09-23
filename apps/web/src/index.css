@@ -558,6 +558,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   ::highlight(t3-assistant-citation-comment) {
     background-color: color-mix(in oklab, var(--primary) 45%, transparent);
   }
+  /* Passages with open margin comments; the one being read is stronger. */
+  ::highlight(t3-document-comment) {
+    background-color: color-mix(in oklab, var(--warning) 22%, transparent);
+  }
+  ::highlight(t3-document-comment-active) {
+    background-color: color-mix(in oklab, var(--warning) 45%, transparent);
+  }
   :root {
     /* Keep the original T3 Code artwork palettes as the defaults. Built-in
        themes override them with their own pigments in the components layer. */

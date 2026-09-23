@@ -91,6 +91,20 @@ the file at those lines.
 Mobile displays saved quotes and comments, but does not create citations or
 navigate to their sources.
 
+## Comment on a document
+
+On web and desktop, you can mark up a Markdown file before handing it to the agent. In the file
+panel's rendered view, select a passage and choose **Comment**, or right-click it and choose
+**Add comment**. Comments appear beside the passage in the margin, or as numbered markers when
+the panel is narrow; select one to read, edit, resolve, or delete it.
+
+Comments belong to the thread and stay until you delete them. Nothing is sent while you mark up.
+When you are done, choose **Add comments to chat** in the file header to place every open
+comment in the composer, then send it with any instructions. The agent resolves each comment as
+it addresses it and leaves a short note on what changed; **Show resolved comments** brings those
+back, and **Reopen** returns one to the open list. If an edit removes a commented passage, its
+comment moves to the top of the margin with the original quote.
+
 ## Recall a sent prompt
 
 Press `ArrowUp` in an empty composer to bring back the last prompt you sent in this thread. Press
