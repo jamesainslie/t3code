@@ -8,7 +8,7 @@ import type {
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
-import type { EnvironmentMachineKind } from "@t3tools/contracts";
+import { DEFAULT_THREAD_HIGHLIGHT_PALETTE, type EnvironmentMachineKind } from "@t3tools/contracts";
 import {
   canAddDependency,
   canSnooze,
@@ -34,6 +34,10 @@ import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr } from "../../state/use-thread-pr";
 import { ThreadSwipeable } from "../home/thread-swipe-actions";
+import {
+  buildThreadHighlightMenuAction,
+  resolveThreadHighlightMenuSelection,
+} from "./thread-highlight-menu";
 import { buildThreadTitleRegenerationMenuItems } from "./thread-title-regeneration-menu";
 import {
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
@@ -460,6 +464,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
   readonly onPinThread: (thread: EnvironmentThreadShell) => void;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => void;
+  /** Sets the thread's highlight color; null clears it. */
+  readonly onHighlightThread: (
+    thread: EnvironmentThreadShell,
+    color: string | null,
+  ) => void | Promise<unknown>;
   /** False on environments whose server predates thread.settle/unsettle:
       swipe + menu fall back to Archive instead of failing on use. */
   readonly settlementSupported: boolean;
@@ -469,6 +478,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly dependenciesSupported: boolean;
   /** False on servers that predate thread.pin/unpin. */
   readonly pinningSupported: boolean;
+  /** False on servers that predate thread highlights. */
+  readonly highlightSupported: boolean;
   /** False on servers that predate thread title regeneration. */
   readonly titleRegenerationSupported: boolean;
   /** Server supports reordering this card's section. */
@@ -508,6 +519,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onArchiveThread,
     onPinThread,
     onUnpinThread,
+    onHighlightThread,
     onMoveThread,
   } = props;
   const snoozedRow = props.snoozed === true;
@@ -527,13 +539,19 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   // differs by pane and (for the sidebar pane) selection: the sidebar row
   // background becomes the selected fill or the drawer surface, while the
   // flat "screen" pane rows always sit on the screen background.
-  const providerIconSurfaceColor = sidebarPane
-    ? selected
-      ? selectedBackgroundColor
-      : Platform.OS === "android"
-        ? screenColor
-        : drawerColor
+  const highlightColor =
+    typeof thread.highlightColor === "string" && thread.highlightColor.trim().length > 0
+      ? thread.highlightColor
+      : null;
+  // Selection wins over a highlight, and a highlight wins over the pane's
+  // default surface, matching the row background below.
+  const rowSurfaceColor = sidebarPane
+    ? Platform.OS === "android"
+      ? screenColor
+      : drawerColor
     : screenColor;
+  const providerIconSurfaceColor =
+    sidebarPane && selected ? selectedBackgroundColor : (highlightColor ?? rowSurfaceColor);
 
   const status = resolveThreadListV2Status(thread);
   const statusLabel = STATUS_LABEL_BY_STATUS[status];
@@ -652,6 +670,20 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       variant,
     ],
   );
+  // Highlight is offered in every row state (card, slim, snoozed, blocked,
+  // legacy) so a color can be set or cleared wherever the thread sits.
+  const highlightMenuItems = useMemo<MenuAction[]>(
+    () =>
+      props.highlightSupported
+        ? [
+            buildThreadHighlightMenuAction({
+              palette: DEFAULT_THREAD_HIGHLIGHT_PALETTE,
+              currentColor: thread.highlightColor ?? null,
+            }),
+          ]
+        : [],
+    [props.highlightSupported, thread.highlightColor],
+  );
   const titleMenuItems = useMemo<MenuAction[]>(
     () => [
       { id: "rename", title: "Rename", image: "square.and.pencil" },
@@ -694,20 +726,28 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       },
       ...dependencyMenuItems,
       ...arrangementMenuItems,
+      ...highlightMenuItems,
       ...titleMenuItems,
       { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
     ],
-    [arrangementMenuItems, dependencyMenuItems, snoozePresetActions, titleMenuItems],
+    [
+      arrangementMenuItems,
+      dependencyMenuItems,
+      highlightMenuItems,
+      snoozePresetActions,
+      titleMenuItems,
+    ],
   );
   const cardMenuActions = useMemo<MenuAction[]>(
     () => [
       CARD_MENU_ACTIONS[0]!,
       ...dependencyMenuItems,
       ...arrangementMenuItems,
+      ...highlightMenuItems,
       ...titleMenuItems,
       ...CARD_MENU_ACTIONS.slice(1),
     ],
-    [arrangementMenuItems, dependencyMenuItems, titleMenuItems],
+    [arrangementMenuItems, dependencyMenuItems, highlightMenuItems, titleMenuItems],
   );
   const slimMenuActions = useMemo<MenuAction[]>(
     () => [
@@ -715,27 +755,39 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ...arrangementMenuItems.filter(
         (action) => action.id !== "move-up" && action.id !== "move-down",
       ),
+      ...highlightMenuItems,
       ...titleMenuItems,
       SLIM_MENU_ACTIONS[1]!,
     ],
-    [arrangementMenuItems, titleMenuItems],
+    [arrangementMenuItems, highlightMenuItems, titleMenuItems],
   );
   const snoozedMenuActions = useMemo<MenuAction[]>(
-    () => [SNOOZED_MENU_ACTIONS[0]!, ...titleMenuItems, SNOOZED_MENU_ACTIONS[1]!],
-    [titleMenuItems],
+    () => [
+      SNOOZED_MENU_ACTIONS[0]!,
+      ...highlightMenuItems,
+      ...titleMenuItems,
+      SNOOZED_MENU_ACTIONS[1]!,
+    ],
+    [highlightMenuItems, titleMenuItems],
   );
   const blockedMenuActions = useMemo<MenuAction[]>(
-    () => [BLOCKED_MENU_ACTIONS[0]!, ...titleMenuItems, BLOCKED_MENU_ACTIONS[1]!],
-    [titleMenuItems],
+    () => [
+      BLOCKED_MENU_ACTIONS[0]!,
+      ...highlightMenuItems,
+      ...titleMenuItems,
+      BLOCKED_MENU_ACTIONS[1]!,
+    ],
+    [highlightMenuItems, titleMenuItems],
   );
   const legacyMenuActions = useMemo<MenuAction[]>(
     () => [
       LEGACY_MENU_ACTIONS[0]!,
       ...arrangementMenuItems,
+      ...highlightMenuItems,
       ...titleMenuItems,
       LEGACY_MENU_ACTIONS[1]!,
     ],
-    [arrangementMenuItems, titleMenuItems],
+    [arrangementMenuItems, highlightMenuItems, titleMenuItems],
   );
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
@@ -758,6 +810,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         copyTextWithHaptic(thread.id, { target: "thread-id" });
       }
       if (nativeEvent.event === "delete") handleDelete();
+      if (nativeEvent.event.startsWith("highlight:")) {
+        const highlightSelection = resolveThreadHighlightMenuSelection(
+          nativeEvent.event,
+          DEFAULT_THREAD_HIGHLIGHT_PALETTE,
+        );
+        if (highlightSelection !== null) void onHighlightThread(thread, highlightSelection.color);
+        return;
+      }
       if (nativeEvent.event === "snooze:custom") {
         setCustomSnoozeOpen(true);
         return;
@@ -774,6 +834,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       }
     },
     [
+      onHighlightThread,
       onNewThreadOnBranch,
       thread,
       handleArchive,
@@ -1097,13 +1158,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             ? {
                 backgroundColor: selected
                   ? selectedBackgroundColor
-                  : sidebarPane && Platform.OS !== "android"
-                    ? drawerColor
-                    : screenColor,
+                  : (highlightColor ?? rowSurfaceColor),
                 borderRadius: Platform.OS === "android" ? 20 : SIDEBAR_V2_ROW_RADIUS,
                 ...(sidebarPane ? { paddingHorizontal: 12, paddingVertical: 10 } : null),
               }
-            : undefined
+            : highlightColor !== null
+              ? { backgroundColor: highlightColor }
+              : undefined
         }
       >
         {sidebarPane ? (
@@ -1149,12 +1210,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             ? {
                 backgroundColor: selected
                   ? selectedBackgroundColor
-                  : sidebarPane && Platform.OS !== "android"
-                    ? drawerColor
-                    : screenColor,
+                  : (highlightColor ?? rowSurfaceColor),
                 borderRadius: Platform.OS === "android" ? 20 : SIDEBAR_V2_ROW_RADIUS,
               }
-            : undefined
+            : highlightColor !== null
+              ? { backgroundColor: highlightColor }
+              : undefined
         }
       >
         {/* Settled history recedes: dimmed favicon + muted title. */}

@@ -135,10 +135,10 @@ finishes; the call's own result shows its status.
 
 Choose **Highlight** from a thread's menu to give its card a background color, so
 the threads you are watching stand out in the list. **Default** restores the plain
-card. The twelve colors and their menu labels are yours to change under
-**Settings → Appearance → Chat colors → Highlight palette**. A highlight stays
-put through pinning, snoozing, and settling, and it shows on every device
-connected to the same environment.
+card. On web and desktop, the twelve colors and their menu labels are yours to
+change under **Settings → Appearance → Chat colors → Highlight palette**; mobile
+offers the default twelve. A highlight stays put through pinning, snoozing, and
+settling, and it shows on every device connected to the same environment.
 
 ## Snooze until later
 

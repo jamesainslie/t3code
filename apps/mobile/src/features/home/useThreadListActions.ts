@@ -66,6 +66,15 @@ function environmentSupportsPinning(environmentId: EnvironmentThreadShell["envir
   );
 }
 
+export function environmentSupportsHighlight(
+  environmentId: EnvironmentThreadShell["environmentId"],
+) {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadHighlight === true
+  );
+}
+
 function environmentSupportsPinReorder(environmentId: EnvironmentThreadShell["environmentId"]) {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -256,6 +265,11 @@ export function useThreadListActions(): {
   readonly unsettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly pinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  /** Sets the thread's highlight color; null clears it. */
+  readonly setThreadHighlight: (
+    thread: EnvironmentThreadShell,
+    color: string | null,
+  ) => Promise<boolean>;
   readonly moveThread: (
     thread: EnvironmentThreadShell,
     direction: ThreadMoveDestination,
@@ -268,6 +282,9 @@ export function useThreadListActions(): {
   const unsnoozeMutation = useAtomCommand(threadEnvironment.unsnooze, { reportFailure: false });
   const pinMutation = useAtomCommand(threadEnvironment.pin, { reportFailure: false });
   const unpinMutation = useAtomCommand(threadEnvironment.unpin, { reportFailure: false });
+  const highlightMutation = useAtomCommand(threadEnvironment.setHighlight, {
+    reportFailure: false,
+  });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -567,6 +584,34 @@ export function useThreadListActions(): {
     },
     [unpinMutation],
   );
+  const setThreadHighlight = useCallback(
+    async (thread: EnvironmentThreadShell, color: string | null) => {
+      if (!environmentSupportsHighlight(thread.environmentId)) {
+        Alert.alert(
+          "Could not highlight thread",
+          "This environment's server does not support highlights yet. Update the server to use Highlight.",
+        );
+        return false;
+      }
+      selectionHaptic();
+      const result = await highlightMutation({
+        environmentId: thread.environmentId,
+        input: { threadId: thread.id, color },
+      });
+      if (result._tag === "Failure") {
+        const error = Cause.squash(result.cause);
+        Alert.alert(
+          "Could not highlight thread",
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "The thread highlight could not be changed.",
+        );
+        return false;
+      }
+      return true;
+    },
+    [highlightMutation],
+  );
   const regenerateThreadTitle = useCallback(
     async (thread: EnvironmentThreadShell) => {
       const key = scopedThreadKey(thread.environmentId, thread.id);
@@ -832,6 +877,7 @@ export function useThreadListActions(): {
     unsettleThread,
     pinThread,
     unpinThread,
+    setThreadHighlight,
     moveThread,
     renameThread,
     regenerateThreadTitle,
