@@ -113,6 +113,7 @@ describe("remote thread lifecycle commands", () => {
     ["pin", { orderKey: "a" }, { pinnedAt: expect.any(String), pinOrderKey: "a" }],
     ["unpin", {}, { pinnedAt: null, pinOrderKey: null }],
     ["reorderPin", { orderKey: "b" }, { pinOrderKey: "b" }],
+    ["setHighlight", {}, { highlightColor: "#ff8800" }],
     ["reorderActive", { orderKey: "b" }, { activeOrderKey: "b" }],
   ] as const;
 
@@ -147,6 +148,7 @@ describe("remote thread lifecycle commands", () => {
             reason: "user",
             orderKey: "a",
             snoozedUntil: "2099-01-01T00:00:00.000Z",
+            color: "#ff8800",
             ...input,
           },
         });

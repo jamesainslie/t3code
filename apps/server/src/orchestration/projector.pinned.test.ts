@@ -152,3 +152,51 @@ it.effect("projects pin order key lifecycle", () =>
     expect(unpinned.threads[0]?.pinOrderKey).toBeNull();
   }),
 );
+
+it.effect("projects highlight set and clear", () =>
+  Effect.gen(function* () {
+    const now = "2026-01-01T00:00:00.000Z";
+    const later = "2026-01-02T00:00:00.000Z";
+    const created = yield* projectEvent(
+      createEmptyReadModel(now),
+      makeEvent({
+        sequence: 1,
+        type: "thread.created",
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          projectId: ProjectId.make("project-1"),
+          title: "Thread",
+          modelSelection: { provider: "codex", model: "gpt-5.4" },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    );
+    expect(created.threads[0]?.highlightColor ?? null).toBeNull();
+
+    const highlighted = yield* projectEvent(
+      created,
+      makeEvent({
+        sequence: 2,
+        type: "thread.highlighted",
+        payload: { threadId: ThreadId.make("thread-1"), color: "#ff8800", updatedAt: later },
+      }),
+    );
+    expect(highlighted.threads[0]?.highlightColor).toBe("#ff8800");
+    expect(highlighted.threads[0]?.updatedAt).toBe(later);
+
+    const cleared = yield* projectEvent(
+      highlighted,
+      makeEvent({
+        sequence: 3,
+        type: "thread.highlighted",
+        payload: { threadId: ThreadId.make("thread-1"), color: null, updatedAt: later },
+      }),
+    );
+    expect(cleared.threads[0]?.highlightColor).toBeNull();
+  }),
+);

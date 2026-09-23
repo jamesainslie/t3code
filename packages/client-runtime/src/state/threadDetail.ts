@@ -65,6 +65,7 @@ export function mergeEnvironmentThread(
     dependencies: shell.dependencies ?? [],
     pinnedAt: shell.pinnedAt,
     pinOrderKey: shell.pinOrderKey,
+    highlightColor: shell.highlightColor,
     session: shell.session,
   };
 }

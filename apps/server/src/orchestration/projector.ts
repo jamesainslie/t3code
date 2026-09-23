@@ -46,6 +46,7 @@ import {
   ThreadSettledPayload,
   ThreadPinnedPayload,
   ThreadPinReorderedPayload,
+  ThreadHighlightedPayload,
   ThreadPullRequestLinkedPayload,
   ThreadPullRequestSyncedPayload,
   ThreadPullRequestUnlinkedPayload,
@@ -646,6 +647,17 @@ export function projectEvent(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             pinOrderKey: payload.orderKey,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.highlighted":
+      return decodeForEvent(ThreadHighlightedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            highlightColor: payload.color,
             updatedAt: payload.updatedAt,
           }),
         })),

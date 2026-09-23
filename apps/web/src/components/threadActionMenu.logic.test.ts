@@ -6,6 +6,11 @@ const baseState: ThreadActionMenuState = {
   branch: null,
   projectFilter: null,
   isPinned: false,
+  highlightColor: null,
+  highlightPalette: Array.from({ length: 12 }, (_, index) => ({
+    label: `Color ${index + 1}`,
+    color: `#${(index + 1).toString(16).padStart(2, "0")}0000`,
+  })),
   isSettled: false,
   isSnoozed: false,
   canSnoozeNow: true,
@@ -17,6 +22,7 @@ const baseState: ThreadActionMenuState = {
     settlement: true,
     snooze: true,
     pinning: true,
+    highlight: true,
     titleRegeneration: true,
     dependencies: true,
   },
@@ -36,6 +42,27 @@ function allIds(state: ThreadActionMenuState): string[] {
 }
 
 describe("buildThreadActionMenuItems", () => {
+  it("offers Default plus every palette slot under Highlight and marks the current one", () => {
+    const items = buildThreadActionMenuItems({ ...baseState, highlightColor: "#020000" });
+    const highlight = items.find((item) => item.id === "highlight");
+    expect(highlight?.children?.map((child) => child.id)).toEqual([
+      "highlight:default",
+      ...Array.from({ length: 12 }, (_, index) => `highlight:${index}`),
+    ]);
+    expect(highlight?.children?.[0]?.label).toBe("Default");
+    expect(highlight?.children?.[2]?.label).toBe("Color 2 ✓");
+    expect(
+      buildThreadActionMenuItems(baseState).find((item) => item.id === "highlight")?.children?.[0]
+        ?.label,
+    ).toBe("Default ✓");
+  });
+
+  it("hides Highlight when the environment lacks the capability", () => {
+    expect(
+      ids({ ...baseState, supports: { ...baseState.supports, highlight: false } }),
+    ).not.toContain("highlight");
+  });
+
   it("hides lifecycle items when the environment lacks the capabilities", () => {
     expect(
       ids({
@@ -44,6 +71,7 @@ describe("buildThreadActionMenuItems", () => {
           settlement: false,
           snooze: false,
           pinning: false,
+          highlight: false,
           titleRegeneration: false,
           dependencies: false,
         },
@@ -176,6 +204,7 @@ describe("buildThreadActionMenuItems", () => {
           settlement: false,
           snooze: false,
           pinning: false,
+          highlight: false,
           titleRegeneration: false,
           dependencies: false,
         },

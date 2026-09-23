@@ -649,6 +649,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             dependencies: [],
             pinnedAt: null,
             pinOrderKey: null,
+            highlightColor: null,
             activeOrderKey: null,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
@@ -863,6 +864,21 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             pinOrderKey: event.payload.orderKey,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.highlighted": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            highlightColor: event.payload.color,
             updatedAt: event.payload.updatedAt,
           });
           return;

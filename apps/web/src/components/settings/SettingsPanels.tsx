@@ -21,7 +21,10 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
+  DEFAULT_THREAD_HIGHLIGHT_PALETTE,
   DEFAULT_UNIFIED_SETTINGS,
+  type ThreadHighlightPalette,
+  type ThreadHighlightPaletteEntry,
   type DiffLayout,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
@@ -535,7 +538,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
       ...(settings.chatTextColor !== DEFAULT_UNIFIED_SETTINGS.chatTextColor ||
       settings.composerCaretColor !== DEFAULT_UNIFIED_SETTINGS.composerCaretColor ||
-      settings.threadCardColor !== DEFAULT_UNIFIED_SETTINGS.threadCardColor
+      settings.threadCardColor !== DEFAULT_UNIFIED_SETTINGS.threadCardColor ||
+      !isDefaultThreadHighlightPalette(settings.threadHighlightPalette)
         ? ["Chat colors"]
         : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
@@ -679,6 +683,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatTextColor,
       settings.composerCaretColor,
       settings.threadCardColor,
+      settings.threadHighlightPalette,
       settings.panelAnimationDurationMs,
       settings.responseStreamingMode,
       settings.enableProviderUpdateChecks,
@@ -782,6 +787,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor,
       composerCaretColor: DEFAULT_UNIFIED_SETTINGS.composerCaretColor,
       threadCardColor: DEFAULT_UNIFIED_SETTINGS.threadCardColor,
+      threadHighlightPalette: DEFAULT_UNIFIED_SETTINGS.threadHighlightPalette,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -1239,6 +1245,7 @@ export function AppearanceSettingsPanel() {
             updateSettings({ threadCardColor: DEFAULT_UNIFIED_SETTINGS.threadCardColor })
           }
         />
+        <ThreadHighlightPaletteRow />
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Interface">
@@ -1869,6 +1876,83 @@ function FontSizeSelect({ size }: { size: FontSizeControl }) {
 }
 
 /** A size-only typography row for a surface that keeps the interface family. */
+function isDefaultThreadHighlightPalette(palette: ThreadHighlightPalette): boolean {
+  return palette.every(
+    (entry, index) =>
+      entry.label === DEFAULT_THREAD_HIGHLIGHT_PALETTE[index]?.label &&
+      entry.color === DEFAULT_THREAD_HIGHLIGHT_PALETTE[index]?.color,
+  );
+}
+
+/**
+ * The twelve colors offered under Highlight in a thread's context menu. The
+ * label is what the menu shows, so it is editable beside the swatch.
+ */
+function ThreadHighlightPaletteRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const palette = settings.threadHighlightPalette;
+  const updateEntry = (index: number, patch: Partial<ThreadHighlightPaletteEntry>) => {
+    updateSettings({
+      threadHighlightPalette: palette.map((entry, at) =>
+        at === index ? { ...entry, ...patch } : entry,
+      ),
+    });
+  };
+  return (
+    <SettingsRow
+      {...searchableSetting("thread-highlight-palette")}
+      title="Highlight palette"
+      description="Colors offered when you right-click a thread and choose Highlight. Each slot has a menu label and a color."
+      resetAction={
+        isDefaultThreadHighlightPalette(palette) ? null : (
+          <SettingResetButton
+            label="highlight palette"
+            onClick={() =>
+              updateSettings({ threadHighlightPalette: DEFAULT_THREAD_HIGHLIGHT_PALETTE })
+            }
+          />
+        )
+      }
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        {palette.map((entry, index) => {
+          const resolved = resolveColorPreference(entry.color);
+          return (
+            <div
+              key={index}
+              className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5"
+            >
+              <ThemeColorPicker
+                label={entry.label || `Color ${index + 1}`}
+                onChange={(color) => updateEntry(index, { color })}
+                value={resolved ?? "#808080"}
+              />
+              <Input
+                aria-label={`Highlight ${index + 1} label`}
+                className="min-w-0 flex-1 text-xs"
+                nativeInput
+                onChange={(event) => updateEntry(index, { label: event.currentTarget.value })}
+                placeholder={`Color ${index + 1}`}
+                value={entry.label}
+              />
+              <Input
+                aria-invalid={resolved === null}
+                aria-label={`Highlight ${index + 1} hex value`}
+                className="w-24 shrink-0 font-mono text-xs [&_[data-slot=input]]:text-right"
+                nativeInput
+                onChange={(event) => updateEntry(index, { color: event.currentTarget.value })}
+                spellCheck={false}
+                value={entry.color}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </SettingsRow>
+  );
+}
+
 /**
  * One optional color override. An unset value shows a neutral swatch and no
  * reset; the hex field accepts the same syntax as the theme editor.

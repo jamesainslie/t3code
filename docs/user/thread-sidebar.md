@@ -131,6 +131,15 @@ Expand a tool call in the conversation to see its full command and output.
 Summaries shorten shell wrappers and can still describe the latest call after it
 finishes; the call's own result shows its status.
 
+## Highlight a thread
+
+Choose **Highlight** from a thread's menu to give its card a background color, so
+the threads you are watching stand out in the list. **Default** restores the plain
+card. The twelve colors and their menu labels are yours to change under
+**Settings → Appearance → Chat colors → Highlight palette**. A highlight stays
+put through pinning, snoozing, and settling, and it shows on every device
+connected to the same environment.
+
 ## Snooze until later
 
 Choose **Snooze → Custom…** from a thread's menu to pick a date and time in your

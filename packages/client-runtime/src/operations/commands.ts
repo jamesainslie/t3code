@@ -44,6 +44,7 @@ export type RemoveThreadDependenciesInput = CommandInput<"thread.dependency.remo
 export type PinThreadInput = CommandInput<"thread.pin">;
 export type UnpinThreadInput = CommandInput<"thread.unpin">;
 export type ReorderPinnedThreadInput = CommandInput<"thread.pin.reorder">;
+export type SetThreadHighlightInput = CommandInput<"thread.highlight.set">;
 export type ReorderActiveThreadInput = CommandInput<"thread.active.reorder">;
 export type UpdateThreadMetadataInput = CommandInput<"thread.meta.update">;
 export type LinkThreadPullRequestInput = CommandInput<"thread.pull-request.link">;
@@ -253,6 +254,16 @@ export const reorderPinnedThread: (input: ReorderPinnedThreadInput) => CommandEf
   return yield* dispatch({
     ...input,
     type: "thread.pin.reorder",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const setThreadHighlight: (input: SetThreadHighlightInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.setThreadHighlight",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "thread.highlight.set",
     commandId: yield* commandId(input),
   });
 });

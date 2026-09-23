@@ -293,6 +293,16 @@ export function applyThreadDetailEvent(
         },
       };
 
+    case "thread.highlighted":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          highlightColor: event.payload.color,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
     // ── Thread metadata ─────────────────────────────────────────────
     case "thread.meta-updated":
       return {

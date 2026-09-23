@@ -1193,6 +1193,34 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.highlight.set": {
+      // Highlight is cosmetic and orthogonal to lifecycle, so archived
+      // threads accept it too; only a missing thread is rejected.
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      // Idempotent by re-emission (see thread.settle): setting the color the
+      // thread already has keeps updatedAt so it projects as a no-op.
+      const colorUnchanged = (thread.highlightColor ?? null) === command.color;
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.highlighted",
+        payload: {
+          threadId: command.threadId,
+          color: command.color,
+          updatedAt: colorUnchanged ? thread.updatedAt : occurredAt,
+        },
+      };
+    }
+
     case "thread.active.reorder": {
       const thread = yield* requireThreadNotArchived({
         readModel,
