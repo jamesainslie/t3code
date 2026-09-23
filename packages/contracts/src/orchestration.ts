@@ -783,7 +783,7 @@ export const ThreadPullRequestLink = Schema.Struct({
 export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
 
 export const THREAD_DOCUMENT_COMMENT_MAX_BODY_LENGTH = 8_000;
-export const THREAD_DOCUMENT_COMMENT_MAX_PATH_LENGTH = 4_096;
+const THREAD_DOCUMENT_COMMENT_MAX_PATH_LENGTH = 4_096;
 
 export const ThreadDocumentCommentId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type ThreadDocumentCommentId = typeof ThreadDocumentCommentId.Type;

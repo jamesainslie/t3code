@@ -16,7 +16,7 @@ export type AssistantCitationSourceAnchor = {
 };
 
 /** Rendered text a citation can quote: an assistant message, or a rendered file in the file panel. */
-export const ASSISTANT_CITATION_SOURCE_SELECTOR = "[data-assistant-citation-source]";
+const ASSISTANT_CITATION_SOURCE_SELECTOR = "[data-assistant-citation-source]";
 export const DOCUMENT_CITATION_SOURCE_SELECTOR = "[data-document-citation-source]";
 
 export function findAssistantCitationSourceAnchor(

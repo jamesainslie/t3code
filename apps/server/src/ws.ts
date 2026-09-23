@@ -372,7 +372,7 @@ export function isThreadDetailEvent(event: OrchestrationEvent): event is Extract
  * (older clients cannot decode the discriminants), and the shell stream skips
  * them because the shell never changes.
  */
-export function isThreadDocumentCommentEvent(event: Pick<OrchestrationEvent, "type">): boolean {
+function isThreadDocumentCommentEvent(event: Pick<OrchestrationEvent, "type">): boolean {
   return (
     event.type === "thread.document-comment-added" ||
     event.type === "thread.document-comment-updated" ||
