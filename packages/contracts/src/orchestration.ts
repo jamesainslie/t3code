@@ -669,7 +669,7 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
-export const THREAD_HIGHLIGHT_COLOR_MAX_LENGTH = 32;
+const THREAD_HIGHLIGHT_COLOR_MAX_LENGTH = 32;
 
 // User-chosen CSS color string (typically hex) for a thread highlight.
 export const ThreadHighlightColor = TrimmedNonEmptyString.check(

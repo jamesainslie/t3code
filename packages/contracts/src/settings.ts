@@ -278,7 +278,7 @@ export const ThreadHighlightPaletteEntry = Schema.Struct({
 });
 export type ThreadHighlightPaletteEntry = typeof ThreadHighlightPaletteEntry.Type;
 
-export const THREAD_HIGHLIGHT_PALETTE_SIZE = 12;
+const THREAD_HIGHLIGHT_PALETTE_SIZE = 12;
 export const ThreadHighlightPalette = Schema.Array(ThreadHighlightPaletteEntry).check(
   Schema.isLengthBetween(THREAD_HIGHLIGHT_PALETTE_SIZE, THREAD_HIGHLIGHT_PALETTE_SIZE),
 );
