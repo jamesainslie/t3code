@@ -38,7 +38,7 @@ import bundledManifestJson from "./model-manifest.json" with { type: "json" };
 import type { ServerProviderDraft } from "./providerSnapshot.ts";
 
 // Fork: refresh from the fork's own `main`, not upstream, so models the fork
-// adds to its bundled manifest (Claude Mythos) survive the runtime refresh.
+// adds to its bundled manifest (such as Claude Opus 5.5) survive the runtime refresh.
 const MODEL_MANIFEST_URL = `https://raw.githubusercontent.com/${FORK_IDENTITY.releaseRepository}/main/apps/server/src/provider/model-manifest.json`;
 
 /** How long a fetched manifest stays fresh before the next probe re-fetches. */
