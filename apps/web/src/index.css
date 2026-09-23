@@ -200,6 +200,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --color-sidebar-foreground: var(--contrast-sidebar-foreground);
   --color-sidebar-muted-foreground: var(--contrast-sidebar-muted-foreground);
   --color-sidebar-control-surface: var(--sidebar-control-surface);
+  --color-sidebar-row-rest: var(--sidebar-row-rest);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-active: var(--sidebar-row-active);
   --color-sidebar-row-selected: var(--sidebar-row-selected);
@@ -1033,6 +1034,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --sidebar-foreground: var(--foreground);
   --sidebar-muted-foreground: var(--muted-foreground);
   --sidebar-control-surface: var(--color-zinc-100);
+  --sidebar-row-rest: transparent;
   --sidebar-row-hover: var(--color-zinc-25);
   --sidebar-row-active: var(--color-white);
   --sidebar-row-selected: var(--color-white);
@@ -2151,6 +2153,40 @@ code {
    widgets while the caret is on styled text. */
 .composer-tiptap {
   position: relative;
+}
+
+/* Settings → Appearance → Chat colors. `applyAppearanceColorOverrides` writes
+   one root variable plus one data flag per override; the flag keeps the
+   theme's own cascade untouched while nothing is set. Chat text replaces the
+   contrast-adjusted foregrounds inside the timeline only, so the rest of the
+   UI keeps the theme color. Thread cards get a resting surface and their
+   hover/active tints are re-mixed over it so they still read as states. */
+html[data-user-chat-text] [data-timeline-root] {
+  --contrast-foreground: var(--user-chat-text);
+  --contrast-message-foreground: var(--user-chat-text);
+}
+
+html[data-user-composer-caret] .composer-tiptap {
+  caret-color: var(--user-composer-caret);
+}
+
+html[data-user-thread-card] [data-app-sidebar] {
+  --sidebar-row-rest: var(--user-thread-card);
+  --sidebar-row-hover: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 8%,
+    var(--user-thread-card)
+  );
+  --sidebar-row-active: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 14%,
+    var(--user-thread-card)
+  );
+  --sidebar-row-selected: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 10%,
+    var(--user-thread-card)
+  );
 }
 
 .composer-tiptap p {

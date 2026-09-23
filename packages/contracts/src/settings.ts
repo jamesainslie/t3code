@@ -260,6 +260,14 @@ export const FontFamilyPreference = Schema.String.check(Schema.isMaxLength(200))
 export type FontFamilyPreference = typeof FontFamilyPreference.Type;
 
 /**
+ * A color override for one chat surface (Settings → Appearance → Chat colors),
+ * or "" to keep the theme's color. Stored as entered; the client only applies
+ * values it can parse.
+ */
+export const ColorPreference = Schema.String.check(Schema.isMaxLength(64));
+export type ColorPreference = typeof ColorPreference.Type;
+
+/**
  * The environment's theme, set with `t3 theme set <id>`. Each client applies
  * it once per value — live when connected, on its next connect otherwise — so
  * setting it switches every client, while a theme a user picks in Settings
@@ -398,6 +406,9 @@ export const ClientSettingsSchema = Schema.Struct({
   fontFamilyComposer: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilySans: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilyTerminal: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  chatTextColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  composerCaretColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  threadCardColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   // Grayscale `-webkit-font-smoothing: antialiased` (thinner strokes);
   // disabling restores the platform's heavier default. No effect off macOS.
   fontSmoothing: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1590,6 +1601,9 @@ export const ClientSettingsPatch = Schema.Struct({
   fontFamilyComposer: Schema.optionalKey(FontFamilyPreference),
   fontFamilySans: Schema.optionalKey(FontFamilyPreference),
   fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
+  chatTextColor: Schema.optionalKey(ColorPreference),
+  composerCaretColor: Schema.optionalKey(ColorPreference),
+  threadCardColor: Schema.optionalKey(ColorPreference),
   fontSmoothing: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(
     Schema.Array(

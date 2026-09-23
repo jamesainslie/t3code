@@ -130,6 +130,8 @@ import {
   resolveTerminalFontSizePreference,
   TYPOGRAPHY_ADVANCED_STORAGE_KEY,
 } from "../../appearanceFonts";
+import { resolveColorPreference } from "../../appearanceColors";
+import { ThemeColorPicker } from "./ThemeColorPicker";
 import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
 import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
 import {
@@ -531,6 +533,11 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Contrast"]
         : []),
       ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
+      ...(settings.chatTextColor !== DEFAULT_UNIFIED_SETTINGS.chatTextColor ||
+      settings.composerCaretColor !== DEFAULT_UNIFIED_SETTINGS.composerCaretColor ||
+      settings.threadCardColor !== DEFAULT_UNIFIED_SETTINGS.threadCardColor
+        ? ["Chat colors"]
+        : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
@@ -669,6 +676,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontSizePrompt,
       settings.fontSizeTerminal,
       settings.glassOpacity,
+      settings.chatTextColor,
+      settings.composerCaretColor,
+      settings.threadCardColor,
       settings.panelAnimationDurationMs,
       settings.responseStreamingMode,
       settings.enableProviderUpdateChecks,
@@ -769,6 +779,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
+      chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor,
+      composerCaretColor: DEFAULT_UNIFIED_SETTINGS.composerCaretColor,
+      threadCardColor: DEFAULT_UNIFIED_SETTINGS.threadCardColor,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -1195,6 +1208,37 @@ export function AppearanceSettingsPanel() {
             onImportOpenChange={setIsImportThemeOpen}
           />
         </div>
+      </SettingsSection>
+
+      <SettingsSection id="appearance-chat-colors" title="Chat colors">
+        <ColorSettingsRow
+          {...searchableSetting("chat-text-color")}
+          title="Chat text"
+          description="Message text in the conversation. Leave unset to use the theme's color."
+          value={settings.chatTextColor}
+          onValueChange={(chatTextColor) => updateSettings({ chatTextColor })}
+          onReset={() => updateSettings({ chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor })}
+        />
+        <ColorSettingsRow
+          {...searchableSetting("composer-caret-color")}
+          title="Prompt cursor"
+          description="The text cursor in the box you write prompts in."
+          value={settings.composerCaretColor}
+          onValueChange={(composerCaretColor) => updateSettings({ composerCaretColor })}
+          onReset={() =>
+            updateSettings({ composerCaretColor: DEFAULT_UNIFIED_SETTINGS.composerCaretColor })
+          }
+        />
+        <ColorSettingsRow
+          {...searchableSetting("thread-card-color")}
+          title="Thread cards"
+          description="Resting background of thread cards in the sidebar. Hover and active tints are layered on top."
+          value={settings.threadCardColor}
+          onValueChange={(threadCardColor) => updateSettings({ threadCardColor })}
+          onReset={() =>
+            updateSettings({ threadCardColor: DEFAULT_UNIFIED_SETTINGS.threadCardColor })
+          }
+        />
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Interface">
@@ -1825,6 +1869,54 @@ function FontSizeSelect({ size }: { size: FontSizeControl }) {
 }
 
 /** A size-only typography row for a surface that keeps the interface family. */
+/**
+ * One optional color override. An unset value shows a neutral swatch and no
+ * reset; the hex field accepts the same syntax as the theme editor.
+ */
+function ColorSettingsRow({
+  id,
+  title,
+  description,
+  value,
+  onValueChange,
+  onReset,
+}: {
+  id?: string;
+  title: string;
+  description: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  onReset: () => void;
+}) {
+  const resolved = resolveColorPreference(value);
+  const isUnset = value.trim().length === 0;
+  return (
+    <SettingsRow
+      {...(id !== undefined ? { id } : {})}
+      title={title}
+      description={description}
+      resetAction={
+        isUnset ? null : <SettingResetButton label={title.toLowerCase()} onClick={onReset} />
+      }
+      control={
+        <div className="flex items-center gap-2">
+          <ThemeColorPicker label={title} onChange={onValueChange} value={resolved ?? "#808080"} />
+          <Input
+            aria-invalid={!isUnset && resolved === null}
+            aria-label={`${title} hex value`}
+            className="w-28 shrink-0 font-mono text-xs [&_[data-slot=input]]:text-right"
+            nativeInput
+            onChange={(event) => onValueChange(event.currentTarget.value)}
+            placeholder="Theme"
+            spellCheck={false}
+            value={value}
+          />
+        </div>
+      }
+    />
+  );
+}
+
 function FontSizeSettingsRow({
   id,
   title,
