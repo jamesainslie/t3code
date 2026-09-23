@@ -91,7 +91,10 @@ import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
 import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
+import { parseInlineCodeLanguage, remarkHeadingIds } from "../markdown-document";
+import { MarkdownMath } from "./chat/MarkdownMath";
 import {
   artifactTemplateFromHastProperties,
   CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
@@ -232,6 +235,9 @@ interface ChatMarkdownProps {
       text nests under the heading that introduces it, such as a chat message's
       author. Rendered tags and their styling are unchanged. */
   headingLevelOffset?: number | undefined;
+  /** Render a standalone markdown file rather than a message: TeX math,
+      GitHub heading anchors, and `code{:lang}` inline highlighting. */
+  asDocument?: boolean | undefined;
 }
 
 export interface ChatMarkdownContextReference {
@@ -506,6 +512,11 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkPreserveCodeMeta,
   remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
+
+// GitHub renders `$…$` and `$$…$$` in markdown files; a file has a table of contents to link into.
+const DOCUMENT_REMARK_PLUGINS = [remarkMath, remarkHeadingIds] satisfies NonNullable<
+  ReactMarkdownOptions["remarkPlugins"]
+>;
 
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
   rehypeRaw,
@@ -1070,6 +1081,29 @@ function SuspenseShikiCodeBlock({
       preserveLines={isStreaming || hasStreamed}
     />
   );
+}
+
+/** Inline code with a `{:lang}` marker, colored in place of its plain chip. */
+function InlineShikiCode({
+  code,
+  language,
+  themeName,
+}: {
+  code: string;
+  language: string;
+  themeName: DiffThemeName;
+}) {
+  const highlighter = use(getSyntaxHighlighterPromise(language));
+  const html = useMemo(() => {
+    const options = { theme: themeName, structure: "inline" } as const;
+    try {
+      return highlighter.codeToHtml(code, { ...options, lang: language });
+    } catch {
+      // An unknown language resolves to the plain-text highlighter above.
+      return highlighter.codeToHtml(code, { ...options, lang: "text" });
+    }
+  }, [code, highlighter, language, themeName]);
+  return <code className="chat-markdown-inline-shiki" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 interface UncachedShikiCodeBlockProps {
@@ -1824,7 +1858,8 @@ function handleMarkdownFragmentClick(event: ReactMouseEvent<HTMLAnchorElement>, 
   const nextUrl = new URL(window.location.href);
   nextUrl.hash = href.slice(1);
   window.history.pushState(window.history.state, "", nextUrl);
-  target.scrollIntoView({ block: "nearest" });
+  // A table-of-contents jump opens the section at the top; a footnote only needs to be visible.
+  target.scrollIntoView({ block: /^H[1-6]$/.test(target.tagName) ? "start" : "nearest" });
 }
 
 function MarkdownExternalLinkContent({
@@ -2266,6 +2301,7 @@ function useChatMarkdownState({
   renderContextReference,
   headingLevelOffset = 0,
   githubMedia = false,
+  asDocument = false,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const [localMediaPreview, setLocalMediaPreview] = useState<ExpandedImagePreview | null>(null);
@@ -2658,6 +2694,7 @@ function useChatMarkdownState({
 
   const componentState = useMemo(
     () => ({
+      asDocument,
       cwd,
       diffThemeName,
       environmentId,
@@ -2689,6 +2726,7 @@ function useChatMarkdownState({
       updateThreadPullRequestLink,
     }),
     [
+      asDocument,
       cwd,
       diffThemeName,
       environmentId,
@@ -3101,11 +3139,37 @@ const CHAT_MARKDOWN_COMPONENTS = {
     );
   },
   code: function MarkdownCode({ node, children, className, ...props }) {
-    const { cwd, imageBaseDir, inlineCodeFileLinkMetaByText, fileLinkChip } = use(
-      ChatMarkdownRendererContext,
-    );
+    const {
+      asDocument,
+      cwd,
+      diffThemeName,
+      imageBaseDir,
+      inlineCodeFileLinkMetaByText,
+      fileLinkChip,
+    } = use(ChatMarkdownRendererContext);
+    // A block formula never reaches here: the `pre` renderer typesets it whole.
+    if (asDocument && CODE_FENCE_LANGUAGE_REGEX.exec(className ?? "")?.[1] === "math") {
+      return <MarkdownMath source={nodeToPlainText(children)} display={false} />;
+    }
     if (node?.properties?.dataInlineCode != null) {
       const codeText = nodeToPlainText(children);
+      const inlineLanguage = asDocument ? parseInlineCodeLanguage(codeText) : null;
+      if (inlineLanguage) {
+        return (
+          <RenderErrorBoundary
+            resetKeys={[codeText, diffThemeName]}
+            fallback={<code>{codeText}</code>}
+          >
+            <Suspense fallback={<code>{inlineLanguage.code}</code>}>
+              <InlineShikiCode
+                code={inlineLanguage.code}
+                language={inlineLanguage.language}
+                themeName={diffThemeName}
+              />
+            </Suspense>
+          </RenderErrorBoundary>
+        );
+      }
       const fileLinkMeta =
         inlineCodeFileLinkMetaByText.get(codeText.trim()) ??
         resolveInlineCodeFileLinkMeta(codeText, cwd, imageBaseDir ?? cwd);
@@ -3260,7 +3324,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
     return <MarkdownDetails open={detailsOpen}>{children}</MarkdownDetails>;
   },
   pre: function MarkdownPre({ node, children, ...props }) {
-    const { resolvedTheme, diffThemeName, isStreaming, text, onRepairMermaid } = use(
+    const { asDocument, resolvedTheme, diffThemeName, isStreaming, text, onRepairMermaid } = use(
       ChatMarkdownRendererContext,
     );
     const codeBlock = extractCodeBlock(children);
@@ -3269,6 +3333,10 @@ const CHAT_MARKDOWN_COMPONENTS = {
     }
 
     const language = extractFenceLanguage(codeBlock.className);
+    // `$$…$$` and a ```math fence both arrive as `language-math`, as on GitHub.
+    if (asDocument && language === "math") {
+      return <MarkdownMath source={codeBlock.code.replace(/\n$/, "")} display />;
+    }
     if (language?.toLowerCase() === "mermaid") {
       const start = node?.position?.start.offset;
       const end = node?.position?.end.offset;
@@ -3342,10 +3410,11 @@ function ChatMarkdown({
   const remarkPlugins = useMemo(
     () => [
       ...(lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS),
+      ...(props.asDocument ? DOCUMENT_REMARK_PLUGINS : []),
       ...extraRemarkPlugins,
       ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
     ],
-    [extraRemarkPlugins, incrementalParsing, lineBreaks],
+    [extraRemarkPlugins, incrementalParsing, lineBreaks, props.asDocument],
   );
 
   // react-markdown converts unparsed HTML nodes to text when skipHtml is false.

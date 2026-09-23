@@ -27,7 +27,8 @@ export function FileMarkdownPreview(props: {
       cwd={props.cwd}
       imageBaseDir={imageBaseDir}
       threadRef={props.threadRef}
-      className="mx-auto max-w-4xl px-6 py-5"
+      asDocument
+      className="chat-markdown-document mx-auto max-w-4xl px-8 py-7"
       onTaskListChange={props.onTaskListChange}
     />
   );

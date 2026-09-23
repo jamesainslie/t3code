@@ -162,6 +162,15 @@
       }
     },
     {
+      "license": "MIT",
+      "name": "remark-math",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/tree/main/packages/remark-math",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
       "name": "glob-to-regexp",
       "generatedNotice": {
         "licenseId": "BSD-2-Clause",
