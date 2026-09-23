@@ -2,6 +2,7 @@ import { type EnvironmentId, UsageLimitSourceId } from "@t3tools/contracts";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -15,12 +16,14 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 
+type SourceKind = "cliproxy" | "modelproxy";
+
 /**
- * Stable per hub and readable in settings.json. Dots and dashes in the host
- * are kept so `foo-bar.com` and `foo.bar.com` do not collide; anything else
- * (a port's colon, a path) is folded to a dash.
+ * Stable per source and readable in settings.json. Dots and dashes in the
+ * host are kept so `foo-bar.com` and `foo.bar.com` do not collide; anything
+ * else (a port's colon, a path) is folded to a dash.
  */
-function sourceIdFromUrl(url: string): UsageLimitSourceId {
+function sourceIdFromUrl(kind: SourceKind, url: string): UsageLimitSourceId {
   let host = url;
   try {
     host = new URL(url).host;
@@ -31,13 +34,27 @@ function sourceIdFromUrl(url: string): UsageLimitSourceId {
     .toLowerCase()
     .replace(/[^a-z0-9.-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return UsageLimitSourceId.make(`cliproxy-${slug || "hub"}`);
+  return UsageLimitSourceId.make(`${kind}-${slug || (kind === "cliproxy" ? "hub" : "gateway")}`);
 }
 
+const KIND_COPY: Record<SourceKind, { title: string; description: string; action: string }> = {
+  cliproxy: {
+    title: "CLIProxyAPI hub",
+    description: "Show the quota of every account the hub pools. The management key stays on",
+    action: "Add hub",
+  },
+  modelproxy: {
+    title: "modelproxy gateway",
+    description:
+      "Show which account the gateway is serving and how much headroom the pool has. You sign in as yourself; the client secret and your session stay on",
+    action: "Add gateway",
+  },
+};
+
 /**
- * Adds a CLIProxyAPI hub from provider settings on one environment. The
- * management key is sent once and kept in that server's secret store;
- * settings only ever carry a redaction marker for it afterwards.
+ * Adds a usage-limit source from provider settings on one environment. The
+ * secret is sent once and kept in that server's secret store; settings only
+ * ever carry a redaction marker for it afterwards.
  */
 export function AddUsageLimitSourceDialog({
   open,
@@ -51,36 +68,55 @@ export function AddUsageLimitSourceDialog({
   readonly environmentLabel: string;
 }) {
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
+  const [kind, setKind] = useState<SourceKind>("cliproxy");
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
-  const [managementKey, setManagementKey] = useState("");
+  const [secret, setSecret] = useState("");
+  const [issuer, setIssuer] = useState("");
+  const [clientId, setClientId] = useState("");
   const trimmedUrl = url.trim();
-  const canSave = trimmedUrl.length > 0 && managementKey.trim().length > 0;
+  const canSave =
+    trimmedUrl.length > 0 &&
+    secret.trim().length > 0 &&
+    (kind === "cliproxy" || (issuer.trim().length > 0 && clientId.trim().length > 0));
 
   const reset = () => {
+    setKind("cliproxy");
     setLabel("");
     setUrl("");
-    setManagementKey("");
+    setSecret("");
+    setIssuer("");
+    setClientId("");
   };
 
   const save = () => {
     if (!canSave) return;
-    const id = sourceIdFromUrl(trimmedUrl);
+    const id = sourceIdFromUrl(kind, trimmedUrl);
+    const common = {
+      ...(label.trim() ? { label: label.trim() } : {}),
+      url: trimmedUrl,
+      enabled: true,
+    };
     // The patch names only this entry; the server merges it into its map.
     updateSettings({
       usageLimitSources: {
-        [id]: {
-          kind: "cliproxy",
-          ...(label.trim() ? { label: label.trim() } : {}),
-          url: trimmedUrl,
-          managementKey: managementKey.trim(),
-          enabled: true,
-        },
+        [id]:
+          kind === "cliproxy"
+            ? { kind, ...common, managementKey: secret.trim() }
+            : {
+                kind,
+                ...common,
+                issuer: issuer.trim(),
+                clientId: clientId.trim(),
+                clientSecret: secret.trim(),
+              },
       },
     });
     reset();
     onOpenChange(false);
   };
+
+  const copy = KIND_COPY[kind];
 
   return (
     <Dialog
@@ -92,10 +128,9 @@ export function AddUsageLimitSourceDialog({
     >
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add a CLIProxyAPI hub</DialogTitle>
+          <DialogTitle>Add a {copy.title}</DialogTitle>
           <DialogDescription>
-            Show the quota of every account the hub pools, next to the providers on{" "}
-            {environmentLabel}. The key stays on that server.
+            {copy.description} {environmentLabel}.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -107,30 +142,79 @@ export function AddUsageLimitSourceDialog({
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="usage-source-url">Hub URL</Label>
+              <Label>Kind</Label>
+              <div className="flex gap-1" role="radiogroup" aria-label="Source kind">
+                {(["cliproxy", "modelproxy"] as const).map((option) => (
+                  <Button
+                    key={option}
+                    type="button"
+                    size="xs"
+                    role="radio"
+                    aria-checked={kind === option}
+                    variant={kind === option ? "default" : "outline"}
+                    className={cn(kind !== option && "text-muted-foreground")}
+                    onClick={() => setKind(option)}
+                  >
+                    {KIND_COPY[option].title}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="usage-source-url">
+                {kind === "cliproxy" ? "Hub URL" : "Gateway URL"}
+              </Label>
               <Input
                 id="usage-source-url"
-                placeholder="https://hub.example.ts.net:8318"
+                placeholder={
+                  kind === "cliproxy"
+                    ? "https://hub.example.ts.net:8318"
+                    : "https://iris.example.com"
+                }
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
                 autoFocus
               />
             </div>
+            {kind === "modelproxy" ? (
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="usage-source-issuer">OIDC issuer</Label>
+                  <Input
+                    id="usage-source-issuer"
+                    placeholder="https://auth.example.com/realms/main"
+                    value={issuer}
+                    onChange={(event) => setIssuer(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="usage-source-client-id">Client ID</Label>
+                  <Input
+                    id="usage-source-client-id"
+                    placeholder="t3-code"
+                    value={clientId}
+                    onChange={(event) => setClientId(event.target.value)}
+                  />
+                </div>
+              </>
+            ) : null}
             <div className="grid gap-1.5">
-              <Label htmlFor="usage-source-key">Management key</Label>
+              <Label htmlFor="usage-source-key">
+                {kind === "cliproxy" ? "Management key" : "Client secret"}
+              </Label>
               <Input
                 id="usage-source-key"
                 type="password"
                 autoComplete="off"
-                value={managementKey}
-                onChange={(event) => setManagementKey(event.target.value)}
+                value={secret}
+                onChange={(event) => setSecret(event.target.value)}
               />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="usage-source-label">Label (optional)</Label>
               <Input
                 id="usage-source-label"
-                placeholder="Defaults to the hub's host name"
+                placeholder="Defaults to the host name"
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
               />
@@ -148,7 +232,7 @@ export function AddUsageLimitSourceDialog({
             Cancel
           </Button>
           <Button onClick={save} disabled={!canSave}>
-            Add hub
+            {copy.action}
           </Button>
         </DialogFooter>
       </DialogPopup>

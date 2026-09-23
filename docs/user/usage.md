@@ -86,8 +86,9 @@ using a proxy through `ANTHROPIC_AUTH_TOKEN`.
 
 ## Connect a CLIProxyAPI hub
 
-To see pooled accounts, open **Settings → Providers → Usage providers → Add hub**. Choose the
-environment that will connect to the hub and enter its URL and management key.
+To see pooled accounts, open **Settings → Providers → Usage providers → Add source**, pick
+**CLIProxyAPI hub**, and enter the hub's URL and management key. The environment you choose is
+the one that connects to the hub.
 
 The accounts appear under **Usage → Limits**. Codex accounts show banked reset credits; select an
 account and choose **Use reset** to redeem one. No hub plugin is required.
@@ -95,6 +96,21 @@ account and choose **Use reset** to redeem one. No hub plugin is required.
 This connection supplies usage information; configure
 the provider separately to send agent requests through the hub. Remove the hub from the same
 settings section when you no longer need it.
+
+## Connect a modelproxy gateway
+
+A modelproxy gateway rotates requests across a pool of subscription accounts. To watch that pool
+from T3, open **Settings → Providers → Usage providers → Add source**, pick **modelproxy
+gateway**, and enter the gateway URL together with the OIDC issuer, client ID, and client secret
+of the gateway's T3 client. Then choose **Sign in** on the source's row: T3 shows a short code and
+a link, and you finish the login in any browser, on any device. The server keeps the session and
+refreshes it on its own; sign in again only if it says so.
+
+Once signed in, a pill in the thread header shows the account the gateway is serving, its session
+and weekly windows against the gateway's rotation threshold, and how long the whole pool is
+forecast to last. Hover it for every pooled account, what each is doing (serving, ready, cooling,
+spent, needing a login), and the metered fallback the gateway spills to when the pool is spent.
+The same accounts appear under **Usage → Limits**.
 
 ## Subscription usage widget
 
