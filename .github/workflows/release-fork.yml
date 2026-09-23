@@ -1,0 +1,587 @@
+# Fork-local release pipeline for jamesainslie/t3code on GitHub-hosted runners.
+# Upstream .github/workflows/release.yml is left untouched and disabled in repo
+# settings. Per-target desktop and CLI archive builds reuse upstream's
+# release-desktop.yml unchanged; only the job graph, runners, and identity
+# differ. npm publish uses OIDC trusted publishing configured on npmjs.com for
+# this workflow file (jamesainslie/t3code, release-fork.yml) on the launcher
+# package and on every @jamesainslie/t3code-<platform> package.
+name: Release (fork)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "!v*-nightly.*"
+  schedule:
+    # Avoid minute zero, when GitHub scheduled jobs are busiest.
+    - cron: "8,38 * * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release channel"
+        required: false
+        default: stable
+        type: choice
+        options:
+          - stable
+          - nightly
+      version:
+        description: "Release version (for example 1.2.3 or v1.2.3)"
+        required: false
+        type: string
+
+# Serialize nightlies (scheduled and manual) so overlapping runs cannot build
+# the same commit twice or publish out of order. Stable tag releases get their
+# own group so a nightly never blocks them. Running publishers are never
+# canceled, and queue: max keeps every pending run instead of the default
+# newest-wins single slot, so a queued stable tag can never be silently
+# dropped. Automatic nightlies recheck the release gap after leaving the queue.
+concurrency:
+  group: release-${{ (github.event_name == 'schedule' || inputs.channel == 'nightly') && 'nightly' || 'stable' }}
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+  id-token: none
+
+jobs:
+  check_changes:
+    name: Check automatic nightly release
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      has_changes: ${{ steps.check.outputs.result }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+
+      - id: check
+        name: Check release gap and new commits
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { shouldReleaseNightly } = require('./.github/scripts/check-nightly-release.cjs');
+            return await shouldReleaseNightly({ github, context, core });
+
+  preflight:
+    name: Preflight
+    needs: [check_changes]
+    if: |
+      !failure() && !cancelled() &&
+      (github.event_name != 'schedule' || needs.check_changes.outputs.has_changes == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release_channel: ${{ steps.release_meta.outputs.release_channel }}
+      version: ${{ steps.release_meta.outputs.version }}
+      tag: ${{ steps.release_meta.outputs.tag }}
+      release_name: ${{ steps.release_meta.outputs.name }}
+      short_sha: ${{ steps.release_meta.outputs.short_sha }}
+      previous_tag: ${{ steps.previous_tag.outputs.previous_tag }}
+      cli_dist_tag: ${{ steps.release_meta.outputs.cli_dist_tag }}
+      is_prerelease: ${{ steps.release_meta.outputs.is_prerelease }}
+      make_latest: ${{ steps.release_meta.outputs.make_latest }}
+      ref: ${{ github.sha }}
+      clerk_publishable_key: ${{ steps.connect_config.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ steps.connect_config.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ steps.connect_config.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ steps.connect_config.outputs.relay_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - id: release_meta
+        name: Resolve release version
+        shell: bash
+        env:
+          DISPATCH_CHANNEL: ${{ github.event.inputs.channel }}
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          NIGHTLY_DATE: ${{ github.run_started_at }}
+          NIGHTLY_SHA: ${{ github.sha }}
+          NIGHTLY_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" || ( "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${DISPATCH_CHANNEL:-stable}" == "nightly" ) ]]; then
+            nightly_date="$(date -u -d "$NIGHTLY_DATE" +%Y%m%d)"
+
+            node scripts/resolve-nightly-release.ts \
+              --date "$nightly_date" \
+              --run-number "$NIGHTLY_RUN_NUMBER" \
+              --sha "$NIGHTLY_SHA" \
+              --github-output
+
+            echo "release_channel=nightly" >> "$GITHUB_OUTPUT"
+            echo "cli_dist_tag=nightly" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              raw="${DISPATCH_VERSION}"
+              if [[ -z "$raw" ]]; then
+                echo "workflow_dispatch stable releases require the version input." >&2
+                exit 1
+              fi
+            else
+              raw="${GITHUB_REF_NAME}"
+            fi
+
+            version="${raw#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Invalid release version: $raw" >&2
+              exit 1
+            fi
+
+            echo "release_channel=stable" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+            echo "name=T3 Code Fork v$version" >> "$GITHUB_OUTPUT"
+            echo "cli_dist_tag=latest" >> "$GITHUB_OUTPUT"
+            if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+              echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+              echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - id: previous_tag
+        name: Resolve previous release tag
+        run: |
+          node scripts/resolve-previous-release-tag.ts \
+            --channel "${{ steps.release_meta.outputs.release_channel }}" \
+            --current-tag "${{ steps.release_meta.outputs.tag }}" \
+            --github-output
+
+      # The fork builds against the public T3 Connect identifiers that
+      # .env.example carries (upstream's release resolves them from its relay
+      # deploy). They are public client identifiers, not secrets.
+      - id: connect_config
+        name: Read public T3 Connect configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          read_env() { sed -n "s/^$1=//p" .env.example | head -n 1; }
+          {
+            echo "clerk_publishable_key=$(read_env T3CODE_CLERK_PUBLISHABLE_KEY)"
+            echo "clerk_jwt_template=$(read_env T3CODE_CLERK_JWT_TEMPLATE)"
+            echo "clerk_cli_oauth_client_id=$(read_env T3CODE_CLERK_CLI_OAUTH_CLIENT_ID)"
+            echo "relay_url=$(read_env T3CODE_RELAY_URL)"
+          } >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality checks
+    needs: [preflight]
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Ensure Electron runtime is installed
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Check
+        run: vp check
+
+      - name: Typecheck
+        run: vp run typecheck
+
+      - name: Install browser secret helper build libraries
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Test
+        run: vp run test
+
+  # One JS bundle, consumed by every desktop and CLI archive build so all
+  # targets ship the same server and web client bytes.
+  build_bundle:
+    name: Build JS bundle
+    needs: [preflight]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      T3CODE_RELAY_URL: ${{ needs.preflight.outputs.relay_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Install bundle dependencies
+        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - uses: ./.github/actions/setup-apt-mirrors
+
+      # @t3tools/desktop#build compiles the Linux browser secret helper on a
+      # Linux host before packing, and that needs libsecret headers.
+      - name: Install browser secret helper build libraries
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      # Runs t3#build (which depends on @t3tools/web#build) and
+      # @t3tools/desktop#build, so apps/server/dist holds the server bundle
+      # plus the web client and apps/desktop/dist-electron the Electron main.
+      - name: Build JS bundle
+        run: vp run build:desktop
+
+      # Two paths under apps/ so the artifact root is apps/; consumers download
+      # into `apps` to restore both at their original locations.
+      - name: Upload JS bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: js-bundle
+          path: |
+            apps/server/dist
+            apps/desktop/dist-electron
+          if-no-files-found: error
+          retention-days: 1
+
+  # One job per platform and architecture on GitHub-hosted hardware of that
+  # architecture (see release-desktop.yml). Every job builds the desktop app;
+  # all but macOS x64 also build the CLI archive for their platform, so a
+  # target either ships fully or not at all. The fork ships no Windows builds.
+  desktop_mac_arm64:
+    name: Desktop macOS arm64
+    needs: [preflight, build_bundle]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.build_bundle.result == 'success' }}
+    uses: ./.github/workflows/release-desktop.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+      release_channel: ${{ needs.preflight.outputs.release_channel }}
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.preflight.outputs.relay_url }}
+      label: macOS arm64
+      runner: macos-15
+      platform: mac
+      target: dmg
+      arch: arm64
+      rust_target: aarch64-apple-darwin
+      resource_key: darwin-arm64
+      cli_archive: true
+
+  desktop_mac_x64:
+    name: Desktop macOS x64
+    needs: [preflight, build_bundle]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.build_bundle.result == 'success' }}
+    uses: ./.github/workflows/release-desktop.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+      release_channel: ${{ needs.preflight.outputs.release_channel }}
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.preflight.outputs.relay_url }}
+      label: macOS x64
+      runner: macos-15
+      platform: mac
+      target: dmg
+      arch: x64
+      rust_target: x86_64-apple-darwin
+      resource_key: darwin-x64
+      cli_archive: false
+
+  desktop_linux_x64:
+    name: Desktop Linux x64
+    needs: [preflight, build_bundle]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.build_bundle.result == 'success' }}
+    uses: ./.github/workflows/release-desktop.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+      release_channel: ${{ needs.preflight.outputs.release_channel }}
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.preflight.outputs.relay_url }}
+      label: Linux x64
+      runner: ubuntu-24.04
+      platform: linux
+      target: AppImage
+      arch: x64
+      rust_target: x86_64-unknown-linux-gnu
+      resource_key: linux-x64
+      cli_archive: true
+
+  desktop_linux_arm64:
+    name: Desktop Linux arm64
+    needs: [preflight, build_bundle]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.build_bundle.result == 'success' }}
+    uses: ./.github/workflows/release-desktop.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+      release_channel: ${{ needs.preflight.outputs.release_channel }}
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.preflight.outputs.relay_url }}
+      label: Linux arm64
+      runner: ubuntu-24.04-arm
+      platform: linux
+      target: AppImage
+      arch: arm64
+      rust_target: aarch64-unknown-linux-gnu
+      resource_key: linux-arm64
+      cli_archive: true
+
+  publish_cli:
+    name: Publish CLI to npm
+    needs: [preflight, quality, desktop_mac_arm64, desktop_linux_x64, desktop_linux_arm64]
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.quality.result == 'success' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_linux_x64.result == 'success' && needs.desktop_linux_arm64.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=t3...
+              - --filter=@t3tools/scripts...
+
+      - name: Download all CLI archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: release-cli
+
+      # --allow-missing: the fork builds no Windows archives, so the launcher
+      # deliberately omits those platforms.
+      - name: Build npm packages from CLI archives
+        run: node scripts/build-npm-platform-packages.ts --archives-dir release-cli --version "${{ needs.preflight.outputs.version }}" --output-dir npm-packages --allow-missing
+
+      # A dry run of every package first: an auth or scope error here (a
+      # package without a trusted publisher) fails before anything is live,
+      # instead of after some platforms already are.
+      - name: Check npm publish access (dry run)
+        run: |
+          if ! node apps/server/scripts/cli.ts publish --packages-dir npm-packages --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --provenance --dry-run --verbose; then
+            echo "::error::npm publish --dry-run failed. Make sure @jamesainslie/t3code and every @jamesainslie/t3code-<platform> package has a trusted publisher registered for .github/workflows/release-fork.yml." >&2
+            exit 1
+          fi
+
+      - name: Publish CLI packages
+        run: node apps/server/scripts/cli.ts publish --packages-dir npm-packages --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --provenance --verbose
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      [
+        preflight,
+        desktop_mac_arm64,
+        desktop_mac_x64,
+        desktop_linux_x64,
+        desktop_linux_arm64,
+        publish_cli,
+      ]
+    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_mac_x64.result == 'success' && needs.desktop_linux_x64.result == 'success' && needs.desktop_linux_arm64.result == 'success' && needs.publish_cli.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/scripts...
+
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Download all CLI archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: release-assets
+
+      # Installers, pinned runtimes, and remote ssh runtimes verify archives
+      # against this file, so it is written from the bytes that get uploaded.
+      - name: Write CLI archive checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          shopt -s nullglob
+          archives=(t3-*.tar.gz t3-*.zip)
+          if [[ ${#archives[@]} -eq 0 ]]; then
+            echo "No CLI archives were produced." >&2
+            exit 1
+          fi
+          sha256sum "${archives[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      # electron-updater reads one manifest per platform and channel and picks
+      # the file entry whose name carries the running arch, so the per-arch
+      # manifests the build jobs wrote are merged back into that one file.
+      - name: Merge macOS updater manifests
+        run: |
+          shopt -s nullglob
+          for x64_manifest in release-assets/*-mac-x64.yml; do
+            arm64_manifest="${x64_manifest%-x64.yml}.yml"
+            if [[ -f "$arm64_manifest" ]]; then
+              node scripts/merge-update-manifests.ts --platform mac "$arm64_manifest" "$x64_manifest"
+              rm -f "$x64_manifest"
+            fi
+          done
+
+      # GitHub's generated notes list merged pull requests only. This fork's
+      # commits mostly land without one, so the generated body is just the
+      # compare link, which the desktop update popover deliberately hides.
+      # Listing the commits gives the popover its "What's changed" back.
+      # Oldest first: the desktop keeps the last lines and shows the newest on
+      # top. GitHub appends its own notes after this body.
+      - name: Write changelog
+        if: needs.preflight.outputs.previous_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.ref }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${RELEASE_SHA}?per_page=250" \
+            --jq '.commits[] | select(.parents | length < 2) | "* \(.commit.message | split("\n")[0]) (\(.sha[0:7]))"' \
+            | tail -n 100 > release-commits.md
+          if [[ -s release-commits.md ]]; then
+            { echo "## What's Changed"; echo; cat release-commits.md; echo; } > release-body.md
+          else
+            : > release-body.md
+          fi
+          wc -l release-commits.md
+
+      - name: Publish release
+        if: needs.preflight.outputs.previous_tag != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.preflight.outputs.tag }}
+          target_commitish: ${{ needs.preflight.outputs.ref }}
+          name: ${{ needs.preflight.outputs.release_name }}
+          body_path: release-body.md
+          generate_release_notes: true
+          previous_tag: ${{ needs.preflight.outputs.previous_tag }}
+          prerelease: ${{ needs.preflight.outputs.is_prerelease }}
+          make_latest: ${{ needs.preflight.outputs.make_latest }}
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/*.AppImage
+            release-assets/*.blockmap
+            release-assets/*.yml
+            release-assets/*.tar.gz
+            release-assets/SHA256SUMS
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}
+
+      - name: Publish first release
+        if: needs.preflight.outputs.previous_tag == ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.preflight.outputs.tag }}
+          target_commitish: ${{ needs.preflight.outputs.ref }}
+          name: ${{ needs.preflight.outputs.release_name }}
+          generate_release_notes: true
+          prerelease: ${{ needs.preflight.outputs.is_prerelease }}
+          make_latest: ${{ needs.preflight.outputs.make_latest }}
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/*.AppImage
+            release-assets/*.blockmap
+            release-assets/*.yml
+            release-assets/*.tar.gz
+            release-assets/SHA256SUMS
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}

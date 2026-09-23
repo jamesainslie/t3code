@@ -1,0 +1,234 @@
+import type { ContextMenuItem, ThreadHighlightPalette } from "@t3tools/contracts";
+import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
+
+/**
+ * Ids for the per-thread action menu. Snooze presets are dispatched as
+ * `snooze:<presetId>` so the union stays closed while the preset list
+ * remains data-driven.
+ */
+export type ThreadActionMenuId =
+  | "new-thread-on-branch"
+  | "filter-by-project"
+  | "project-settings"
+  | "pin"
+  | "unpin"
+  | "settle"
+  | "unsettle"
+  | "snooze"
+  | `snooze:${string}`
+  | "unsnooze"
+  | "highlight"
+  | "highlight:default"
+  | `highlight:${number}`
+  | "depends-on"
+  | "new-thread-to-unblock"
+  | "release"
+  | "rename"
+  | "regenerate-title"
+  | "mark-unread"
+  | "copy"
+  | "copy-path"
+  | "copy-branch"
+  | "copy-thread-id"
+  | "archive"
+  | "delete";
+
+export interface ThreadActionMenuState {
+  readonly branch: string | null;
+  /**
+   * Project scoping for the thread list. Null on surfaces with no scoped
+   * list behind the menu (the chat header), where the item must not show.
+   */
+  readonly projectFilter: {
+    readonly label: string;
+    /** True when the list is already scoped to this thread's project. */
+    readonly isActive: boolean;
+  } | null;
+  readonly isPinned: boolean;
+  /** Current highlight color, or null for the plain card. */
+  readonly highlightColor: string | null;
+  /** Palette offered under Highlight; each index dispatches as `highlight:<index>`. */
+  readonly highlightPalette: ThreadHighlightPalette;
+  readonly isSettled: boolean;
+  readonly isSnoozed: boolean;
+  readonly canSnoozeNow: boolean;
+  /** Waiting on another thread, so the only parking action left is the way out. */
+  readonly isBlocked: boolean;
+  readonly canAddDependencyNow: boolean;
+  readonly isRegeneratingTitle: boolean;
+  /** Archive rejects a thread with an active turn, so disable it here rather than let the action fail. */
+  readonly isRunning: boolean;
+  readonly supports: {
+    readonly settlement: boolean;
+    readonly snooze: boolean;
+    readonly pinning: boolean;
+    readonly highlight: boolean;
+    readonly titleRegeneration: boolean;
+    readonly dependencies: boolean;
+  };
+  readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+}
+
+/**
+ * Single source for the per-thread action menu: the sidebar row's right-click
+ * menu and the chat header menu share labels, ordering, and capability gating.
+ * Each surface supplies state for the actions it supports.
+ */
+export function buildThreadActionMenuItems(
+  state: ThreadActionMenuState,
+): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
+  return [
+    ...(state.branch
+      ? [
+          {
+            id: "new-thread-on-branch" as const,
+            label: `New thread on ${state.branch}`,
+            icon: "message-square-plus",
+          },
+        ]
+      : []),
+    ...(state.supports.pinning
+      ? [
+          state.isPinned
+            ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
+            : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+        ]
+      : []),
+    // A highlight is a visual marker only: it survives settle, snooze, and
+    // pin changes. The checked entry mirrors what the card shows now.
+    ...(state.supports.highlight
+      ? [
+          {
+            id: "highlight" as const,
+            label: "Highlight",
+            icon: "palette",
+            children: [
+              {
+                id: "highlight:default" as const,
+                label: state.highlightColor === null ? "Default ✓" : "Default",
+              },
+              ...state.highlightPalette.map((entry, index) => ({
+                id: `highlight:${index}` as const,
+                label:
+                  state.highlightColor !== null &&
+                  entry.color.trim().toLowerCase() === state.highlightColor.trim().toLowerCase()
+                    ? `${entry.label} ✓`
+                    : entry.label,
+                ...(index === 0 ? { separatorBefore: true } : {}),
+              })),
+            ],
+          },
+        ]
+      : []),
+    // Both lifecycle actions stay available on pinned threads: settling
+    // clears the pin ("done" beats "keep on top"), and snoozing hides the
+    // card until wake with the pin intact.
+    ...(state.supports.settlement
+      ? [
+          state.isSettled
+            ? { id: "unsettle" as const, label: "Un-settle thread", icon: "circle-check" }
+            : { id: "settle" as const, label: "Settle thread", icon: "circle-check" },
+        ]
+      : []),
+    // A thread waits either for a time or for other threads, never both, so
+    // the parking group shows one set at a time: the way out while it waits,
+    // otherwise snooze beside the two ways to park it on another thread.
+    ...(state.supports.dependencies && state.isBlocked
+      ? [{ id: "release" as const, label: "Wake thread", icon: "clock" }]
+      : [
+          ...(state.supports.snooze
+            ? [
+                state.isSnoozed
+                  ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
+                  : {
+                      id: "snooze" as const,
+                      label: "Snooze",
+                      icon: "clock",
+                      disabled: !state.canSnoozeNow,
+                      children: [
+                        ...state.snoozePresets.map((preset) => ({
+                          id: `snooze:${preset.id}` as const,
+                          label: `${preset.label} (${preset.whenLabel})`,
+                        })),
+                        { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
+                      ],
+                    },
+              ]
+            : []),
+          // Disabled rather than hidden for the same reason as snooze: the
+          // thread is asking the user something, and hiding the item would
+          // read as the feature being unavailable here.
+          ...(state.supports.dependencies
+            ? [
+                {
+                  id: "depends-on" as const,
+                  label: "Depends on…",
+                  icon: "link",
+                  disabled: !state.canAddDependencyNow,
+                },
+                {
+                  id: "new-thread-to-unblock" as const,
+                  label: "Start a thread to unblock this",
+                  icon: "message-square-plus",
+                  disabled: !state.canAddDependencyNow,
+                },
+              ]
+            : []),
+        ]),
+    { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
+    ...(state.supports.titleRegeneration
+      ? [
+          {
+            id: "regenerate-title" as const,
+            label: state.isRegeneratingTitle ? "Regenerating…" : "Regenerate title",
+            icon: "refresh-cw",
+            disabled: state.isRegeneratingTitle,
+          },
+        ]
+      : []),
+    { id: "mark-unread", label: "Mark unread", icon: "mail-open" },
+    ...(state.projectFilter
+      ? [
+          {
+            id: "filter-by-project" as const,
+            label: state.projectFilter.isActive
+              ? "Show all projects"
+              : `Filter by ${state.projectFilter.label}`,
+            icon: "folder-tree",
+          },
+        ]
+      : []),
+    {
+      id: "copy",
+      label: "Copy",
+      icon: "copy",
+      separatorBefore: true,
+      children: [
+        { id: "copy-path", label: "Path", icon: "folder" },
+        ...(state.branch
+          ? [{ id: "copy-branch" as const, label: "Branch", icon: "git-branch" }]
+          : []),
+        { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
+      ],
+    },
+    { id: "project-settings", label: "Project settings", icon: "settings" },
+    // Archive removes the thread from the sidebar while keeping its
+    // conversation under Settings > Archived threads — distinct from Settle
+    // (stays visible in the Settled shelf) and Delete (clears history for
+    // good), so it sits beside Delete without borrowing its destructive
+    // styling.
+    {
+      id: "archive",
+      label: "Archive thread",
+      icon: "archive",
+      disabled: state.isRunning,
+      separatorBefore: true,
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      destructive: true,
+      icon: "trash",
+    },
+  ];
+}

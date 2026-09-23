@@ -1,0 +1,161 @@
+import {
+  isSyncedThreadId,
+  unsatisfiedThreadDependencies,
+  type OrchestrationThreadShell,
+} from "@t3tools/contracts";
+import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
+
+export interface SettlementPullRequest {
+  readonly state: "open" | "closed" | "merged";
+  readonly closedAt?: string | null;
+  readonly mergedAt?: string | null;
+  readonly updatedAt?: string | null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1_000;
+const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
+
+function latestTimestamp(values: ReadonlyArray<string | null | undefined>): string | null {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (value == null) continue;
+    const valueMs = Date.parse(value);
+    if (valueMs > latestMs) {
+      latest = value;
+      latestMs = valueMs;
+    }
+  }
+  return latest;
+}
+
+/** A recent user message stays queued until a turn adopts its timestamp.
+ * Absolute age bounds client clock skew in both directions and stops stale
+ * pre-adoption data from blocking the thread forever. */
+export function threadHasQueuedTurnStart(
+  thread: Pick<OrchestrationThreadShell, "latestUserMessageAt" | "latestTurn" | "session">,
+  now: string,
+): boolean {
+  if (thread.latestUserMessageAt === null || thread.session?.status === "error") return false;
+  const messageAt = Date.parse(thread.latestUserMessageAt);
+  const age = Date.parse(now) - messageAt;
+  if (Number.isNaN(age) || Math.abs(age) > QUEUED_TURN_START_GRACE_MS) return false;
+  if (thread.latestTurn === null) return true;
+  return [
+    thread.latestTurn.requestedAt,
+    thread.latestTurn.startedAt,
+    thread.latestTurn.completedAt,
+  ].every((value) => value == null || Date.parse(value) < messageAt);
+}
+
+function pullRequestSettles(
+  thread: Pick<OrchestrationThreadShell, "createdAt" | "latestUserMessageAt" | "latestTurn">,
+  pullRequest: SettlementPullRequest,
+  autoSettleOnMerge: boolean,
+): boolean {
+  if (pullRequest.state !== "closed" && (pullRequest.state !== "merged" || !autoSettleOnMerge)) {
+    return false;
+  }
+  const terminalAt = pullRequest.state === "merged" ? pullRequest.mergedAt : pullRequest.closedAt;
+  if (terminalAt == null) return false;
+  const userAnchor = latestTimestamp([
+    thread.createdAt,
+    thread.latestUserMessageAt,
+    thread.latestTurn?.requestedAt,
+  ]);
+  if (userAnchor === null) return false;
+  const pullRequestAt = Date.parse(terminalAt);
+  const userAnchorAt = Date.parse(userAnchor);
+  if (Number.isNaN(pullRequestAt) || Number.isNaN(userAnchorAt)) return false;
+  return pullRequestAt >= userAnchorAt;
+}
+
+export function resolveAutoSettlementAt(input: {
+  readonly thread: OrchestrationThreadShell;
+  readonly pullRequest: SettlementPullRequest | null;
+  readonly now: string;
+  readonly autoSettleAfterDays: number | null;
+  readonly autoSettleOnMerge: boolean;
+}): string | null {
+  const { thread } = input;
+  let pullRequest = input.pullRequest;
+  const links = visibleThreadPullRequests(thread.pullRequests);
+  if (links.some((link) => link.snapshot === null || link.snapshot.state === "open")) return null;
+  if (links.length > 0) {
+    const terminalTimestamp = (link: (typeof links)[number]) => {
+      const snapshot = link.snapshot;
+      const value = snapshot?.state === "merged" ? snapshot.mergedAt : snapshot?.closedAt;
+      const timestamp = Date.parse(value ?? "");
+      return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+    };
+    const latest = links.reduce((current, candidate) =>
+      terminalTimestamp(candidate) > terminalTimestamp(current) ? candidate : current,
+    );
+    pullRequest =
+      latest.snapshot === null
+        ? null
+        : {
+            state: latest.snapshot.state,
+            mergedAt: latest.snapshot.mergedAt ?? null,
+            closedAt: latest.snapshot.closedAt ?? null,
+          };
+  }
+  if (!isAutoSettlementCandidate(thread, input.now)) return null;
+  const activityAt = latestTimestamp([
+    thread.latestUserMessageAt,
+    thread.latestTurn?.requestedAt,
+    thread.latestTurn?.startedAt,
+    thread.latestTurn?.completedAt,
+  ]);
+  if (pullRequest !== null) {
+    if (pullRequestSettles(thread, pullRequest, input.autoSettleOnMerge)) {
+      return activityAt ?? thread.createdAt;
+    }
+  }
+  if (input.autoSettleAfterDays === null || activityAt === null) return null;
+  return Date.parse(activityAt) < Date.parse(input.now) - input.autoSettleAfterDays * DAY_MS
+    ? activityAt
+    : null;
+}
+
+/** Cheap checks that run before any source control lookup. */
+export function isAutoSettlementCandidate(thread: OrchestrationThreadShell, now: string): boolean {
+  if (isSyncedThreadId(thread.id)) return false;
+  if (thread.archivedAt !== null || thread.settledOverride !== null) return false;
+  if (thread.hasPendingApprovals || thread.hasPendingUserInput) return false;
+  if (thread.session?.status === "starting" || thread.session?.status === "running") return false;
+  if (thread.backgroundLiveness != null) return false;
+  if (threadHasQueuedTurnStart(thread, now)) return false;
+  // A thread waiting on other threads is parked the same way a snoozed one
+  // is, and only a raised hand since the latest link puts it back in play.
+  const openLinks = unsatisfiedThreadDependencies(thread);
+  if (openLinks.length > 0) {
+    const latestLinkedAt = openLinks.reduce(
+      (latest, link) => (Date.parse(link.linkedAt) > Date.parse(latest) ? link.linkedAt : latest),
+      openLinks[0]!.linkedAt,
+    );
+    if (!threadRaisedHandSince(thread, latestLinkedAt)) return false;
+  }
+  if (thread.snoozedUntil == null || Date.parse(thread.snoozedUntil) <= Date.parse(now))
+    return true;
+  return threadRaisedHandSince(thread, thread.snoozedAt ?? null);
+}
+
+/**
+ * Server twin of the client raised-hand rule: a fresh session error, or a
+ * turn that completed after the reference time, outranks a snooze or a wait.
+ */
+function threadRaisedHandSince(
+  thread: OrchestrationThreadShell,
+  referenceAt: string | null,
+): boolean {
+  const wokeOnError =
+    thread.session?.status === "error" &&
+    (referenceAt == null || Date.parse(thread.session.updatedAt) > Date.parse(referenceAt));
+  const wokeOnCompletion =
+    referenceAt != null &&
+    thread.latestTurn?.state === "completed" &&
+    thread.latestTurn.completedAt != null &&
+    Date.parse(thread.latestTurn.completedAt) > Date.parse(referenceAt);
+  return wokeOnError || wokeOnCompletion;
+}
