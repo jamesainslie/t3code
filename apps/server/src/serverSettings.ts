@@ -27,6 +27,8 @@ import {
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  usageLimitSourceSecret,
+  withUsageLimitSourceSecret,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -176,14 +178,14 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
         : instance,
     ]),
   );
-  // The hub key is a bearer secret; clients only need to know one is set.
+  // A source's secret is a bearer credential; clients only need to know one is set.
   const usageLimitSources = Object.fromEntries(
     Object.entries(settings.usageLimitSources).map(([id, source]) => [
       id,
-      {
-        ...source,
-        managementKey: source.managementKey.length > 0 ? USAGE_LIMIT_SOURCE_KEY_REDACTED : "",
-      },
+      withUsageLimitSourceSecret(
+        source,
+        usageLimitSourceSecret(source).length > 0 ? USAGE_LIMIT_SOURCE_KEY_REDACTED : "",
+      ),
     ]),
   );
   return { ...settings, providerInstances, usageLimitSources };
@@ -694,7 +696,7 @@ const make = Effect.gen(function* () {
       }
       const usageLimitSources: Record<string, UsageLimitSourceConfig> = {};
       for (const [sourceId, source] of Object.entries(settings.usageLimitSources)) {
-        if (source.managementKey !== USAGE_LIMIT_SOURCE_KEY_REDACTED) {
+        if (usageLimitSourceSecret(source) !== USAGE_LIMIT_SOURCE_KEY_REDACTED) {
           usageLimitSources[sourceId] = source;
           continue;
         }
@@ -705,10 +707,10 @@ const make = Effect.gen(function* () {
               (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
             ),
           );
-        usageLimitSources[sourceId] = {
-          ...source,
-          managementKey: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
-        };
+        usageLimitSources[sourceId] = withUsageLimitSourceSecret(
+          source,
+          Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
+        );
       }
       return {
         ...settings,
@@ -843,12 +845,13 @@ const make = Effect.gen(function* () {
       const usageLimitSources: Record<string, UsageLimitSourceConfig> = {};
       for (const [sourceId, source] of Object.entries(next.usageLimitSources)) {
         const secretName = usageLimitSourceSecretName(sourceId);
-        if (source.managementKey === USAGE_LIMIT_SOURCE_KEY_REDACTED) {
+        const secret = usageLimitSourceSecret(source);
+        if (secret === USAGE_LIMIT_SOURCE_KEY_REDACTED) {
           // Unchanged from the client's point of view; the store already has it.
           usageLimitSources[sourceId] = source;
           continue;
         }
-        if (source.managementKey.length === 0) {
+        if (secret.length === 0) {
           yield* secretStore
             .remove(secretName)
             .pipe(
@@ -861,14 +864,17 @@ const make = Effect.gen(function* () {
           continue;
         }
         yield* secretStore
-          .set(secretName, textEncoder.encode(source.managementKey))
+          .set(secretName, textEncoder.encode(secret))
           .pipe(
             Effect.mapError(
               (cause) =>
                 new ServerSettingsError({ settingsPath, operation: "write-secret", cause }),
             ),
           );
-        usageLimitSources[sourceId] = { ...source, managementKey: USAGE_LIMIT_SOURCE_KEY_REDACTED };
+        usageLimitSources[sourceId] = withUsageLimitSourceSecret(
+          source,
+          USAGE_LIMIT_SOURCE_KEY_REDACTED,
+        );
       }
       for (const sourceId of Object.keys(current.usageLimitSources)) {
         if (sourceId in next.usageLimitSources) continue;

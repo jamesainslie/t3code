@@ -936,19 +936,62 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
 /**
- * A read-only quota source outside this environment's provider CLIs. The
- * only kind today is a CLIProxyAPI hub, whose management API reports the
- * windows of every pooled account. The key travels in settings for now, like
- * provider environment secrets; it is redacted before reaching a client.
+ * A quota source outside this environment's provider CLIs. Two kinds:
+ *
+ * - `cliproxy`: a CLIProxyAPI hub whose management API reports the windows
+ *   of every pooled account. The management key is the secret.
+ * - `modelproxy`: a modelproxy gateway (iris) whose status API reports every
+ *   pooled account, the one it is serving, and its rotation forecast. The
+ *   server signs in as the user through the OIDC device grant against
+ *   `issuer`; the client secret is the settings secret and the session
+ *   tokens live only in the secret store.
+ *
+ * Secrets travel in settings for now, like provider environment secrets;
+ * they are redacted before reaching a client.
  */
-export const UsageLimitSourceConfig = Schema.Struct({
+export const CliproxyUsageLimitSourceConfig = Schema.Struct({
   kind: Schema.Literal("cliproxy"),
   label: Schema.optional(TrimmedNonEmptyString),
   url: TrimmedNonEmptyString,
   managementKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
+export type CliproxyUsageLimitSourceConfig = typeof CliproxyUsageLimitSourceConfig.Type;
+
+export const ModelproxyUsageLimitSourceConfig = Schema.Struct({
+  kind: Schema.Literal("modelproxy"),
+  label: Schema.optional(TrimmedNonEmptyString),
+  url: TrimmedNonEmptyString,
+  /** OIDC issuer, e.g. `https://auth.example.com/realms/main`. */
+  issuer: TrimmedNonEmptyString,
+  clientId: TrimmedNonEmptyString,
+  clientSecret: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type ModelproxyUsageLimitSourceConfig = typeof ModelproxyUsageLimitSourceConfig.Type;
+
+export const UsageLimitSourceConfig = Schema.Union([
+  CliproxyUsageLimitSourceConfig,
+  ModelproxyUsageLimitSourceConfig,
+]);
 export type UsageLimitSourceConfig = typeof UsageLimitSourceConfig.Type;
+
+/**
+ * The one field of a source that is a bearer secret. Settings persistence
+ * moves it to the secret store and clients only ever see a redaction marker.
+ */
+export function usageLimitSourceSecret(config: UsageLimitSourceConfig): string {
+  return config.kind === "cliproxy" ? config.managementKey : config.clientSecret;
+}
+
+export function withUsageLimitSourceSecret<Config extends UsageLimitSourceConfig>(
+  config: Config,
+  secret: string,
+): Config {
+  return config.kind === "cliproxy"
+    ? { ...config, managementKey: secret }
+    : { ...config, clientSecret: secret };
+}
 
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),

@@ -72,6 +72,32 @@ export const ProviderUsageLimitsUpdate = Schema.Struct({
 export type ProviderUsageLimitsUpdate = typeof ProviderUsageLimitsUpdate.Type;
 
 /**
+ * What a modelproxy gateway says one pooled account is doing right now. The
+ * vocabulary is the gateway's own: `live` is the account serving traffic,
+ * `ready` may be selected, `cooling` is parked after a rejection, `paused`
+ * is disabled by the operator, and the last two are terminal conditions
+ * that need the operator to act.
+ */
+export const UsageLimitSourceProxyAccountState = Schema.Literals([
+  "live",
+  "ready",
+  "cooling",
+  "paused",
+  "reauthentication",
+  "suspended",
+]);
+export type UsageLimitSourceProxyAccountState = typeof UsageLimitSourceProxyAccountState.Type;
+
+export const UsageLimitSourceProxyAccount = Schema.Struct({
+  state: UsageLimitSourceProxyAccountState,
+  coolingUntil: Schema.optional(IsoDateTime),
+  /** The upstream keeps serving from purchased credits once the windows are spent. */
+  credits: Schema.optional(Schema.Boolean),
+  inflight: NonNegativeInt,
+});
+export type UsageLimitSourceProxyAccount = typeof UsageLimitSourceProxyAccount.Type;
+
+/**
  * One account a usage-limit source reports on. `driver` is the provider the
  * account belongs to, for the icon and colour clients already have; the
  * account itself is not something this environment can run turns on.
@@ -84,8 +110,67 @@ export const UsageLimitSourceAccount = Schema.Struct({
   /** Plan as the matching provider would label it (`ChatGPT Pro 20x Subscription`). */
   plan: Schema.optional(TrimmedNonEmptyString),
   usageLimits: ServerProviderUsageLimits,
+  /** Present on `modelproxy` sources only. */
+  proxy: Schema.optional(UsageLimitSourceProxyAccount),
 });
 export type UsageLimitSourceAccount = typeof UsageLimitSourceAccount.Type;
+
+/** Mirrors modelproxy's forecast runway kinds. */
+export const UsageLimitSourceRunway = Schema.Struct({
+  kind: Schema.Literals(["at", "idle", "beyondHorizon", "resetsFirst", "unknown", "disabled"]),
+  at: Schema.optional(IsoDateTime),
+});
+export type UsageLimitSourceRunway = typeof UsageLimitSourceRunway.Type;
+
+/**
+ * Where the server stands with the gateway's sign-in. `pending` carries the
+ * device code the user must enter; it is published so any client of this
+ * environment can show it, not only the one that started the flow.
+ */
+export const UsageLimitSourceAuthState = Schema.Union([
+  Schema.Struct({ state: Schema.Literal("signedOut") }),
+  Schema.Struct({ state: Schema.Literal("signedIn") }),
+  Schema.Struct({
+    state: Schema.Literal("pending"),
+    userCode: TrimmedNonEmptyString,
+    verificationUrl: TrimmedNonEmptyString,
+    /** The URL with the code already filled in, when the issuer offers one. */
+    verificationUrlComplete: Schema.optional(TrimmedNonEmptyString),
+    expiresAt: IsoDateTime,
+  }),
+]);
+export type UsageLimitSourceAuthState = typeof UsageLimitSourceAuthState.Type;
+
+/** A metered account the gateway spills to once the subscriptions are spent. */
+export const UsageLimitSourceProxyFallback = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  provider: TrimmedNonEmptyString,
+  spendUsd: Schema.Number,
+  /** Absent when the gateway imposes no cap. */
+  capUsd: Schema.optional(Schema.Number),
+  /** `day` or `month`. */
+  window: Schema.optional(TrimmedNonEmptyString),
+});
+export type UsageLimitSourceProxyFallback = typeof UsageLimitSourceProxyFallback.Type;
+
+/**
+ * Gateway-wide state from a `modelproxy` source: what the header widget
+ * needs beyond the per-account windows.
+ */
+export const UsageLimitSourceProxyStatus = Schema.Struct({
+  auth: UsageLimitSourceAuthState,
+  /** `accounts[].id` of the account serving traffic, when one is. */
+  current: Schema.optional(TrimmedNonEmptyString),
+  /** Utilisation at which the gateway rotates off the shared windows, 0-100. */
+  rotationThresholdPercent: Schema.optional(Schema.Number),
+  /** The same for per-model weekly buckets. */
+  modelThresholdPercent: Schema.optional(Schema.Number),
+  runway: Schema.optional(UsageLimitSourceRunway),
+  fallback: Schema.optional(ForwardCompatibleArray(UsageLimitSourceProxyFallback)),
+  inflightTotal: Schema.optional(NonNegativeInt),
+  queueDepth: Schema.optional(NonNegativeInt),
+});
+export type UsageLimitSourceProxyStatus = typeof UsageLimitSourceProxyStatus.Type;
 
 /**
  * The published state of one configured `usageLimitSources` entry. A source
@@ -94,13 +179,22 @@ export type UsageLimitSourceAccount = typeof UsageLimitSourceAccount.Type;
  */
 export const UsageLimitSourceSnapshot = Schema.Struct({
   id: UsageLimitSourceId,
-  kind: Schema.Literal("cliproxy"),
+  kind: Schema.Literals(["cliproxy", "modelproxy"]),
   label: TrimmedNonEmptyString,
   checkedAt: IsoDateTime,
   accounts: ForwardCompatibleArray(UsageLimitSourceAccount),
   error: Schema.optional(TrimmedNonEmptyString),
+  /** Present on `modelproxy` sources, even while signed out. */
+  proxy: Schema.optional(UsageLimitSourceProxyStatus),
 });
 export type UsageLimitSourceSnapshot = typeof UsageLimitSourceSnapshot.Type;
+
+/** Drive a `modelproxy` source's sign-in. `start` is idempotent while a flow is pending. */
+export const UsageLimitSourceAuthInput = Schema.Struct({
+  sourceId: UsageLimitSourceId,
+  action: Schema.Literals(["start", "cancel", "signOut"]),
+});
+export type UsageLimitSourceAuthInput = typeof UsageLimitSourceAuthInput.Type;
 
 export const UsageLimitSourceSnapshots = ForwardCompatibleArray(UsageLimitSourceSnapshot);
 export type UsageLimitSourceSnapshots = typeof UsageLimitSourceSnapshots.Type;
