@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-18T14:00:00Z",
+  "updatedAt": "2026-09-23T09:30:00Z",
   "currentModels": {
     "codex": [
       "gpt-6-astra",
@@ -14,7 +14,7 @@
       "claude-fable-5-1",
       "claude-mythos-5-1",
       "claude-mythos-5",
-      "claude-opus-5",
+      "claude-opus-5-5",
       "claude-sonnet-5"
     ],
     "antigravity": ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"]
@@ -609,10 +609,23 @@
           }
         },
         {
+          "slug": "claude-opus-5-5",
+          "name": "Claude Opus 5.5",
+          "aliases": ["opus", "opus-5.5", "claude-opus-5.5"],
+          "status": "current",
+          "badge": "new",
+          "profile": "opus-5",
+          "adapter": {
+            "claudeCode": {
+              "minVersion": "2.1.280"
+            }
+          }
+        },
+        {
           "slug": "claude-opus-5",
           "name": "Claude Opus 5",
-          "aliases": ["opus", "opus-5", "claude-opus-5.0", "claude-opus-5-0"],
-          "status": "current",
+          "aliases": ["opus-5", "claude-opus-5.0", "claude-opus-5-0"],
+          "status": "legacy",
           "profile": "opus-5",
           "adapter": {
             "claudeCode": {
