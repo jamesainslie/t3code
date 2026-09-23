@@ -268,6 +268,39 @@ export const ColorPreference = Schema.String.check(Schema.isMaxLength(64));
 export type ColorPreference = typeof ColorPreference.Type;
 
 /**
+ * One slot of the thread highlight palette offered from a thread's context
+ * menu. The label is what the menu shows (native menus cannot draw a
+ * swatch); the color is what the thread stores when picked.
+ */
+export const ThreadHighlightPaletteEntry = Schema.Struct({
+  label: Schema.String.check(Schema.isMaxLength(32)),
+  color: ColorPreference,
+});
+export type ThreadHighlightPaletteEntry = typeof ThreadHighlightPaletteEntry.Type;
+
+const THREAD_HIGHLIGHT_PALETTE_SIZE = 12;
+export const ThreadHighlightPalette = Schema.Array(ThreadHighlightPaletteEntry).check(
+  Schema.isLengthBetween(THREAD_HIGHLIGHT_PALETTE_SIZE, THREAD_HIGHLIGHT_PALETTE_SIZE),
+);
+export type ThreadHighlightPalette = typeof ThreadHighlightPalette.Type;
+
+/** Muted tones that keep light sidebar text readable in a dark theme. */
+export const DEFAULT_THREAD_HIGHLIGHT_PALETTE: ThreadHighlightPalette = [
+  { label: "Red", color: "#5c2b2b" },
+  { label: "Orange", color: "#5c3d1f" },
+  { label: "Amber", color: "#5a4a1a" },
+  { label: "Lime", color: "#3f5220" },
+  { label: "Green", color: "#234d33" },
+  { label: "Teal", color: "#1f4d4a" },
+  { label: "Cyan", color: "#1f4457" },
+  { label: "Blue", color: "#26385f" },
+  { label: "Indigo", color: "#33305f" },
+  { label: "Purple", color: "#472d5c" },
+  { label: "Pink", color: "#5a2b48" },
+  { label: "Slate", color: "#3a3f4a" },
+];
+
+/**
  * The environment's theme, set with `t3 theme set <id>`. Each client applies
  * it once per value — live when connected, on its next connect otherwise — so
  * setting it switches every client, while a theme a user picks in Settings
@@ -409,6 +442,9 @@ export const ClientSettingsSchema = Schema.Struct({
   chatTextColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   composerCaretColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   threadCardColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  threadHighlightPalette: ThreadHighlightPalette.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_THREAD_HIGHLIGHT_PALETTE)),
+  ),
   // Grayscale `-webkit-font-smoothing: antialiased` (thinner strokes);
   // disabling restores the platform's heavier default. No effect off macOS.
   fontSmoothing: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1604,6 +1640,7 @@ export const ClientSettingsPatch = Schema.Struct({
   chatTextColor: Schema.optionalKey(ColorPreference),
   composerCaretColor: Schema.optionalKey(ColorPreference),
   threadCardColor: Schema.optionalKey(ColorPreference),
+  threadHighlightPalette: Schema.optionalKey(ThreadHighlightPalette),
   fontSmoothing: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(
     Schema.Array(

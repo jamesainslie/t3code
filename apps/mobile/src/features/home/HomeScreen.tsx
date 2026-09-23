@@ -127,6 +127,10 @@ interface HomeScreenProps {
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
   readonly onPinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly onHighlightThread: (
+    thread: EnvironmentThreadShell,
+    color: string | null,
+  ) => Promise<boolean>;
   readonly onMoveThread: (
     thread: EnvironmentThreadShell,
     direction: ThreadMoveDestination,
@@ -537,6 +541,12 @@ export function HomeScreen(props: HomeScreenProps) {
     },
     [props.onPinThread],
   );
+  const handleHighlightThread = useCallback(
+    (thread: EnvironmentThreadShell, color: string | null) => {
+      void props.onHighlightThread(thread, color);
+    },
+    [props.onHighlightThread],
+  );
   const handleMoveThread = useCallback(
     (thread: EnvironmentThreadShell, direction: ThreadMoveDestination) => {
       void props.onMoveThread(thread, direction);
@@ -634,6 +644,15 @@ export function HomeScreen(props: HomeScreenProps) {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadPinning === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const highlightEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (config.environment.capabilities.threadHighlight === true) {
         supported.add(environmentId);
       }
     }
@@ -937,6 +956,7 @@ export function HomeScreen(props: HomeScreenProps) {
           snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
           dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
+          highlightSupported={highlightEnvironmentIds.has(thread.environmentId)}
           reorderSupported={
             item.item.pinned
               ? pinReorderEnvironmentIds.has(thread.environmentId)
@@ -952,6 +972,7 @@ export function HomeScreen(props: HomeScreenProps) {
           onUnsettleThread={handleUnsettleThread}
           onPinThread={handlePinThread}
           onUnpinThread={handleUnpinThread}
+          onHighlightThread={handleHighlightThread}
           onMoveThread={handleMoveThread}
           onSwipeableClose={handleSwipeableClose}
           onSwipeableWillOpen={handleSwipeableWillOpen}
@@ -964,6 +985,7 @@ export function HomeScreen(props: HomeScreenProps) {
       threadMovePlanners,
       pendingOrder,
       queuedThreadKeys,
+      handleHighlightThread,
       handleMoveThread,
       handlePinThread,
       handleRegenerateThreadTitle,
@@ -977,6 +999,7 @@ export function HomeScreen(props: HomeScreenProps) {
       handleSwipeableWillOpen,
       handleUnsettleThread,
       pinningEnvironmentIds,
+      highlightEnvironmentIds,
       machineByEnvironmentId,
       pinReorderEnvironmentIds,
       projectByKey,

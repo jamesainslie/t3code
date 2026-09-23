@@ -27,6 +27,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
   readEnvironmentSupportsDependencies,
+  readEnvironmentSupportsHighlight,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
@@ -96,6 +97,7 @@ export function useThreadActionMenu(input: {
     releaseThreadDependencies,
     pinThread,
     confirmAndUnpinThread,
+    setThreadHighlight,
     archiveThread,
     deleteThread,
   } = useThreadActions();
@@ -107,6 +109,7 @@ export function useThreadActionMenu(input: {
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
+  const threadHighlightPalette = useClientSettings((s) => s.threadHighlightPalette);
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onCopy: ({ path }) => {
       toastManager.add({ type: "success", title: "Path copied", description: path });
@@ -142,6 +145,7 @@ export function useThreadActionMenu(input: {
           settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
           snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
           pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
+          highlight: readEnvironmentSupportsHighlight(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
           dependencies: readEnvironmentSupportsDependencies(threadRef.environmentId),
         };
@@ -153,6 +157,8 @@ export function useThreadActionMenu(input: {
           // menu, so the "Filter by project" affordance is sidebar-only.
           projectFilter: null,
           isPinned: thread.pinnedAt != null,
+          highlightColor: thread.highlightColor ?? null,
+          highlightPalette: threadHighlightPalette,
           isSettled: supports.settlement && thread.settledOverride === "settled",
           isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
           canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
@@ -166,6 +172,19 @@ export function useThreadActionMenu(input: {
         const clicked = await settlePromise(() => api.contextMenu.show(items, position));
         if (clicked._tag === "Failure" || clicked.value === null) return;
         const action: ThreadActionMenuId = clicked.value;
+        if (action.startsWith("highlight:")) {
+          const color =
+            action === "highlight:default"
+              ? null
+              : (threadHighlightPalette[Number(action.slice("highlight:".length))]?.color ??
+                undefined);
+          if (color === undefined) return;
+          const result = await setThreadHighlight(threadRef, color);
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            failureToast("Failed to highlight thread", squashAtomCommandFailure(result));
+          }
+          return;
+        }
         if (action.startsWith("snooze:")) {
           const preset =
             action === "snooze:custom"
@@ -286,6 +305,8 @@ export function useThreadActionMenu(input: {
             return;
           case "unsnooze":
             await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
+            return;
+          case "highlight":
             return;
           case "pin":
             await reportFailure("Failed to pin thread", () => pinThread(threadRef));

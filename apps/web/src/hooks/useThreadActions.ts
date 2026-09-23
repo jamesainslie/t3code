@@ -30,6 +30,7 @@ import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsStat
 import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
 import { readLocalApi } from "../localApi";
 import {
+  readEnvironmentSupportsHighlight,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
@@ -145,6 +146,18 @@ export class ThreadPinningUnsupportedError extends Schema.TaggedError<ThreadPinn
   }
 }
 
+export class ThreadHighlightUnsupportedError extends Schema.TaggedError<ThreadHighlightUnsupportedError>()(
+  "ThreadHighlightUnsupportedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return "This environment's server does not support thread highlights yet. Update the server to highlight threads.";
+  }
+}
+
 export class ThreadPinReorderUnsupportedError extends Schema.TaggedError<ThreadPinReorderUnsupportedError>()(
   "ThreadPinReorderUnsupportedError",
   {
@@ -228,6 +241,9 @@ export function useThreadActions() {
     reportFailure: false,
   });
   const reorderPinnedThreadMutation = useAtomCommand(threadEnvironment.reorderPin, {
+    reportFailure: false,
+  });
+  const setThreadHighlightMutation = useAtomCommand(threadEnvironment.setHighlight, {
     reportFailure: false,
   });
   const reorderActiveThreadMutation = useAtomCommand(threadEnvironment.reorderActive, {
@@ -691,6 +707,27 @@ export function useThreadActions() {
     [reorderPinnedThreadMutation],
   );
 
+  const setThreadHighlight = useCallback(
+    async (target: ScopedThreadRef, color: string | null) => {
+      // Version skew: never send the command to a server that predates it.
+      if (!readEnvironmentSupportsHighlight(target.environmentId)) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadHighlightUnsupportedError({
+              environmentId: target.environmentId,
+              threadId: target.threadId,
+            }),
+          ),
+        );
+      }
+      return setThreadHighlightMutation({
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, color },
+      });
+    },
+    [setThreadHighlightMutation],
+  );
+
   const reorderActiveThread = useCallback(
     async (target: ScopedThreadRef, orderKey: string) => {
       if (!readEnvironmentSupportsActiveReorder(target.environmentId)) {
@@ -897,6 +934,7 @@ export function useThreadActions() {
       confirmAndUnpinThread,
       reorderPinnedThread,
       reorderActiveThread,
+      setThreadHighlight,
     }),
     [
       addThreadDependency,
@@ -909,6 +947,7 @@ export function useThreadActions() {
       removeThreadDependency,
       reorderPinnedThread,
       reorderActiveThread,
+      setThreadHighlight,
       settleThread,
       snoozeThread,
       unarchiveThread,

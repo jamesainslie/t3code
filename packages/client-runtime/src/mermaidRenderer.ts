@@ -72,6 +72,27 @@ function config(theme: "dark" | "light"): MermaidConfig {
   };
 }
 
+/**
+ * Mermaid emits its root as `width="100%"` with a `max-width` style and a
+ * viewBox. Shown through an <img>, that root fills the image box and the
+ * drawing sits at its left edge, so the diagram cannot be centered. Pin the
+ * root to its viewBox size instead; the image then has natural dimensions
+ * and the viewer scales and centers it like any other picture.
+ */
+export function sizeMermaidSvg(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (root) => {
+    const box = root.match(
+      /\bviewBox=["']\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*["']/,
+    );
+    if (!box) return root;
+    const width = Number(box[3]);
+    const height = Number(box[4]);
+    if (!(width > 0) || !(height > 0)) return root;
+    const stripped = root.replace(/\s(?:width|height)=["'][^"']*["']/g, "");
+    return stripped.replace(/^<svg\b/, `<svg width="${width}" height="${height}"`);
+  });
+}
+
 /** Serialized because Mermaid's configuration and render queue are global. */
 export function renderMermaid(source: string, theme: "dark" | "light"): Promise<string> {
   if (source.length > 50000)
@@ -92,7 +113,7 @@ export function renderMermaid(source: string, theme: "dark" | "light"): Promise<
     mermaid.initialize(config(theme));
     const id = `t3-mermaid-${++nextId}`;
     try {
-      return (await mermaid.render(id, source)).svg;
+      return sizeMermaidSvg((await mermaid.render(id, source)).svg);
     } finally {
       // Mermaid can leave its temporary render node behind on a parser failure.
       if (typeof document !== "undefined") document.getElementById(`d${id}`)?.remove();

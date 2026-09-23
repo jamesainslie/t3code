@@ -72,6 +72,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -1423,6 +1424,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // like elevated cards while settled threads were plain rows, leaving neither
   // a useful hierarchy nor a reliable hover cue. Status now lives in the row
   // content; surface is reserved for interaction (hover, multi-select, route).
+  // A highlighted thread carries its color as an inline variable; index.css
+  // turns it into the resting surface and re-mixes the hover/active tints.
+  const highlightColor = props.thread.highlightColor ?? null;
+  const highlightProps =
+    highlightColor === null
+      ? {}
+      : {
+          "data-thread-highlight": "",
+          style: { "--thread-highlight": highlightColor } as CSSProperties,
+        };
   const rowSurfaceClassName = cn(
     "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md bg-sidebar-row-rest text-left outline-none select-none",
     variantAction === "unsettle" && "[&:not(:hover):not(:focus-within)_*]:text-secondary-label/70",
@@ -1627,6 +1638,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 tabIndex={0}
                 data-testid="sidebar-row-slim"
                 aria-busy={isRegeneratingTitle || undefined}
+                {...highlightProps}
                 className={cn(rowSurfaceClassName, "flex h-9 items-center gap-2.5 px-2.5")}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
@@ -1788,6 +1800,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               tabIndex={0}
               data-testid="sidebar-row-card"
               aria-busy={isRegeneratingTitle || undefined}
+              {...highlightProps}
               className={rowSurfaceClassName}
               onClick={handleClick}
               onDoubleClick={handleDoubleClick}
@@ -2179,8 +2192,10 @@ export default function Sidebar() {
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
+  const threadHighlightPalette = useClientSettings((s) => s.threadHighlightPalette);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
+    setThreadHighlight,
     settleThread,
     unsettleThread,
     snoozeThread,
@@ -3233,6 +3248,25 @@ export default function Sidebar() {
     },
     [unsnoozeThread],
   );
+  const attemptHighlight = useCallback(
+    (threadRef: ScopedThreadRef, color: string | null) => {
+      void (async () => {
+        const result = await setThreadHighlight(threadRef, color);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to highlight thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+      })();
+    },
+    [setThreadHighlight],
+  );
+
   const attemptRelease = useCallback(
     (threadRef: ScopedThreadRef) => {
       void (async () => {
@@ -4214,6 +4248,9 @@ export default function Sidebar() {
         const supportsDependencies =
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadDependencies ===
           true;
+        const supportsHighlight =
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadHighlight ===
+          true;
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
@@ -4240,6 +4277,8 @@ export default function Sidebar() {
                   }
                 : null,
               isPinned,
+              highlightColor: thread.highlightColor ?? null,
+              highlightPalette: threadHighlightPalette,
               isSettled,
               isSnoozed,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
@@ -4252,6 +4291,7 @@ export default function Sidebar() {
                 settlement: supportsSettlement,
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
+                highlight: supportsHighlight,
                 titleRegeneration: supportsTitleRegeneration,
                 dependencies: supportsDependencies,
               },
@@ -4261,6 +4301,11 @@ export default function Sidebar() {
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value?.startsWith("highlight:") && clicked.value !== "highlight:default") {
+          const entry = threadHighlightPalette[Number(clicked.value.slice("highlight:".length))];
+          if (entry) attemptHighlight(threadRef, entry.color);
+          return;
+        }
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
             clicked.value === "snooze:custom"
@@ -4334,6 +4379,11 @@ export default function Sidebar() {
           }
           case "depends-on":
             openThreadDependencyPicker(threadRef);
+            return;
+          case "highlight":
+            return;
+          case "highlight:default":
+            attemptHighlight(threadRef, null);
             return;
           case "release":
             attemptRelease(threadRef);

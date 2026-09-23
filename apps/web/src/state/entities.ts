@@ -220,6 +220,15 @@ export function readEnvironmentSupportsPinning(environmentId: EnvironmentId): bo
   );
 }
 
+/** Whether the environment's server understands thread.highlight.set.
+    Same version-skew contract as settlement. */
+export function readEnvironmentSupportsHighlight(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadHighlight === true
+  );
+}
+
 /** Whether the environment's server understands thread title regeneration.
     Same version-skew contract as settlement. */
 export function readEnvironmentSupportsTitleRegeneration(environmentId: EnvironmentId): boolean {

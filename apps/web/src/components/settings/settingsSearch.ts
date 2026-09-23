@@ -265,6 +265,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["colors sidebar thread bar row card background"],
   },
   {
+    id: "thread-highlight-palette",
+    title: "Highlight palette",
+    to: "/settings/appearance",
+    searchTerms: ["colors sidebar thread highlight context menu right click twelve"],
+  },
+  {
     id: "panel-font",
     title: "Panel font size",
     to: "/settings/appearance",

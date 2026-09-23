@@ -669,6 +669,14 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
+const THREAD_HIGHLIGHT_COLOR_MAX_LENGTH = 32;
+
+// User-chosen CSS color string (typically hex) for a thread highlight.
+export const ThreadHighlightColor = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(THREAD_HIGHLIGHT_COLOR_MAX_LENGTH),
+);
+export type ThreadHighlightColor = typeof ThreadHighlightColor.Type;
+
 // Version changes even when a manual rename keeps the same text.
 export const ThreadTitleState = Schema.Struct({
   source: Schema.Literals(["manual", "generated"]),
@@ -816,6 +824,10 @@ export const OrchestrationThread = Schema.Struct({
   // threads remain in their respective shelves even when pinned.
   // Optional so payloads from pre-pinning servers still decode.
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  // User-chosen CSS color used to highlight the thread. Purely cosmetic and
+  // independent of lifecycle. Optional so payloads from pre-highlight servers
+  // still decode.
+  highlightColor: Schema.optional(Schema.NullOr(ThreadHighlightColor)),
   // Fractional index for user-arranged pinned order. Keyed threads sort by
   // string comparison ahead of keyless ones (which keep creation order), so
   // servers never need each other's threads to agree on the merged list.
@@ -896,6 +908,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   dependencies: Schema.optional(Schema.Array(ThreadDependency)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  highlightColor: Schema.optional(Schema.NullOr(ThreadHighlightColor)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
@@ -1224,6 +1237,14 @@ const ThreadPinReorderCommand = Schema.Struct({
   orderKey: TrimmedNonEmptyString,
 });
 
+const ThreadHighlightSetCommand = Schema.Struct({
+  type: Schema.Literal("thread.highlight.set"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  // null clears the highlight.
+  color: Schema.NullOr(ThreadHighlightColor),
+});
+
 const ThreadActiveReorderCommand = Schema.Struct({
   type: Schema.Literal("thread.active.reorder"),
   commandId: CommandId,
@@ -1434,6 +1455,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadPinCommand,
   ThreadUnpinCommand,
   ThreadPinReorderCommand,
+  ThreadHighlightSetCommand,
   ThreadActiveReorderCommand,
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
@@ -1469,6 +1491,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadPinCommand,
   ThreadUnpinCommand,
   ThreadPinReorderCommand,
+  ThreadHighlightSetCommand,
   ThreadActiveReorderCommand,
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
@@ -1770,6 +1793,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.pinned",
   "thread.unpinned",
   "thread.pin-reordered",
+  "thread.highlighted",
   "thread.meta-updated",
   "thread.pull-request-linked",
   "thread.pull-request-unlinked",
@@ -1924,6 +1948,12 @@ export const ThreadPinnedPayload = Schema.Struct({
 
 export const ThreadUnpinnedPayload = Schema.Struct({
   threadId: ThreadId,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadHighlightedPayload = Schema.Struct({
+  threadId: ThreadId,
+  color: Schema.NullOr(ThreadHighlightColor),
   updatedAt: IsoDateTime,
 });
 
@@ -2220,6 +2250,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.pin-reordered"),
     payload: ThreadPinReorderedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.highlighted"),
+    payload: ThreadHighlightedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

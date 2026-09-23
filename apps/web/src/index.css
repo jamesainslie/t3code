@@ -2170,6 +2170,27 @@ html[data-user-composer-caret] .composer-tiptap {
   caret-color: var(--user-composer-caret);
 }
 
+/* A thread's own highlight (context menu → Highlight). The row sets
+   --thread-highlight inline; it outranks the global thread card color. */
+[data-app-sidebar] [data-thread-highlight] {
+  --sidebar-row-rest: var(--thread-highlight);
+  --sidebar-row-hover: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 8%,
+    var(--thread-highlight)
+  );
+  --sidebar-row-active: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 14%,
+    var(--thread-highlight)
+  );
+  --sidebar-row-selected: color-mix(
+    in srgb,
+    var(--contrast-sidebar-foreground) 10%,
+    var(--thread-highlight)
+  );
+}
+
 html[data-user-thread-card] [data-app-sidebar] {
   --sidebar-row-rest: var(--user-thread-card);
   --sidebar-row-hover: color-mix(

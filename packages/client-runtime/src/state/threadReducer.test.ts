@@ -307,6 +307,37 @@ describe("applyThreadDetailEvent", () => {
     });
   });
 
+  describe("thread.highlighted", () => {
+    it.each([
+      [null, "#ff8800"],
+      ["#ff8800", null],
+    ] as const)("changes the highlight from %s to %s", (from, to) => {
+      const updatedAt = "2026-04-01T07:00:00.000Z";
+      const result = applyThreadDetailEvent(
+        { ...baseThread, highlightColor: from },
+        {
+          ...baseEventFields,
+          sequence: 7,
+          occurredAt: updatedAt,
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-1"),
+          type: "thread.highlighted",
+          payload: {
+            threadId: ThreadId.make("thread-1"),
+            color: to,
+            updatedAt,
+          },
+        },
+      );
+
+      expect(result.kind).toBe("updated");
+      if (result.kind === "updated") {
+        expect(result.thread.highlightColor).toBe(to);
+        expect(result.thread.updatedAt).toBe(updatedAt);
+      }
+    });
+  });
+
   describe("thread.meta-updated", () => {
     it.each(["f", null] as const)(
       "updates the active key to %s without activity",

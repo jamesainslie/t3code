@@ -1,4 +1,4 @@
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem, ThreadHighlightPalette } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
 /**
@@ -17,6 +17,9 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "highlight"
+  | "highlight:default"
+  | `highlight:${number}`
   | "depends-on"
   | "new-thread-to-unblock"
   | "release"
@@ -42,6 +45,10 @@ export interface ThreadActionMenuState {
     readonly isActive: boolean;
   } | null;
   readonly isPinned: boolean;
+  /** Current highlight color, or null for the plain card. */
+  readonly highlightColor: string | null;
+  /** Palette offered under Highlight; each index dispatches as `highlight:<index>`. */
+  readonly highlightPalette: ThreadHighlightPalette;
   readonly isSettled: boolean;
   readonly isSnoozed: boolean;
   readonly canSnoozeNow: boolean;
@@ -55,6 +62,7 @@ export interface ThreadActionMenuState {
     readonly settlement: boolean;
     readonly snooze: boolean;
     readonly pinning: boolean;
+    readonly highlight: boolean;
     readonly titleRegeneration: boolean;
     readonly dependencies: boolean;
   };
@@ -84,6 +92,32 @@ export function buildThreadActionMenuItems(
           state.isPinned
             ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
             : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+        ]
+      : []),
+    // A highlight is a visual marker only: it survives settle, snooze, and
+    // pin changes. The checked entry mirrors what the card shows now.
+    ...(state.supports.highlight
+      ? [
+          {
+            id: "highlight" as const,
+            label: "Highlight",
+            icon: "palette",
+            children: [
+              {
+                id: "highlight:default" as const,
+                label: state.highlightColor === null ? "Default ✓" : "Default",
+              },
+              ...state.highlightPalette.map((entry, index) => ({
+                id: `highlight:${index}` as const,
+                label:
+                  state.highlightColor !== null &&
+                  entry.color.trim().toLowerCase() === state.highlightColor.trim().toLowerCase()
+                    ? `${entry.label} ✓`
+                    : entry.label,
+                ...(index === 0 ? { separatorBefore: true } : {}),
+              })),
+            ],
+          },
         ]
       : []),
     // Both lifecycle actions stay available on pinned threads: settling

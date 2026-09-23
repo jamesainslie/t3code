@@ -176,6 +176,7 @@ function ThreadNavigationSidebarPane(
     unsettleThread,
     pinThread,
     unpinThread,
+    setThreadHighlight,
     moveThread,
     renameThread,
     regenerateThreadTitle,
@@ -456,6 +457,15 @@ function ThreadNavigationSidebarPane(
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadPinning === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const highlightEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (config.environment.capabilities.threadHighlight === true) {
         supported.add(environmentId);
       }
     }
@@ -986,6 +996,7 @@ function ThreadNavigationSidebarPane(
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
               dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
+              highlightSupported={highlightEnvironmentIds.has(thread.environmentId)}
               reorderSupported={
                 item.item.pinned
                   ? pinReorderEnvironmentIds.has(thread.environmentId)
@@ -1001,6 +1012,7 @@ function ThreadNavigationSidebarPane(
               onUnsettleThread={unsettleThread}
               onPinThread={pinThread}
               onUnpinThread={unpinThread}
+              onHighlightThread={setThreadHighlight}
               onMoveThread={moveThread}
               onSwipeableClose={handleSwipeableClose}
               onSwipeableWillOpen={handleSwipeableWillOpen}
@@ -1139,6 +1151,8 @@ function ThreadNavigationSidebarPane(
       pinReorderEnvironmentIds,
       pinThread,
       pinningEnvironmentIds,
+      highlightEnvironmentIds,
+      setThreadHighlight,
       projectByKey,
       projectTitleByProjectKey,
       regenerateThreadTitle,

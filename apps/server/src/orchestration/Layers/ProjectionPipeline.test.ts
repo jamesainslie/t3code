@@ -531,6 +531,32 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         assert.deepEqual(rows, [{ activeOrderKey: "gm", updatedAt: orderUpdatedAt }]);
       }
 
+      // Highlight set then clear persists through the SQL projection.
+      for (const [index, color] of (["#ff8800", null] as const).entries()) {
+        yield* eventStore.append({
+          type: "thread.highlighted",
+          eventId: EventId.make(`evt-highlight-${index}`),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-1"),
+          occurredAt: "2026-01-01T00:00:00.600Z",
+          commandId: CommandId.make(`cmd-highlight-${index}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            threadId: ThreadId.make("thread-1"),
+            color,
+            updatedAt: orderUpdatedAt,
+          },
+        });
+        yield* projectionPipeline.bootstrap;
+        const rows = yield* sql<{ readonly highlightColor: string | null }>`
+          SELECT highlight_color AS "highlightColor"
+          FROM projection_threads WHERE thread_id = 'thread-1'
+        `;
+        assert.deepEqual(rows, [{ highlightColor: color }]);
+      }
+
       // Settled lifecycle through the DB pipeline: thread.settled writes the
       // override + timestamp, thread.unsettled(user) flips to the active pin.
       yield* eventStore.append({
