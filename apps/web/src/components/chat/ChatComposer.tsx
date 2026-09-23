@@ -18,7 +18,7 @@ import {
 import type {
   ApprovalRequestId,
   KeybindingCommand,
-  AssistantCitation,
+  Citation,
   ChatFileAttachment,
   EnvironmentId,
   ModelSelection,
@@ -75,7 +75,7 @@ import {
   composerSubmissionIntentForEnter,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
-  formatAssistantCitationForComposer,
+  formatCitationForComposer,
   replaceTextRange,
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
@@ -1234,10 +1234,7 @@ export interface ChatComposerHandle {
   ) => boolean;
   /** Apply large-paste folding for text redirected from a blurred composer. */
   pasteTextAtEnd: (text: string, options?: { bypassAutoAttachment?: boolean }) => boolean;
-  citeAssistantText: (
-    citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-  ) => boolean;
+  citeText: (citation: Citation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
   openModelPicker: () => void;
   toggleModelPicker: () => void;
   openControl: (command: KeybindingCommand) => void;
@@ -5863,12 +5860,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusComposer();
         return true;
       },
-      citeAssistantText: (citation, sourceAnchor) =>
-        insertComposerText(
-          formatAssistantCitationForComposer(citation, citation.comment),
-          "cursor",
-          { ensureLeadingBoundary: true, citationCommentAnchor: sourceAnchor },
-        ),
+      citeText: (citation, sourceAnchor) =>
+        insertComposerText(formatCitationForComposer(citation, citation.comment), "cursor", {
+          ensureLeadingBoundary: true,
+          citationCommentAnchor: sourceAnchor,
+        }),
       openModelPicker,
       toggleModelPicker: () => {
         if (isComposerModelPickerOpen) {

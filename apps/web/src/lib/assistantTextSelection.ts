@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_CONTEXT_LENGTH, type AssistantCitation } from "@t3tools/contracts";
+import { ASSISTANT_CITATION_CONTEXT_LENGTH, type Citation } from "@t3tools/contracts";
 
 export type AssistantTextSelector = {
   readonly text: string;
@@ -15,19 +15,31 @@ export type AssistantCitationSourceAnchor = {
   viewport: HTMLElement;
 };
 
+/** Rendered text a citation can quote: an assistant message, or a rendered file in the file panel. */
+export const ASSISTANT_CITATION_SOURCE_SELECTOR = "[data-assistant-citation-source]";
+export const DOCUMENT_CITATION_SOURCE_SELECTOR = "[data-document-citation-source]";
+
 export function findAssistantCitationSourceAnchor(
   document: Document,
-  citation: AssistantCitation,
+  citation: Citation,
 ): AssistantCitationSourceAnchor | null {
+  const isDocument = "kind" in citation;
   const source = [
-    ...document.querySelectorAll<HTMLElement>("[data-assistant-citation-source]"),
-  ].find(
-    (element) =>
-      element.dataset.assistantCitationSource === citation.messageId &&
-      element.dataset.assistantCitationEnvironment === citation.environmentId &&
-      element.dataset.assistantCitationThread === citation.threadId,
+    ...document.querySelectorAll<HTMLElement>(
+      isDocument ? DOCUMENT_CITATION_SOURCE_SELECTOR : ASSISTANT_CITATION_SOURCE_SELECTOR,
+    ),
+  ].find((element) =>
+    isDocument
+      ? element.dataset.documentCitationSource === citation.filePath &&
+        element.dataset.documentCitationEnvironment === citation.environmentId &&
+        element.dataset.documentCitationThread === citation.threadId
+      : element.dataset.assistantCitationSource === citation.messageId &&
+        element.dataset.assistantCitationEnvironment === citation.environmentId &&
+        element.dataset.assistantCitationThread === citation.threadId,
   );
-  const viewport = source?.closest<HTMLElement>("[data-assistant-citation-viewport]");
+  const viewport = source?.closest<HTMLElement>(
+    isDocument ? "[data-document-citation-viewport]" : "[data-assistant-citation-viewport]",
+  );
   if (!source || !viewport) return null;
   const range = resolveAssistantCitationRange(source, citation);
   return range ? { source, range, viewport } : null;
@@ -212,13 +224,14 @@ function selectedTextBoundary(range: Range, node: Node, last: boolean): Text | n
 export function captureAssistantTextSelection(
   viewport: HTMLElement,
   selection: Selection | null,
+  sourceSelector: string = ASSISTANT_CITATION_SOURCE_SELECTOR,
 ): { source: HTMLElement; selector: AssistantTextSelector; range: Range } | null {
   if (selection === null || selection.isCollapsed || selection.rangeCount !== 1) return null;
   const range = selection.getRangeAt(0).cloneRange();
   const first = selectedTextBoundary(range, range.commonAncestorContainer, false);
   const last = selectedTextBoundary(range, range.commonAncestorContainer, true);
   if (first === null || last === null) return null;
-  const source = first.parentElement?.closest<HTMLElement>("[data-assistant-citation-source]");
+  const source = first.parentElement?.closest<HTMLElement>(sourceSelector);
   if (!source || !viewport.contains(source)) return null;
 
   // Paragraph selection can end at the next block's offset 0 or a parent

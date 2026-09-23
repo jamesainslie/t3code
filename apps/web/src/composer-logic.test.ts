@@ -1,9 +1,9 @@
 import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
 import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
 import {
-  collectAssistantCitations,
-  expandAssistantCitationsForProvider,
-  serializeAssistantCitation,
+  collectCitations,
+  expandCitationsForProvider,
+  serializeCitation,
 } from "@t3tools/shared/assistantCitations";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -13,7 +13,7 @@ import {
   composerSubmissionIntentForEnter,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
-  formatAssistantCitationForComposer,
+  formatCitationForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
@@ -38,25 +38,23 @@ const citation: AssistantCitation = {
   prefix: "前: ",
   suffix: " 後",
 };
-const citationSource = serializeAssistantCitation(citation).replaceAll("+", "%20");
+const citationSource = serializeCitation(citation).replaceAll("+", "%20");
 
-describe("formatAssistantCitationForComposer", () => {
+describe("formatCitationForComposer", () => {
   it.each([undefined, "", " \n\t "])(
     "keeps citation-only insertion for a blank comment %j",
     (comment) => {
-      expect(formatAssistantCitationForComposer(citation, comment)).toBe(
-        `${serializeAssistantCitation(citation)} `,
-      );
+      expect(formatCitationForComposer(citation, comment)).toBe(`${serializeCitation(citation)} `);
     },
   );
 
   it("binds a multiline comment to its citation without adding standalone prompt text", () => {
     const comment = 'What does "keep" mean? 👋\n  Please show an example.';
-    const text = formatAssistantCitationForComposer(citation, `  ${comment}\n`);
+    const text = formatCitationForComposer(citation, `  ${comment}\n`);
     const boundCitation = { ...citation, comment };
-    expect(text).toBe(`${serializeAssistantCitation(boundCitation)} `);
-    expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([boundCitation]);
-    expect(expandAssistantCitationsForProvider(text)).toMatch(/^\[assistant-quote-1\] \n\n/);
+    expect(text).toBe(`${serializeCitation(boundCitation)} `);
+    expect(collectCitations(text).map((entry) => entry.citation)).toEqual([boundCitation]);
+    expect(expandCitationsForProvider(text)).toMatch(/^\[assistant-quote-1\] \n\n/);
   });
 });
 

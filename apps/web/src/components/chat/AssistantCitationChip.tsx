@@ -1,7 +1,8 @@
-import type { AssistantCitation } from "@t3tools/contracts";
-import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { Citation } from "@t3tools/contracts";
+import { isDocumentCitation, serializeCitation } from "@t3tools/shared/assistantCitations";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { PencilIcon, QuoteIcon } from "lucide-react";
+import { FileTextIcon, PencilIcon, QuoteIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import {
   findAssistantCitationSourceAnchor,
@@ -25,6 +26,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { AssistantCitationCommentEditor } from "./AssistantCitationCommentEditor";
 import { observeAssistantCitationCommentSource } from "./AssistantCitationSource";
 import { composerFloatingLayerProps } from "./composerEventScope";
+import { useRightPanelStore } from "../../rightPanelStore";
 
 const CITATION_ACTION_BUTTON_CLASS_NAME = cn(
   COMPOSER_INLINE_CHIP_DISMISS_BUTTON_CLASS_NAME,
@@ -36,7 +38,7 @@ export function AssistantCitationChip({
   composer = false,
   commentEditor,
 }: {
-  citation: AssistantCitation;
+  citation: Citation;
   composer?: boolean;
   commentEditor?: {
     open: boolean;
@@ -77,38 +79,63 @@ export function AssistantCitationChip({
     : undefined;
   const preview = (citation.comment?.trim() || citation.text).replace(/\s+/g, " ");
   const label = preview.length > 64 ? `${preview.slice(0, 64)}…` : preview;
-  const sourceLinkProps = {
-    to: "/$environmentId/$threadId" as const,
-    params: { environmentId: citation.environmentId, threadId: citation.threadId },
-    hash: assistantCitationHash(citation),
-    "data-markdown-copy": serializeAssistantCitation(citation),
-    resetScroll: false,
-    onClick: (event: ReactMouseEvent<HTMLAnchorElement>) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-      event.preventDefault();
-      void navigate(assistantCitationNavigation(citation));
-    },
-  };
-  const composerSourceLink = (
-    <Link
-      {...sourceLinkProps}
-      className="inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline focus-visible:outline-2 focus-visible:outline-[var(--contrast-foreground)]"
-      aria-label={`View cited assistant text: ${label}`}
-    >
-      <QuoteIcon aria-hidden="true" className={COMPOSER_INLINE_CHIP_ICON_CLASS_NAME} />
+  const sourceContent = (
+    <>
+      {isDocumentCitation(citation) ? (
+        <FileTextIcon aria-hidden="true" className={COMPOSER_INLINE_CHIP_ICON_CLASS_NAME} />
+      ) : (
+        <QuoteIcon aria-hidden="true" className={COMPOSER_INLINE_CHIP_ICON_CLASS_NAME} />
+      )}
       <span className={cn(COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME, "max-w-[16em]")}>{label}</span>
-    </Link>
+    </>
   );
-  const chatSourceLink = (
+  const sourceLinkClassName = cn(
+    "inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline focus-visible:outline-2 focus-visible:outline-[var(--contrast-foreground)]",
+    !composer && "hover:bg-[color-mix(in_oklab,var(--context-chip-accent)_17%,transparent)]",
+  );
+  // A document quote opens its file at the quoted lines; an assistant quote scrolls to its message.
+  const sourceLink = isDocumentCitation(citation) ? (
+    <button
+      type="button"
+      className={cn(sourceLinkClassName, "cursor-pointer")}
+      aria-label={`View quoted text in ${citation.filePath}: ${label}`}
+      data-markdown-copy={serializeCitation(citation)}
+      onClick={() =>
+        useRightPanelStore
+          .getState()
+          .openFile(
+            scopeThreadRef(citation.environmentId, citation.threadId),
+            citation.filePath,
+            citation.startLine,
+          )
+      }
+    >
+      {sourceContent}
+    </button>
+  ) : (
     <Link
-      {...sourceLinkProps}
-      className="inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline hover:bg-[color-mix(in_oklab,var(--context-chip-accent)_17%,transparent)] focus-visible:outline-2 focus-visible:outline-[var(--contrast-foreground)]"
+      to="/$environmentId/$threadId"
+      params={{ environmentId: citation.environmentId, threadId: citation.threadId }}
+      hash={assistantCitationHash(citation)}
+      data-markdown-copy={serializeCitation(citation)}
+      resetScroll={false}
+      onClick={(event: ReactMouseEvent<HTMLAnchorElement>) => {
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+        event.preventDefault();
+        void navigate(assistantCitationNavigation(citation));
+      }}
+      className={sourceLinkClassName}
       aria-label={`View cited assistant text: ${label}`}
     >
-      <QuoteIcon aria-hidden="true" className={COMPOSER_INLINE_CHIP_ICON_CLASS_NAME} />
-      <span className={cn(COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME, "max-w-[16em]")}>{label}</span>
+      {sourceContent}
     </Link>
   );
   return (
@@ -119,13 +146,13 @@ export function AssistantCitationChip({
       )}
       contentEditable={false}
       data-assistant-citation-chip="true"
-      data-markdown-copy={serializeAssistantCitation(citation)}
+      data-markdown-copy={serializeCitation(citation)}
     >
       {composer ? (
-        composerSourceLink
+        sourceLink
       ) : (
         <Tooltip>
-          <TooltipTrigger render={chatSourceLink} />
+          <TooltipTrigger render={sourceLink} />
           <TooltipPopup side="top">View source</TooltipPopup>
         </Tooltip>
       )}
@@ -153,7 +180,7 @@ export function AssistantCitationChip({
               onPointerDown={(event) => event.stopPropagation()}
             >
               <AssistantCitationCommentEditor
-                key={serializeAssistantCitation(citation)}
+                key={serializeCitation(citation)}
                 citation={citation}
                 inputRef={commentInputRef}
                 onSubmit={(comment) => {

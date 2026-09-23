@@ -5,7 +5,7 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
-import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
+import { serializeCitation } from "@t3tools/shared/assistantCitations";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -30,7 +30,7 @@ describe("project thread title", () => {
     },
   ])("uses readable titles and intact links with comment $comment", ({ comment, title }) => {
     const quoteText = "Keep `cache[key]` & <parser> shared.\n  Retry!";
-    const text = serializeAssistantCitation({
+    const text = serializeCitation({
       version: 1,
       environmentId: EnvironmentId.make("source-environment"),
       threadId: ThreadId.make("source-thread"),

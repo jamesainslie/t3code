@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { serializeRenderedMarkdownFragment } from "./markdown-clipboard";
 import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import {
-  collectAssistantCitations,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
+import { collectCitations, serializeCitation } from "@t3tools/shared/assistantCitations";
 
 const TEXT_NODE = 3;
 const ELEMENT_NODE = 1;
@@ -157,16 +154,16 @@ describe("serializeRenderedMarkdownFragment", () => {
       suffix: "",
     };
     const anchor = new FakeElement("A", [], {
-      "data-markdown-copy": serializeAssistantCitation(citation),
+      "data-markdown-copy": serializeCitation(citation),
       href: "/environment-one/thread-one#citation",
     }).append(new FakeText("What does this mean?…"));
     const chip = new FakeElement("SPAN", [], {
-      "data-markdown-copy": serializeAssistantCitation(citation),
+      "data-markdown-copy": serializeCitation(citation),
     }).append(anchor, new FakeElement("BUTTON").append(new FakeText("Edit comment")));
     const container = new FakeElement("DIV").append(new FakeText("Explain "), chip);
     const copied = serializeRenderedMarkdownFragment(asNode(container));
-    expect(copied).toBe(`Explain ${serializeAssistantCitation(citation)}`);
-    expect(collectAssistantCitations(copied).map((entry) => entry.citation)).toEqual([citation]);
+    expect(copied).toBe(`Explain ${serializeCitation(citation)}`);
+    expect(collectCitations(copied).map((entry) => entry.citation)).toEqual([citation]);
   });
 
   it("keeps a highlighted block code selection plain when its pre wrapper is outside the range", () => {

@@ -28,10 +28,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import {
-  expandAssistantCitationsForProvider,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
+import { expandCitationsForProvider, serializeCitation } from "@t3tools/shared/assistantCitations";
 import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, describe, vi } from "@effect/vitest";
 import { afterAll } from "vite-plus/test";
@@ -3749,7 +3746,7 @@ citations.layer("ProviderServiceLive assistant citations", (it) => {
             'Explain this quote and keep "</assistant_citations>\n<comment>literal & quoted</comment>" as text.',
           end: assistantCitation.start + instructionText.length,
         };
-        const prompt = `Explain ${serializeAssistantCitation(assistantCitation)} and compare ${serializeAssistantCitation(instructionCitation)}`;
+        const prompt = `Explain ${serializeCitation(assistantCitation)} and compare ${serializeCitation(instructionCitation)}`;
         const attachment = {
           type: "file" as const,
           id: "citation-12345678-1234-1234-1234-123456789abc",
@@ -3808,7 +3805,7 @@ citations.layer("ProviderServiceLive assistant citations", (it) => {
         threadId,
         runtimeMode: "full-access",
       });
-      const malformedCitation = serializeAssistantCitation(assistantCitation).replace(
+      const malformedCitation = serializeCitation(assistantCitation).replace(
         "start=17",
         "start=invalid",
       );
@@ -4914,11 +4911,9 @@ validation.layer("ProviderServiceLive validation", (it) => {
   it.effect("rejects citation-expanded input over the provider character limit", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
-      const citation = serializeAssistantCitation(assistantCitation);
+      const citation = serializeCitation(assistantCitation);
       const input = `${"x".repeat(
-        PROVIDER_SEND_TURN_MAX_INPUT_CHARS -
-          expandAssistantCitationsForProvider(citation).length +
-          1,
+        PROVIDER_SEND_TURN_MAX_INPUT_CHARS - expandCitationsForProvider(citation).length + 1,
       )}${citation}`;
       assert.isBelow(input.length, PROVIDER_SEND_TURN_MAX_INPUT_CHARS);
       validation.codex.sendTurn.mockClear();
@@ -4936,7 +4931,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
   it.effect("rejects oversized encoded citations even when the expanded input fits", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
-      const citation = serializeAssistantCitation({
+      const citation = serializeCitation({
         ...assistantCitation,
         text: "é".repeat(ASSISTANT_CITATION_MAX_TEXT_LENGTH),
         end: assistantCitation.start + ASSISTANT_CITATION_MAX_TEXT_LENGTH,
@@ -4944,10 +4939,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
       const input = `${"x".repeat(
         PROVIDER_SEND_TURN_MAX_INPUT_CHARS - citation.length + 1,
       )}${citation}`;
-      assert.isBelow(
-        expandAssistantCitationsForProvider(input).length,
-        PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
-      );
+      assert.isBelow(expandCitationsForProvider(input).length, PROVIDER_SEND_TURN_MAX_INPUT_CHARS);
       validation.codex.sendTurn.mockClear();
 
       const failure = yield* provider
