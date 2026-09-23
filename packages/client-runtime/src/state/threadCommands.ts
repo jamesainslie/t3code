@@ -43,6 +43,16 @@ import {
   type AddThreadDependencyInput,
   type RemoveThreadDependenciesInput,
   type UpdateThreadMetadataInput,
+  type AddThreadDocumentCommentInput,
+  type UpdateThreadDocumentCommentInput,
+  type DeleteThreadDocumentCommentInput,
+  type ResolveThreadDocumentCommentInput,
+  type ReopenThreadDocumentCommentInput,
+  addThreadDocumentComment,
+  updateThreadDocumentComment,
+  deleteThreadDocumentComment,
+  resolveThreadDocumentComment,
+  reopenThreadDocumentComment,
   archiveThread,
   createThread,
   deleteThread,
@@ -99,6 +109,11 @@ export type {
   UnsettleThreadInput,
   UnsnoozeThreadInput,
   UpdateThreadMetadataInput,
+  AddThreadDocumentCommentInput,
+  UpdateThreadDocumentCommentInput,
+  DeleteThreadDocumentCommentInput,
+  ResolveThreadDocumentCommentInput,
+  ReopenThreadDocumentCommentInput,
 } from "../operations/commands.ts";
 
 export function createThreadEnvironmentAtoms<R, E>(
@@ -217,6 +232,37 @@ export function createThreadEnvironmentAtoms<R, E>(
     unlinkPullRequest: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:unlink-pull-request",
       execute: (input: UnlinkThreadPullRequestInput) => unlinkThreadPullRequest(input),
+      scheduler,
+      concurrency,
+    }),
+    // Comments are detail-only, so there is no shell state to update optimistically.
+    addDocumentComment: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:add-document-comment",
+      execute: (input: AddThreadDocumentCommentInput) => addThreadDocumentComment(input),
+      scheduler,
+      concurrency,
+    }),
+    updateDocumentComment: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:update-document-comment",
+      execute: (input: UpdateThreadDocumentCommentInput) => updateThreadDocumentComment(input),
+      scheduler,
+      concurrency,
+    }),
+    deleteDocumentComment: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:delete-document-comment",
+      execute: (input: DeleteThreadDocumentCommentInput) => deleteThreadDocumentComment(input),
+      scheduler,
+      concurrency,
+    }),
+    resolveDocumentComment: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:resolve-document-comment",
+      execute: (input: ResolveThreadDocumentCommentInput) => resolveThreadDocumentComment(input),
+      scheduler,
+      concurrency,
+    }),
+    reopenDocumentComment: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:reopen-document-comment",
+      execute: (input: ReopenThreadDocumentCommentInput) => reopenThreadDocumentComment(input),
       scheduler,
       concurrency,
     }),

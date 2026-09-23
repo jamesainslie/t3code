@@ -9918,6 +9918,157 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  const makeDocumentCommentAddedEvent = (
+    sequence: number,
+    threadId: ThreadId = defaultThreadId,
+  ): OrchestrationEvent => ({
+    sequence,
+    eventId: EventId.make(`event-document-comment-${sequence}`),
+    aggregateKind: "thread",
+    aggregateId: threadId,
+    occurredAt: "2026-01-01T00:00:01.000Z",
+    commandId: null,
+    causationEventId: null,
+    correlationId: null,
+    metadata: {},
+    type: "thread.document-comment-added",
+    payload: {
+      threadId,
+      comment: {
+        id: `comment-${sequence}`,
+        filePath: "docs/plan.md",
+        anchor: {
+          text: "passage",
+          start: 0,
+          end: 7,
+          prefix: "",
+          suffix: "",
+          startLine: 1,
+          endLine: 1,
+        },
+        body: "Tighten this.",
+        status: "open",
+        resolution: null,
+        createdAt: "2026-01-01T00:00:01.000Z",
+        updatedAt: "2026-01-01T00:00:01.000Z",
+        resolvedAt: null,
+      },
+    },
+  });
+
+  for (const documentComments of [undefined, true] as const) {
+    it.effect(
+      `subscribeThread delivers document comment events only on opt-in (${documentComments})`,
+      () =>
+        Effect.gen(function* () {
+          const events = [makeDocumentCommentAddedEvent(2), makeLiveToolActivityEvent(3)];
+          yield* buildAppUnderTest({
+            layers: {
+              orchestrationEngine: {
+                latestSequence: Effect.succeed(3),
+                getThreadReplayStats: () =>
+                  Effect.succeed({ eventCount: 2, payloadBytes: 200, hasCreateEvent: false }),
+                readThreadEvents: () => Stream.fromIterable(events),
+              },
+            },
+          });
+
+          const wsUrl = yield* getWsServerUrl("/ws");
+          const items = yield* Effect.scoped(
+            withWsRpcClient(wsUrl, (client) =>
+              client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+                threadId: defaultThreadId,
+                afterSequence: 1,
+                requestCompletionMarker: true,
+                ...(documentComments ? { documentComments } : {}),
+              }).pipe(
+                Stream.takeUntil((item) => item.kind === "synchronized"),
+                Stream.runCollect,
+              ),
+            ),
+          );
+
+          // Older detail-event unions must never receive the comment discriminants.
+          assert.deepEqual(
+            Array.from(items).map((item) => (item.kind === "event" ? item.event.type : item.kind)),
+            documentComments
+              ? ["thread.document-comment-added", "thread.activity-appended", "synchronized"]
+              : ["thread.activity-appended", "synchronized"],
+          );
+        }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+  }
+
+  it.effect("subscribeShell never refetches a shell for document comment events", () =>
+    Effect.gen(function* () {
+      const commentedThreadId = ThreadId.make("thread-commented");
+      const shellFetches: Array<string> = [];
+      const metaEvent: OrchestrationEvent = {
+        sequence: 1,
+        eventId: EventId.make("event-meta-before-comment"),
+        aggregateKind: "thread",
+        aggregateId: defaultThreadId,
+        occurredAt: "2026-01-01T00:00:01.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "thread.meta-updated",
+        payload: {
+          threadId: defaultThreadId,
+          title: "Renamed",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        },
+      };
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.succeed(3),
+            readEvents: () =>
+              Stream.fromIterable([
+                metaEvent,
+                // Coalescing keeps the newest event per thread; a trailing
+                // comment must not replace the rename or cost a refetch.
+                makeDocumentCommentAddedEvent(2),
+                makeDocumentCommentAddedEvent(3, commentedThreadId),
+              ]),
+          },
+          projectionSnapshotQuery: {
+            getThreadShellById: (threadId) =>
+              Effect.sync(() => {
+                shellFetches.push(threadId);
+                return Option.some(makeDefaultOrchestrationThreadShell({ id: threadId }));
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeShell]({
+            afterSequence: 0,
+            requestCompletionMarker: true,
+          }).pipe(
+            Stream.takeUntil((item) => item.kind === "synchronized"),
+            Stream.runCollect,
+          ),
+        ),
+      );
+
+      assert.deepEqual(
+        Array.from(items).map((item) =>
+          item.kind === "thread-upserted"
+            ? [item.kind, item.thread.id, item.sequence]
+            : [item.kind],
+        ),
+        [["thread-upserted", defaultThreadId, 1], ["synchronized"]],
+      );
+      assert.deepEqual(shellFetches, [defaultThreadId]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("subscribeShell replaces a cursor ahead of the authoritative head", () =>
     Effect.gen(function* () {
       let readEventsCalls = 0;

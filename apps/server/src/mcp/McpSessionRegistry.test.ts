@@ -79,9 +79,17 @@ it.effect("always grants pull-requests and gates browser and device access indep
         .resolve(issued.config.authorizationHeader.replace(/^Bearer\s+/, ""))
         .pipe(Effect.map((scope) => [...(scope?.capabilities ?? [])].sort()));
 
-    expect(yield* capabilitiesOf(withPreview)).toEqual(["preview", "pull-requests"]);
-    expect(yield* capabilitiesOf(withoutPreview)).toEqual(["pull-requests"]);
-    expect(yield* capabilitiesOf(withDevice)).toEqual(["device", "pull-requests"]);
+    expect(yield* capabilitiesOf(withPreview)).toEqual([
+      "document-comments",
+      "preview",
+      "pull-requests",
+    ]);
+    expect(yield* capabilitiesOf(withoutPreview)).toEqual(["document-comments", "pull-requests"]);
+    expect(yield* capabilitiesOf(withDevice)).toEqual([
+      "device",
+      "document-comments",
+      "pull-requests",
+    ]);
   }),
 );
 

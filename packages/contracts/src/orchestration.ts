@@ -904,10 +904,8 @@ export const OrchestrationThread = Schema.Struct({
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
   // Detail-only: comments reach a client with the thread open, never the shell
-  // list. Defaulted so payloads from pre-comment servers still decode.
-  documentComments: Schema.Array(ThreadDocumentComment).pipe(
-    Schema.withDecodingDefault(Effect.succeed([])),
-  ),
+  // list. Optional so payloads from pre-comment servers still decode.
+  documentComments: Schema.optional(Schema.Array(ThreadDocumentComment)),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
@@ -1068,6 +1066,12 @@ export const OrchestrationSubscribeThreadInput = Schema.Struct({
   threadId: ThreadId,
   /** Opt in to reasoning roles; older clients receive system messages instead. */
   reasoningMessages: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Opt in to thread.document-comment-* events. Older clients cannot decode
+   * them, so they are withheld unless requested. Servers that predate comments
+   * ignore the key, so clients may always send it.
+   */
+  documentComments: Schema.optionalKey(Schema.Boolean),
   /**
    * When provided, the server skips the initial snapshot frame and instead
    * replays events after this sequence before streaming live events. Clients

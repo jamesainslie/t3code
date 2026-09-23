@@ -349,6 +349,19 @@ describe("thread pagination state", () => {
     }),
   );
 
+  it.effect("opts in to document comment events even on servers that predate them", () =>
+    Effect.gen(function* () {
+      // A pre-comment server ignores the unknown key, so no capability gate.
+      const harness = yield* makeHarness({
+        paginationCapability: false,
+        initialResponse: Option.some({ snapshotSequence: 10, thread: BASE_THREAD }),
+      });
+      yield* harness.awaitState((value) => Option.isSome(value.data));
+      const subscribeInput = yield* Ref.get(harness.lastSubscribeInput);
+      expect(subscribeInput?.documentComments).toBe(true);
+    }),
+  );
+
   it.effect("merges an older page below the loaded window and clears the cursor", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ initialResponse: Option.some(WINDOWED_SNAPSHOT) });

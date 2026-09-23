@@ -49,6 +49,11 @@ export type ReorderActiveThreadInput = CommandInput<"thread.active.reorder">;
 export type UpdateThreadMetadataInput = CommandInput<"thread.meta.update">;
 export type LinkThreadPullRequestInput = CommandInput<"thread.pull-request.link">;
 export type UnlinkThreadPullRequestInput = CommandInput<"thread.pull-request.unlink">;
+export type AddThreadDocumentCommentInput = CommandInput<"thread.document-comment.add">;
+export type UpdateThreadDocumentCommentInput = CommandInput<"thread.document-comment.update">;
+export type DeleteThreadDocumentCommentInput = CommandInput<"thread.document-comment.delete">;
+export type ResolveThreadDocumentCommentInput = CommandInput<"thread.document-comment.resolve">;
+export type ReopenThreadDocumentCommentInput = CommandInput<"thread.document-comment.reopen">;
 export type SetThreadRuntimeModeInput = CommandInput<"thread.runtime-mode.set">;
 export type SetThreadInteractionModeInput = CommandInput<"thread.interaction-mode.set">;
 export type StartThreadTurnInput = CommandInput<"thread.turn.start">;
@@ -305,6 +310,63 @@ export const unlinkThreadPullRequest: (input: UnlinkThreadPullRequestInput) => C
       commandId: yield* commandId(input),
     });
   });
+
+export const addThreadDocumentComment: (input: AddThreadDocumentCommentInput) => CommandEffect =
+  Effect.fn("EnvironmentCommands.addThreadDocumentComment")(function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.document-comment.add",
+      commandId: yield* commandId(input),
+    });
+  });
+
+export const updateThreadDocumentComment: (
+  input: UpdateThreadDocumentCommentInput,
+) => CommandEffect = Effect.fn("EnvironmentCommands.updateThreadDocumentComment")(
+  function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.document-comment.update",
+      commandId: yield* commandId(input),
+    });
+  },
+);
+
+export const deleteThreadDocumentComment: (
+  input: DeleteThreadDocumentCommentInput,
+) => CommandEffect = Effect.fn("EnvironmentCommands.deleteThreadDocumentComment")(
+  function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.document-comment.delete",
+      commandId: yield* commandId(input),
+    });
+  },
+);
+
+export const resolveThreadDocumentComment: (
+  input: ResolveThreadDocumentCommentInput,
+) => CommandEffect = Effect.fn("EnvironmentCommands.resolveThreadDocumentComment")(
+  function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.document-comment.resolve",
+      commandId: yield* commandId(input),
+    });
+  },
+);
+
+export const reopenThreadDocumentComment: (
+  input: ReopenThreadDocumentCommentInput,
+) => CommandEffect = Effect.fn("EnvironmentCommands.reopenThreadDocumentComment")(
+  function* (input) {
+    return yield* dispatch({
+      ...input,
+      type: "thread.document-comment.reopen",
+      commandId: yield* commandId(input),
+    });
+  },
+);
 
 export const setThreadRuntimeMode: (input: SetThreadRuntimeModeInput) => CommandEffect = Effect.fn(
   "EnvironmentCommands.setThreadRuntimeMode",

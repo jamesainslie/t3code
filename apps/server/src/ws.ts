@@ -347,7 +347,12 @@ export function isThreadDetailEvent(event: OrchestrationEvent): event is Extract
       | "thread.activity-appended"
       | "thread.turn-diff-completed"
       | "thread.reverted"
-      | "thread.session-set";
+      | "thread.session-set"
+      | "thread.document-comment-added"
+      | "thread.document-comment-updated"
+      | "thread.document-comment-deleted"
+      | "thread.document-comment-resolved"
+      | "thread.document-comment-reopened";
   }
 > {
   return (
@@ -356,7 +361,24 @@ export function isThreadDetailEvent(event: OrchestrationEvent): event is Extract
     event.type === "thread.activity-appended" ||
     event.type === "thread.turn-diff-completed" ||
     event.type === "thread.reverted" ||
-    event.type === "thread.session-set"
+    event.type === "thread.session-set" ||
+    // Comments live only on thread detail, so this stream is how they arrive.
+    isThreadDocumentCommentEvent(event)
+  );
+}
+
+/**
+ * Comment events change detail state only. Subscribers must opt in to them
+ * (older clients cannot decode the discriminants), and the shell stream skips
+ * them because the shell never changes.
+ */
+export function isThreadDocumentCommentEvent(event: Pick<OrchestrationEvent, "type">): boolean {
+  return (
+    event.type === "thread.document-comment-added" ||
+    event.type === "thread.document-comment-updated" ||
+    event.type === "thread.document-comment-deleted" ||
+    event.type === "thread.document-comment-resolved" ||
+    event.type === "thread.document-comment-reopened"
   );
 }
 
@@ -989,6 +1011,9 @@ const makeWsRpcLayer = (
           }
           const latestByAggregate = new Map<string, ShellEvent>();
           for (const event of events) {
+            // Dropped before coalescing so a trailing comment cannot stand in
+            // for an earlier shell-changing event on the same thread.
+            if (isThreadDocumentCommentEvent(event)) continue;
             latestByAggregate.set(`${event.aggregateKind}:${event.aggregateId}`, event);
           }
           const survivors = Array.from(latestByAggregate.values()).sort(
@@ -2145,7 +2170,8 @@ const makeWsRpcLayer = (
               const isThisThreadDetailEvent = (event: OrchestrationEvent) =>
                 event.aggregateKind === "thread" &&
                 event.aggregateId === input.threadId &&
-                isThreadDetailEvent(event);
+                isThreadDetailEvent(event) &&
+                (input.documentComments === true || !isThreadDocumentCommentEvent(event));
 
               const liveStream = orchestrationEngine.streamDomainEvents.pipe(
                 Stream.filter(isThisThreadDetailEvent),

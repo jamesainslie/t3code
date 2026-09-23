@@ -23,6 +23,10 @@ import {
   legacyThreadPullRequestKey,
   threadPullRequestKeysEqual,
 } from "@t3tools/shared/threadPullRequests";
+import {
+  applyThreadDocumentCommentEvent,
+  type ThreadDocumentCommentEvent,
+} from "@t3tools/shared/threadDocumentComments";
 import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -50,6 +54,11 @@ import {
   ThreadPullRequestLinkedPayload,
   ThreadPullRequestSyncedPayload,
   ThreadPullRequestUnlinkedPayload,
+  ThreadDocumentCommentAddedPayload,
+  ThreadDocumentCommentDeletedPayload,
+  ThreadDocumentCommentReopenedPayload,
+  ThreadDocumentCommentResolvedPayload,
+  ThreadDocumentCommentUpdatedPayload,
   ThreadSnoozedPayload,
   ThreadDependencyAddedPayload,
   ThreadDependenciesRemovedPayload,
@@ -107,6 +116,23 @@ function updateThread(
   patch: ThreadPatch,
 ): OrchestrationThread[] {
   return threads.map((thread) => (thread.id === threadId ? { ...thread, ...patch } : thread));
+}
+
+// Comments are detail-only state: they leave thread.updatedAt alone so they
+// never reorder or refresh the sidebar.
+function projectDocumentComment(
+  model: OrchestrationReadModel,
+  event: ThreadDocumentCommentEvent,
+): OrchestrationReadModel {
+  const thread = model.threads.find((entry) => entry.id === event.payload.threadId);
+  if (!thread) {
+    return model;
+  }
+  const current = thread.documentComments ?? [];
+  const documentComments = applyThreadDocumentCommentEvent(current, event);
+  return documentComments === current
+    ? model
+    : { ...model, threads: updateThread(model.threads, thread.id, { documentComments }) };
 }
 
 /** Patch that swaps a thread's links and re-derives the legacy single-PR field from them. */
@@ -433,6 +459,7 @@ export function projectEvent(
             activities: [],
             checkpoints: [],
             session: null,
+            documentComments: [],
           },
           event.type,
           "thread",
@@ -789,6 +816,56 @@ export function projectEvent(
             }),
           };
         }),
+      );
+
+    case "thread.document-comment-added":
+      return decodeForEvent(
+        ThreadDocumentCommentAddedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => projectDocumentComment(nextBase, { type: event.type, payload })),
+      );
+
+    case "thread.document-comment-updated":
+      return decodeForEvent(
+        ThreadDocumentCommentUpdatedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => projectDocumentComment(nextBase, { type: event.type, payload })),
+      );
+
+    case "thread.document-comment-deleted":
+      return decodeForEvent(
+        ThreadDocumentCommentDeletedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => projectDocumentComment(nextBase, { type: event.type, payload })),
+      );
+
+    case "thread.document-comment-resolved":
+      return decodeForEvent(
+        ThreadDocumentCommentResolvedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => projectDocumentComment(nextBase, { type: event.type, payload })),
+      );
+
+    case "thread.document-comment-reopened":
+      return decodeForEvent(
+        ThreadDocumentCommentReopenedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => projectDocumentComment(nextBase, { type: event.type, payload })),
       );
 
     case "thread.runtime-mode-set":

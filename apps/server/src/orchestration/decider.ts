@@ -143,6 +143,13 @@ function findPullRequestLink(
   return thread.pullRequests.find((link) => threadPullRequestKeysEqual(link, key));
 }
 
+function findDocumentComment(
+  thread: Pick<OrchestrationThread, "documentComments">,
+  commentId: string,
+) {
+  return thread.documentComments?.find((comment) => comment.id === commentId);
+}
+
 function withEventBase(
   input: Pick<OrchestrationCommand, "commandId"> & {
     readonly aggregateKind: OrchestrationEvent["aggregateKind"];
@@ -1493,6 +1500,99 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: occurredAt,
         },
       };
+    }
+
+    // Document comments are thread state alongside highlight, so archived
+    // threads accept them too; only a missing thread is rejected.
+    case "thread.document-comment.add": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (findDocumentComment(thread, command.commentId) !== undefined) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `document comment ${command.commentId} already exists on thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.document-comment-added",
+        payload: {
+          threadId: command.threadId,
+          comment: {
+            id: command.commentId,
+            filePath: command.filePath,
+            anchor: command.anchor,
+            body: command.body,
+            status: "open",
+            resolution: null,
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+            resolvedAt: null,
+          },
+        },
+      };
+    }
+
+    case "thread.document-comment.update":
+    case "thread.document-comment.delete":
+    case "thread.document-comment.resolve":
+    case "thread.document-comment.reopen": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (findDocumentComment(thread, command.commentId) === undefined) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `document comment ${command.commentId} does not exist on thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      const eventBase = yield* withEventBase({
+        aggregateKind: "thread",
+        aggregateId: command.threadId,
+        occurredAt,
+        commandId: command.commandId,
+      });
+      const key = { threadId: command.threadId, commentId: command.commentId };
+      // Resolving a resolved comment or reopening an open one re-emits (see
+      // thread.settle) so the agent's resolve tool stays idempotent.
+      switch (command.type) {
+        case "thread.document-comment.update":
+          return {
+            ...eventBase,
+            type: "thread.document-comment-updated",
+            payload: { ...key, body: command.body, updatedAt: occurredAt },
+          };
+        case "thread.document-comment.delete":
+          return {
+            ...eventBase,
+            type: "thread.document-comment-deleted",
+            payload: { ...key, deletedAt: occurredAt },
+          };
+        case "thread.document-comment.resolve":
+          return {
+            ...eventBase,
+            type: "thread.document-comment-resolved",
+            payload: { ...key, resolution: command.resolution, resolvedAt: occurredAt },
+          };
+        case "thread.document-comment.reopen":
+          return {
+            ...eventBase,
+            type: "thread.document-comment-reopened",
+            payload: { ...key, reopenedAt: occurredAt },
+          };
+      }
     }
 
     case "thread.pull-request-link.sync": {

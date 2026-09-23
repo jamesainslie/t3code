@@ -70,7 +70,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layerMemory()))("054 on a fork database", 
 
       assert.deepStrictEqual(
         executed.map(([id]) => id),
-        [51, 52, 53, 54, 55, 56],
+        [51, 52, 53, 54, 55, 56, 57],
       );
       const state = yield* readState;
       assert.deepStrictEqual(state.pullRequests, [{ threadId: "thread-linked", number: 42 }]);

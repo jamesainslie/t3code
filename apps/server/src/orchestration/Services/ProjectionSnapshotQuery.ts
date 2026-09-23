@@ -25,6 +25,7 @@ import type {
   OrchestrationThreadDetailWindow,
   OrchestrationThreadShell,
   ProjectId,
+  ThreadDocumentComment,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -230,6 +231,14 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadShellById: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationThreadShell>, ProjectionRepositoryError>;
+
+  /**
+   * Read a thread's document comments in creation order without hydrating the
+   * rest of its detail.
+   */
+  readonly listThreadDocumentComments: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<ThreadDocumentComment>, ProjectionRepositoryError>;
 
   /** Read the active thread and session facts used to ingest provider events. */
   readonly getThreadRuntimeContext: (

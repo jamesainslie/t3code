@@ -34,6 +34,7 @@ import {
   ThreadId,
   ThreadPullRequestSnapshot,
   ThreadPullRequestStack,
+  type ThreadDocumentComment,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { legacyLinkedPullRequestOf } from "@t3tools/shared/threadPullRequests";
@@ -62,6 +63,7 @@ import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionT
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadPullRequest } from "../../persistence/ProjectionThreadPullRequests.ts";
+import { ProjectionThreadDocumentCommentDbRow } from "../../persistence/ProjectionThreadDocumentComments.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
 import {
@@ -449,6 +451,25 @@ function groupPullRequestRowsByThread(
   return byThread;
 }
 
+function mapDocumentCommentRow({
+  threadId: _threadId,
+  ...comment
+}: typeof ProjectionThreadDocumentCommentDbRow.Type): ThreadDocumentComment {
+  return comment;
+}
+
+function groupDocumentCommentRowsByThread(
+  rows: ReadonlyArray<typeof ProjectionThreadDocumentCommentDbRow.Type>,
+): Map<string, Array<ThreadDocumentComment>> {
+  const byThread = new Map<string, Array<ThreadDocumentComment>>();
+  for (const row of rows) {
+    const comments = byThread.get(row.threadId) ?? [];
+    comments.push(mapDocumentCommentRow(row));
+    byThread.set(row.threadId, comments);
+  }
+  return byThread;
+}
+
 /**
  * The link array plus the legacy single-link field derived from it, so clients
  * from before `pullRequests` keep seeing the thread's current pull request.
@@ -775,6 +796,27 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           stack_json AS "stack"
         FROM projection_thread_pull_requests
         ORDER BY thread_id ASC, linked_at ASC, number ASC
+      `,
+  });
+
+  const listThreadDocumentCommentRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionThreadDocumentCommentDbRow,
+    execute: () =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          comment_id AS "id",
+          file_path AS "filePath",
+          anchor_json AS "anchor",
+          body,
+          status,
+          resolution,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          resolved_at AS "resolvedAt"
+        FROM projection_thread_document_comments
+        ORDER BY thread_id ASC, created_at ASC, comment_id ASC
       `,
   });
 
@@ -1416,6 +1458,28 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         FROM projection_thread_pull_requests
         WHERE thread_id = ${threadId}
         ORDER BY linked_at ASC, number ASC
+      `,
+  });
+
+  const listThreadDocumentCommentRowsByThread = SqlSchema.findAll({
+    Request: ThreadIdLookupInput,
+    Result: ProjectionThreadDocumentCommentDbRow,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          comment_id AS "id",
+          file_path AS "filePath",
+          anchor_json AS "anchor",
+          body,
+          status,
+          resolution,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          resolved_at AS "resolvedAt"
+        FROM projection_thread_document_comments
+        WHERE thread_id = ${threadId}
+        ORDER BY created_at ASC, comment_id ASC
       `,
   });
 
@@ -2106,6 +2170,14 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          listThreadDocumentCommentRows(undefined).pipe(
+            Effect.mapError(
+              toPersistenceSqlOrDecodeError(
+                "ProjectionSnapshotQuery.getSnapshot:listThreadDocumentComments:query",
+                "ProjectionSnapshotQuery.getSnapshot:listThreadDocumentComments:decodeRows",
+              ),
+            ),
+          ),
           listThreadActivityRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
@@ -2156,6 +2228,7 @@ pending_approval_requests AS (
             messageRows,
             proposedPlanRows,
             pullRequestRows,
+            documentCommentRows,
             activityRows,
             sessionRows,
             checkpointRows,
@@ -2166,6 +2239,8 @@ pending_approval_requests AS (
               const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
               const proposedPlansByThread = new Map<string, Array<OrchestrationProposedPlan>>();
               const pullRequestsByThread = groupPullRequestRowsByThread(pullRequestRows);
+              const documentCommentsByThread =
+                groupDocumentCommentRowsByThread(documentCommentRows);
               const activitiesByThread = new Map<string, Array<OrchestrationThreadActivity>>();
               const checkpointsByThread = new Map<string, Array<OrchestrationCheckpointSummary>>();
               const sessionsByThread = new Map<string, OrchestrationSession>();
@@ -2356,6 +2431,7 @@ pending_approval_requests AS (
                 activities: activitiesByThread.get(row.threadId) ?? [],
                 checkpoints: checkpointsByThread.get(row.threadId) ?? [],
                 session: sessionsByThread.get(row.threadId) ?? null,
+                documentComments: documentCommentsByThread.get(row.threadId) ?? [],
               }));
 
               const snapshot = {
@@ -2416,6 +2492,14 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          listThreadDocumentCommentRows(undefined).pipe(
+            Effect.mapError(
+              toPersistenceSqlOrDecodeError(
+                "ProjectionSnapshotQuery.getCommandReadModel:listThreadDocumentComments:query",
+                "ProjectionSnapshotQuery.getCommandReadModel:listThreadDocumentComments:decodeRows",
+              ),
+            ),
+          ),
           listThreadSessionRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
@@ -2449,6 +2533,7 @@ pending_approval_requests AS (
             threadRows,
             proposedPlanRows,
             pullRequestRows,
+            documentCommentRows,
             sessionRows,
             latestTurnRows,
             stateRows,
@@ -2541,6 +2626,9 @@ pending_approval_requests AS (
               }
               const proposedPlansByThread = new Map<string, Array<OrchestrationProposedPlan>>();
               const pullRequestsByThread = groupPullRequestRowsByThread(pullRequestRows);
+              // The decider checks comment ids against these.
+              const documentCommentsByThread =
+                groupDocumentCommentRowsByThread(documentCommentRows);
               const sessionByThread = new Map<string, OrchestrationSession>();
 
               for (let index = 0; index < sessionRows.length; index += 1) {
@@ -2603,6 +2691,7 @@ pending_approval_requests AS (
                   activities: [],
                   checkpoints: [],
                   session: sessionByThread.get(row.threadId) ?? null,
+                  documentComments: documentCommentsByThread.get(row.threadId) ?? [],
                 });
               }
 
@@ -3290,6 +3379,19 @@ pending_approval_requests AS (
       } satisfies OrchestrationThreadShell);
     });
 
+  const listThreadDocumentComments: ProjectionSnapshotQueryShape["listThreadDocumentComments"] = (
+    threadId,
+  ) =>
+    listThreadDocumentCommentRowsByThread({ threadId }).pipe(
+      Effect.map((rows) => rows.map(mapDocumentCommentRow)),
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.listThreadDocumentComments:query",
+          "ProjectionSnapshotQuery.listThreadDocumentComments:decodeRows",
+        ),
+      ),
+    );
+
   const getThreadRuntimeContext: ProjectionSnapshotQueryShape["getThreadRuntimeContext"] =
     Effect.fn("ProjectionSnapshotQuery.getThreadRuntimeContext")(function* (threadId) {
       const context = yield* getThreadRuntimeContextRow({ threadId }).pipe(
@@ -3476,6 +3578,7 @@ pending_approval_requests AS (
         messageRows,
         proposedPlanRows,
         pullRequestRows,
+        documentCommentRows,
         activities,
         checkpointRows,
         latestTurnRow,
@@ -3513,6 +3616,16 @@ pending_approval_requests AS (
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:listPullRequests:query",
               "ProjectionSnapshotQuery.getThreadDetailById:listPullRequests:decodeRows",
+            ),
+          ),
+        ),
+        // Comments are few and pinned to files rather than turns, so windowed
+        // reads carry all of them.
+        listThreadDocumentCommentRowsByThread({ threadId }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getThreadDetailById:listDocumentComments:query",
+              "ProjectionSnapshotQuery.getThreadDetailById:listDocumentComments:decodeRows",
             ),
           ),
         ),
@@ -3612,6 +3725,7 @@ pending_approval_requests AS (
           completedAt: row.completedAt,
         })),
         session: Option.isSome(sessionRow) ? mapSessionRow(sessionRow.value) : null,
+        documentComments: documentCommentRows.map(mapDocumentCommentRow),
       };
 
       return Option.some(
@@ -3799,6 +3913,7 @@ pending_approval_requests AS (
     getThreadCheckpointContext,
     getFullThreadDiffContext,
     getThreadShellById,
+    listThreadDocumentComments,
     getThreadRuntimeContext,
     getTurnStartMessage,
     getThreadDetailById,

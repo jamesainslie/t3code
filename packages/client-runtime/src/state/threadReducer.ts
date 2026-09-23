@@ -14,6 +14,7 @@ import type {
   TurnId,
 } from "@t3tools/contracts";
 import { threadPullRequestKeysEqual } from "@t3tools/shared/threadPullRequests";
+import { applyThreadDocumentCommentEvent } from "@t3tools/shared/threadDocumentComments";
 import {
   applyThreadDependenciesRemoved,
   applyThreadDependencyAdded,
@@ -146,6 +147,7 @@ export function applyThreadDetailEvent(
           activities: [],
           checkpoints: [],
           session: null,
+          documentComments: [],
         },
       };
 
@@ -368,6 +370,19 @@ export function applyThreadDetailEvent(
         ),
         event.payload.updatedAt,
       );
+    }
+
+    // Detail-only state: comments leave updatedAt alone, as on the server.
+    case "thread.document-comment-added":
+    case "thread.document-comment-updated":
+    case "thread.document-comment-deleted":
+    case "thread.document-comment-resolved":
+    case "thread.document-comment-reopened": {
+      const current = thread.documentComments ?? [];
+      const documentComments = applyThreadDocumentCommentEvent(current, event);
+      return documentComments === current
+        ? { kind: "unchanged" }
+        : { kind: "updated", thread: { ...thread, documentComments } };
     }
 
     case "thread.runtime-mode-set":
