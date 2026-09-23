@@ -247,6 +247,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["typography family size monospace output"],
   },
   {
+    id: "chat-text-color",
+    title: "Chat text color",
+    to: "/settings/appearance",
+    searchTerms: ["colors message font foreground white stark assistant response"],
+  },
+  {
+    id: "composer-caret-color",
+    title: "Prompt cursor color",
+    to: "/settings/appearance",
+    searchTerms: ["colors caret composer input text cursor"],
+  },
+  {
+    id: "thread-card-color",
+    title: "Thread card color",
+    to: "/settings/appearance",
+    searchTerms: ["colors sidebar thread bar row card background"],
+  },
+  {
     id: "panel-font",
     title: "Panel font size",
     to: "/settings/appearance",

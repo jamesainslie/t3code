@@ -44,6 +44,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
+import { applyAppearanceColorOverrides } from "~/appearanceColors";
 import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
@@ -173,6 +174,7 @@ function RootRouteView() {
           <EnvironmentThemeSync />
           <GlassAppearanceSync />
           <FontAppearanceSync />
+          <ColorAppearanceSync />
           <CustomSnoozeDialogHost />
           <CommandPalette>
             <AppSidebarLayout>
@@ -213,6 +215,7 @@ function RootRouteView() {
         <EnvironmentThemeSync />
         <GlassAppearanceSync />
         <FontAppearanceSync />
+        <ColorAppearanceSync />
         <FirstRunGate
           enabled={primaryEnvironmentAuthenticated}
           hostedStatic={authGateState.status === "hosted-static"}
@@ -315,6 +318,22 @@ function FontAppearanceSync() {
     fontSizePrompt,
     fontSmoothing,
   ]);
+
+  return null;
+}
+
+function ColorAppearanceSync() {
+  const chatTextColor = useClientSettings((settings) => settings.chatTextColor);
+  const composerCaretColor = useClientSettings((settings) => settings.composerCaretColor);
+  const threadCardColor = useClientSettings((settings) => settings.threadCardColor);
+
+  useEffect(() => {
+    applyAppearanceColorOverrides(document.documentElement, {
+      chatText: chatTextColor,
+      composerCaret: composerCaretColor,
+      threadCard: threadCardColor,
+    });
+  }, [chatTextColor, composerCaretColor, threadCardColor]);
 
   return null;
 }
