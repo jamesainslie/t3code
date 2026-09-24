@@ -70,11 +70,24 @@ function shortLabel(window: ServerProviderUsageWindow): string {
   return window.label;
 }
 
-function countdown(at: string | undefined, now: number): string {
+/** `1:42:10` inside a day and `3d 04h` beyond it, so a watcher can see the clock move. */
+export function formatCountdownSeconds(ms: number): string {
+  const total = Math.floor(Math.max(0, ms) / 1000);
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  if (days > 0) return `${days}d ${pad(hours)}h`;
+  return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function countdown(at: string | undefined, now: number, seconds = false): string {
   if (!at) return "";
   const ms = Date.parse(at) - now;
   if (!Number.isFinite(ms)) return "";
-  return ms <= 0 ? "now" : formatDuration(ms);
+  if (ms <= 0) return "now";
+  return seconds ? formatCountdownSeconds(ms) : formatDuration(ms);
 }
 
 function spent(window: ServerProviderUsageWindow, threshold: number, now: number): boolean {
@@ -84,7 +97,7 @@ function spent(window: ServerProviderUsageWindow, threshold: number, now: number
 
 function accountView(
   account: UsageLimitSourceAccount,
-  input: { threshold: number; modelThreshold: number; now: number },
+  input: { threshold: number; modelThreshold: number; now: number; seconds: boolean },
 ): ProxyAccountView {
   const windows = account.usageLimits.windows.map((window): ProxyWindowView => {
     const threshold =
@@ -96,7 +109,7 @@ function accountView(
       label: shortLabel(window),
       usedPercent: window.usedPercent,
       tone: windowTone(window.usedPercent, threshold),
-      resetText: window.resetsAt ? `↻ ${countdown(window.resetsAt, input.now)}` : "",
+      resetText: window.resetsAt ? `↻ ${countdown(window.resetsAt, input.now, input.seconds)}` : "",
     };
   });
   const session = account.usageLimits.windows.find((window) => window.id === "five_hour");
@@ -115,10 +128,12 @@ function accountView(
       break;
     case "cooling":
       stateLabel = proxy.coolingUntil
-        ? `cooling · back in ${countdown(proxy.coolingUntil, input.now)}`
+        ? `cooling · back in ${countdown(proxy.coolingUntil, input.now, input.seconds)}`
         : "circuit open";
       stateTone = "crit";
-      runwayText = proxy.coolingUntil ? countdown(proxy.coolingUntil, input.now) : "circuit";
+      runwayText = proxy.coolingUntil
+        ? countdown(proxy.coolingUntil, input.now, input.seconds)
+        : "circuit";
       runwayTone = "crit";
       break;
     case "paused":
@@ -161,14 +176,16 @@ function accountView(
       } else {
         stateLabel = `${shortLabel(governing)} spent`;
         stateTone = "crit";
-        runwayText = governing.resetsAt ? countdown(governing.resetsAt, input.now) : "spent";
+        runwayText = governing.resetsAt
+          ? countdown(governing.resetsAt, input.now, input.seconds)
+          : "spent";
         runwayTone = "crit";
       }
     } else {
       const soonest = [...account.usageLimits.windows]
         .filter((window) => window.resetsAt)
         .toSorted((left, right) => Date.parse(left.resetsAt!) - Date.parse(right.resetsAt!))[0];
-      runwayText = soonest ? countdown(soonest.resetsAt, input.now) : "";
+      runwayText = soonest ? countdown(soonest.resetsAt, input.now, input.seconds) : "";
       runwayTone = "muted";
     }
   }
@@ -185,14 +202,14 @@ function accountView(
   };
 }
 
-function fleetRunway(snapshot: UsageLimitSourceSnapshot, now: number): string {
+function fleetRunway(snapshot: UsageLimitSourceSnapshot, now: number, seconds: boolean): string {
   const runway = snapshot.proxy?.runway;
   if (!runway) return "";
   switch (runway.kind) {
     case "at":
-      return countdown(runway.at, now) || "now";
+      return countdown(runway.at, now, seconds) || "now";
     case "resetsFirst":
-      return runway.at ? `resets ${countdown(runway.at, now)}` : "resets first";
+      return runway.at ? `resets ${countdown(runway.at, now, seconds)}` : "resets first";
     case "idle":
       return "idle";
     case "beyondHorizon":
@@ -236,18 +253,23 @@ export function selectProxySource<
   return null;
 }
 
-/** `null` for a source the pill does not represent. */
+/**
+ * `null` for a source the pill does not represent. `seconds` renders every
+ * countdown to the second, for a view that ticks while it is open.
+ */
 export function deriveProxyPill(
   snapshot: UsageLimitSourceSnapshot,
   now: number,
+  options: { readonly seconds?: boolean } = {},
 ): ProxyPillView | null {
   if (snapshot.kind !== "modelproxy") return null;
+  const seconds = options.seconds === true;
   const proxy = snapshot.proxy;
   const auth = proxy?.auth ?? { state: "signedOut" as const };
   const threshold = proxy?.rotationThresholdPercent ?? DEFAULT_THRESHOLD;
   const modelThreshold = proxy?.modelThresholdPercent ?? threshold;
   const accounts = snapshot.accounts.map((account) =>
-    accountView(account, { threshold, modelThreshold, now }),
+    accountView(account, { threshold, modelThreshold, now, seconds }),
   );
   const current = accounts.find((account) => account.id === proxy?.current) ?? null;
   const fallbacks = (proxy?.fallback ?? []).map(
@@ -313,7 +335,7 @@ export function deriveProxyPill(
     status: "live",
     current,
     tone,
-    runwayText: fleetRunway(snapshot, now),
+    runwayText: fleetRunway(snapshot, now, seconds),
     fallbackText: poolSpent ? fallbackText(snapshot) : null,
   };
 }
