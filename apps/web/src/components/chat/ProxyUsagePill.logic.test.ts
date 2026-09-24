@@ -1,7 +1,7 @@
 import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { deriveProxyPill } from "./ProxyUsagePill.logic";
+import { deriveProxyPill, selectProxySource } from "./ProxyUsagePill.logic";
 
 const now = Date.parse("2026-09-23T12:00:00Z");
 const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
@@ -71,6 +71,30 @@ function snapshot(overrides: Partial<UsageLimitSourceSnapshot> = {}): UsageLimit
     ...overrides,
   };
 }
+
+describe("selectProxySource", () => {
+  const gateway = snapshot();
+  const hub = { ...snapshot(), kind: "cliproxy" as const };
+
+  it("prefers the thread's environment, then the primary, then any other", () => {
+    const configs = new Map([
+      ["mac", { usageLimitSources: [gateway] }],
+      ["hephaestus", { usageLimitSources: [hub] }],
+      ["incus", { usageLimitSources: [gateway] }],
+    ]);
+    expect(selectProxySource(configs, ["hephaestus", "mac"])?.environmentId).toBe("mac");
+    expect(selectProxySource(configs, ["incus", "mac"])?.environmentId).toBe("incus");
+    expect(selectProxySource(configs, ["hephaestus", null])?.environmentId).toBe("mac");
+  });
+
+  it("returns null when no environment has a gateway", () => {
+    const configs = new Map([
+      ["hephaestus", { usageLimitSources: [hub] }],
+      ["mac", {}],
+    ]);
+    expect(selectProxySource(configs, ["hephaestus", "mac"])).toBeNull();
+  });
+});
 
 describe("deriveProxyPill", () => {
   it("ignores sources that are not a gateway", () => {
