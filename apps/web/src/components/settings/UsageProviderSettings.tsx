@@ -120,7 +120,9 @@ function GatewayAuthStatus({
     return (
       <>
         {" "}
-        · Enter code <code className="font-mono tracking-widest">{auth.userCode}</code> at{" "}
+        · Confirm device code <code className="font-mono tracking-widest">
+          {auth.userCode}
+        </code> at{" "}
         <a
           className="underline"
           href={auth.verificationUrlComplete ?? auth.verificationUrl}
@@ -129,6 +131,8 @@ function GatewayAuthStatus({
         >
           {auth.verificationUrl}
         </a>
+        , then sign in with your password and a passkey or authenticator code. This row updates when
+        you finish.
       </>
     );
   }
