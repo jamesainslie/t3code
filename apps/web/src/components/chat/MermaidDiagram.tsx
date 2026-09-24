@@ -4,7 +4,9 @@ import {
   CodeIcon,
   CopyIcon,
   ExpandIcon,
+  MoonIcon,
   NetworkIcon,
+  SunIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
@@ -15,7 +17,20 @@ import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTitle, DialogDescription, DialogTrigger } from "../ui/dialog";
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 
-function DiagramCanvas({ svg }: { svg: string }) {
+type DiagramTheme = "dark" | "light";
+
+/** Matches the renderer's `background` theme variable, so a copied image has no seam. */
+const CANVAS_BACKGROUND: Record<DiagramTheme, string> = { dark: "#18181b", light: "#ffffff" };
+
+function DiagramCanvas({
+  svg,
+  theme,
+  onToggleTheme,
+}: {
+  svg: string;
+  theme: DiagramTheme;
+  onToggleTheme: () => void;
+}) {
   const imageSource = useMemo(
     () => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
     [svg],
@@ -69,6 +84,17 @@ function DiagramCanvas({ svg }: { svg: string }) {
         <Button variant="ghost" size="sm" onClick={() => controls.current?.actualSize()}>
           100%
         </Button>
+        <span className="mx-2 h-4 border-l border-border" />
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={theme === "dark" ? "Switch diagram to light" : "Switch diagram to dark"}
+          aria-pressed={theme === "light"}
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          {theme === "dark" ? "Light" : "Dark"}
+        </Button>
       </div>
       <div
         ref={canvas}
@@ -76,7 +102,9 @@ function DiagramCanvas({ svg }: { svg: string }) {
         role="region"
         aria-label="Diagram canvas"
         aria-describedby="mermaid-viewer-help"
-        className="relative min-h-0 flex-1 touch-none cursor-grab overflow-hidden bg-background outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        data-diagram-theme={theme}
+        className="relative min-h-0 flex-1 touch-none cursor-grab overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        style={{ backgroundColor: CANVAS_BACKGROUND[theme] }}
       >
         <img ref={image} src={imageSource} alt="Mermaid diagram" draggable={false} />
       </div>
@@ -87,6 +115,65 @@ function DiagramCanvas({ svg }: { svg: string }) {
         Drag to pan · Scroll or pinch to zoom · Arrow keys to pan · + / - zoom · F fit · C center ·
         0 actual size · Esc close
       </DialogDescription>
+    </>
+  );
+}
+
+/**
+ * The expanded viewer owns its own theme. It opens in the app's, and the
+ * toggle re-renders the same source in the other palette with a matching
+ * canvas, so a diagram can be copied light for a document from a dark app
+ * without changing the app. The previous picture stays up until the new
+ * render lands, so the canvas never shows one palette on the other's ground.
+ */
+export function ExpandedDiagram({
+  source,
+  theme: appTheme,
+  svg: appSvg,
+}: {
+  source: string;
+  theme: DiagramTheme;
+  svg: string;
+}) {
+  const [viewerTheme, setViewerTheme] = useState<DiagramTheme>(appTheme);
+  const [rendered, setRendered] = useState<{ theme: DiagramTheme; svg: string } | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (viewerTheme === appTheme) return;
+    let cancelled = false;
+    void renderMermaid(source, viewerTheme).then(
+      (svg) => {
+        if (!cancelled) setRendered({ theme: viewerTheme, svg });
+      },
+      () => {
+        if (!cancelled) setFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [source, viewerTheme, appTheme]);
+  const shown =
+    viewerTheme === appTheme
+      ? { theme: appTheme, svg: appSvg }
+      : rendered?.theme === viewerTheme
+        ? rendered
+        : { theme: appTheme, svg: appSvg };
+  return (
+    <>
+      <DiagramCanvas
+        svg={shown.svg}
+        theme={shown.theme}
+        onToggleTheme={() => {
+          setFailed(false);
+          setViewerTheme(viewerTheme === "dark" ? "light" : "dark");
+        }}
+      />
+      {failed ? (
+        <p role="status" className="border-t border-border px-4 py-2 text-xs text-destructive">
+          {`The ${viewerTheme} version could not be rendered.`}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -201,7 +288,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
                 <DialogTitle className="border-b border-border px-4 py-4 text-sm">
                   Mermaid diagram
                 </DialogTitle>
-                <DiagramCanvas svg={svg} />
+                <ExpandedDiagram source={source} theme={theme} svg={svg} />
               </DialogPopup>
             </Dialog>
           )}
