@@ -246,6 +246,9 @@ Expand a diagram to inspect it, then drag to pan or scroll or pinch to zoom.
 **Fit** shows the whole diagram; **Center** recenters it without changing the zoom.
 With the canvas focused, arrow keys pan, `+` and `-` zoom, `F` fits, `C` centers,
 and `0` restores actual size. Press Escape to close the web or desktop viewer.
+**Light** or **Dark** in the viewer redraws just that diagram in the other palette,
+so you can copy a light version into a document from a dark app; the app's own
+theme does not change.
 
 The original source remains available. If a diagram cannot render, **Ask agent
 to fix** adds its source and the error to your draft. Review and send the request
