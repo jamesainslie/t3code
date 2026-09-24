@@ -102,9 +102,11 @@ settings section when you no longer need it.
 A modelproxy gateway rotates requests across a pool of subscription accounts. To watch that pool
 from T3, open **Settings → Providers → Usage providers → Add source**, pick **modelproxy
 gateway**, and enter the gateway URL together with the OIDC issuer, client ID, and client secret
-of the gateway's T3 client. Then choose **Sign in** on the source's row: T3 shows a short code and
-a link, and you finish the login in any browser, on any device. The server keeps the session and
-refreshes it on its own; sign in again only if it says so.
+of the gateway's T3 client. Then choose **Sign in** on the source's row: T3 shows a short device code and
+a link. Open the link in any browser, on any device, confirm the code, and sign in with your
+password and your second factor, either a passkey or the code from your authenticator app. The
+row updates on its own when you finish. The server keeps the session and refreshes it; sign in
+again only if it says so.
 
 Once signed in, a pill in the thread header shows the account the gateway is serving, its session
 and weekly windows against the gateway's rotation threshold, and how long the whole pool is

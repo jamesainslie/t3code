@@ -156,7 +156,9 @@ function SignIn({
     return (
       <div className="flex flex-col gap-2">
         <div className="text-muted-foreground">
-          Open the sign-in page and enter this code. It walks the gateway's passkey step-up.
+          Open the sign-in page and confirm this device code. Then sign in with your password and
+          your second factor: a passkey, or the code from your authenticator app. Any browser on any
+          device will do.
         </div>
         <div className="flex items-center justify-between gap-3">
           <code className="rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest text-foreground">
@@ -171,7 +173,9 @@ function SignIn({
           </Button>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Waiting for the issuer.</span>
+          <span className="text-muted-foreground">
+            This panel updates on its own once you finish.
+          </span>
           <Button size="xs" variant="ghost" disabled={busy} onClick={() => void run("cancel")}>
             Cancel
           </Button>
@@ -280,7 +284,7 @@ function pillLabel(pill: ProxyPillView): string {
     case "signedOut":
       return "Sign in";
     case "pending":
-      return "Enter code";
+      return "Finish sign-in";
     case "offline":
       return "offline";
     default:
