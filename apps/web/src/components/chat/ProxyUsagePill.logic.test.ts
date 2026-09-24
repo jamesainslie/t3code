@@ -1,7 +1,7 @@
 import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { deriveProxyPill, selectProxySource } from "./ProxyUsagePill.logic";
+import { deriveProxyPill, formatCountdownSeconds, selectProxySource } from "./ProxyUsagePill.logic";
 
 const now = Date.parse("2026-09-23T12:00:00Z");
 const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
@@ -189,6 +189,17 @@ describe("deriveProxyPill", () => {
       verificationUrl: "https://auth.test/device?user_code=ABCD-EFGH",
       expiresAt: at(0.1),
     });
+  });
+
+  it("counts down to the second when asked, so a watcher sees the clock move", () => {
+    expect(formatCountdownSeconds(3 * 86_400_000 + 4 * 3_600_000 + 5_000)).toBe("3d 04h");
+    expect(formatCountdownSeconds(19 * 3_600_000 + 17 * 60_000 + 9_000)).toBe("19:17:09");
+    expect(formatCountdownSeconds(42_000)).toBe("0:00:42");
+    const pill = deriveProxyPill(snapshot(), now, { seconds: true })!;
+    expect(pill.accounts[1]?.runwayText).toBe("1:42:00");
+    expect(pill.runwayText).toBe("4:20:24");
+    // Off by default: the header pill ticks by the minute and reads the short form.
+    expect(deriveProxyPill(snapshot(), now)!.accounts[1]?.runwayText).toBe("1h 42m");
   });
 
   it("marks a signed-in source that failed to read as offline", () => {
