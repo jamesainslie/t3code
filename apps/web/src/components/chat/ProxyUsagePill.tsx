@@ -3,13 +3,15 @@ import type { EnvironmentId, UsageLimitSourceSnapshot } from "@t3tools/contracts
 import { useMemo, useState } from "react";
 
 import { useNowMinute } from "~/hooks/useNowMinute";
-import { serverEnvironment } from "../../state/server";
+import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
+import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import {
   deriveProxyPill,
+  selectProxySource,
   type ProxyAccountView,
   type ProxyPillView,
   type ProxyTone,
@@ -294,12 +296,20 @@ function pillLabel(pill: ProxyPillView): string {
  * the rotation threshold; the number is the session window; after the
  * rule is the fleet runway. Hover for every pooled account.
  */
-export function ProxyUsagePill({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+export function ProxyUsagePill({
+  environmentId: threadEnvironmentId,
+}: {
+  readonly environmentId: EnvironmentId;
+}) {
+  const configs = useAtomValue(environmentServerConfigsAtom);
+  const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
   const minute = useNowMinute();
-  const snapshot: UsageLimitSourceSnapshot | undefined = serverConfig?.usageLimitSources?.find(
-    (source) => source.kind === "modelproxy",
+  const selected = useMemo(
+    () => selectProxySource(configs, [threadEnvironmentId, primaryEnvironmentId]),
+    [configs, threadEnvironmentId, primaryEnvironmentId],
   );
+  const snapshot: UsageLimitSourceSnapshot | undefined = selected?.snapshot;
+  const environmentId = (selected?.environmentId ?? threadEnvironmentId) as EnvironmentId;
   const threshold = snapshot?.proxy?.rotationThresholdPercent ?? 90;
   const pill = useMemo(
     () => (snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null),

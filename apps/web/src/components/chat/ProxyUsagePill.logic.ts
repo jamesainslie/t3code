@@ -210,6 +210,32 @@ function fallbackText(snapshot: UsageLimitSourceSnapshot): string | null {
   return `$${spend.toFixed(2)}${window === "day" ? " today" : window === "month" ? " this month" : ""}`;
 }
 
+/**
+ * The gateway source the pill shows, with the environment that owns it. A
+ * gateway is the user's, not a thread's: the source is configured once, on
+ * whichever environment the user happened to have selected in settings, and
+ * every thread should see it. The thread's own environment wins when it has
+ * one, then the primary environment, then any other, in catalog order.
+ */
+export function selectProxySource<
+  Config extends { usageLimitSources?: readonly UsageLimitSourceSnapshot[] | undefined },
+>(
+  configs: ReadonlyMap<string, Config>,
+  preferred: ReadonlyArray<string | null>,
+): { environmentId: string; snapshot: UsageLimitSourceSnapshot } | null {
+  const order = [...preferred.filter((id): id is string => id !== null), ...configs.keys()];
+  const seen = new Set<string>();
+  for (const environmentId of order) {
+    if (seen.has(environmentId)) continue;
+    seen.add(environmentId);
+    const snapshot = configs
+      .get(environmentId)
+      ?.usageLimitSources?.find((source) => source.kind === "modelproxy");
+    if (snapshot) return { environmentId, snapshot };
+  }
+  return null;
+}
+
 /** `null` for a source the pill does not represent. */
 export function deriveProxyPill(
   snapshot: UsageLimitSourceSnapshot,

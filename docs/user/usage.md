@@ -108,7 +108,8 @@ refreshes it on its own; sign in again only if it says so.
 
 Once signed in, a pill in the thread header shows the account the gateway is serving, its session
 and weekly windows against the gateway's rotation threshold, and how long the whole pool is
-forecast to last. Hover it for every pooled account, what each is doing (serving, ready, cooling,
+forecast to last. Add the gateway on one environment only; the pill finds it from every thread,
+whichever environment the thread runs on. Hover it for every pooled account, what each is doing (serving, ready, cooling,
 spent, needing a login), and the metered fallback the gateway spills to when the pool is spent.
 The same accounts appear under **Usage → Limits**.
 
