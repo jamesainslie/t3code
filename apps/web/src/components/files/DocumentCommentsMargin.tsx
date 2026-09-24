@@ -418,7 +418,13 @@ function DocumentCommentCard({
   );
 }
 
-function DocumentCommentEditor({
+/**
+ * The comment form. It takes focus on mount without scrolling: a new card
+ * is committed at the top of the rail and only moved beside its passage once
+ * the parent has measured, so a scrolling focus would throw the document to
+ * the top and leave the reader hunting for the line they just selected.
+ */
+export function DocumentCommentEditor({
   label,
   initialBody,
   submitLabel,
@@ -433,6 +439,10 @@ function DocumentCommentEditor({
 }) {
   const [body, setBody] = useState(initialBody);
   const trimmed = body.trim();
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    textarea.current?.focus({ preventScroll: true });
+  }, []);
   return (
     <form
       className="rounded-lg border border-warning/60 bg-card p-2.5 text-xs shadow-xs/5 ring-2 ring-warning/20"
@@ -443,8 +453,8 @@ function DocumentCommentEditor({
     >
       <p className="mb-1.5 text-[11px] text-muted-foreground tabular-nums">{label}</p>
       <Textarea
+        ref={textarea}
         size="sm"
-        autoFocus
         value={body}
         aria-label="Comment"
         placeholder="Add a comment for the agent"
