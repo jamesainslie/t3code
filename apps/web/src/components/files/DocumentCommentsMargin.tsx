@@ -247,19 +247,24 @@ export function DocumentCommentsMargin({
           onOpenChange={(open) => setActiveId(open ? comment.id : null)}
         >
           <PopoverTrigger
-            className={cn(
-              "pointer-events-auto absolute end-1 flex h-5 min-w-5 cursor-pointer items-center justify-center gap-0.5 rounded-full border px-1 text-[10px] font-medium tabular-nums shadow-xs",
-              comment.status === "resolved"
-                ? "border-border bg-muted text-muted-foreground"
-                : "border-warning/40 bg-warning-surface text-warning-foreground",
-            )}
-            style={{ top: tops.get(comment.id) ?? 0 }}
-            aria-label={`Comment ${index + 1}: ${comment.body}`}
+            render={
+              <button
+                type="button"
+                className={cn(
+                  "pointer-events-auto absolute end-1 flex h-5 min-w-5 cursor-pointer items-center justify-center gap-0.5 rounded-full border px-1 text-3xs font-medium tabular-nums shadow-xs",
+                  comment.status === "resolved"
+                    ? "border-border bg-muted text-muted-foreground"
+                    : "border-warning/40 bg-warning-surface text-warning-foreground",
+                )}
+                style={{ top: tops.get(comment.id) ?? 0 }}
+                aria-label={`Comment ${index + 1}: ${comment.body}`}
+              />
+            }
           >
             <MessageSquareIcon aria-hidden className="size-3" />
             {index + 1}
           </PopoverTrigger>
-          <PopoverPopup side="left" align="start" className="w-72" viewportClassName="p-0">
+          <PopoverPopup side="left" align="start" className="w-72" padding="none">
             {commentCard(comment)}
           </PopoverPopup>
         </Popover>
@@ -267,13 +272,18 @@ export function DocumentCommentsMargin({
       {draft ? (
         <Popover open onOpenChange={(open) => (open ? undefined : onDraftDone())}>
           <PopoverTrigger
-            className="pointer-events-auto absolute end-1 flex size-5 items-center justify-center rounded-full border border-warning/40 bg-warning-surface text-warning-foreground"
-            style={{ top: tops.get(draft.id) ?? 0 }}
-            aria-label="New comment"
+            render={
+              <button
+                type="button"
+                className="pointer-events-auto absolute end-1 flex size-5 items-center justify-center rounded-full border border-warning/40 bg-warning-surface text-warning-foreground"
+                style={{ top: tops.get(draft.id) ?? 0 }}
+                aria-label="New comment"
+              />
+            }
           >
             <MessageSquareIcon aria-hidden className="size-3" />
           </PopoverTrigger>
-          <PopoverPopup side="left" align="start" className="w-72" viewportClassName="p-0">
+          <PopoverPopup side="left" align="start" className="w-72" padding="none">
             {draftCard}
           </PopoverPopup>
         </Popover>
@@ -329,7 +339,7 @@ function DocumentCommentCard({
         if (event.key === "Escape") onDeactivate();
       }}
     >
-      <header className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <header className="mb-1 flex items-center gap-1.5 text-2xs text-muted-foreground">
         {detached ? (
           <UnlinkIcon aria-hidden className="size-3" />
         ) : (
@@ -451,7 +461,7 @@ export function DocumentCommentEditor({
         if (trimmed) onSubmit(trimmed);
       }}
     >
-      <p className="mb-1.5 text-[11px] text-muted-foreground tabular-nums">{label}</p>
+      <p className="mb-1.5 text-2xs text-muted-foreground tabular-nums">{label}</p>
       <Textarea
         ref={textarea}
         size="sm"

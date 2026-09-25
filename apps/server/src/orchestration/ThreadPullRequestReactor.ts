@@ -271,16 +271,16 @@ export const make = Effect.gen(function* () {
               }
               return { thread, branchPullRequest, replacement };
             }).pipe(
-              Effect.catchCause((cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.failCause(cause)
-                  : Effect.logWarning("thread pull request discovery failed", {
-                      threadId: thread.id,
-                      cause: Cause.pretty(cause),
-                    }).pipe(
-                      Effect.tap(() => Effect.sync(() => failBackfill([thread]))),
-                      Effect.as(null),
-                    ),
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) =>
+                  Effect.logWarning("thread pull request discovery failed", {
+                    threadId: thread.id,
+                    cause: Cause.pretty(cause),
+                  }).pipe(
+                    Effect.tap(() => Effect.sync(() => failBackfill([thread]))),
+                    Effect.as(null),
+                  ),
               ),
             ),
           );
@@ -337,13 +337,13 @@ export const make = Effect.gen(function* () {
                   OrchestrationCommandInvariantError: () =>
                     Effect.sync(() => finishBackfill([thread])),
                 }),
-                Effect.catchCause((cause) =>
-                  Cause.hasInterruptsOnly(cause)
-                    ? Effect.failCause(cause)
-                    : Effect.logWarning("thread pull request update failed", {
-                        threadId: thread.id,
-                        cause: Cause.pretty(cause),
-                      }).pipe(Effect.tap(() => Effect.sync(() => failBackfill([thread])))),
+                Effect.catchCauseIf(
+                  (cause) => !Cause.hasInterruptsOnly(cause),
+                  (cause) =>
+                    Effect.logWarning("thread pull request update failed", {
+                      threadId: thread.id,
+                      cause: Cause.pretty(cause),
+                    }).pipe(Effect.tap(() => Effect.sync(() => failBackfill([thread])))),
                 ),
               ),
             { discard: true },
@@ -352,14 +352,14 @@ export const make = Effect.gen(function* () {
           // Any pass that reaches the end without failing clears the group's failure record,
           // so the next failure warns again rather than hiding behind an old one.
           Effect.tap(() => Effect.sync(() => lookupFailures.delete(groupKey))),
-          Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
-              : reportLookupFailure(
-                  groupKey,
-                  group.map((thread) => thread.id),
-                  cause,
-                ).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) =>
+              reportLookupFailure(
+                groupKey,
+                group.map((thread) => thread.id),
+                cause,
+              ).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
           ),
         ),
       { concurrency: 8, discard: true },
@@ -375,12 +375,12 @@ export const make = Effect.gen(function* () {
 
   const worker = yield* makeDrainableWorker((request: RefreshRequest) =>
     synchronize(request).pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.logWarning("thread pull request refresh failed", {
-              cause: Cause.pretty(cause),
-            }),
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterruptsOnly(cause),
+        (cause) =>
+          Effect.logWarning("thread pull request refresh failed", {
+            cause: Cause.pretty(cause),
+          }),
       ),
     ),
   );

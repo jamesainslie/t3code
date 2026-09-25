@@ -68,7 +68,8 @@ export function AinslieTartanArt({ compact = false }: { compact?: boolean }) {
 
   return (
     <svg
-      className="stage-art stage-nightly stage-tartan h-full w-full"
+      data-stage-art="tartan"
+      className="h-full w-full"
       fill="none"
       preserveAspectRatio="xMinYMin slice"
       viewBox={compact ? STAGE_BUTTON_VIEW_BOX : STAGE_CANVAS_VIEW_BOX}

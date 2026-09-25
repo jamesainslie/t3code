@@ -140,18 +140,18 @@ function LedgerRow({
     <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)_2.25rem_4.5rem] items-center gap-x-2.5 border-t border-border/60 py-1.5 first:border-t-0">
       <div className="min-w-0">
         <div className="truncate font-medium text-foreground">{account.id}</div>
-        <div className={cn("truncate text-[10.5px]", TONE_TEXT[account.stateTone])}>
+        <div className={cn("truncate text-2xs", TONE_TEXT[account.stateTone])}>
           {account.stateLabel}
         </div>
       </div>
       <div className="flex flex-col gap-1">
         {account.windows.length === 0 ? (
-          <span className="text-[10px] text-muted-foreground">no data</span>
+          <span className="text-3xs text-muted-foreground">no data</span>
         ) : (
           account.windows.map((window) => (
             <div
               key={window.key}
-              className="grid grid-cols-[1.25rem_1fr] items-center gap-1.5 font-mono text-[10px] text-muted-foreground"
+              className="grid grid-cols-[1.25rem_1fr] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
             >
               <span className="truncate">{window.label}</span>
               <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
@@ -159,14 +159,11 @@ function LedgerRow({
           ))
         )}
       </div>
-      <div className="text-right font-mono text-[11px] text-foreground tabular-nums">
+      <div className="text-right font-mono text-2xs text-foreground tabular-nums">
         {account.headline}
       </div>
       <div
-        className={cn(
-          "text-right font-mono text-[11px] tabular-nums",
-          TONE_TEXT[account.runwayTone],
-        )}
+        className={cn("text-right font-mono text-2xs tabular-nums", TONE_TEXT[account.runwayTone])}
       >
         {account.runwayText}
       </div>
@@ -273,13 +270,13 @@ function Ledger({
   const auth = useAtomCommand(serverEnvironment.usageLimitSourceAuth, { reportFailure: false });
   if (!pill) return null;
   return (
-    <div className="flex flex-col gap-2 p-[var(--floating-content-inset)] text-xs">
+    <div className="flex flex-col gap-2 p-(--floating-content-inset) text-xs">
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium text-muted-foreground">
           {pill.label} · {pill.accounts.length}{" "}
           {pill.accounts.length === 1 ? "account" : "accounts"}
         </span>
-        <span className="font-mono text-[10.5px] text-secondary-label">
+        <span className="font-mono text-2xs text-secondary-label">
           {pill.runwayText ? `fleet runway ${pill.runwayText}` : ""}
         </span>
       </div>
@@ -291,13 +288,13 @@ function Ledger({
             ))}
           </div>
           {pill.fallbacks.length > 0 ? (
-            <div className="border-t border-border/60 pt-1.5 font-mono text-[10.5px] text-muted-foreground">
+            <div className="border-t border-border/60 pt-1.5 font-mono text-2xs text-muted-foreground">
               {pill.fallbacks.map((line) => (
                 <div key={line}>{line}</div>
               ))}
             </div>
           ) : null}
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-1.5 font-mono text-[10.5px] text-secondary-label">
+          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-1.5 font-mono text-2xs text-secondary-label">
             <span>{pill.footer}</span>
             {confirmSignOut ? (
               <span className="flex items-center gap-1">
@@ -386,64 +383,61 @@ export function ProxyUsagePill({
             variant="outline"
             data-toolbar-control=""
             aria-label={`${pill.label}: ${pill.current ? `${pill.current.id} ${pill.current.headline}` : pillLabel(pill)}`}
-            className={cn(
-              "gap-2 px-2",
-              dim && "text-muted-foreground",
-              tone === "crit" && !dim && "border-error/50",
-            )}
           />
         }
       >
-        <IrisGauge
-          session={pill.status === "live" ? session : null}
-          weekly={pill.status === "live" ? weekly : null}
-          className={cn(
-            pill.status === "pending" && "text-warning-foreground",
-            tone === "crit" && !dim && "text-error-foreground",
-            dim && "opacity-60",
-          )}
-        />
-        {pill.status === "live" ? (
-          <span className="flex w-8 flex-col gap-[3px]" aria-hidden>
-            <Meter
-              usedPercent={session?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
-              tone={session?.tone ?? tone}
-              threshold={threshold}
-            />
-            <Meter
-              usedPercent={weekly?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
-              tone={weekly?.tone ?? tone}
-              threshold={threshold}
-            />
-          </span>
-        ) : null}
-        <span
-          className={cn(
-            "font-mono text-[11.5px] tabular-nums",
-            pill.status === "live" && pill.fallbackText && "text-error-foreground",
-          )}
-        >
-          {pillLabel(pill)}
-        </span>
-        {pill.status === "live" && pill.runwayText ? (
-          <>
-            <span className="h-3.5 w-px bg-border" aria-hidden />
-            <span
-              className={cn(
-                "hidden font-mono text-[11.5px] tabular-nums @3xl/header-actions:inline",
-                tone === "crit" ? "text-error-foreground" : "text-muted-foreground",
-              )}
-            >
-              {pill.runwayText}
+        <span className={cn("flex items-center gap-2", dim && "text-muted-foreground")}>
+          <IrisGauge
+            session={pill.status === "live" ? session : null}
+            weekly={pill.status === "live" ? weekly : null}
+            className={cn(
+              pill.status === "pending" && "text-warning-foreground",
+              tone === "crit" && !dim && "text-error-foreground",
+              dim && "opacity-60",
+            )}
+          />
+          {pill.status === "live" ? (
+            <span className="flex w-8 flex-col gap-0.75" aria-hidden>
+              <Meter
+                usedPercent={session?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
+                tone={session?.tone ?? tone}
+                threshold={threshold}
+              />
+              <Meter
+                usedPercent={weekly?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
+                tone={weekly?.tone ?? tone}
+                threshold={threshold}
+              />
             </span>
-          </>
-        ) : null}
+          ) : null}
+          <span
+            className={cn(
+              "font-mono text-xs tabular-nums",
+              pill.status === "live" && pill.fallbackText && "text-error-foreground",
+            )}
+          >
+            {pillLabel(pill)}
+          </span>
+          {pill.status === "live" && pill.runwayText ? (
+            <>
+              <span className="h-3.5 w-px bg-border" aria-hidden />
+              <span
+                className={cn(
+                  "hidden font-mono text-xs tabular-nums @3xl/header-actions:inline",
+                  tone === "crit" ? "text-error-foreground" : "text-muted-foreground",
+                )}
+              >
+                {pill.runwayText}
+              </span>
+            </>
+          ) : null}
+        </span>
       </PopoverTrigger>
       <PopoverPopup
         tooltipStyle
         side="bottom"
         align="end"
-        viewportClassName="p-0"
+        padding="none"
         className="w-[21rem] max-w-none text-left whitespace-normal"
       >
         {snapshot ? (

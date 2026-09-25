@@ -14,7 +14,7 @@ import { renderMermaid } from "@t3tools/client-runtime/mermaid-renderer";
 import { mountDiagramViewport } from "@t3tools/client-runtime/mermaid-viewport";
 import { mermaidRepairPrompt } from "@t3tools/client-runtime/mermaid";
 import { Button } from "../ui/button";
-import { Dialog, DialogPopup, DialogTitle, DialogDescription, DialogTrigger } from "../ui/dialog";
+import { Dialog, DialogPopup, DialogTrigger } from "../ui/dialog";
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 
 type DiagramTheme = "dark" | "light";
@@ -108,13 +108,13 @@ function DiagramCanvas({
       >
         <img ref={image} src={imageSource} alt="Mermaid diagram" draggable={false} />
       </div>
-      <DialogDescription
+      <p
         id="mermaid-viewer-help"
-        className="border-t border-border px-4 py-3 text-xs"
+        className="border-t border-border px-4 py-3 text-xs text-muted-foreground"
       >
         Drag to pan · Scroll or pinch to zoom · Arrow keys to pan · + / - zoom · F fit · C center ·
         0 actual size · Esc close
-      </DialogDescription>
+      </p>
     </>
   );
 }
@@ -243,7 +243,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   };
   return (
     <div
-      className="not-prose my-3 overflow-hidden rounded-xl border border-border bg-card"
+      className="my-3 overflow-hidden rounded-xl border border-border bg-card"
       data-mermaid-diagram=""
     >
       <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-1.5">
@@ -278,16 +278,18 @@ export const MermaidDiagram = memo(function MermaidDiagram({
                 Expand
               </DialogTrigger>
               <DialogPopup
-                className="flex h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col overflow-hidden p-0"
+                className="flex h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col overflow-hidden"
+                aria-label="Mermaid diagram"
+                aria-describedby="mermaid-viewer-help"
                 bottomStickOnMobile={false}
                 initialFocus={false}
                 onKeyDown={(event) => {
                   if (event.key !== "Escape") event.stopPropagation();
                 }}
               >
-                <DialogTitle className="border-b border-border px-4 py-4 text-sm">
+                <h2 className="border-b border-border px-4 py-4 text-sm leading-none font-semibold">
                   Mermaid diagram
-                </DialogTitle>
+                </h2>
                 <ExpandedDiagram source={source} theme={theme} svg={svg} />
               </DialogPopup>
             </Dialog>

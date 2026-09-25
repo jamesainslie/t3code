@@ -2,7 +2,6 @@ import { type EnvironmentId, UsageLimitSourceId } from "@t3tools/contracts";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
-import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -152,7 +151,6 @@ export function AddUsageLimitSourceDialog({
                     role="radio"
                     aria-checked={kind === option}
                     variant={kind === option ? "default" : "outline"}
-                    className={cn(kind !== option && "text-muted-foreground")}
                     onClick={() => setKind(option)}
                   >
                     {KIND_COPY[option].title}

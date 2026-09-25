@@ -53,7 +53,14 @@ update it with `git pull` and a rebuild.
 Download a release from [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
 The fork installs as **T3 Code Fork** with its own data directory, so it runs
 alongside the upstream desktop app. Builds are published for macOS (Apple
-Silicon and Intel) and Linux (AppImage).
+Silicon and Intel) and Linux (AppImage and `.deb`, x64 and arm64).
+
+On Debian or Ubuntu, install the `.deb` with `sudo apt install ./T3-Code-Fork-*.deb`.
+Its package is named `t3code-fork`, so it installs beside upstream's `t3code`
+package rather than replacing it. The `.deb` updates itself like the other
+desktop builds. It asks for your password to install each update. If your
+desktop has no password prompt, the update fails. Download the new `.deb` and
+install it the same way.
 
 ### Windows Subsystem for Linux
 
@@ -109,6 +116,12 @@ Provider CLIs must be on the server's `PATH`. If T3 Code cannot find one, set it
 **Binary path** in provider settings, especially when using a version manager.
 Cursor's executable is `cursor-agent`, although its login command is
 `agent login`. Antigravity can use its managed runtime without a `PATH` entry.
+
+T3 Code warns when a provider version has known compatibility problems with your
+release. Check **Settings → Providers** on that environment for the recommended
+version or range. When its package manager supports installing a specific version,
+you can install the recommendation there. Otherwise use the provider's installer
+on the environment's machine. An unlisted version is unverified.
 
 When a provider CLI is behind its latest release, its provider card shows the
 available version. **Update now** appears only when T3 Code can tell which

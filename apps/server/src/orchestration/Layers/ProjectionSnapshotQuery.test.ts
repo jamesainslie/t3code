@@ -494,6 +494,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pinOrderKey: "gm",
           highlightColor: "#ff8800",
           activeOrderKey: "hq",
+          autoSettleDisabledAt: null,
           titleRegeneration: null,
           titleState: null,
           deletedAt: null,
@@ -623,6 +624,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pinOrderKey: "gm",
           highlightColor: "#ff8800",
           activeOrderKey: "hq",
+          autoSettleDisabledAt: null,
           titleRegeneration: null,
           titleState: null,
           session: {

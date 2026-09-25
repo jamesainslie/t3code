@@ -31,6 +31,7 @@ import {
   type ReorderPinnedThreadInput,
   type SetThreadHighlightInput,
   type ReorderActiveThreadInput,
+  type SetThreadAutoSettleInput,
   type SettleThreadInput,
   type SnoozeThreadInput,
   type StartThreadTurnInput,
@@ -68,6 +69,7 @@ import {
   reorderPinnedThread,
   setThreadHighlight,
   reorderActiveThread,
+  setThreadAutoSettle,
   settleThread,
   snoozeThread,
   startThreadTurn,
@@ -84,6 +86,7 @@ import {
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 
 export type {
+  AddThreadDependencyInput,
   ArchiveThreadInput,
   CreateThreadInput,
   DeleteThreadInput,
@@ -99,6 +102,8 @@ export type {
   ReorderPinnedThreadInput,
   SetThreadHighlightInput,
   ReorderActiveThreadInput,
+  RemoveThreadDependenciesInput,
+  SetThreadAutoSettleInput,
   SettleThreadInput,
   SnoozeThreadInput,
   StartThreadTurnInput,
@@ -208,6 +213,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     setHighlight: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:set-highlight",
       execute: (input: SetThreadHighlightInput) => setThreadHighlight(input),
+      scheduler,
+      concurrency,
+    }),
+    setAutoSettle: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:set-auto-settle",
+      execute: (input: SetThreadAutoSettleInput) => setThreadAutoSettle(input),
       scheduler,
       concurrency,
     }),

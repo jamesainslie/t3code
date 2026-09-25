@@ -558,6 +558,7 @@ jobs:
             release-assets/*.dmg
             release-assets/*.zip
             release-assets/*.AppImage
+            release-assets/*.deb
             release-assets/*.blockmap
             release-assets/*.yml
             release-assets/*.tar.gz
@@ -579,6 +580,7 @@ jobs:
             release-assets/*.dmg
             release-assets/*.zip
             release-assets/*.AppImage
+            release-assets/*.deb
             release-assets/*.blockmap
             release-assets/*.yml
             release-assets/*.tar.gz

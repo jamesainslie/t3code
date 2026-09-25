@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
@@ -10,15 +11,9 @@ import {
   type RepositoryIdentity,
   type ServerSettings,
 } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
-import {
-  ProjectionProjectRepository,
-  type ProjectionProject,
-} from "../persistence/Services/ProjectionProjects.ts";
-import {
-  ProjectionThreadRepository,
-  type ProjectionThread,
-} from "../persistence/Services/ProjectionThreads.ts";
+import { runMigrations } from "../persistence/Migrations.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettingsService from "../serverSettings.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -57,14 +52,54 @@ function makeSelector(input: {
   readonly settings?: Partial<
     Pick<ServerSettings, "gitHubAccountRules" | "projectSettingsOverrides">
   >;
-  readonly projects?: ReadonlyArray<Pick<ProjectionProject, "projectId" | "workspaceRoot">>;
-  readonly threads?: ReadonlyArray<Pick<ProjectionThread, "projectId" | "worktreePath">>;
+  readonly projects?: ReadonlyArray<{
+    readonly projectId: ProjectId;
+    readonly workspaceRoot: string;
+  }>;
+  readonly threads?: ReadonlyArray<{
+    readonly projectId: ProjectId;
+    readonly worktreePath: string;
+  }>;
   readonly token?: (
     args: ReadonlyArray<string>,
   ) => Effect.Effect<VcsProcess.VcsProcessOutput, VcsProcessExitError>;
   readonly commands?: Array<ReadonlyArray<string>>;
 }) {
-  return GitHubAccountSelector.make.pipe(
+  const seedProjection = Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* runMigrations();
+    for (const project of input.projects ?? []) {
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id, title, workspace_root, scripts_json, created_at, updated_at, deleted_at
+        )
+        VALUES (
+          ${project.projectId}, 'Project', ${project.workspaceRoot}, '[]',
+          '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z', NULL
+        )
+      `;
+    }
+    for (const [index, thread] of (input.threads ?? []).entries()) {
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id, project_id, title, model_selection_json, worktree_path, created_at, updated_at
+        )
+        VALUES (
+          ${`thread-${index}`}, ${thread.projectId}, 'Thread',
+          '{"instanceId":"codex","model":"gpt-5.4"}', ${thread.worktreePath},
+          '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z'
+        )
+      `;
+    }
+  });
+  return Effect.gen(function* () {
+    // Built into the test's scope: the selector reads the projection after this returns.
+    const database = yield* Layer.build(
+      Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })),
+    );
+    yield* seedProjection.pipe(Effect.provide(database));
+    return yield* GitHubAccountSelector.make.pipe(Effect.provide(database));
+  }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mock(RepositoryIdentityResolver.RepositoryIdentityResolver)({
@@ -73,18 +108,6 @@ function makeSelector(input: {
         ServerSettingsService.layerTest({
           gitHubAccountRules: input.settings?.gitHubAccountRules ?? [],
           projectSettingsOverrides: input.settings?.projectSettingsOverrides ?? {},
-        }),
-        Layer.mock(ProjectionProjectRepository)({
-          listAll: () =>
-            Effect.succeed((input.projects ?? []) as unknown as ReadonlyArray<ProjectionProject>),
-        }),
-        Layer.mock(ProjectionThreadRepository)({
-          listByProjectId: ({ projectId }) =>
-            Effect.succeed(
-              (input.threads ?? []).filter(
-                (thread) => thread.projectId === projectId,
-              ) as unknown as ReadonlyArray<ProjectionThread>,
-            ),
         }),
         Layer.mock(VcsProcess.VcsProcess)({
           run: (command) => {
