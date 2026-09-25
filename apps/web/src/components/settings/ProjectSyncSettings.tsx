@@ -153,7 +153,7 @@ export function ProjectSyncSettings({ environmentId }: { environmentId: Environm
                     </select>
                   </div>
                   {project.warnings.map((warning) => (
-                    <p key={warning} className="text-xs text-amber-600 dark:text-amber-400">
+                    <p key={warning} className="text-xs text-warning-foreground">
                       {warning}
                     </p>
                   ))}
@@ -319,7 +319,7 @@ export function ProjectSyncSettings({ environmentId }: { environmentId: Environm
             <div
               role="alertdialog"
               aria-label={confirm.operation === "undo" ? "Undo sync" : "Restore backup"}
-              className="space-y-3 rounded-md border border-amber-500/40 p-3"
+              className="space-y-3 rounded-md border border-warning/40 p-3"
             >
               <p className="text-sm">
                 {confirm.operation === "undo"

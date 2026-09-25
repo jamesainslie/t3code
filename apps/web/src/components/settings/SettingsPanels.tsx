@@ -1934,7 +1934,7 @@ function ThreadHighlightPaletteRow() {
               />
               <Input
                 aria-label={`Highlight ${index + 1} label`}
-                className="min-w-0 flex-1 text-xs"
+                className="min-w-0 flex-1"
                 nativeInput
                 onChange={(event) => updateEntry(index, { label: event.currentTarget.value })}
                 placeholder={`Color ${index + 1}`}
@@ -1943,7 +1943,8 @@ function ThreadHighlightPaletteRow() {
               <Input
                 aria-invalid={resolved === null}
                 aria-label={`Highlight ${index + 1} hex value`}
-                className="w-24 shrink-0 font-mono text-xs [&_[data-slot=input]]:text-right"
+                className="w-24 shrink-0 [&_[data-slot=input]]:text-right"
+                font="mono"
                 nativeInput
                 onChange={(event) => updateEntry(index, { color: event.currentTarget.value })}
                 spellCheck={false}
@@ -1992,7 +1993,8 @@ function ColorSettingsRow({
           <Input
             aria-invalid={!isUnset && resolved === null}
             aria-label={`${title} hex value`}
-            className="w-28 shrink-0 font-mono text-xs [&_[data-slot=input]]:text-right"
+            className="w-28 shrink-0 [&_[data-slot=input]]:text-right"
+            font="mono"
             nativeInput
             onChange={(event) => onValueChange(event.currentTarget.value)}
             placeholder="Theme"

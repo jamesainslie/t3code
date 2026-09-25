@@ -1165,7 +1165,7 @@ function InlineShikiCode({
       return highlighter.codeToHtml(code, { ...options, lang: "text" });
     }
   }, [code, highlighter, language, themeName]);
-  return <code className="chat-markdown-inline-shiki" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <code data-chat-markdown-inline-shiki dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 interface UncachedShikiCodeBlockProps {
