@@ -51,6 +51,7 @@ import {
   ThreadPinnedPayload,
   ThreadPinReorderedPayload,
   ThreadHighlightedPayload,
+  ThreadAutoSettleSetPayload,
   ThreadPullRequestLinkedPayload,
   ThreadPullRequestSyncedPayload,
   ThreadPullRequestUnlinkedPayload,
@@ -451,6 +452,7 @@ export function projectEvent(
             settledAt: null,
             unsettledAt: null,
             activeOrderKey: null,
+            autoSettleDisabledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
             dependencies: [],
@@ -663,6 +665,17 @@ export function projectEvent(
             // Unpin clears the slot: re-pinning is "pin again", not "restore
             // an ancient position".
             pinOrderKey: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.auto-settle-set":
+      return decodeForEvent(ThreadAutoSettleSetPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            autoSettleDisabledAt: payload.autoSettleDisabledAt,
             updatedAt: payload.updatedAt,
           }),
         })),

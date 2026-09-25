@@ -259,7 +259,7 @@ export function DocumentCommentsMargin({
             <MessageSquareIcon aria-hidden className="size-3" />
             {index + 1}
           </PopoverTrigger>
-          <PopoverPopup side="left" align="start" className="w-72" viewportClassName="p-0">
+          <PopoverPopup side="left" align="start" className="w-72" padding="none">
             {commentCard(comment)}
           </PopoverPopup>
         </Popover>
@@ -273,7 +273,7 @@ export function DocumentCommentsMargin({
           >
             <MessageSquareIcon aria-hidden className="size-3" />
           </PopoverTrigger>
-          <PopoverPopup side="left" align="start" className="w-72" viewportClassName="p-0">
+          <PopoverPopup side="left" align="start" className="w-72" padding="none">
             {draftCard}
           </PopoverPopup>
         </Popover>

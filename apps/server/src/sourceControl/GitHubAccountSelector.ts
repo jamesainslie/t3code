@@ -8,14 +8,11 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { pullRequestHostOf, type ProjectId } from "@t3tools/contracts";
 import { resolveGitHubAccount } from "@t3tools/shared/gitHubAccountRouting";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 
-import { ProjectionProjectRepositoryLive } from "../persistence/Layers/ProjectionProjects.ts";
-import { ProjectionThreadRepositoryLive } from "../persistence/Layers/ProjectionThreads.ts";
-import { ProjectionProjectRepository } from "../persistence/Services/ProjectionProjects.ts";
-import { ProjectionThreadRepository } from "../persistence/Services/ProjectionThreads.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -64,27 +61,29 @@ const tokenKey = (selection: GitHubAccountSelection) =>
 export const make = Effect.gen(function* () {
   const identities = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
-  const projects = yield* ProjectionProjectRepository;
-  const threads = yield* ProjectionThreadRepository;
+  const sql = yield* SqlClient.SqlClient;
   const process = yield* VcsProcess.VcsProcess;
 
   // Every project root and thread worktree the projection knows, so a cwd with no project id
-  // can still find its override. Read from the repositories rather than the shell snapshot
-  // query: that query resolves identities through the source control registry, which is what
-  // this selector is a dependency of. One read serves every checkout for the TTL.
+  // can still find its override. Read the projection tables directly rather than the shell
+  // snapshot query: that query resolves identities through the source control registry, which
+  // is what this selector is a dependency of. One read serves every checkout for the TTL.
   const projectIndex = yield* Cache.makeWith(
     (_key: string) =>
       Effect.gen(function* () {
+        const worktrees = yield* sql<{ readonly root: string; readonly projectId: ProjectId }>`
+          SELECT worktree_path AS "root", project_id AS "projectId"
+          FROM projection_threads
+          WHERE worktree_path IS NOT NULL
+            AND project_id IN (SELECT project_id FROM projection_projects)
+        `;
+        const roots = yield* sql<{ readonly root: string; readonly projectId: ProjectId }>`
+          SELECT workspace_root AS "root", project_id AS "projectId"
+          FROM projection_projects
+        `;
         const byRoot = new Map<string, ProjectId>();
-        const rows = yield* projects.listAll();
-        for (const project of rows) {
-          const projectThreads = yield* threads.listByProjectId({ projectId: project.projectId });
-          for (const thread of projectThreads) {
-            if (thread.worktreePath !== null) byRoot.set(thread.worktreePath, project.projectId);
-          }
-        }
         // Project roots win over worktrees that happen to share a path.
-        for (const project of rows) byRoot.set(project.workspaceRoot, project.projectId);
+        for (const row of [...worktrees, ...roots]) byRoot.set(row.root, row.projectId);
         return byRoot as ReadonlyMap<string, ProjectId>;
       }).pipe(Effect.orElseSucceed((): ReadonlyMap<string, ProjectId> => new Map())),
     {
@@ -193,8 +192,6 @@ const layer = Layer.effect(GitHubAccountSelector, make);
 export const layerLive = layer.pipe(
   Layer.provide(RepositoryIdentityResolver.layer),
   Layer.provide(VcsProcess.layer),
-  Layer.provide(ProjectionProjectRepositoryLive),
-  Layer.provide(ProjectionThreadRepositoryLive),
 );
 
 /** No account selection at all: every call keeps gh's active account. For contexts without settings. */

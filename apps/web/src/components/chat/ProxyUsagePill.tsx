@@ -443,7 +443,7 @@ export function ProxyUsagePill({
         tooltipStyle
         side="bottom"
         align="end"
-        viewportClassName="p-0"
+        padding="none"
         className="w-[21rem] max-w-none text-left whitespace-normal"
       >
         {snapshot ? (

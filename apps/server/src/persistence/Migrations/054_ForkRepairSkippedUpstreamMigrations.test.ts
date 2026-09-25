@@ -46,63 +46,69 @@ const readState = Effect.gen(function* () {
   };
 });
 
-it.layer(Layer.fresh(NodeSqliteClient.layerMemory()))("054 on a fork database", (it) => {
-  it.effect("creates the pull request projection that fork installs skipped", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 48 });
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "054 on a fork database",
+  (it) => {
+    it.effect("creates the pull request projection that fork installs skipped", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations({ toMigrationInclusive: 48 });
 
-      // A fork install before this refresh: its placement migration ran as
-      // id 49 and again as id 50, adding these columns, and both rows sit in
-      // the migration table under the fork's name.
-      yield* sql`ALTER TABLE projection_threads ADD COLUMN active_order_key TEXT`;
-      yield* sql`ALTER TABLE projection_threads ADD COLUMN pin_position INTEGER`;
-      yield* sql`ALTER TABLE projection_threads ADD COLUMN thread_order_key TEXT`;
-      for (const id of [49, 50]) {
-        yield* sql`
+        // A fork install before this refresh: its placement migration ran as
+        // id 49 and again as id 50, adding these columns, and both rows sit in
+        // the migration table under the fork's name.
+        yield* sql`ALTER TABLE projection_threads ADD COLUMN active_order_key TEXT`;
+        yield* sql`ALTER TABLE projection_threads ADD COLUMN pin_position INTEGER`;
+        yield* sql`ALTER TABLE projection_threads ADD COLUMN thread_order_key TEXT`;
+        for (const id of [49, 50]) {
+          yield* sql`
           INSERT INTO effect_sql_migrations (migration_id, name, created_at)
           VALUES (${id}, 'ProjectionThreadPlacement', '2026-09-08T00:00:00.000Z')
         `;
-      }
-      yield* seedLinkedThread;
+        }
+        yield* seedLinkedThread;
 
-      const executed = yield* runMigrations();
+        const executed = yield* runMigrations();
 
-      assert.deepStrictEqual(
-        executed.map(([id]) => id),
-        [51, 52, 53, 54, 55, 56, 57],
-      );
-      const state = yield* readState;
-      assert.deepStrictEqual(state.pullRequests, [{ threadId: "thread-linked", number: 42 }]);
-      assert.strictEqual(state.recordedNames.get(50), "ProjectionThreadPlacement");
-      assert.strictEqual(state.recordedNames.get(54), "ForkRepairSkippedUpstreamMigrations");
-      // Upstream's later migrations still landed on top of the fork schema.
-      assert.ok(state.columnNames.includes("title_state_json"));
-      assert.ok(state.columnNames.includes("pin_position"));
-    }),
-  );
-});
+        assert.deepStrictEqual(
+          executed.map(([id]) => id),
+          [51, 52, 53, 54, 55, 56, 57, 58],
+        );
+        const state = yield* readState;
+        assert.deepStrictEqual(state.pullRequests, [{ threadId: "thread-linked", number: 42 }]);
+        assert.strictEqual(state.recordedNames.get(50), "ProjectionThreadPlacement");
+        assert.strictEqual(state.recordedNames.get(54), "ForkRepairSkippedUpstreamMigrations");
+        // Upstream's later migrations still landed on top of the fork schema.
+        assert.ok(state.columnNames.includes("title_state_json"));
+        assert.ok(state.columnNames.includes("pin_position"));
+      }),
+    );
+  },
+);
 
-it.layer(Layer.fresh(NodeSqliteClient.layerMemory()))("054 on an upstream database", (it) => {
-  it.effect("is a no-op when 049 and 050 already ran", () =>
-    Effect.gen(function* () {
-      yield* runMigrations({ toMigrationInclusive: 48 });
-      yield* seedLinkedThread;
-      yield* runMigrations({ toMigrationInclusive: 53 });
-      const before = yield* readState;
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "054 on an upstream database",
+  (it) => {
+    it.effect("is a no-op when 049 and 050 already ran", () =>
+      Effect.gen(function* () {
+        yield* runMigrations({ toMigrationInclusive: 48 });
+        yield* seedLinkedThread;
+        yield* runMigrations({ toMigrationInclusive: 53 });
+        const before = yield* readState;
 
-      // Stop at 054 itself: later migrations legitimately add columns and
-      // would mask whether 054 alone changed anything.
-      const executed = yield* runMigrations({ toMigrationInclusive: 54 });
+        // Stop at 054 itself: later migrations legitimately add columns and
+        // would mask whether 054 alone changed anything.
+        const executed = yield* runMigrations({ toMigrationInclusive: 54 });
 
-      assert.deepStrictEqual(
-        executed.map(([id]) => id),
-        [54],
-      );
-      const after = yield* readState;
-      assert.deepStrictEqual(after.pullRequests, before.pullRequests);
-      assert.deepStrictEqual(after.columnNames, before.columnNames);
-      assert.deepStrictEqual(after.recordedIds, [...before.recordedIds, 54]);
-    }),
-  );
-});
+        assert.deepStrictEqual(
+          executed.map(([id]) => id),
+          [54],
+        );
+        const after = yield* readState;
+        assert.deepStrictEqual(after.pullRequests, before.pullRequests);
+        assert.deepStrictEqual(after.columnNames, before.columnNames);
+        assert.deepStrictEqual(after.recordedIds, [...before.recordedIds, 54]);
+      }),
+    );
+  },
+);

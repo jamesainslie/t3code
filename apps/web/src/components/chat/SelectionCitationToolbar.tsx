@@ -215,7 +215,6 @@ export function SelectionCitationToolbar({
         variant="glass"
         disabled={tooLong}
         aria-label={tooLong ? "Selection is too long to cite" : "Cite selection in composer"}
-        className="rounded-full px-2.5"
         onClick={cite}
       >
         <QuoteIcon aria-hidden="true" className="size-3.5" />
@@ -227,7 +226,6 @@ export function SelectionCitationToolbar({
           size="xs"
           variant="glass"
           aria-label="Comment on selection"
-          className="rounded-full px-2.5"
           onClick={comment}
         >
           <MessageSquarePlusIcon aria-hidden="true" className="size-3.5" />

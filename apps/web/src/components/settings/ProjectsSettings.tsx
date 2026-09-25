@@ -6,6 +6,7 @@ import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { ProjectSyncSettings } from "./ProjectSyncSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
+import { SettingsPageContainer } from "./settingsLayout";
 
 /**
  * Sync imports into one environment's database, so it needs exactly one
@@ -73,7 +74,9 @@ export function ProjectsSettings() {
           checkoutKey={value.checkout ?? null}
         />
       ) : scope.kind === "unavailable" ? (
-        <p className="p-8 text-sm text-muted-foreground">{scope.message}</p>
+        <SettingsPageContainer>
+          <p className="text-sm text-muted-foreground">{scope.message}</p>
+        </SettingsPageContainer>
       ) : (
         <>
           {/* The notice sizes to its content here: its own flex-1 scroll area
