@@ -53,7 +53,14 @@ update it with `git pull` and a rebuild.
 Download a release from [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
 The fork installs as **T3 Code Fork** with its own data directory, so it runs
 alongside the upstream desktop app. Builds are published for macOS (Apple
-Silicon and Intel) and Linux (AppImage).
+Silicon and Intel) and Linux (AppImage and `.deb`, x64 and arm64).
+
+On Debian or Ubuntu, install the `.deb` with `sudo apt install ./T3-Code-Fork-*.deb`.
+Its package is named `t3code-fork`, so it installs beside upstream's `t3code`
+package rather than replacing it. The `.deb` updates itself like the other
+desktop builds. It asks for your password to install each update. If your
+desktop has no password prompt, the update fails. Download the new `.deb` and
+install it the same way.
 
 ### Windows Subsystem for Linux
 

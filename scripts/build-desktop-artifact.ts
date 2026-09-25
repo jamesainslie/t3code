@@ -2735,13 +2735,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
 
   if (platform === "linux") {
     buildConfig.linux = {
-      target: [target],
+      // The .deb is built from the same unpacked app after the AppImage.
+      // electron-builder lists both in latest-linux.yml and writes
+      // resources/package-type into the .deb only, so electron-updater updates
+      // each install in its own format.
+      target: target === "AppImage" ? [target, "deb"] : [target],
       executableName: FORK_IDENTITY.desktop.production.executableName,
       icon: "icons",
       category: "Development",
       synopsis: "Desktop GUI for coding agents",
       // Required by the .deb control file.
-      maintainer: "T3 Tools <hello@t3.codes>",
+      maintainer: FORK_IDENTITY.linuxPackage.maintainer,
       // electron-builder turns these into MimeType=x-scheme-handler/<scheme>;
       // in the .desktop entry (Exec already gets %U), so browsers can hand
       // t3code:// OAuth callbacks to the app.
@@ -2758,6 +2762,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
     };
     buildConfig.deb = {
+      packageName: FORK_IDENTITY.linuxPackage.name,
       // Electron's runtime libraries. Debian 13 and Ubuntu 24.04 renamed some
       // for 64-bit time; the old name is the fallback for older releases.
       depends: [
@@ -3665,7 +3670,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     packageManager: rootPackageJson.packageManager,
     description: "T3 Code desktop build",
     // Required by the .deb control file.
-    homepage: "https://t3.codes",
+    homepage: FORK_IDENTITY.repositoryUrl,
     author: "T3 Tools",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(

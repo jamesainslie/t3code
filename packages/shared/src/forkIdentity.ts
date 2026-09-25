@@ -25,6 +25,11 @@ export const FORK_IDENTITY = Object.freeze({
   releaseRepository: "jamesainslie/t3code",
   releasesUrl: "https://github.com/jamesainslie/t3code/releases",
   urlHandlerDesktopEntryName: "t3code-fork-url-handler.desktop",
+  /** Debian control fields for the Linux .deb; upstream's package is named `t3code`. */
+  linuxPackage: Object.freeze({
+    name: "t3code-fork",
+    maintainer: "James Ainslie <42301770+jamesainslie@users.noreply.github.com>",
+  }),
   bootService: Object.freeze({
     systemdName: "t3code-fork",
     launchdLabel: "us.ainslies.t3code.service",

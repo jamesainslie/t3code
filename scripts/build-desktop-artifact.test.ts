@@ -674,6 +674,16 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       });
       // A Linux AppImage build also emits the .deb from the same run.
       assert.deepStrictEqual((linux.linux as Record<string, unknown>).target, ["AppImage", "deb"]);
+      // The fork's .deb must not share a Debian package name or maintainer
+      // with upstream's, or installing one would replace the other.
+      assert.equal(
+        (linux.deb as Record<string, unknown>).packageName,
+        FORK_IDENTITY.linuxPackage.name,
+      );
+      assert.equal(
+        (linux.linux as Record<string, unknown>).maintainer,
+        FORK_IDENTITY.linuxPackage.maintainer,
+      );
       // Linux must register the renderer schemes so the generated .desktop
       // entry advertises MimeType=x-scheme-handler/t3code; for OAuth deep links.
       assert.deepStrictEqual((linux.linux as Record<string, unknown>).protocols, [
