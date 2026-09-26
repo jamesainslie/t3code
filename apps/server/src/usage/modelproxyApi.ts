@@ -8,7 +8,9 @@
  * @module usage/modelproxyApi
  */
 import {
+  ForwardCompatibleArray,
   ProviderDriverKind,
+  TrimmedNonEmptyString,
   type ServerProviderUsageWindow,
   type UsageLimitSourceAccount,
   type UsageLimitSourceProxyAccountState,
@@ -51,6 +53,13 @@ const Account = Schema.Struct({
   circuits: Schema.optional(Schema.Array(Schema.Struct({ state: Schema.String }))),
   health: Schema.optional(Schema.Struct({ state: Schema.String })),
 });
+/** `model` routes rename a request; `fallback` routes spill a spent model elsewhere. */
+const Route = Schema.Struct({
+  kind: Schema.optional(Schema.String),
+  from: TrimmedNonEmptyString,
+  to: TrimmedNonEmptyString,
+  provider: TrimmedNonEmptyString,
+});
 /** Only the fields T3 reads; the payload carries much more and may grow. */
 export const ModelproxyStatus = Schema.Struct({
   current: Schema.String,
@@ -60,6 +69,8 @@ export const ModelproxyStatus = Schema.Struct({
   queueDepth: Schema.Number,
   forecast: Schema.Struct({ fleet: Runway }),
   accounts: Schema.Array(Account),
+  // One route this build cannot read must not cost the whole status.
+  routes: Schema.optional(ForwardCompatibleArray(Route)),
 });
 export type ModelproxyStatus = typeof ModelproxyStatus.Type;
 type ModelproxyAccount = typeof Account.Type;
@@ -201,6 +212,16 @@ export function mapModelproxyStatus(
     });
   }
   const current = accounts.find((account) => account.id === status.current);
+  // A fallback's `from` is a model the picker already offers; only model
+  // routes name something a client could not otherwise ask for.
+  const routes = status.routes
+    ?.filter((route) => route.kind === undefined || route.kind === "model")
+    .map((route) => ({
+      ...(route.kind ? { kind: route.kind } : {}),
+      from: route.from,
+      to: route.to,
+      provider: route.provider,
+    }));
   return {
     accounts,
     proxy: {
@@ -216,6 +237,7 @@ export function mapModelproxyStatus(
       ...(fallback.length > 0 ? { fallback } : {}),
       inflightTotal: Math.max(0, Math.round(status.inflightTotal)),
       queueDepth: Math.max(0, Math.round(status.queueDepth)),
+      ...(routes ? { routes } : {}),
     },
   };
 }

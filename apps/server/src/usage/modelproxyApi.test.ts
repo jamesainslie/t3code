@@ -136,10 +136,28 @@ const raw = {
       pinnedSessions: 0,
     },
   ],
+  routes: [
+    {
+      kind: "model",
+      from: "kimi-k3",
+      to: "moonshotai/kimi-k3",
+      provider: "openrouter",
+      price: { inUsd: 3, cachedInUsd: 0.3, outUsd: 15 },
+    },
+    { kind: "model", from: "claude-opus-4-8", to: "claude-opus-5", provider: "anthropic" },
+    {
+      kind: "fallback",
+      from: "claude-fable-5",
+      to: "anthropic/claude-fable-5",
+      provider: "openrouter",
+      price: { inUsd: 15, cachedInUsd: 1.5, outUsd: 75 },
+    },
+  ],
   events: [],
   generatedAt: iso(0),
 };
-const status = Schema.decodeUnknownSync(ModelproxyStatus)(raw);
+const decodeStatus = Schema.decodeUnknownSync(ModelproxyStatus);
+const status = decodeStatus(raw);
 
 describe("mapModelproxyStatus", () => {
   const mapped = mapModelproxyStatus(status, { checkedAt: iso(0), nowMs: now });
@@ -189,6 +207,31 @@ describe("mapModelproxyStatus", () => {
     expect(mapped.proxy.fallback).toEqual([
       { name: "openrouter-main", provider: "openrouter", spendUsd: 3.4, window: "day" },
     ]);
+  });
+
+  it("publishes model routes and drops fallbacks, whose names the picker already has", () => {
+    expect(mapped.proxy.routes).toEqual([
+      { kind: "model", from: "kimi-k3", to: "moonshotai/kimi-k3", provider: "openrouter" },
+      { kind: "model", from: "claude-opus-4-8", to: "claude-opus-5", provider: "anthropic" },
+    ]);
+  });
+
+  it("treats a route without a kind as a model route and skips one it cannot read", () => {
+    const decoded = decodeStatus({
+      ...raw,
+      routes: [{ from: "gpt-6", to: "gpt-6", provider: "openai" }, { from: "broken" }],
+    });
+    expect(mapModelproxyStatus(decoded, { checkedAt: iso(0), nowMs: now }).proxy.routes).toEqual([
+      { from: "gpt-6", to: "gpt-6", provider: "openai" },
+    ]);
+  });
+
+  it("reads a gateway that predates route publishing", () => {
+    const { routes: _routes, ...older } = raw;
+    const decoded = decodeStatus(older);
+    expect(mapModelproxyStatus(decoded, { checkedAt: iso(0), nowMs: now }).proxy.routes).toBe(
+      undefined,
+    );
   });
 });
 

@@ -323,6 +323,10 @@
       "types": "./src/usageLimits.ts",
       "import": "./src/usageLimits.ts"
     },
+    "./gatewayRoutedModels": {
+      "types": "./src/gatewayRoutedModels.ts",
+      "import": "./src/gatewayRoutedModels.ts"
+    },
     "./desktopAppControl": {
       "types": "./src/desktopAppControl.ts",
       "import": "./src/desktopAppControl.ts"

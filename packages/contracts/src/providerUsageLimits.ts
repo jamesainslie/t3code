@@ -154,6 +154,24 @@ export const UsageLimitSourceProxyFallback = Schema.Struct({
 export type UsageLimitSourceProxyFallback = typeof UsageLimitSourceProxyFallback.Type;
 
 /**
+ * A model name the gateway serves from somewhere other than its own name,
+ * e.g. `kimi-k3` answered by `moonshotai/kimi-k3` on OpenRouter. Only model
+ * routes are published: a fallback route's `from` is a model the picker
+ * already offers.
+ */
+export const UsageLimitSourceProxyRoute = Schema.Struct({
+  /** The name a client requests. */
+  from: TrimmedNonEmptyString,
+  /** The upstream model that serves it. */
+  to: TrimmedNonEmptyString,
+  /** The upstream family, e.g. `openrouter`, `openai`, `anthropic`. */
+  provider: TrimmedNonEmptyString,
+  /** The gateway's route kind; absent means a model route. */
+  kind: Schema.optional(TrimmedNonEmptyString),
+});
+export type UsageLimitSourceProxyRoute = typeof UsageLimitSourceProxyRoute.Type;
+
+/**
  * Gateway-wide state from a `modelproxy` source: what the header widget
  * needs beyond the per-account windows.
  */
@@ -169,6 +187,8 @@ export const UsageLimitSourceProxyStatus = Schema.Struct({
   fallback: Schema.optional(ForwardCompatibleArray(UsageLimitSourceProxyFallback)),
   inflightTotal: Schema.optional(NonNegativeInt),
   queueDepth: Schema.optional(NonNegativeInt),
+  /** Absent from gateways that predate route publishing. */
+  routes: Schema.optional(ForwardCompatibleArray(UsageLimitSourceProxyRoute)),
 });
 export type UsageLimitSourceProxyStatus = typeof UsageLimitSourceProxyStatus.Type;
 

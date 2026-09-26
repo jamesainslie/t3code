@@ -72,6 +72,23 @@ function sourceLabel(id: string, config: UsageLimitSourceConfig): string {
   }
 }
 
+/**
+ * A gateway T3 cannot read right now still serves its routed models, and a
+ * routed model that left the picker would reset every thread that selected
+ * it. A failed read therefore keeps the last routes the gateway published;
+ * only removing or disabling the source takes them away.
+ */
+function keepGatewayRoutes(
+  snapshot: UsageLimitSourceSnapshot,
+  previous: ReadonlyArray<UsageLimitSourceSnapshot>,
+): UsageLimitSourceSnapshot {
+  if (snapshot.kind !== "modelproxy" || snapshot.error === undefined || !snapshot.proxy) {
+    return snapshot;
+  }
+  const routes = previous.find((source) => source.id === snapshot.id)?.proxy?.routes;
+  return routes ? { ...snapshot, proxy: { ...snapshot.proxy, routes } } : snapshot;
+}
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
@@ -170,7 +187,7 @@ export const make = Effect.gen(function* () {
       ([id, config]) => readSource(id as UsageLimitSourceId, config),
       { concurrency: 4 },
     );
-    yield* publish(snapshots);
+    yield* publish(snapshots.map((snapshot) => keepGatewayRoutes(snapshot, previous)));
   }).pipe(refreshLock.withPermits(1), Effect.ignoreCause({ log: true }));
 
   const auth = (input: UsageLimitSourceAuthInput) =>

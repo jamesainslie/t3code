@@ -116,10 +116,25 @@ again only if it says so.
 
 Once signed in, a pill in the thread header shows the account the gateway is serving, its session
 and weekly windows against the gateway's rotation threshold, and how long the whole pool is
-forecast to last. Add the gateway on one environment only; the pill finds it from every thread,
-whichever environment the thread runs on. Hover it for every pooled account, what each is doing (serving, ready, cooling,
+forecast to last. The pill needs the gateway on one environment only; it finds it from every
+thread, whichever environment the thread runs on. Hover it for every pooled account, what each is doing (serving, ready, cooling,
 spent, needing a login), and the metered fallback the gateway spills to when the pool is spent.
 The same accounts appear under **Usage → Limits**.
+
+### Pick models the gateway routes
+
+A gateway can serve a model name from another upstream, for example `kimi-k3` from OpenRouter.
+To offer those names in the model picker, open the Claude instance that sends its requests
+through the gateway under **Settings → Providers** and turn on **Show gateway routed models**.
+Each routed name then appears in that instance's picker with the upstream beside it, such as
+**Claude (iris) · OpenRouter**. Adding or removing a route on the gateway updates the picker
+within one refresh; there is nothing to configure in T3.
+
+The switch is off by default because T3 cannot tell which gateway, if any, a Claude instance
+talks to, and an instance that goes straight to Anthropic cannot serve routed names. Routes come
+from a modelproxy source on the same environment as the Claude instance, so that environment needs
+its own signed-in source even when another environment already shows the gateway's pill. If the
+gateway cannot be read for a while, the picker keeps the routes it last saw.
 
 ## Subscription usage widget
 
