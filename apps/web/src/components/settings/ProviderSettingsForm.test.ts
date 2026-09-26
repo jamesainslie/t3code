@@ -67,7 +67,20 @@ describe("ProviderSettingsForm helpers", () => {
       "homePath",
       "autoCompactWindow",
       "launchArgs",
+      "gatewayRoutedModels",
     ]);
+  });
+
+  it("offers Claude instances an off-by-default switch for gateway routed models", () => {
+    const claude = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("claudeAgent")];
+    const field = deriveProviderSettingsFields(claude!).find(
+      (candidate) => candidate.key === "gatewayRoutedModels",
+    );
+    expect(field).toMatchObject({
+      control: "switch",
+      label: "Show gateway routed models",
+      defaultBooleanValue: false,
+    });
   });
 
   it("preserves unknown config keys while omitting empty configurable fields", () => {

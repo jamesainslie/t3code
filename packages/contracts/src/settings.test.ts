@@ -222,6 +222,20 @@ describe("ClaudeSettings auto-compaction", () => {
   });
 });
 
+describe("ClaudeSettings gateway routed models", () => {
+  it("is off unless the instance opts in, so a direct instance never gains routed models", () => {
+    expect(decodeClaudeSettings({}).gatewayRoutedModels).toBe(false);
+    expect(decodeClaudeSettings({ gatewayRoutedModels: true }).gatewayRoutedModels).toBe(true);
+  });
+
+  it("accepts the switch at the settings patch boundary", () => {
+    expect(
+      decodeServerSettingsPatch({ providers: { claudeAgent: { gatewayRoutedModels: true } } })
+        .providers?.claudeAgent?.gatewayRoutedModels,
+    ).toBe(true);
+  });
+});
+
 describe("ClientSettings notifications", () => {
   it("requires opt-in when existing settings omit notification preferences", () => {
     expect(decodeClientSettings({}).notificationMode).toBe("off");

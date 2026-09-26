@@ -743,9 +743,20 @@ export const ClaudeSettings = makeProviderSettingsSchema(
         },
       }),
     ),
+    // Opt-in: T3 cannot see which gateway, if any, an instance's Claude
+    // config dir points at, and a direct instance must not offer models
+    // only the gateway can serve.
+    gatewayRoutedModels: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.annotateKey({
+        title: "Show gateway routed models",
+        description: "Add models routed by the modelproxy gateway to this instance's picker.",
+        providerSettingsForm: { control: "switch" },
+      }),
+    ),
   },
   {
-    order: ["binaryPath", "homePath", "autoCompactWindow", "launchArgs"],
+    order: ["binaryPath", "homePath", "autoCompactWindow", "launchArgs", "gatewayRoutedModels"],
   },
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;
@@ -1535,6 +1546,7 @@ const ClaudeSettingsPatch = Schema.Struct({
   autoCompactWindow: Schema.optionalKey(
     TrimmedString.check(Schema.isPattern(CLAUDE_AUTO_COMPACT_WINDOW_PATTERN)),
   ),
+  gatewayRoutedModels: Schema.optionalKey(Schema.Boolean),
 });
 
 const CursorSettingsPatch = Schema.Struct({

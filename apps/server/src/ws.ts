@@ -1,3 +1,4 @@
+import { sameGatewayRoutes, withGatewayRoutedModels } from "@t3tools/shared/gatewayRoutedModels";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -156,6 +157,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import { gatewayRoutedInstanceIds, sameInstanceIds } from "./usage/gatewayRoutedInstances.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
@@ -1833,13 +1835,17 @@ const makeWsRpcLayer = (
       const loadServerConfig = (options: { readonly usageLimitsCommand: boolean }) =>
         Effect.gen(function* () {
           const keybindingsConfig = yield* keybindings.loadConfigState;
-          const currentProviders = yield* providerRegistry.getProviders;
-          const providers = options.usageLimitsCommand
-            ? withUsageLimitsCommands(currentProviders, yield* usageLimitSources.current)
-            : currentProviders;
-          const settings = ServerSettings.redactServerSettingsForClient(
-            yield* serverSettings.getSettings,
+          const serverSettingsSnapshot = yield* serverSettings.getSettings;
+          const sources = yield* usageLimitSources.current;
+          const currentProviders = withGatewayRoutedModels(
+            yield* providerRegistry.getProviders,
+            sources,
+            gatewayRoutedInstanceIds(serverSettingsSnapshot),
           );
+          const providers = options.usageLimitsCommand
+            ? withUsageLimitsCommands(currentProviders, sources)
+            : currentProviders;
+          const settings = ServerSettings.redactServerSettingsForClient(serverSettingsSnapshot);
           const environment = yield* serverEnvironment.getDescriptor;
           const auth = yield* serverAuth.getDescriptor();
           const availableEditors: ReadonlyArray<EditorId> = yield* resolveAvailableEditorsForConfig(
@@ -3658,7 +3664,7 @@ const makeWsRpcLayer = (
                   },
                 })),
               );
-              const providerStatuses = Stream.zipLatestWith(
+              const providerStatuses = Stream.zipLatestAll(
                 // The registry stream carries changes only. Seed it with the current
                 // providers so a source refresh that lands before any provider change
                 // still pairs up and reaches the client.
@@ -3668,14 +3674,29 @@ const makeWsRpcLayer = (
                 ),
                 usageLimitSources.streamChanges.pipe(
                   // Quota updates already have their own stream. Republish the model
-                  // catalog only when the set of providers offered the command changes.
+                  // catalog only when the set of providers offered the command, or
+                  // the gateway's routed models, change.
                   Stream.changesWith(
-                    usageLimitsCommand ? sameUsageLimitCommandCoverage : () => true,
+                    (previous, next) =>
+                      (!usageLimitsCommand || sameUsageLimitCommandCoverage(previous, next)) &&
+                      sameGatewayRoutes(previous, next),
                   ),
                 ),
-                (providers, sources) =>
-                  usageLimitsCommand ? withUsageLimitsCommands(providers, sources) : providers,
+                Stream.concat(
+                  Stream.fromEffect(serverSettings.getSettings),
+                  serverSettings.streamChanges,
+                ).pipe(Stream.map(gatewayRoutedInstanceIds), Stream.changesWith(sameInstanceIds)),
               ).pipe(
+                Stream.map(([registryProviders, sources, routedInstanceIds]) => {
+                  const providers = withGatewayRoutedModels(
+                    registryProviders,
+                    sources,
+                    routedInstanceIds,
+                  );
+                  return usageLimitsCommand
+                    ? withUsageLimitsCommands(providers, sources)
+                    : providers;
+                }),
                 // Both sides replay their current value, so the first pairing normally
                 // repeats the snapshot the client already holds. Compare against that
                 // snapshot rather than dropping blindly: a refresh that landed between

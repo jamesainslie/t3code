@@ -56,7 +56,7 @@ import {
 } from "@t3tools/shared/dpop";
 import { RELAY_HEALTH_REQUEST_TYP, RELAY_MINT_REQUEST_TYP } from "@t3tools/shared/relayJwt";
 import * as RelayClient from "@t3tools/shared/relayClient";
-import { assert, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import { assertFailure, assertInclude, assertTrue } from "@effect/vitest/utils";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -7110,6 +7110,141 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         });
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
+
+  describe("gateway routed models", () => {
+    const claude = {
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      installed: true,
+      version: "1.0.0",
+      status: "ready" as const,
+      auth: { status: "authenticated" as const },
+      checkedAt: "2026-09-26T00:00:00.000Z",
+      models: [
+        {
+          slug: "claude-opus-5",
+          name: "Claude Opus 5",
+          isCustom: false,
+          capabilities: { optionDescriptors: [] },
+        },
+      ],
+      slashCommands: [],
+      skills: [],
+    };
+    const gateway = {
+      id: UsageLimitSourceId.make("modelproxy-iris"),
+      kind: "modelproxy" as const,
+      label: "iris",
+      checkedAt: "2026-09-26T00:00:00.000Z",
+      accounts: [],
+      proxy: {
+        auth: { state: "signedIn" as const },
+        routes: [
+          { kind: "model", from: "kimi-k3", to: "moonshotai/kimi-k3", provider: "openrouter" },
+        ],
+      },
+    };
+    const routedClaude = {
+      ...claude,
+      models: [
+        ...claude.models,
+        {
+          slug: "kimi-k3",
+          name: "kimi-k3",
+          subProvider: "OpenRouter",
+          isCustom: false,
+          capabilities: { optionDescriptors: [] },
+        },
+      ],
+    };
+    const optedIn = {
+      ...DEFAULT_SERVER_SETTINGS,
+      providers: {
+        ...DEFAULT_SERVER_SETTINGS.providers,
+        claudeAgent: {
+          ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
+          gatewayRoutedModels: true,
+        },
+      },
+    };
+
+    it.effect("reach an opted-in instance when only the gateway's routes change", () =>
+      Effect.gen(function* () {
+        yield* buildAppUnderTest({
+          layers: {
+            providerRegistry: {
+              getProviders: Effect.succeed([claude]),
+              streamChanges: Stream.empty,
+            },
+            usageLimitSources: {
+              current: Effect.succeed([]),
+              streamChanges: Stream.concat(Stream.make([]), Stream.make([gateway])),
+            },
+            serverSettings: { getSettings: Effect.succeed(optedIn) },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        // No limits capability: route changes must not depend on it.
+        const events = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[WS_METHODS.subscribeServerConfig]({}).pipe(Stream.take(2), Stream.runCollect),
+          ),
+        );
+
+        const [first, second] = Array.from(events);
+        assert.equal(first?.type, "snapshot");
+        if (first?.type === "snapshot") assert.deepEqual(first.config.providers, [claude]);
+        assert.deepEqual(second, {
+          version: 1,
+          type: "providerStatuses",
+          payload: { providers: [routedClaude] },
+        });
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+
+    it.effect("appear in the snapshot and follow the instance's switch", () =>
+      Effect.gen(function* () {
+        yield* buildAppUnderTest({
+          layers: {
+            providerRegistry: {
+              getProviders: Effect.succeed([claude]),
+              streamChanges: Stream.empty,
+            },
+            usageLimitSources: {
+              current: Effect.succeed([gateway]),
+              streamChanges: Stream.make([gateway]),
+            },
+            serverSettings: {
+              getSettings: Effect.succeed(optedIn),
+              streamChanges: Stream.make(DEFAULT_SERVER_SETTINGS),
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const events = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[WS_METHODS.subscribeServerConfig]({ usageLimitsCommand: true }).pipe(
+              Stream.filter((event) => event.type !== "settingsUpdated"),
+              Stream.take(2),
+              Stream.runCollect,
+            ),
+          ),
+        );
+
+        const [first, second] = Array.from(events);
+        assert.equal(first?.type, "snapshot");
+        if (first?.type === "snapshot") assert.deepEqual(first.config.providers, [routedClaude]);
+        assert.deepEqual(second, {
+          version: 1,
+          type: "providerStatuses",
+          payload: { providers: [claude] },
+        });
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+  });
 
   it.effect(
     "routes websocket rpc subscribeServerLifecycle replays snapshot and streams updates",
