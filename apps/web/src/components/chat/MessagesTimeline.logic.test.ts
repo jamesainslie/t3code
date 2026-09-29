@@ -2397,6 +2397,8 @@ describe("deriveMessagesTimelineRows", () => {
     // User message (00:00:00) → trailing work entry (00:00:12).
     expect(foldRow?.turnId).toBe("turn-1");
     expect(foldRow?.label).toBe("Worked for 12s");
+    // The run span behind the label, for event timestamps.
+    expect(Date.parse(foldRow!.runEndedAt) - Date.parse(foldRow!.runStartedAt)).toBe(12_000);
   });
 
   it("uses latest-turn timings and the stopped label for an interrupted latest turn", () => {
@@ -2433,6 +2435,8 @@ describe("deriveMessagesTimelineRows", () => {
         turnId: "turn-1",
         label: "You stopped after 47s",
         expanded: false,
+        runStartedAt: "2026-01-01T00:00:00Z",
+        runEndedAt: "2026-01-01T00:00:47Z",
       }),
     ]);
   });

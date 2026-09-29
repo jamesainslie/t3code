@@ -248,6 +248,11 @@ import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
+import {
+  type ChatEventTimestampOptions,
+  resolveChatEventTimestampOptions,
+} from "../../chatEventTimestamps";
+import { ChatEventTimestamp } from "./ChatEventTimestamp";
 
 import { SkillChipIcon, SkillInlineText } from "./SkillInlineText";
 import { deriveAgentSpawnSummary } from "./agentSpawnSummary";
@@ -271,6 +276,8 @@ interface TimelineRowSharedState {
   citationRequest: AssistantCitationTarget | null;
   listRef: React.RefObject<LegendListRef | null>;
   timestampFormat: TimestampFormat;
+  /** Non-null when event timestamps are always shown. */
+  eventTimestamps: ChatEventTimestampOptions | null;
   routeThreadKey: string;
   threadRef: ScopedThreadRef | null;
   markdownCwd: string | undefined;
@@ -957,6 +964,20 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   // Re-measure the minimap gutter when the chat column changes width without a viewport resize.
   const chatWidth = useClientSettings((settings) => settings.chatWidth);
+  const eventTimestampsEnabled = useClientSettings(
+    (settings) => settings.chatEventTimestampsEnabled,
+  );
+  const eventTimestampStyle = useClientSettings((settings) => settings.chatEventTimestampStyle);
+  const eventTimestampSeconds = useClientSettings((settings) => settings.chatEventTimestampSeconds);
+  const eventTimestamps = useMemo(
+    () =>
+      resolveChatEventTimestampOptions({
+        chatEventTimestampsEnabled: eventTimestampsEnabled,
+        chatEventTimestampStyle: eventTimestampStyle,
+        chatEventTimestampSeconds: eventTimestampSeconds,
+      }),
+    [eventTimestampsEnabled, eventTimestampStyle, eventTimestampSeconds],
+  );
   const {
     target: readyCitationRequest,
     positioning: citationPositioning,
@@ -1160,6 +1181,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       citationRequest: readyCitationRequest,
       listRef,
       timestampFormat,
+      eventTimestamps,
       routeThreadKey,
       // Keep Markdown callbacks memoized during unrelated activity updates.
       threadRef: citationThreadRef,
@@ -1198,6 +1220,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       readyCitationRequest,
       listRef,
       timestampFormat,
+      eventTimestamps,
       routeThreadKey,
       citationThreadRef,
       markdownCwd,
@@ -1901,6 +1924,7 @@ function ContextCompactionTimelineRow({
 }: {
   row: Extract<TimelineRow, { kind: "context-compaction" }>;
 }) {
+  const ctx = use(TimelineRowCtx);
   return (
     <div
       role="separator"
@@ -1911,6 +1935,13 @@ function ContextCompactionTimelineRow({
       <span className="flex shrink-0 items-center gap-1.5">
         <Minimize2Icon aria-hidden="true" className="size-3" />
         {row.label}
+        {ctx.eventTimestamps ? (
+          <ChatEventTimestamp
+            iso={row.createdAt}
+            timestampFormat={ctx.timestampFormat}
+            options={ctx.eventTimestamps}
+          />
+        ) : null}
       </span>
       <span className="h-px flex-1 bg-border/70" />
     </div>
@@ -1969,6 +2000,9 @@ const MESSAGE_HEADING_LEVEL = 3;
 function MessageAuthorHeading({ children }: { children: string }) {
   return <h3 className="sr-only select-none">{children}</h3>;
 }
+
+const USER_MESSAGE_META_HOVER_CLASS_NAME =
+  "opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100";
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
@@ -2241,17 +2275,36 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           />
         </div>
       </div>
-      <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
+      <div
+        className={cn(
+          "flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums",
+          // With event timestamps on, only the actions wait for hover.
+          !ctx.eventTimestamps && USER_MESSAGE_META_HOVER_CLASS_NAME,
+        )}
+      >
         <div className="flex shrink-0 items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
-              {formatDayAwareTimestamp(row.message.createdAt, ctx.timestampFormat)}
-            </TooltipTrigger>
-            <TooltipPopup>
-              {formatChatTimestampTooltip(row.message.createdAt, ctx.timestampFormat)}
-            </TooltipPopup>
-          </Tooltip>
-          <div className="flex items-center gap-0.5">
+          {ctx.eventTimestamps ? (
+            <ChatEventTimestamp
+              iso={row.message.createdAt}
+              timestampFormat={ctx.timestampFormat}
+              options={ctx.eventTimestamps}
+            />
+          ) : (
+            <Tooltip>
+              <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
+                {formatDayAwareTimestamp(row.message.createdAt, ctx.timestampFormat)}
+              </TooltipTrigger>
+              <TooltipPopup>
+                {formatChatTimestampTooltip(row.message.createdAt, ctx.timestampFormat)}
+              </TooltipPopup>
+            </Tooltip>
+          )}
+          <div
+            className={cn(
+              "flex items-center gap-0.5",
+              ctx.eventTimestamps && USER_MESSAGE_META_HOVER_CLASS_NAME,
+            )}
+          >
             {typeof revertTurnCount === "number" && (
               <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
             )}
@@ -2345,13 +2398,28 @@ function RevertUserMessageButton({
  */
 function TimelineRowTimestamp({
   createdAt,
+  startedAt,
   timestampFormat,
   className,
 }: {
   createdAt: string;
+  /** With event timestamps on, the tooltip spans from here to `createdAt`. */
+  startedAt?: string | undefined;
   timestampFormat: TimestampFormat;
   className?: string;
 }) {
+  const { eventTimestamps } = use(TimelineRowCtx);
+  if (eventTimestamps) {
+    return (
+      <ChatEventTimestamp
+        iso={createdAt}
+        startIso={startedAt}
+        timestampFormat={timestampFormat}
+        options={eventTimestamps}
+        className={cn("me-1", className)}
+      />
+    );
+  }
   return (
     <Tooltip>
       <TooltipTrigger
@@ -2388,7 +2456,8 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
         <Icon className="size-3.5" />
       </button>
       <TimelineRowTimestamp
-        createdAt={row.createdAt}
+        createdAt={ctx.eventTimestamps ? row.runEndedAt : row.createdAt}
+        startedAt={row.runStartedAt}
         timestampFormat={ctx.timestampFormat}
         className="ms-auto"
       />
@@ -2476,23 +2545,40 @@ function AssistantMessageMeta({
   alwaysVisible?: boolean;
 }) {
   const ctx = use(TimelineRowCtx);
+  const hoverClassName =
+    "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100";
+  // With event timestamps on, the time stays visible and only the copy action waits for hover.
+  const copyButton = (
+    <AssistantCopyButton
+      message={message}
+      showCopyButton={showCopyButton}
+      streaming={copyStreaming}
+    />
+  );
 
   return (
     <div
       className={cn(
         "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
-        alwaysVisible
-          ? "opacity-100"
-          : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
+        alwaysVisible || ctx.eventTimestamps ? "opacity-100" : hoverClassName,
         className,
       )}
     >
-      <AssistantCopyButton
-        message={message}
-        showCopyButton={showCopyButton}
-        streaming={copyStreaming}
-      />
-      {!message.streaming && (
+      {ctx.eventTimestamps && !alwaysVisible ? (
+        <span className={cn("flex transition-opacity duration-200", hoverClassName)}>
+          {copyButton}
+        </span>
+      ) : (
+        copyButton
+      )}
+      {!message.streaming && ctx.eventTimestamps ? (
+        <ChatEventTimestamp
+          iso={message.updatedAt}
+          timestampFormat={ctx.timestampFormat}
+          options={ctx.eventTimestamps}
+        />
+      ) : null}
+      {!message.streaming && !ctx.eventTimestamps && (
         <Tooltip>
           <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
             {formatDayAwareTimestamp(message.updatedAt, ctx.timestampFormat)}
@@ -2549,6 +2635,7 @@ function ProposedPlanTimelineRow({
 }
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
+  const { eventTimestamps, timestampFormat } = use(TimelineRowCtx);
   const { isCompacting, isPreparingWorktree, backgroundWorktreeSetup } =
     use(TimelineRowActivityCtx);
   // One span for every label so the setup-to-working handoff swaps text in
@@ -2575,6 +2662,13 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
           {label}
           {shimmer ? <ActivityShimmerOverlay>{label}</ActivityShimmerOverlay> : null}
         </span>
+        {eventTimestamps && row.createdAt ? (
+          <ChatEventTimestamp
+            iso={row.createdAt}
+            timestampFormat={timestampFormat}
+            options={eventTimestamps}
+          />
+        ) : null}
         {backgroundWorktreeSetup ? (
           <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
         ) : null}
@@ -2716,6 +2810,14 @@ function ActivityGroupTimelineRow({
           active={row.active}
           shimmer={thinking}
         />
+        {ctx.eventTimestamps ? (
+          <ChatEventTimestamp
+            iso={row.createdAt}
+            timestampFormat={ctx.timestampFormat}
+            options={ctx.eventTimestamps}
+            className="ms-auto ps-2 pe-1"
+          />
+        ) : null}
       </button>
       {row.expanded ? <div className="mt-2">{details}</div> : null}
     </div>
@@ -3318,6 +3420,14 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
         failed={failed}
         active={row.active}
       />
+      {ctx.eventTimestamps ? (
+        <ChatEventTimestamp
+          iso={row.entry.createdAt}
+          timestampFormat={ctx.timestampFormat}
+          options={ctx.eventTimestamps}
+          className="ms-auto ps-2 pe-1"
+        />
+      ) : null}
     </button>
   );
 }
