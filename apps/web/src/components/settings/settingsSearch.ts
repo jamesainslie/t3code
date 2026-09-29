@@ -341,6 +341,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["notification sound alert completion input approval desktop"],
   },
   {
+    id: "copy-on-select",
+    title: "Copy selected text",
+    to: "/settings/general",
+    searchTerms: ["clipboard copy selection select highlight automatic"],
+  },
+  {
     id: "in-app-notifications",
     title: "In-app notifications",
     to: "/settings/general",
