@@ -473,7 +473,12 @@ export class GitHubPullRequestCli extends Context.Service<
   GitHubPullRequestCli,
   {
     readonly withVerifiedCredential: <A, E, R>(
-      input: { readonly cwd: string; readonly host: string; readonly projectId?: ProjectId },
+      input: {
+        readonly cwd: string;
+        readonly host: string;
+        readonly projectId?: ProjectId;
+        readonly repository?: string;
+      },
       use: (identity: {
         readonly accountId: string;
         readonly viewer: string;
@@ -484,6 +489,7 @@ export class GitHubPullRequestCli extends Context.Service<
       readonly cwd: string;
       readonly host: string;
       readonly projectId?: ProjectId;
+      readonly repository?: string;
     }) => Effect.Effect<
       { readonly accountId: string; readonly viewer: string },
       GitHubPullRequestCliError
@@ -1115,6 +1121,7 @@ export const make = Effect.gen(function* () {
       readonly cwd: string;
       readonly host: string;
       readonly projectId?: ProjectId | undefined;
+      readonly repository?: string | undefined;
     }) {
       const unavailable = () =>
         new GitHubViewerLoginUnavailableError({ command: "gh", cwd: input.cwd });
@@ -1126,7 +1133,11 @@ export const make = Effect.gen(function* () {
       const selected =
         pinned !== null
           ? null
-          : yield* accounts.forCheckout({ cwd: input.cwd, projectId: input.projectId });
+          : yield* accounts.forCheckout({
+              cwd: input.cwd,
+              projectId: input.projectId,
+              repository: input.repository,
+            });
       const login = selected !== null && selected.host === host ? selected.login : null;
       // Only the digest is retained. Never attach credential lookup output to an error.
       const token =

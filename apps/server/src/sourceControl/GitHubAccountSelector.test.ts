@@ -256,3 +256,39 @@ it.effect("returns no pin when gh has no token for the account", () =>
     assert.strictEqual(commands.length, 2);
   }),
 );
+
+it.effect("matches rules against the repository a borrowed checkout addresses", () =>
+  Effect.gen(function* () {
+    const selector = yield* makeSelector({
+      identities: { "/titan": identity({ rootPath: "/titan", owner: "geico-private" }) },
+      settings: {
+        gitHubAccountRules: [workRule, { host: "github.com", owner: "jamesainslie", login: "me" }],
+        projectSettingsOverrides: { [PROJECT_ID]: { gitHubAccount: "work-override" } },
+      },
+      projects: [{ projectId: PROJECT_ID, workspaceRoot: "/titan" }],
+    });
+    // The borrowed checkout's own owner and project override say nothing about another repository.
+    assert.deepStrictEqual(
+      yield* selector.forCheckout({ cwd: "/titan", repository: "jamesainslie/boxes" }),
+      { host: "github.com", login: "me" },
+    );
+    assert.deepStrictEqual(
+      yield* selector.forCheckout({
+        cwd: "/titan",
+        projectId: PROJECT_ID,
+        repository: "JamesAinslie/boxes",
+      }),
+      { host: "github.com", login: "me" },
+    );
+    assert.isNull(yield* selector.forCheckout({ cwd: "/titan", repository: "pingdotgg/t3code" }));
+    // Naming the checkout's own repository changes nothing.
+    assert.deepStrictEqual(
+      yield* selector.forCheckout({
+        cwd: "/titan",
+        projectId: PROJECT_ID,
+        repository: "Geico-Private/repo",
+      }),
+      { host: "github.com", login: "work-override" },
+    );
+  }),
+);
