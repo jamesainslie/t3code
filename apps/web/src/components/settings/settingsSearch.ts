@@ -347,6 +347,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["timestamp clock locale system browser os 12 hour 24 hour"],
   },
   {
+    id: "chat-event-timestamps",
+    title: "Event timestamps",
+    to: "/settings/general",
+    searchTerms: ["timestamp time chat timeline tool call run worked for seconds always visible"],
+  },
+  {
+    id: "chat-event-timestamp-style",
+    title: "Event timestamp style",
+    to: "/settings/general",
+    searchTerms: ["timestamp date time iso format chat timeline"],
+  },
+  {
+    id: "chat-event-timestamp-seconds",
+    title: "Event timestamp seconds",
+    to: "/settings/general",
+    searchTerms: ["timestamp seconds chat timeline"],
+  },
+  {
     id: "response-streaming",
     title: "Response streaming",
     to: "/settings/general",

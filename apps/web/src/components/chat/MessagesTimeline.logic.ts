@@ -396,6 +396,8 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       turnId: TurnId;
+      runStartedAt: string;
+      runEndedAt: string;
       label: string;
       expanded: boolean;
     }
@@ -557,6 +559,9 @@ interface TurnFold {
   turnId: TurnId;
   anchorEntryId: string;
   createdAt: string;
+  /** The span the label's duration measures. */
+  runStartedAt: string;
+  runEndedAt: string;
   hiddenEntryIds: ReadonlySet<string>;
   label: string;
 }
@@ -794,16 +799,18 @@ function deriveTurnFolds(input: {
     // terminal message — take whichever ended last.
     const lastEntryEnd =
       lastEntry.kind === "message" ? lastEntry.message.updatedAt : lastEntry.createdAt;
-    const elapsedMs =
+    const latestTurnSpan =
       input.latestTurn?.turnId === turnId &&
       input.latestTurn.startedAt &&
       input.latestTurn.completedAt
-        ? computeElapsedMs(input.latestTurn.startedAt, input.latestTurn.completedAt)
-        : computeElapsedMs(
-            group.startBoundary ?? firstEntry.createdAt,
-            maxIsoTimestamp(group.terminalEntry?.message.updatedAt ?? null, lastEntryEnd) ??
-              lastEntryEnd,
-          );
+        ? { startedAt: input.latestTurn.startedAt, endedAt: input.latestTurn.completedAt }
+        : null;
+    const runStartedAt = latestTurnSpan?.startedAt ?? group.startBoundary ?? firstEntry.createdAt;
+    const runEndedAt =
+      latestTurnSpan?.endedAt ??
+      maxIsoTimestamp(group.terminalEntry?.message.updatedAt ?? null, lastEntryEnd) ??
+      lastEntryEnd;
+    const elapsedMs = computeElapsedMs(runStartedAt, runEndedAt);
     const duration = elapsedMs !== null ? formatDuration(elapsedMs) : null;
     const label = isLatestInterruptedTurn
       ? duration
@@ -817,6 +824,8 @@ function deriveTurnFolds(input: {
       turnId,
       anchorEntryId: firstHiddenEntry.id,
       createdAt: firstHiddenEntry.createdAt,
+      runStartedAt,
+      runEndedAt,
       hiddenEntryIds,
       label,
     });
@@ -1147,6 +1156,8 @@ export function deriveMessagesTimelineRows(input: {
         id: `turn-fold:${anchoredTurnFold.turnId}`,
         createdAt: anchoredTurnFold.createdAt,
         turnId: anchoredTurnFold.turnId,
+        runStartedAt: anchoredTurnFold.runStartedAt,
+        runEndedAt: anchoredTurnFold.runEndedAt,
         label: anchoredTurnFold.label,
         expanded: input.expandedTurnIds?.has(anchoredTurnFold.turnId) ?? false,
       });
@@ -1627,7 +1638,13 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "turn-fold": {
       const bf = b as typeof a;
-      return a.createdAt === bf.createdAt && a.label === bf.label && a.expanded === bf.expanded;
+      return (
+        a.createdAt === bf.createdAt &&
+        a.runStartedAt === bf.runStartedAt &&
+        a.runEndedAt === bf.runEndedAt &&
+        a.label === bf.label &&
+        a.expanded === bf.expanded
+      );
     }
 
     case "context-compaction": {

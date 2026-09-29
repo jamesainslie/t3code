@@ -48,6 +48,14 @@ export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"])
 export type TimestampFormat = typeof TimestampFormat.Type;
 const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 
+/**
+ * How always-visible chat event timestamps read: wall-clock time that adds the
+ * date once the event is no longer from today, the date on every event, or a
+ * sortable `2026-09-29 11:46:36`.
+ */
+export const ChatEventTimestampStyle = Schema.Literals(["time", "date-time", "iso"]);
+export type ChatEventTimestampStyle = typeof ChatEventTimestampStyle.Type;
+
 export const DiffLayout = Schema.Literals(["stacked", "split"]);
 export type DiffLayout = typeof DiffLayout.Type;
 const DEFAULT_DIFF_LAYOUT: DiffLayout = "stacked";
@@ -543,6 +551,13 @@ export const ClientSettingsSchema = Schema.Struct({
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
+  chatEventTimestampsEnabled: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  chatEventTimestampStyle: ChatEventTimestampStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed("time" as const)),
+  ),
+  chatEventTimestampSeconds: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   snapShotIncludeAccessibility: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
@@ -1819,6 +1834,9 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarThreadSortOrder: Schema.optionalKey(SidebarThreadSortOrder),
   sidebarThreadPreviewCount: Schema.optionalKey(SidebarThreadPreviewCount),
   timestampFormat: Schema.optionalKey(TimestampFormat),
+  chatEventTimestampsEnabled: Schema.optionalKey(Schema.Boolean),
+  chatEventTimestampStyle: Schema.optionalKey(ChatEventTimestampStyle),
+  chatEventTimestampSeconds: Schema.optionalKey(Schema.Boolean),
   snapShotEnabled: Schema.optionalKey(Schema.Boolean),
   snapShotIncludeAccessibility: Schema.optionalKey(Schema.Boolean),
   snapShotShortcut: Schema.optionalKey(SnapShotShortcut),

@@ -177,6 +177,7 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { ChatEventTimestampSettings } from "./ChatEventTimestampSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -563,6 +564,12 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
+      ...(settings.chatEventTimestampsEnabled !==
+        DEFAULT_UNIFIED_SETTINGS.chatEventTimestampsEnabled ||
+      settings.chatEventTimestampStyle !== DEFAULT_UNIFIED_SETTINGS.chatEventTimestampStyle ||
+      settings.chatEventTimestampSeconds !== DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds
+        ? ["Event timestamps"]
+        : []),
       ...(settings.notificationMode !== DEFAULT_UNIFIED_SETTINGS.notificationMode
         ? ["Thread notifications"]
         : []),
@@ -705,6 +712,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarThreadPreviewCount,
       settings.showSkillsInSlashMenu,
       settings.timestampFormat,
+      settings.chatEventTimestampsEnabled,
+      settings.chatEventTimestampStyle,
+      settings.chatEventTimestampSeconds,
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
       settings.wordWrap,
@@ -781,6 +791,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
+      chatEventTimestampsEnabled: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampsEnabled,
+      chatEventTimestampStyle: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampStyle,
+      chatEventTimestampSeconds: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
@@ -2646,6 +2659,7 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
+        <ChatEventTimestampSettings />
         <SettingsRow
           serverScoped
           settingKeys={["responseStreamingMode"]}
