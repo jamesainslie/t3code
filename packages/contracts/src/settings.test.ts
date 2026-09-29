@@ -317,8 +317,9 @@ describe("ClientSettings diff colors", () => {
 });
 
 describe("ClientSettings chat width", () => {
-  it("keeps the comfortable width for existing settings without a saved width", () => {
-    expect(decodeClientSettings({}).chatWidth).toBe("comfortable");
+  // The fork's chat filled the pane before this setting existed.
+  it("keeps the full width for existing settings without a saved width", () => {
+    expect(decodeClientSettings({}).chatWidth).toBe("full");
   });
 
   it.each(["comfortable", "wide", "full"])("round-trips the %s width", (chatWidth) => {
