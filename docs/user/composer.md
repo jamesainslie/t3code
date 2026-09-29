@@ -99,7 +99,9 @@ navigate to their sources.
 On web and desktop, you can mark up a Markdown file before handing it to the agent. In the file
 panel's rendered view, select a passage and choose **Comment**, or right-click it and choose
 **Add comment**. Comments appear beside the passage in the margin, or as numbered markers when
-the panel is narrow; select one to read, edit, resolve, or delete it.
+the panel is narrow; select one to read, edit, resolve, or delete it. This works for project files
+and for Markdown files outside the project that you open from a link in chat, but not for files
+attached to a message.
 
 Comments belong to the thread and stay until you delete them. Nothing is sent while you mark up.
 When you are done, choose **Add comments to chat** in the file header to place every open

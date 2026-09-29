@@ -2,6 +2,7 @@ import type { ThreadDocumentComment } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  canCommentOnDocument,
   documentCommentReviewContext,
   documentCommentsForFile,
   layoutMarginCards,
@@ -114,5 +115,19 @@ describe("documentCommentReviewContext", () => {
 
   it("labels a single line without a range", () => {
     expect(documentCommentReviewContext(comment()).rangeLabel).toBe("L16");
+  });
+});
+
+describe("canCommentOnDocument", () => {
+  const supported = { serverSupportsComments: true, isAttachment: false, isMarkdown: true };
+
+  it("allows a project file and a file opened from a chat link outside the project", () => {
+    expect(canCommentOnDocument(supported)).toBe(true);
+  });
+
+  it("refuses attachments, non-markdown files, and servers that cannot store comments", () => {
+    expect(canCommentOnDocument({ ...supported, isAttachment: true })).toBe(false);
+    expect(canCommentOnDocument({ ...supported, isMarkdown: false })).toBe(false);
+    expect(canCommentOnDocument({ ...supported, serverSupportsComments: false })).toBe(false);
   });
 });
