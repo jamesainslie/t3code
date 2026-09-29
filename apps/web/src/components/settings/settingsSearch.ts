@@ -218,6 +218,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["wide full width column layout messages composer monitor"],
   },
   {
+    id: "chat-math",
+    title: "Render math",
+    to: "/settings/appearance",
+    searchTerms: ["math tex latex katex equation formula dollar"],
+  },
+  {
     id: "panel-animations",
     title: "Panel animations",
     to: "/settings/appearance",
