@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
 import { searchableSetting } from "./settingsSearch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
@@ -27,18 +28,43 @@ export function UsageProviderSettings({
   environmentId,
   environmentLabel,
   sources,
+  cursorKeychainUsageEnabled,
   readOnly,
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
   readonly sources: UnifiedSettings["usageLimitSources"];
+  readonly cursorKeychainUsageEnabled: boolean;
   readonly readOnly: boolean;
 }) {
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const snapshots = serverConfig?.usageLimitSources ?? [];
+  const updateCursorSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "update Cursor account usage",
+  });
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const platform = serverConfig?.environment.platform;
   const [adding, setAdding] = useState(false);
+  const [updatingCursor, setUpdatingCursor] = useState(false);
   const entries = Object.entries(sources);
+
+  const setCursorUsageEnabled = async (enabled: boolean) => {
+    setUpdatingCursor(true);
+    try {
+      const result = await updateCursorSettings({
+        environmentId,
+        input: { patch: { cursorKeychainUsageEnabled: enabled } },
+      });
+      if (result._tag === "Success") {
+        await refreshProviders({ environmentId, input: {} });
+      }
+    } finally {
+      setUpdatingCursor(false);
+    }
+  };
 
   return (
     <>
@@ -53,8 +79,23 @@ export function UsageProviderSettings({
           ) : null
         }
       >
+        {platform?.os === "darwin" ? (
+          <SettingsRow
+            id="cursor-keychain-usage"
+            title="Cursor account usage"
+            description="Read your existing Cursor CLI login from macOS Keychain to show account history and monthly limits. macOS may ask you to allow access."
+            control={
+              <Switch
+                aria-label="Cursor account usage"
+                checked={cursorKeychainUsageEnabled}
+                disabled={readOnly || updatingCursor}
+                onCheckedChange={(enabled) => void setCursorUsageEnabled(enabled)}
+              />
+            }
+          />
+        ) : null}
         {entries.length === 0 ? (
-          <SettingsRow title="No usage providers configured." />
+          <SettingsRow title="No hubs configured." />
         ) : (
           entries.map(([id, source]) => {
             const label = source.label?.trim() || source.url;
