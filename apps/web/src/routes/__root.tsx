@@ -50,6 +50,7 @@ import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { applyAppearanceColorOverrides } from "~/appearanceColors";
 import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
+import { useCopyOnSelect } from "../copyOnSelect";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -219,6 +220,7 @@ function RootRouteView() {
         <GlassAppearanceSync />
         <FontAppearanceSync />
         <ColorAppearanceSync />
+        <CopyOnSelectSync />
         <FirstRunGate
           enabled={primaryEnvironmentAuthenticated}
           hostedStatic={authGateState.status === "hosted-static"}
@@ -278,6 +280,11 @@ function ContrastAppearanceSync() {
     applyAppearanceContrast(document.documentElement, appearanceContrast);
   }, [appearanceContrast]);
 
+  return null;
+}
+
+function CopyOnSelectSync() {
+  useCopyOnSelect(useClientSettings((settings) => settings.copyOnSelectEnabled));
   return null;
 }
 

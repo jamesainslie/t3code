@@ -2,6 +2,7 @@ import { SettingsGroup } from "./SettingsGroup";
 import { Spinner } from "~/components/ui/spinner";
 import { ChatMathSettings } from "./ChatMathSettings";
 import { NotificationSettings } from "./NotificationSettings";
+import { CopyOnSelectSettings } from "./CopyOnSelectSettings";
 import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
@@ -580,6 +581,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.inAppNotificationsEnabled !== DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled
         ? ["In-app notifications"]
         : []),
+      ...(settings.copyOnSelectEnabled !== DEFAULT_UNIFIED_SETTINGS.copyOnSelectEnabled
+        ? ["Copy selected text"]
+        : []),
       ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
         ? ["Visible threads"]
         : []),
@@ -722,6 +726,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatEventTimestampSeconds,
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
+      settings.copyOnSelectEnabled,
       settings.wordWrap,
       followSystem,
       theme,
@@ -801,6 +806,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatEventTimestampSeconds: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
+      copyOnSelectEnabled: DEFAULT_UNIFIED_SETTINGS.copyOnSelectEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       chatMathEnabled: DEFAULT_UNIFIED_SETTINGS.chatMathEnabled,
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
@@ -2614,6 +2620,7 @@ export function GeneralSettingsPanel() {
 
       <SettingsSection id="behavior" title="Behavior">
         <NotificationSettings />
+        <CopyOnSelectSettings />
         <SettingsRow
           {...searchableSetting("in-app-notifications")}
           description="Show a toast when another thread finishes, fails, or needs input or approval while this app has focus."
