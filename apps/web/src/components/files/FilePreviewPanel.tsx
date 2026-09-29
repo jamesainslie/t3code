@@ -77,7 +77,11 @@ import {
 import { sourceLinesBetween, sourceLineSpanAt } from "~/markdown-document";
 import { useServerConfigs, useThreadDetail } from "~/state/entities";
 import { DocumentCommentsMargin, type DocumentCommentDraft } from "./DocumentCommentsMargin";
-import { documentCommentReviewContext, documentCommentsForFile } from "./documentComments.logic";
+import {
+  canCommentOnDocument,
+  documentCommentReviewContext,
+  documentCommentsForFile,
+} from "./documentComments.logic";
 import { useDocumentCommentActions } from "./useDocumentCommentActions";
 import {
   type FileCommentAnnotationEntry,
@@ -1112,13 +1116,13 @@ export default function FilePreviewPanel({
   const canToggleRendered =
     previewPath !== null && attachment === undefined && renderedMode !== null;
   const updateClientSettings = useUpdateClientSettings();
-  // Margin comments live on workspace files in a thread whose server stores them.
-  const commentsSupported =
-    useServerConfigs().get(environmentId)?.environment.capabilities.threadDocumentComments ===
-      true &&
-    attachment === undefined &&
-    !isHostFile &&
-    isMarkdown;
+  const commentsSupported = canCommentOnDocument({
+    serverSupportsComments:
+      useServerConfigs().get(environmentId)?.environment.capabilities.threadDocumentComments ===
+      true,
+    isAttachment: attachment !== undefined,
+    isMarkdown,
+  });
   const threadDetail = useThreadDetail(commentsSupported ? threadRef : null);
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);

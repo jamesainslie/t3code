@@ -21,6 +21,19 @@ export function layoutMarginCards(
   return tops;
 }
 
+/**
+ * Margin comments work on any markdown file the thread can read, whether it is
+ * in the project or reached through a chat link, since a comment is keyed by
+ * the path the panel shows. Attachments are excluded: they have no file path.
+ */
+export function canCommentOnDocument(input: {
+  readonly serverSupportsComments: boolean;
+  readonly isAttachment: boolean;
+  readonly isMarkdown: boolean;
+}): boolean {
+  return input.serverSupportsComments && !input.isAttachment && input.isMarkdown;
+}
+
 /** One file's comments in reading order, optionally without resolved ones. */
 export function documentCommentsForFile(
   comments: ReadonlyArray<ThreadDocumentComment>,

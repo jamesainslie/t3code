@@ -99,7 +99,9 @@ navigate to their sources.
 On web and desktop, you can mark up a Markdown file before handing it to the agent. In the file
 panel's rendered view, select a passage and choose **Comment**, or right-click it and choose
 **Add comment**. Comments appear beside the passage in the margin, or as numbered markers when
-the panel is narrow; select one to read, edit, resolve, or delete it.
+the panel is narrow; select one to read, edit, resolve, or delete it. This works for project files
+and for Markdown files outside the project that you open from a link in chat, but not for files
+attached to a message.
 
 Comments belong to the thread and stay until you delete them. Nothing is sent while you mark up.
 When you are done, choose **Add comments to chat** in the file header to place every open
@@ -217,7 +219,8 @@ files show the copy that was attached to the message.
 
 Select a file chip in your draft or a sent message to preview it. Code and JSON use syntax
 highlighting; Markdown, HTML, CSV, and TSV offer rendered and raw views. On web and desktop,
-rendered Markdown typesets TeX math written as `$…$`, `$$…$$`, or a `math` code block, draws
+rendered Markdown typesets TeX math written as `$…$`, `$$…$$`, or a `math` code block (a price
+such as `$5` stays text), draws
 Mermaid diagrams, and highlights inline code that ends in a language marker, such as
 `` `const x = 1{:ts}` ``. Audio files have
 playback controls. Large text files show a limited preview; save the file to read it in full.

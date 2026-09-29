@@ -91,7 +91,7 @@ import { parseCitationHref } from "@t3tools/shared/assistantCitations";
 import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { remarkPandocMath } from "../remarkPandocMath";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
 import { parseInlineCodeLanguage, rehypeSourceLines, remarkHeadingIds } from "../markdown-document";
 import { MarkdownMath } from "./chat/MarkdownMath";
@@ -517,14 +517,15 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
-// GitHub renders `$…$` and `$$…$$` in markdown files; a file has a table of contents to link into.
-const DOCUMENT_REMARK_PLUGINS = [remarkMath, remarkHeadingIds] satisfies NonNullable<
+// Markdown files typeset `$…$` (by Pandoc's rule, so prices stay text) and `$$…$$`;
+// a file has a table of contents to link into.
+const DOCUMENT_REMARK_PLUGINS = [remarkPandocMath, remarkHeadingIds] satisfies NonNullable<
   ReactMarkdownOptions["remarkPlugins"]
 >;
-// Chat text arrives through normalizeChatMath, which leaves only `$$` math.
-const CHAT_MATH_REMARK_PLUGINS = [
-  [remarkMath, { singleDollarTextMath: false }],
-] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
+// Chat text also arrives through normalizeChatMath, which rewrites `\(…\)` and `\[…\]`.
+const CHAT_MATH_REMARK_PLUGINS = [remarkPandocMath] satisfies NonNullable<
+  ReactMarkdownOptions["remarkPlugins"]
+>;
 
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
   rehypeRaw,

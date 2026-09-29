@@ -1,13 +1,11 @@
 /**
  * Chat math (fork feature). Agents write TeX as `$…$`, `$$…$$`, `\(…\)` and
- * `\[…\]`, but chat is also full of prices and shell variables. Before the
- * markdown parse, this rewrites every formula into the only two forms
- * `remark-math` reads with single dollars off: inline `$$…$$` and a `$$` block.
+ * `\[…\]`. The parser (`remarkPandocMath`) reads the dollar forms, applying
+ * Pandoc's rule so prices stay text. Before the parse, this rewrites the rest:
  *
- * - `$…$` counts as math only under Pandoc's rule: no space just inside either
- *   dollar, and no digit right after the closing one. `$5 and $10` stays text.
- * - `\(…\)` and `\[…\]` must be rewritten here, since markdown reads their
+ * - `\(…\)` and `\[…\]` become `$$` math, since markdown reads their
  *   backslashes as escapes and drops them.
+ * - A line holding only `\[…\]` or `$$…$$` becomes a display block.
  * - Code spans and fenced code are copied untouched.
  * - A display block still open at the end (a streaming reply) becomes a TeX
  *   code block, so it cannot swallow the rest of the message.
@@ -124,15 +122,6 @@ function normalizeInlineMath(text: string): string {
       continue;
     }
 
-    if (char === "$") {
-      const close = findPandocClosingDollar(text, index);
-      if (close !== -1) {
-        result += `$$${text.slice(index + 1, close)}$$`;
-        index = close + 1;
-        continue;
-      }
-    }
-
     result += char;
     index += 1;
   }
@@ -157,27 +146,6 @@ function findUnescaped(text: string, needle: string, from: number): number {
     }
     if (text.startsWith(needle, index)) return index;
     if (text[index] === "\\") index += 1;
-  }
-  return -1;
-}
-
-const isSpace = (char: string | undefined) => char === undefined || /\s/.test(char);
-
-/** Index of the `$` closing the one at `open` under Pandoc's rule, or -1. */
-function findPandocClosingDollar(text: string, open: number): number {
-  const first = text[open + 1];
-  if (isSpace(first) || first === "$") return -1;
-  for (let index = open + 1; index < text.length; index++) {
-    const char = text[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char !== "$") continue;
-    const after = text[index + 1];
-    if (!isSpace(text[index - 1]) && !(after !== undefined && /[0-9$]/.test(after))) {
-      return index;
-    }
   }
   return -1;
 }
