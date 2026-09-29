@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import type {
@@ -22,6 +23,7 @@ import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSn
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
 import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
+import { PinnedGitHubCredential } from "../sourceControl/GitHubCli.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
 import { ForgejoCli } from "../sourceControl/ForgejoCli.ts";
@@ -420,6 +422,19 @@ function makeService(input: {
           forCheckout: ({ cwd }) => {
             const login = input.accounts?.[cwd];
             return Effect.succeed(login === undefined ? null : { host: "github.com", login });
+          },
+          pinFor: ({ cwd }) => {
+            const login = input.accounts?.[cwd];
+            return Effect.succeed(
+              login === undefined
+                ? null
+                : {
+                    host: "github.com",
+                    token: Redacted.make(`token-${login}`),
+                    credentialFingerprint: login,
+                    scope: "checkout" as const,
+                  },
+            );
           },
         }),
         Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
@@ -1223,7 +1238,11 @@ it.effect("routing verifies the current account on the requested host without ca
       providers: [
         fakeProvider("github", {
           getRoutingIdentity: (input) => {
-            assert.deepStrictEqual(input, { cwd: "/a", host: "github.example.test" });
+            assert.deepStrictEqual(input, {
+              cwd: "/a",
+              host: "github.example.test",
+              repository: "acme/web",
+            });
             return Effect.succeed({
               viewer,
               accountId: viewer === "first-account" ? "123" : "456",
@@ -1249,6 +1268,47 @@ it.effect("routing verifies the current account on the requested host without ca
     if (failure._tag === "PullRequestOperationError") {
       assert.strictEqual(failure.operation, "routeIdentity");
     }
+  }),
+);
+
+it.effect("routes a pull request without a checkout by its own repository's account", () =>
+  Effect.gen(function* () {
+    const verified: Array<{
+      readonly cwd: string;
+      readonly host: string;
+      readonly repository?: string;
+    }> = [];
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "titan", workspaceRoot: "/titan", repository: "work/titan" }),
+      ],
+      providers: [
+        fakeProvider("github", {
+          getRoutingIdentity: (input) => {
+            verified.push(input);
+            return Effect.succeed({ accountId: "7", viewer: "me" });
+          },
+          withVerifiedCredential: (input, use) => {
+            verified.push(input);
+            return use({ accountId: "7", viewer: "me", credentialFingerprint: "me" });
+          },
+        }),
+      ],
+    });
+    // A repository no project checks out still borrows a checkout on its host to run in, but
+    // its account comes from its own owner rather than the borrowed checkout's.
+    const ref = {
+      projectId: "p1" as ProjectId,
+      repository: "me/boxes",
+      host: "github.com",
+      number: 17,
+    };
+    yield* service.routing(ref);
+    yield* service.withRoutingCredential({ ...ref, expectedAccountId: "7" }, Effect.void);
+    assert.deepStrictEqual(verified, [
+      { cwd: "/titan", host: "github.com", repository: "me/boxes" },
+      { cwd: "/titan", host: "github.com", repository: "me/boxes" },
+    ]);
   }),
 );
 
@@ -6941,6 +7001,50 @@ it.effect("keeps viewers separate for two accounts on one host", () =>
       result.providers.filter((summary) => summary.host === "github.com").length,
       1,
     );
+  }),
+);
+
+it.effect("reads and acts on a pull request as its checkout's selected account", () =>
+  Effect.gen(function* () {
+    const ranAs: Array<string | null> = [];
+    const recordAccount = PinnedGitHubCredential.pipe(
+      Effect.map((credential) => ranAs.push(credential?.credentialFingerprint ?? null)),
+    );
+    const service = yield* makeService({
+      projects: [
+        project({
+          id: "p1",
+          title: "work",
+          workspaceRoot: "/work",
+          repository: "geico-private/web",
+        }),
+        project({ id: "p2", title: "personal", workspaceRoot: "/personal", repository: "me/web" }),
+      ],
+      providers: [
+        fakeProvider("github", {
+          getChangeRequestActivity: () =>
+            recordAccount.pipe(
+              Effect.as({
+                comments: [],
+                commentCount: 0,
+                commentsTruncated: false,
+                reviewThreads: [],
+                commits: [],
+              }),
+            ),
+          runAction: () => Effect.asVoid(recordAccount),
+        }),
+      ],
+      accounts: { "/work": "work" },
+    });
+
+    // Not whichever account `gh` happens to have active: an agent switching it would break reads.
+    const work = { projectId: "p1" as ProjectId, repository: "geico-private/web", number: 1 };
+    yield* service.activity(work);
+    yield* service.runAction({ ...work, action: "close" });
+    // A checkout no rule selects keeps the active account.
+    yield* service.activity({ projectId: "p2" as ProjectId, repository: "me/web", number: 1 });
+    assert.deepStrictEqual(ranAs, ["work", "work", null]);
   }),
 );
 

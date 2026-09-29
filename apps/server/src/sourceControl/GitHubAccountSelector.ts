@@ -32,6 +32,12 @@ export interface GitHubAccountSelection {
 export interface GitHubAccountCheckout {
   readonly cwd: string;
   readonly projectId?: ProjectId | undefined;
+  /**
+   * The `owner/name` the command addresses, when that can differ from the checkout's own remote:
+   * a pull request with no checkout of its own is read through another project's. Rules then
+   * match its owner, and the checkout's project override stays with the checkout's repository.
+   */
+  readonly repository?: string | undefined;
 }
 
 /**
@@ -102,13 +108,19 @@ export const make = Effect.gen(function* () {
     const settings = yield* serverSettings.getSettings.pipe(Effect.option);
     if (settings._tag === "None") return null;
     const host = pullRequestHostOf(identity, "github");
-    const projectId =
-      input.projectId ??
-      (yield* Cache.get(projectIndex, PROJECT_INDEX_KEY).pipe(
-        Effect.map((index) =>
-          identity.rootPath === undefined ? null : (index.get(identity.rootPath) ?? null),
-        ),
-      ));
+    const [addressedOwner, addressedName] = input.repository?.split("/") ?? [];
+    const borrowed =
+      addressedOwner !== undefined &&
+      `${addressedOwner}/${addressedName}`.toLowerCase() !==
+        `${identity.owner}/${identity.name}`.toLowerCase();
+    const projectId = borrowed
+      ? null
+      : (input.projectId ??
+        (yield* Cache.get(projectIndex, PROJECT_INDEX_KEY).pipe(
+          Effect.map((index) =>
+            identity.rootPath === undefined ? null : (index.get(identity.rootPath) ?? null),
+          ),
+        )));
     const projectOverride =
       projectId === null
         ? undefined
@@ -117,7 +129,7 @@ export const make = Effect.gen(function* () {
       rules: settings.value.gitHubAccountRules,
       projectOverride,
       host,
-      owner: identity.owner,
+      owner: borrowed ? addressedOwner : identity.owner,
     });
     return login === null ? null : { host, login };
   });

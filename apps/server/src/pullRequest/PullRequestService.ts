@@ -72,7 +72,7 @@ import {
 } from "@t3tools/contracts";
 import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/sourceControl";
 
-import { AllowGitHubReserve } from "../sourceControl/GitHubCli.ts";
+import { AllowGitHubReserve, PinnedGitHubCredential } from "../sourceControl/GitHubCli.ts";
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
 import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
@@ -487,13 +487,45 @@ function toPullRequestError(
       : new PullRequestOperationError({ operation, detail: error.detail, cause: error });
 }
 
+/** Every provider call names the checkout it runs in, and usually the repository it addresses. */
+type ProviderCallArgs = readonly [
+  { readonly cwd: string; readonly repository?: string },
+  ...ReadonlyArray<unknown>,
+];
+
 function withRateLimitBackoff(
   api: PullRequestProviderApi,
   host: string,
   limits: SourceControlRateLimit.SourceControlRateLimit["Service"],
-  options?: { readonly viewerAllowsPause: boolean },
+  options?: {
+    readonly viewerAllowsPause?: boolean;
+    /**
+     * The `gh` account the owner rules select for a call's checkout and repository. Every call
+     * runs under it unless one is already pinned; otherwise it would use whichever account is
+     * active, which an agent running `gh auth switch` changes for the whole machine.
+     */
+    readonly pinFor?: GitHubAccountSelector.GitHubAccountSelector["Service"]["pinFor"];
+  },
 ): PullRequestProviderApi {
   const key = { provider: api.kind, host };
+  const pinFor = options?.pinFor;
+  const pinned = <A, E>(
+    input: { readonly cwd: string; readonly repository?: string },
+    effect: Effect.Effect<A, E>,
+  ): Effect.Effect<A, E> =>
+    pinFor === undefined
+      ? effect
+      : Effect.flatMap(PinnedGitHubCredential, (current) =>
+          current !== null
+            ? effect
+            : Effect.flatMap(
+                pinFor({ cwd: input.cwd, repository: input.repository }),
+                (credential) =>
+                  credential === null || credential.host !== host
+                    ? effect
+                    : Effect.provideService(effect, PinnedGitHubCredential, credential),
+              ),
+        );
   const protect = <A>(
     operation: string,
     effect: Effect.Effect<A, PullRequestProviderError>,
@@ -528,14 +560,14 @@ function withRateLimitBackoff(
       ),
     );
   const wrap =
-    <Args extends ReadonlyArray<unknown>, A>(
+    <Args extends ProviderCallArgs, A>(
       operation: string,
       call: (...args: Args) => Effect.Effect<A, PullRequestProviderError>,
       allowPaused = false,
     ) =>
     (...args: Args) =>
-      protect(operation, call(...args), allowPaused);
-  const interactive = <Args extends ReadonlyArray<unknown>, A>(
+      protect(operation, pinned(args[0], call(...args)), allowPaused);
+  const interactive = <Args extends ProviderCallArgs, A>(
     operation: string,
     call: (...args: Args) => Effect.Effect<A, PullRequestProviderError>,
   ) => wrap(operation, call, true);
@@ -816,7 +848,12 @@ export const make = Effect.gen(function* () {
           supported.push({
             cursorKey: key,
             project,
-            api: withRateLimitBackoff(api, host, rateLimits),
+            api: withRateLimitBackoff(
+              api,
+              host,
+              rateLimits,
+              kind === "github" ? { pinFor: accounts.pinFor } : undefined,
+            ),
             repository,
             host,
             account,
@@ -1577,7 +1614,11 @@ export const make = Effect.gen(function* () {
       }
       const result = yield* api
         .withVerifiedCredential(
-          { cwd: project.project.workspaceRoot, host: project.host },
+          {
+            cwd: project.project.workspaceRoot,
+            host: project.host,
+            repository: project.repository,
+          },
           (identity) =>
             identity.accountId === input.expectedAccountId
               ? operation.pipe(Effect.provideService(routingCredential, identity), Effect.result)
@@ -1597,6 +1638,7 @@ export const make = Effect.gen(function* () {
       .getRoutingIdentity({
         cwd: project.project.workspaceRoot,
         host: project.host,
+        repository: project.repository,
       })
       .pipe(Effect.mapError(toPullRequestError("routeIdentity")));
     if (!identity.viewer.trim() || !identity.accountId.trim()) {
