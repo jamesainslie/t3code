@@ -2,37 +2,16 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { normalizeChatMath } from "./chatMath";
 
-describe("normalizeChatMath inline dollars (Pandoc rule)", () => {
-  it("marks $…$ as math when it hugs its content", () => {
-    expect(normalizeChatMath("Euler: $e^{i\\pi}+1=0$ inline.")).toBe(
-      "Euler: $$e^{i\\pi}+1=0$$ inline.",
-    );
-    expect(normalizeChatMath("$a$ and $b$")).toBe("$$a$$ and $$b$$");
-  });
-
-  it("leaves prices alone", () => {
+describe("normalizeChatMath dollars", () => {
+  it("leaves inline dollar math, prices, and escapes to the parser", () => {
     for (const text of [
+      "Euler: $e^{i\\pi}+1=0$ inline.",
       "It costs $5 and $10 per month.",
-      "Between $5-$10 a seat.",
-      "Only $5.",
-      "A $ 5 fee and a 5$ fee.",
+      "Pay \\$x$ now",
+      "Area $$\\pi r^2$$ exactly",
     ]) {
       expect(normalizeChatMath(text)).toBe(text);
     }
-  });
-
-  it("leaves shell variables separated by spaces alone", () => {
-    const text = "Run echo $PATH and $SHELL here.";
-    expect(normalizeChatMath(text)).toBe(text);
-  });
-
-  it("does not open or close on an escaped dollar", () => {
-    expect(normalizeChatMath("Pay \\$x$ now")).toBe("Pay \\$x$ now");
-    expect(normalizeChatMath("$\\$5$ in TeX")).toBe("$$\\$5$$ in TeX");
-  });
-
-  it("keeps existing inline $$…$$ as written", () => {
-    expect(normalizeChatMath("Area $$\\pi r^2$$ exactly")).toBe("Area $$\\pi r^2$$ exactly");
   });
 });
 

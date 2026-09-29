@@ -888,6 +888,16 @@ describe("ChatMarkdown documents", () => {
     expect(json).toContain("Energy is ");
   });
 
+  it("leaves prices in a document as text", async () => {
+    const json = await renderDocument(
+      "It costs $350,183 per 30 days and would cost $63 million, or $6 million to $262 million.",
+    );
+
+    expect(json).toContain("$350,183 per 30 days");
+    expect(json).toContain("$6 million to $262 million.");
+    expect(json).not.toContain("katex");
+  });
+
   it("shows invalid TeX instead of dropping it", async () => {
     const json = await renderDocument("$\\frac{1}{$");
 

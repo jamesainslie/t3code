@@ -219,7 +219,8 @@ files show the copy that was attached to the message.
 
 Select a file chip in your draft or a sent message to preview it. Code and JSON use syntax
 highlighting; Markdown, HTML, CSV, and TSV offer rendered and raw views. On web and desktop,
-rendered Markdown typesets TeX math written as `$…$`, `$$…$$`, or a `math` code block, draws
+rendered Markdown typesets TeX math written as `$…$`, `$$…$$`, or a `math` code block (a price
+such as `$5` stays text), draws
 Mermaid diagrams, and highlights inline code that ends in a language marker, such as
 `` `const x = 1{:ts}` ``. Audio files have
 playback controls. Large text files show a limited preview; save the file to read it in full.
