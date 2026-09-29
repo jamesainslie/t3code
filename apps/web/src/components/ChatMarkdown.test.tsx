@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { __setClientSettingsForTests, getClientSettings } from "../hooks/useSettings";
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
@@ -21,11 +22,14 @@ vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
 vi.mock("../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
 vi.mock("../hooks/useSettings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../hooks/useSettings")>();
-  const settings = actual.getClientSettings();
   return {
     ...actual,
-    useClientSettings: (select?: (value: typeof settings) => unknown) =>
-      select ? select(settings) : settings,
+    useClientSettings: (
+      select?: (value: ReturnType<typeof actual.getClientSettings>) => unknown,
+    ) => {
+      const settings = actual.getClientSettings();
+      return select ? select(settings) : settings;
+    },
   };
 });
 vi.mock("./ui/tooltip", async () => {
@@ -895,6 +899,30 @@ describe("ChatMarkdown documents", () => {
 
     expect(json).toContain("It costs $5 and $10 today.");
     expect(json).not.toContain("katex");
+  });
+
+  it("typesets every delimiter agents use in chat", async () => {
+    const json = await renderDocument(
+      "Energy $E = mc^2$ and \\(a^2\\), not $5 or $10.\n\n\\[\n\\int_0^1 x\\,dx\n\\]\n\n$$\n\\sqrt{2}\n$$",
+      false,
+    );
+
+    expect(json.match(/class=\\"katex\\"/g)?.length).toBe(4);
+    expect(json.match(/katex-display/g)?.length).toBe(2);
+    expect(json).toContain("not $5 or $10.");
+  });
+
+  it("shows TeX as written in chat when math is off", async () => {
+    const previous = getClientSettings();
+    __setClientSettingsForTests({ ...previous, chatMathEnabled: false });
+    try {
+      const json = await renderDocument("Energy $E = mc^2$ here.", false);
+
+      expect(json).toContain("Energy $E = mc^2$ here.");
+      expect(json).not.toContain("katex");
+    } finally {
+      __setClientSettingsForTests(previous);
+    }
   });
 
   it("anchors headings so the document's own links resolve", () => {

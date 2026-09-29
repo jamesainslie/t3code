@@ -95,6 +95,7 @@ import remarkMath from "remark-math";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
 import { parseInlineCodeLanguage, rehypeSourceLines, remarkHeadingIds } from "../markdown-document";
 import { MarkdownMath } from "./chat/MarkdownMath";
+import { normalizeChatMath } from "../chatMath";
 import {
   artifactTemplateFromHastProperties,
   CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
@@ -520,6 +521,10 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
 const DOCUMENT_REMARK_PLUGINS = [remarkMath, remarkHeadingIds] satisfies NonNullable<
   ReactMarkdownOptions["remarkPlugins"]
 >;
+// Chat text arrives through normalizeChatMath, which leaves only `$$` math.
+const CHAT_MATH_REMARK_PLUGINS = [
+  [remarkMath, { singleDollarTextMath: false }],
+] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
   rehypeRaw,
@@ -2351,7 +2356,8 @@ function useChatMarkdownState({
   headingLevelOffset = 0,
   githubMedia = false,
   asDocument = false,
-}: ChatMarkdownProps) {
+  renderMath = asDocument,
+}: ChatMarkdownProps & { renderMath?: boolean }) {
   const { resolvedTheme } = useTheme();
   const [localMediaPreview, setLocalMediaPreview] = useState<ExpandedImagePreview | null>(null);
   const markdownRef = useRef<HTMLDivElement>(null);
@@ -2738,6 +2744,7 @@ function useChatMarkdownState({
   const componentState = useMemo(
     () => ({
       asDocument,
+      renderMath,
       cwd,
       diffThemeName,
       environmentId,
@@ -2771,6 +2778,7 @@ function useChatMarkdownState({
     }),
     [
       asDocument,
+      renderMath,
       cwd,
       diffThemeName,
       environmentId,
@@ -3163,6 +3171,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
   code: function MarkdownCode({ node, children, className, ...props }) {
     const {
       asDocument,
+      renderMath,
       cwd,
       diffThemeName,
       imageBaseDir,
@@ -3170,7 +3179,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       fileLinkChip,
     } = use(ChatMarkdownRendererContext);
     // A block formula never reaches here: the `pre` renderer typesets it whole.
-    if (asDocument && CODE_FENCE_LANGUAGE_REGEX.exec(className ?? "")?.[1] === "math") {
+    if (renderMath && CODE_FENCE_LANGUAGE_REGEX.exec(className ?? "")?.[1] === "math") {
       return <MarkdownMath source={nodeToPlainText(children)} display={false} />;
     }
     if (node?.properties?.dataInlineCode != null) {
@@ -3347,6 +3356,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
   pre: function MarkdownPre({ node, children, ...props }) {
     const {
       asDocument,
+      renderMath,
       resolvedTheme,
       diffThemeName,
       isStreaming,
@@ -3374,7 +3384,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       );
     const language = extractFenceLanguage(codeBlock.className);
     // `$$…$$` and a ```math fence both arrive as `language-math`, as on GitHub.
-    if (asDocument && language === "math") {
+    if (renderMath && language === "math") {
       return sourceLined(<MarkdownMath source={codeBlock.code.replace(/\n$/, "")} display />);
     }
     if (language?.toLowerCase() === "mermaid") {
@@ -3434,13 +3444,19 @@ const CHAT_MARKDOWN_COMPONENTS = {
 } satisfies Components;
 
 function ChatMarkdown({
-  text,
+  text: sourceText,
   className,
   lineBreaks = false,
   parseRawHtml = true,
   extraRemarkPlugins = EMPTY_REMARK_PLUGINS,
   ...props
 }: ChatMarkdownProps) {
+  // Documents keep GitHub's math rules; chat math is a setting (fork).
+  const chatMath = useClientSettings((settings) => settings.chatMathEnabled) && !props.asDocument;
+  const text = useMemo(
+    () => (chatMath ? normalizeChatMath(sourceText) : sourceText),
+    [chatMath, sourceText],
+  );
   const {
     componentState,
     handleCopy,
@@ -3448,7 +3464,7 @@ function ChatMarkdown({
     markdownUrlTransform,
     localMediaPreview,
     setLocalMediaPreview,
-  } = useChatMarkdownState({ text, ...props });
+  } = useChatMarkdownState({ text, ...props, renderMath: chatMath || props.asDocument === true });
   const incrementalParsing =
     props.isStreaming === true &&
     extraRemarkPlugins.length === 0 &&
@@ -3456,11 +3472,11 @@ function ChatMarkdown({
   const remarkPlugins = useMemo(
     () => [
       ...(lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS),
-      ...(props.asDocument ? DOCUMENT_REMARK_PLUGINS : []),
+      ...(props.asDocument ? DOCUMENT_REMARK_PLUGINS : chatMath ? CHAT_MATH_REMARK_PLUGINS : []),
       ...extraRemarkPlugins,
       ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
     ],
-    [extraRemarkPlugins, incrementalParsing, lineBreaks, props.asDocument],
+    [chatMath, extraRemarkPlugins, incrementalParsing, lineBreaks, props.asDocument],
   );
 
   // react-markdown converts unparsed HTML nodes to text when skipHtml is false.

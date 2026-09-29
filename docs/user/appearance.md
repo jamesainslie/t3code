@@ -21,6 +21,13 @@ Android uses **Material You Layout** by default unless you have turned it off in
 It changes shapes, spacing, and controls independently
 of the selected theme.
 
+## Math in chat
+
+On web and desktop, chat messages typeset TeX math written as `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, or
+a `math` code block. A single `$` only starts math when the formula follows it without a space and
+the closing `$` is not followed by a digit, so `$5 and $10` stays text. Code is never typeset. To
+see TeX as written, turn off **Render math** in **Settings → Appearance**.
+
 ## Motion
 
 The main sidebar, right panel, and terminal drawer open and close immediately by default. Move the
