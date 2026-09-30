@@ -1,6 +1,6 @@
 import {
-  ComposerContextId,
   type ComposerContextClipboardFragment,
+  type ComposerContextId,
   type EnvironmentId,
   type ProjectId,
   type ThreadContextRecord,
@@ -10,6 +10,7 @@ import {
 import {
   formatComposerContextReference,
   sanitizeComposerContextLabel,
+  toComposerContextId,
 } from "./composerContextReferences.ts";
 
 /** Matches the bound `ThreadContextRecord.title` enforces. */
@@ -21,9 +22,13 @@ interface ThreadChipSource {
   readonly title: string;
 }
 
-/** One context id per thread, so the same thread pasted twice stays one record. */
+/**
+ * One context id per thread, so the same thread pasted twice stays one record. Ids outside the
+ * context id grammar, such as imported `import:<instance>:<session>` threads, fold to a slug
+ * plus hash.
+ */
 export function threadContextId(threadId: ThreadId): ComposerContextId {
-  return ComposerContextId.make(`thread-${threadId.toLowerCase()}`);
+  return toComposerContextId(`thread-${threadId.toLowerCase()}`);
 }
 
 /** Cuts at the cap, backing off one unit rather than leaving a lone high surrogate. */

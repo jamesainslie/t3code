@@ -16,9 +16,9 @@ export async function copyThreadChip(input: {
   readonly environmentId: EnvironmentId;
   readonly thread: { readonly id: ThreadId; readonly projectId: ProjectId; readonly title: string };
 }): Promise<void> {
-  const { text, fragment } = buildThreadChipClipboard(input);
-  const encoded = encodeComposerContextFragment(fragment);
   try {
+    const { text, fragment } = buildThreadChipClipboard(input);
+    const encoded = encodeComposerContextFragment(fragment);
     const didCopy = await writeTextToClipboard(
       text,
       "text",

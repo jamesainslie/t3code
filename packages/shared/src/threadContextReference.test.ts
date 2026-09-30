@@ -1,4 +1,5 @@
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { ComposerContextId, EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 import { collectComposerContextReferences } from "./composerContextReferences.ts";
@@ -8,6 +9,8 @@ import {
   threadContextId,
   threadContextMarkdown,
 } from "./threadContextReference.ts";
+
+const isComposerContextId = Schema.is(ComposerContextId);
 
 const thread = {
   id: ThreadId.make("0B7E6F7A-3C1D-4E5F-9A8B-1C2D3E4F5A6B"),
@@ -59,5 +62,24 @@ describe("threadContextReference", () => {
   it("threadContextId is stable for a thread", () => {
     expect(threadContextId(thread.id)).toBe("thread-0b7e6f7a-3c1d-4e5f-9a8b-1c2d3e4f5a6b");
     expect(threadContextId(thread.id)).toBe(threadContextId(ThreadId.make(thread.id)));
+  });
+
+  it("threadContextId folds imported thread ids into a valid, stable id", () => {
+    const imported = ThreadId.make("import:claudeAgent:0B7E6F7A-3C1D-4E5F-9A8B-1C2D3E4F5A6B");
+    const id = threadContextId(imported);
+
+    expect(id).toMatch(/^thread-import-claudeagent-[a-z0-9-]*-[0-9a-f]{16}$/);
+    expect(isComposerContextId(id)).toBe(true);
+    expect(threadContextId(ThreadId.make(imported))).toBe(id);
+    expect(threadContextId(ThreadId.make("import:codex:0B7E6F7A"))).not.toBe(id);
+  });
+
+  it("threadContextId keeps very long thread ids within the id bound", () => {
+    const first = threadContextId(ThreadId.make(`${"a".repeat(200)}1`));
+    const second = threadContextId(ThreadId.make(`${"a".repeat(200)}2`));
+
+    expect(first.length).toBeLessThanOrEqual(128);
+    expect(isComposerContextId(first)).toBe(true);
+    expect(first).not.toBe(second);
   });
 });

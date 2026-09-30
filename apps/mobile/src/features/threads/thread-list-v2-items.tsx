@@ -957,11 +957,17 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         copyTextWithHaptic(thread.id, { target: "thread-id" });
       }
       if (nativeEvent.event === "copy-thread-chip") {
-        const chip = buildThreadChipClipboard({ environmentId: thread.environmentId, thread });
-        writeComposerContextClipboard(chip.text, chip.fragment).then(
-          () => playCopyHaptic({ target: "thread-chip" }),
-          () => Alert.alert("Could not copy", "Try again."),
-        );
+        const showCopyFailed = () => Alert.alert("Could not copy", "Try again.");
+        try {
+          const chip = buildThreadChipClipboard({ environmentId: thread.environmentId, thread });
+          writeComposerContextClipboard(chip.text, chip.fragment).then(
+            () => playCopyHaptic({ target: "thread-chip" }),
+            showCopyFailed,
+          );
+        } catch (error) {
+          console.error(error);
+          showCopyFailed();
+        }
       }
       if (nativeEvent.event === "delete") handleDelete();
       if (nativeEvent.event.startsWith("highlight:")) {
