@@ -1,5 +1,8 @@
 // @effect-diagnostics globalDate:off -- UI snooze presets use local calendar boundaries and Intl labels.
-import type { OrchestrationThreadShell } from "@t3tools/contracts";
+import type {
+  ExecutionEnvironmentCapabilities,
+  OrchestrationThreadShell,
+} from "@t3tools/contracts";
 import {
   isSyncedThreadId,
   threadDependencyWouldCycle,
@@ -425,6 +428,30 @@ export function snoozeWakeLabel(snoozedUntil: string, options: { readonly now: s
   if (remainingMs < HOUR_MS) return `${Math.max(1, Math.ceil(remainingMs / 60_000))}m`;
   if (remainingMs < DAY_MS) return `${Math.ceil(remainingMs / HOUR_MS)}h`;
   return `${Math.ceil(remainingMs / DAY_MS)}d`;
+}
+
+/**
+ * The note in effect after a snooze, mirroring the server decider so the
+ * optimistic preview matches the confirmed shell. No reminder keeps the note
+ * of a pending snooze (preset re-snoozes must not drop it), a blank one
+ * clears it, and anything else replaces it.
+ */
+export function resolveSnoozeReminder(
+  thread: Pick<OrchestrationThreadShell, "snoozedUntil" | "snoozeReminder">,
+  reminder: string | undefined,
+): string | null {
+  if (reminder === undefined) {
+    return thread.snoozedUntil != null ? (thread.snoozeReminder ?? null) : null;
+  }
+  return reminder.trim() || null;
+}
+
+/** Whether the server accepts a reminder on thread.snooze. Missing means an
+    older server, which must never be offered the reminder controls. */
+export function supportsSnoozeReminder(
+  capabilities: Pick<ExecutionEnvironmentCapabilities, "threadSnoozeReminder"> | null | undefined,
+): boolean {
+  return capabilities?.threadSnoozeReminder === true;
 }
 
 export type CustomSnoozeInput =
