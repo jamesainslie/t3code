@@ -331,6 +331,23 @@ describe("buildTurnStartParams", () => {
     }),
   );
 
+  it.effect("puts the thread history block in the turn's runtime context", () =>
+    Effect.gen(function* () {
+      const params = yield* buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        model: "gpt-5.3-codex",
+        interactionMode: "default",
+        threadHistory: "search",
+      });
+
+      NodeAssert.match(
+        params.additionalContext?.t3_code_runtime?.value ?? "",
+        /<thread_history>[\s\S]*find_threads[\s\S]*<\/thread_history>/,
+      );
+    }),
+  );
+
   it.effect("routes approvals to the auto reviewer in auto mode", () =>
     Effect.gen(function* () {
       const params = yield* buildTurnStartParams({
@@ -628,11 +645,27 @@ describe("buildCodexAdditionalContext", () => {
   });
 
   it("keeps every entry under Codex's 1,000 token cap per entry", () => {
-    const context = buildCodexAdditionalContext(runtime, { browser: true, device: true });
+    const context = buildCodexAdditionalContext(
+      { ...runtime, threadHistory: "search" },
+      { browser: true, device: true },
+    );
     for (const entry of Object.values(context)) {
       // Codex estimates 4 bytes per token and truncates the middle of longer values.
       NodeAssert.ok(Buffer.byteLength(entry.value) < 4_000);
     }
+  });
+
+  it("buildCodexAdditionalContext carries the thread history block", () => {
+    NodeAssert.doesNotMatch(runtimeValue(buildCodexAdditionalContext(runtime)), /<thread_history>/);
+
+    const read = runtimeValue(buildCodexAdditionalContext({ ...runtime, threadHistory: "read" }));
+    NodeAssert.match(read, /<thread_history>[\s\S]*read_thread_turns[\s\S]*<\/thread_history>/);
+    NodeAssert.doesNotMatch(read, /find_threads/);
+
+    const search = runtimeValue(
+      buildCodexAdditionalContext({ ...runtime, threadHistory: "search" }),
+    );
+    NodeAssert.match(search, /<thread_history>[\s\S]*find_threads[\s\S]*<\/thread_history>/);
   });
 });
 

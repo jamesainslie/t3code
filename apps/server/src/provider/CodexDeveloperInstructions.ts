@@ -1,6 +1,9 @@
 import type { ProviderInteractionMode } from "@t3tools/contracts";
 import type { V2TurnStartParams__AdditionalContextEntry } from "effect-codex-app-server/schema";
-import { buildRuntimeInstructions } from "./RuntimeInstructions.ts";
+import {
+  buildRuntimeInstructions,
+  type ThreadHistoryInstructionMode,
+} from "./RuntimeInstructions.ts";
 
 const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `## T3 Code collaborative browser
 
@@ -188,6 +191,8 @@ export interface CodexRuntimeInfo {
   readonly model: string;
   readonly modelName?: string | undefined;
   readonly reasoningEffort: string;
+  /** Set only when the session has the thread history tools attached. */
+  readonly threadHistory?: ThreadHistoryInstructionMode | undefined;
 }
 
 /** Mode prompt for `turn/start.collaborationMode.settings.developer_instructions`. */

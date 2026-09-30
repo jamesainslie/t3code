@@ -40,7 +40,7 @@ import type * as EffectAcpSchema from "effect-acp/schema";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
+import { buildRuntimeInstructions, threadHistoryInstructionMode } from "../RuntimeInstructions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import {
   ProviderAdapterProcessError,
@@ -1646,6 +1646,9 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
                       harness: "Grok",
                       model: displayModel,
                       reasoningEffort: normalizeGrokReasoningEffort(requestedTurnReasoningEffort),
+                      threadHistory: threadHistoryInstructionMode(
+                        McpProviderSession.readMcpProviderSession(input.threadId)?.capabilities,
+                      ),
                     });
               for (let yieldAttempt = 0; yieldAttempt < 8; yieldAttempt += 1) {
                 yield* Effect.yieldNow;

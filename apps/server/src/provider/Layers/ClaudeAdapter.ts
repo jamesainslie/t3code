@@ -93,7 +93,7 @@ import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { claudeSignedOutMessage, makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import { planClaudeSkillDispatch } from "../Drivers/ClaudeSkillDispatch.ts";
 import { discoverClaudeSkills } from "../Drivers/ClaudeSkills.ts";
-import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
+import { buildRuntimeInstructions, threadHistoryInstructionMode } from "../RuntimeInstructions.ts";
 import {
   BUNDLED_CLAUDE_MODEL_CATALOG,
   type ClaudeModelCatalog,
@@ -4915,7 +4915,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           type: "preset",
           preset: "claude_code",
           // Model and effort can change after this session-level prompt is set.
-          append: buildRuntimeInstructions({ harness: "Claude Code" }),
+          append: buildRuntimeInstructions({
+            harness: "Claude Code",
+            threadHistory: threadHistoryInstructionMode(mcpSession?.capabilities),
+          }),
         },
         settingSources: [...CLAUDE_SETTING_SOURCES],
         // `ultracode` is a Claude Code setting, not an API effort level. It is
