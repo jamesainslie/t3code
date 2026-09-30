@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-29T01:03:44Z",
+  "updatedAt": "2026-09-30T14:06:21Z",
   "compatibility": [
     {
       "driver": "codex",
@@ -61,6 +61,7 @@
   "currentModels": {
     "codex": [
       "gpt-6-astra",
+      "gpt-6.1-sol",
       "gpt-6-luna",
       "gpt-6-sol",
       "gpt-daybreak-blue-latest",
