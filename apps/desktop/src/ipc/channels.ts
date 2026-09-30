@@ -59,6 +59,10 @@ export const FETCH_SSH_SESSION_STATE_CHANNEL = "desktop:fetch-ssh-session-state"
 export const ISSUE_SSH_WEBSOCKET_TOKEN_CHANNEL = "desktop:issue-ssh-websocket-token";
 export const SSH_PASSWORD_PROMPT_CHANNEL = "desktop:ssh-password-prompt";
 export const RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL = "desktop:resolve-ssh-password-prompt";
+export const SUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL = "desktop:subscribe-ssh-environment-output";
+export const UNSUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL =
+  "desktop:unsubscribe-ssh-environment-output";
+export const SSH_ENVIRONMENT_OUTPUT_CHANNEL = "desktop:ssh-environment-output";
 export const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 export const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 export const SET_TAILSCALE_SERVE_ENABLED_CHANNEL = "desktop:set-tailscale-serve-enabled";

@@ -6,11 +6,13 @@ import type {
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
   DesktopPreviewAuthRelayCallback,
+  DesktopSshOutputBatch,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 
 import * as IpcChannels from "./ipc/channels.ts";
+import { makeSshOutputFollower } from "./ssh/sshOutputFollower.ts";
 
 const SNAP_SHOT_EVENT_TYPES = new Set([
   "requested",
@@ -162,6 +164,33 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   resolveSshPasswordPrompt: (requestId, password) =>
     ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL, { requestId, password }),
+  onSshEnvironmentOutput: (target, listener) => {
+    const follower = makeSshOutputFollower(listener);
+    const onPush = (_event: Electron.IpcRendererEvent, batch: DesktopSshOutputBatch) =>
+      follower.push(batch);
+    let subscribed = false;
+    let closed = false;
+    ipcRenderer.on(IpcChannels.SSH_ENVIRONMENT_OUTPUT_CHANNEL, onPush);
+    void ipcRenderer
+      .invoke(IpcChannels.SUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL, target)
+      .then((snapshot: DesktopSshOutputBatch) => {
+        subscribed = true;
+        if (closed) {
+          void ipcRenderer.invoke(IpcChannels.UNSUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL, target);
+          return;
+        }
+        follower.snapshot(snapshot);
+      })
+      .catch(() => undefined);
+    return () => {
+      closed = true;
+      ipcRenderer.removeListener(IpcChannels.SSH_ENVIRONMENT_OUTPUT_CHANNEL, onPush);
+      // Until the reply lands, the subscribe handler above unsubscribes instead.
+      if (subscribed) {
+        void ipcRenderer.invoke(IpcChannels.UNSUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL, target);
+      }
+    };
+  },
   getServerExposureState: () => ipcRenderer.invoke(IpcChannels.GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) =>
     ipcRenderer.invoke(IpcChannels.SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),

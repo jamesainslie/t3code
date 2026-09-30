@@ -419,6 +419,23 @@ export const DesktopSshEnvironmentBootstrapSchema = Schema.Struct({
   remoteServerKind: Schema.optionalKey(Schema.Literals(["external", "managed"])),
 });
 
+/** One redacted line of what bringing up an SSH environment printed, or an attempt marker. */
+export const DesktopSshOutputEntrySchema = Schema.Struct({
+  seq: Schema.Number,
+  at: Schema.String,
+  source: Schema.Literals(["launch", "tunnel", "remote-log", "status"]),
+  stderr: Schema.Boolean,
+  text: Schema.String,
+});
+export type DesktopSshOutputEntry = typeof DesktopSshOutputEntrySchema.Type;
+
+/** A target's recent output (on subscribe) or its newest lines (pushed while subscribed). */
+export const DesktopSshOutputBatchSchema = Schema.Struct({
+  key: Schema.String,
+  entries: Schema.Array(DesktopSshOutputEntrySchema),
+});
+export type DesktopSshOutputBatch = typeof DesktopSshOutputBatchSchema.Type;
+
 export interface DesktopSshPasswordPromptRequest {
   requestId: string;
   destination: string;
@@ -1248,6 +1265,14 @@ export interface DesktopBridge {
     bearerToken: string,
   ) => Promise<AuthWebSocketTicketResult>;
   onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
+  /**
+   * The target's recent SSH output, then each new line as it arrives, until the returned
+   * function is called. Nothing is sent while no one is listening.
+   */
+  onSshEnvironmentOutput?: (
+    target: DesktopSshEnvironmentTarget,
+    listener: (entries: ReadonlyArray<DesktopSshOutputEntry>) => void,
+  ) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
