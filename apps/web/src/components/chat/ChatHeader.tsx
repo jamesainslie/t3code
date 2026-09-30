@@ -34,6 +34,7 @@ import ProjectScriptsControl, {
 } from "../ProjectScriptsControl";
 import { OpenInPicker } from "./OpenInPicker";
 import { ProxyUsagePill } from "./ProxyUsagePill";
+import { ThreadContinuationBreadcrumbs } from "./ThreadContinuationBreadcrumbs";
 import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
@@ -487,6 +488,7 @@ export const ChatHeader = memo(function ChatHeader({
             </Tooltip>
           )}
         </WorkspaceBreadcrumbItem>
+        {isServerThread ? <ThreadContinuationBreadcrumbs threadRef={activeThreadRef} /> : null}
       </WorkspaceBreadcrumb>
       <div
         ref={headerActionsRef}

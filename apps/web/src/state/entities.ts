@@ -6,6 +6,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import {
   type EnvironmentThreadStatus,
+  type ThreadContinuation,
   mergeEnvironmentThread,
 } from "@t3tools/client-runtime/state/threads";
 import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
@@ -33,6 +34,9 @@ const EMPTY_THREAD_REFS_ATOM = Atom.make(EMPTY_THREAD_REFS).pipe(
 );
 const EMPTY_THREAD_SHELL_ATOM = Atom.make<EnvironmentThreadShell | null>(null).pipe(
   Atom.withLabel("web-thread-shell:empty"),
+);
+const EMPTY_CONTINUATIONS_ATOM = Atom.make<ReadonlyArray<ThreadContinuation>>([]).pipe(
+  Atom.withLabel("web-thread-continued-in:empty"),
 );
 const EMPTY_THREAD_DETAIL_ATOM = Atom.make<EnvironmentThread | null>(null).pipe(
   Atom.withLabel("web-thread-detail:empty"),
@@ -101,6 +105,12 @@ export function useProject(ref: ScopedProjectRef | null): EnvironmentProject | n
 export function useThreadShell(ref: ScopedThreadRef | null): EnvironmentThreadShell | null {
   return useAtomValue(
     ref === null ? EMPTY_THREAD_SHELL_ATOM : environmentThreadShells.threadShellAtom(ref),
+  );
+}
+
+export function useContinuedInThreads(ref: ScopedThreadRef | null) {
+  return useAtomValue(
+    ref === null ? EMPTY_CONTINUATIONS_ATOM : environmentThreadShells.continuedInAtom(ref),
   );
 }
 

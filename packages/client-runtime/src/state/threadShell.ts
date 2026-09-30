@@ -29,6 +29,31 @@ const EMPTY_THREAD_REFS_BY_PROJECT: ReadonlyMap<
   ReadonlyArray<ScopedThreadRef>
 > = new Map();
 
+/** A thread that picked up another thread's work, as the source thread links to it. */
+export interface ThreadContinuation {
+  readonly threadId: ThreadId;
+  readonly title: string;
+}
+
+const EMPTY_CONTINUATIONS: ReadonlyArray<ThreadContinuation> = Object.freeze([]);
+const EMPTY_CONTINUATION_INDEX: ReadonlyMap<
+  ThreadId,
+  ReadonlyArray<ThreadContinuation>
+> = new Map();
+
+function continuationsEqual(
+  left: ReadonlyArray<ThreadContinuation>,
+  right: ReadonlyArray<ThreadContinuation>,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (entry, index) =>
+        entry.threadId === right[index]?.threadId && entry.title === right[index]?.title,
+    )
+  );
+}
+
 export function createEnvironmentThreadShellAtoms(input: {
   readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
   readonly snapshotAtom: (
@@ -138,6 +163,54 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-thread-shell:${key}`));
   });
 
+  // Groups continuations by source once per shell change, so a thread header
+  // reads its own entry instead of scanning every shell on each render.
+  const environmentContinuationIndexAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get): ReadonlyMap<ThreadId, ReadonlyArray<ThreadContinuation>> => {
+      const grouped = new Map<ThreadId, OrchestrationThreadShell[]>();
+      for (const thread of get(environmentThreadsAtom(environmentId))) {
+        const sourceId = thread.continuedFromThreadId;
+        if (sourceId === undefined || sourceId === null) continue;
+        const continuations = grouped.get(sourceId);
+        if (continuations === undefined) {
+          grouped.set(sourceId, [thread]);
+        } else {
+          continuations.push(thread);
+        }
+      }
+      if (grouped.size === 0) {
+        return EMPTY_CONTINUATION_INDEX;
+      }
+      const index = new Map<ThreadId, ReadonlyArray<ThreadContinuation>>();
+      for (const [sourceId, continuations] of grouped) {
+        continuations.sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        index.set(
+          sourceId,
+          continuations.map((thread) => ({ threadId: thread.id, title: thread.title })),
+        );
+      }
+      return index;
+    }).pipe(Atom.withLabel(`environment-thread-continuations:${environmentId}`)),
+  );
+
+  const continuedInAtomFamily = Atom.family((key: string) => {
+    const ref = parseThreadKey(key);
+    let previous = EMPTY_CONTINUATIONS;
+    return Atom.make((get) => {
+      const next =
+        get(environmentContinuationIndexAtom(ref.environmentId)).get(ref.threadId) ??
+        EMPTY_CONTINUATIONS;
+      if (continuationsEqual(previous, next)) {
+        return previous;
+      }
+      previous = next;
+      return previous;
+    }).pipe(Atom.withLabel(`environment-thread-continued-in:${key}`));
+  });
+
   const threadShellsForProjectRefsAtomFamily = Atom.family((key: string) => {
     const projectRefs = parseProjectRefCollectionKey(key);
     let previous: ReadonlyArray<EnvironmentThreadShell> = [];
@@ -209,5 +282,7 @@ export function createEnvironmentThreadShellAtoms(input: {
     threadShellsForProjectRefsAtom: (refs: ReadonlyArray<ScopedProjectRef>) =>
       threadShellsForProjectRefsAtomFamily(projectRefCollectionKey(refs)),
     threadShellAtom: (ref: ScopedThreadRef) => threadShellAtomFamily(threadKey(ref)),
+    /** Threads continuing `ref`'s work, oldest first. Deleted threads leave the shell. */
+    continuedInAtom: (ref: ScopedThreadRef) => continuedInAtomFamily(threadKey(ref)),
   };
 }
