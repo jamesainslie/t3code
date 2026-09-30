@@ -15,6 +15,7 @@ import type {
   PreviewAnnotationPayload,
   ReviewCommentContextRecord,
   TerminalContextRecord,
+  ThreadContextRecord,
   ThreadId,
 } from "@t3tools/contracts";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
@@ -291,11 +292,18 @@ export function attachmentContextRecord(
   return attachment.type === "image" ? { ...base, kind: "image" } : { ...base, kind: "file" };
 }
 
+export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
+  return { kind: "thread", contextId: record.contextId, label: record.label };
+}
+
 export function buildMessageContext(input: {
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
   reviewComments: ReadonlyArray<ReviewCommentContext>;
   previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
   attachments?: ReadonlyArray<BoundComposerAttachment>;
+  threadReferences?: ReadonlyArray<ThreadContextRecord>;
+  /** The text being sent. A thread reference travels only while its link is still in it. */
+  text?: string;
 }): OrchestrationMessageContext | undefined {
   // An annotation's screenshot travels as the image attachment that reuses its id.
   const screenshotAttachmentIds = new Set(
@@ -313,6 +321,12 @@ export function buildMessageContext(input: {
     ),
     ...(input.attachments ?? []).map(attachmentContextRecord),
   ];
+  if (input.threadReferences && input.threadReferences.length > 0) {
+    const linkedIds = new Set<string>(
+      collectComposerContextReferences(input.text ?? "").map((occurrence) => occurrence.contextId),
+    );
+    records.push(...input.threadReferences.filter((record) => linkedIds.has(record.contextId)));
+  }
   return records.length === 0 ? undefined : { version: 1, records };
 }
 

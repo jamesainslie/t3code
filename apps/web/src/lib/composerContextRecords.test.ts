@@ -3,11 +3,16 @@ import {
   EnvironmentId,
   MessageId,
   OrchestrationMessageContext,
+  ProjectId,
   ThreadId,
   type PreviewAnnotationPayload,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
+import {
+  buildThreadContextRecord,
+  threadContextMarkdown,
+} from "@t3tools/shared/threadContextReference";
 
 import {
   formatInlineContextReference,
@@ -680,6 +685,51 @@ describe("attachment context records", () => {
       ],
     });
     expect(context?.records.map((record) => record.kind)).toEqual(["file"]);
+  });
+});
+
+describe("thread context records", () => {
+  const kept = buildThreadContextRecord({
+    id: ThreadId.make("thread-kept"),
+    projectId: ProjectId.make("project-a"),
+    title: "Plan the migration",
+  });
+  const deleted = buildThreadContextRecord({
+    id: ThreadId.make("thread-deleted"),
+    projectId: ProjectId.make("project-a"),
+    title: "Old investigation",
+  });
+
+  it("includes thread references in the message context", () => {
+    const context = buildMessageContext({
+      terminalContexts: [],
+      reviewComments: [],
+      previewAnnotations: [],
+      threadReferences: [kept],
+      text: `Continue from ${threadContextMarkdown(kept)}`,
+    });
+    expect(context?.records).toEqual([kept]);
+    expect(decodeMessageContext(context)).toEqual(context);
+  });
+
+  it("omits a thread reference whose link was deleted from the prompt", () => {
+    const context = buildMessageContext({
+      terminalContexts: [],
+      reviewComments: [],
+      previewAnnotations: [],
+      threadReferences: [kept, deleted],
+      text: `Continue from ${threadContextMarkdown(kept)}`,
+    });
+    expect(context?.records.map((record) => record.contextId)).toEqual([kept.contextId]);
+    expect(
+      buildMessageContext({
+        terminalContexts: [],
+        reviewComments: [],
+        previewAnnotations: [],
+        threadReferences: [deleted],
+        text: "No chips left",
+      }),
+    ).toBeUndefined();
   });
 });
 

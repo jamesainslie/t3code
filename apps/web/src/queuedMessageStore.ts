@@ -3,6 +3,7 @@ import type {
   PreviewAnnotationPayload,
   ProviderInteractionMode,
   RuntimeMode,
+  ThreadContextRecord,
 } from "@t3tools/contracts";
 import { create } from "zustand";
 
@@ -38,6 +39,7 @@ export interface QueuedComposerMessage {
   terminalContexts: TerminalContextDraft[];
   previewAnnotations: PreviewAnnotationPayload[];
   reviewComments: ReviewCommentContext[];
+  threadReferences?: ReadonlyArray<ThreadContextRecord>;
   sendSettings: QueuedMessageSendSettings;
   /**
    * The newest completed tool activity at queue time. A different id later
