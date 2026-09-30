@@ -497,6 +497,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           highlightColor: "#ff8800",
           activeOrderKey: "hq",
           autoSettleDisabledAt: null,
+          continuedFromThreadId: null,
           titleRegeneration: null,
           titleState: null,
           deletedAt: null,
@@ -628,6 +629,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           highlightColor: "#ff8800",
           activeOrderKey: "hq",
           autoSettleDisabledAt: null,
+          continuedFromThreadId: null,
           titleRegeneration: null,
           titleState: null,
           session: {
@@ -4102,6 +4104,61 @@ projectionSnapshotLayer("ProjectionSnapshotQuery snooze reminders", (it) => {
         { threadId: noted, snoozedUntil: "2026-09-10T00:00:00.000Z" },
         { threadId: ThreadId.make("t-later"), snoozedUntil: "2026-09-12T00:00:00.000Z" },
       ]);
+    }),
+  );
+});
+
+projectionSnapshotLayer("ProjectionSnapshotQuery continuations", (it) => {
+  it.effect("shell and detail expose continuedFromThreadId", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      const at = "2026-09-01T00:00:00.000Z";
+      yield* sql`INSERT INTO projection_projects (project_id, title, workspace_root, scripts_json, created_at, updated_at)
+        VALUES ('project-continued', 'Continued', '/continued', '[]', ${at}, ${at})`;
+      yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, created_at, updated_at, continued_from_thread_id, archived_at, deleted_at)
+        VALUES
+          ('t-source', 'project-continued', 'Source', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, NULL, NULL, NULL),
+          ('t-next', 'project-continued', 'Next', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, 't-source', NULL, NULL),
+          ('t-shelved', 'project-continued', 'Shelved', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, 't-source', ${at}, NULL)`;
+
+      const source = ThreadId.make("t-source");
+      const next = ThreadId.make("t-next");
+      const continuedFromOf = (
+        threads: ReadonlyArray<{
+          readonly id: ThreadId;
+          readonly continuedFromThreadId?: ThreadId | null | undefined;
+        }>,
+        threadId: ThreadId,
+      ) => threads.find((thread) => thread.id === threadId)?.continuedFromThreadId;
+
+      for (const threads of [
+        (yield* query.getShellSnapshot()).threads,
+        (yield* query.getSnapshot()).threads,
+        (yield* query.getCommandReadModel()).threads,
+      ]) {
+        assert.strictEqual(continuedFromOf(threads, next), source);
+        assert.strictEqual(continuedFromOf(threads, source), null);
+      }
+      assert.strictEqual(
+        continuedFromOf(
+          (yield* query.getArchivedShellSnapshot()).threads,
+          ThreadId.make("t-shelved"),
+        ),
+        source,
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* query.getThreadShellById(next)).continuedFromThreadId,
+        source,
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* query.getThreadDetailById(next)).continuedFromThreadId,
+        source,
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* query.getThreadDetailById(source)).continuedFromThreadId,
+        null,
+      );
     }),
   );
 });

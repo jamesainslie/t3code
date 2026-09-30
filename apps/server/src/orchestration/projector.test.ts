@@ -101,6 +101,7 @@ describe("orchestration projector", () => {
         snoozedAt: null,
         snoozeReminder: null,
         dependencies: [],
+        continuedFromThreadId: null,
         deletedAt: null,
         messages: [],
         proposedPlans: [],
@@ -109,6 +110,42 @@ describe("orchestration projector", () => {
         session: null,
         documentComments: [],
       },
+    ]);
+  });
+
+  it("thread.created records continuedFromThreadId", async () => {
+    const now = "2026-01-01T00:00:00.000Z";
+    const created = (threadId: string, continuedFromThreadId?: string) =>
+      makeEvent({
+        sequence: threadId === "thread-source" ? 1 : 2,
+        type: "thread.created",
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: now,
+        commandId: `cmd-create-${threadId}`,
+        payload: {
+          threadId,
+          projectId: "project-1",
+          title: threadId,
+          modelSelection: { instanceId: "codex", model: "gpt-5-codex" },
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+          ...(continuedFromThreadId === undefined ? {} : { continuedFromThreadId }),
+        },
+      });
+
+    const next = await Effect.runPromise(
+      projectEvent(createEmptyReadModel(now), created("thread-source")).pipe(
+        Effect.flatMap((model) => projectEvent(model, created("thread-next", "thread-source"))),
+      ),
+    );
+
+    expect(next.threads.map((thread) => [thread.id, thread.continuedFromThreadId])).toEqual([
+      ["thread-source", null],
+      ["thread-next", "thread-source"],
     ]);
   });
 

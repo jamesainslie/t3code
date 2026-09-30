@@ -621,6 +621,19 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      if (command.continuedFromThreadId !== undefined) {
+        const source = yield* requireThread({
+          readModel,
+          command,
+          threadId: command.continuedFromThreadId,
+        });
+        if (source.deletedAt !== null) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} cannot continue deleted thread ${command.continuedFromThreadId}`,
+          });
+        }
+      }
       return {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -641,6 +654,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           worktreePath: command.worktreePath,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
+          ...(command.continuedFromThreadId !== undefined
+            ? { continuedFromThreadId: command.continuedFromThreadId }
+            : {}),
         },
       };
     }
