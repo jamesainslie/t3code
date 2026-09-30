@@ -31,6 +31,7 @@ export function WorkspaceFilePreviewError(props: {
     return (
       <View className="flex-1 bg-sheet">
         <EnvironmentConnectionNotice
+          environmentId={environmentId}
           environmentLabel={environment.presentation?.entry.target.label ?? "Environment"}
           connection={
             environment.presentation?.connection ?? {

@@ -1,8 +1,11 @@
+import { ConnectionAttemptLog } from "./ConnectionAttemptLog";
 import { ConnectionTraceId } from "./ConnectionTraceId";
 import {
   type EnvironmentConnectionPhase,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
+import type { EnvironmentId } from "@t3tools/contracts";
+import { useState } from "react";
 import { SymbolView } from "../../components/AppSymbol";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
@@ -53,11 +56,14 @@ function noticeDetail(
 }
 
 export function EnvironmentConnectionNotice(props: {
+  /** Enables the connection details; null while the environment is unknown. */
+  readonly environmentId: EnvironmentId | null;
   readonly environmentLabel: string;
   readonly connection: EnvironmentConnectionPresentation;
   readonly resourceName: string;
   readonly onRetry: () => void;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const isRetrying =
     props.connection.phase === "connecting" || props.connection.phase === "reconnecting";
 
@@ -93,6 +99,22 @@ export function EnvironmentConnectionNotice(props: {
           >
             <Text className="text-sm font-t3-bold text-foreground">Retry now</Text>
           </Pressable>
+        ) : null}
+
+        {props.environmentId !== null ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: detailsOpen }}
+              className="rounded-full px-3 py-1.5 active:opacity-70"
+              onPress={() => setDetailsOpen((open) => !open)}
+            >
+              <Text className="text-sm text-foreground-muted">
+                {detailsOpen ? "Hide details" : "Show details"}
+              </Text>
+            </Pressable>
+            {detailsOpen ? <ConnectionAttemptLog environmentId={props.environmentId} /> : null}
+          </>
         ) : null}
       </View>
     </View>
