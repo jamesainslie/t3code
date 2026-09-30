@@ -256,6 +256,18 @@ export function HomeRouteScreen() {
               },
             });
           }}
+          onContinueInNewThread={(thread) => {
+            navigation.navigate("NewTaskSheet", {
+              screen: "NewTaskDraft",
+              params: {
+                environmentId: String(thread.environmentId),
+                projectId: String(thread.projectId),
+                branch: thread.branch,
+                worktreePath: thread.worktreePath,
+                continuedFromThreadId: String(thread.id),
+              },
+            });
+          }}
           onNewThreadInProject={(project) => {
             navigation.navigate("NewTaskSheet", {
               screen: "NewTaskDraft",

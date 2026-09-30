@@ -98,6 +98,7 @@ import {
   getComposerDraftSnapshot,
   mergeComposerDraftContent,
   restoreComposerDraftSnapshot,
+  seedContinuationDraft,
   updateComposerDraftSettings,
   scheduleUnusedComposerAttachmentCleanup,
   type ComposerDraft,
@@ -128,6 +129,7 @@ import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { selectIncomingShareAttachmentsForServer } from "../sharing/incoming-share-model";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { serverEnvironment } from "../../state/server";
+import { environmentThreadShells } from "../../state/threads";
 import { fileRoutePathSegments } from "../files/filePath";
 
 function NewTaskWorkspaceIcon(props: {
@@ -183,6 +185,8 @@ export function NewTaskDraftScreen(props: {
     readonly worktreePath?: string | null;
     /** Thread that waits on the thread this draft becomes. */
     readonly unblocksThreadId?: string;
+    /** Thread whose work this draft continues. */
+    readonly continuedFromThreadId?: string;
     /** The project was just added by a clone that is still running. */
     readonly cloning?: boolean;
   };
@@ -641,6 +645,37 @@ export function NewTaskDraftScreen(props: {
     if (props.pendingTaskId || props.draftId) return;
     setUnblocksThreadId(routeUnblocksThreadId ? ThreadId.make(routeUnblocksThreadId) : null);
   }, [props.draftId, props.pendingTaskId, routeUnblocksThreadId, setUnblocksThreadId]);
+
+  // A continuation names its source thread the same way, and opens prefilled
+  // once per request, after the draft lands in the source thread's project.
+  const setContinuedFromThreadId = flow.setContinuedFromThreadId;
+  const routeContinuedFromThreadId = props.initialProjectRef?.continuedFromThreadId;
+  useEffect(() => {
+    if (props.pendingTaskId || props.draftId) return;
+    setContinuedFromThreadId(
+      routeContinuedFromThreadId ? ThreadId.make(routeContinuedFromThreadId) : null,
+    );
+  }, [props.draftId, props.pendingTaskId, routeContinuedFromThreadId, setContinuedFromThreadId]);
+  const seededContinuationRequestRef = useRef<typeof props.initialProjectRef>(undefined);
+  useEffect(() => {
+    const request = props.initialProjectRef;
+    const draftKey = flow.draftKey;
+    if (props.pendingTaskId || props.draftId || !draftKey || !selectedProject) return;
+    if (!request?.continuedFromThreadId || seededContinuationRequestRef.current === request) {
+      return;
+    }
+    // Read once rather than subscribed: the source thread may still be
+    // streaming, and only its title and model matter here.
+    const source = appAtomRegistry.get(
+      environmentThreadShells.threadShellAtom({
+        environmentId: selectedProject.environmentId,
+        threadId: ThreadId.make(request.continuedFromThreadId),
+      }),
+    );
+    if (source?.projectId !== selectedProject.id) return;
+    seededContinuationRequestRef.current = request;
+    seedContinuationDraft(draftKey, source);
+  }, [flow.draftKey, props.draftId, props.initialProjectRef, props.pendingTaskId, selectedProject]);
 
   useEffect(() => {
     // Pending-task editing and draft resumption own project selection (and

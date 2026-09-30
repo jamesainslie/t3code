@@ -16,6 +16,7 @@ import {
   resolveEnvironmentMachineKind,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { useAtomValue } from "@effect/atom-react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -128,6 +129,7 @@ interface HomeScreenProps {
   readonly onSelectPendingTask: (pendingTask: PendingNewTask) => void;
   readonly onDeletePendingTask: (pendingTask: PendingNewTask) => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
+  readonly onContinueInNewThread: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
 }
 
@@ -827,9 +829,15 @@ export function HomeScreen(props: HomeScreenProps) {
         );
       }
       const thread = item.item.thread;
+      const environmentSettings = serverConfigs.get(thread.environmentId)?.settings;
       return (
         <ThreadListV2Row
           onNewThreadOnBranch={props.onNewThreadOnBranch}
+          onContinueInNewThread={props.onContinueInNewThread}
+          continueSupported={
+            environmentSettings !== undefined &&
+            canContinueThread(environmentSettings, thread.projectId)
+          }
           thread={thread}
           variant={item.item.variant}
           hasQueuedMessages={item.hasQueuedMessages}
@@ -927,10 +935,12 @@ export function HomeScreen(props: HomeScreenProps) {
       props.onSelectPendingTask,
       props.onSelectThread,
       props.onNewThreadOnBranch,
+      props.onContinueInNewThread,
       props.onAddThreadDependency,
       props.onNewThreadToUnblock,
       props.savedConnectionsById,
       resolveProviderInstance,
+      serverConfigs,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
       snoozeReminderEnvironmentIds,

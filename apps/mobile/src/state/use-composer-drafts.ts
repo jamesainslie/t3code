@@ -16,7 +16,12 @@ import {
   type ProjectId,
   type ProviderInteractionMode,
   type RuntimeMode,
+  type ThreadId,
 } from "@t3tools/contracts";
+import {
+  buildContinuePrompt,
+  buildThreadContextRecord,
+} from "@t3tools/shared/threadContextReference";
 import * as Schema from "effect/Schema";
 import { useEffect } from "react";
 import { Atom } from "effect/unstable/reactivity";
@@ -1257,6 +1262,35 @@ export function setComposerDraftText(draftKey: string, value: string): void {
     const existing = normalizeDraft(current[draftKey]);
     const context = referencedComposerContext(value, existing.context);
     const draft = withReferencedContextFiles(existing, value, context);
+    removed = existing.attachments.filter((attachment) => !draft.attachments.includes(attachment));
+    return withComposerDraft(current, draftKey, draft);
+  });
+  scheduleUnusedComposerAttachmentCleanup(removed);
+}
+
+/**
+ * Prefills a "Continue in new thread" draft. The prompt, the chip record it
+ * links to, and the source thread's model land in one write, so the link
+ * never points at a missing record.
+ */
+export function seedContinuationDraft(
+  draftKey: string,
+  thread: {
+    readonly id: ThreadId;
+    readonly projectId: ProjectId;
+    readonly title: string;
+    readonly modelSelection: ModelSelection;
+  },
+): void {
+  const record = buildThreadContextRecord(thread);
+  const text = buildContinuePrompt(record);
+  let removed: ReadonlyArray<DraftComposerAttachment> = [];
+  updateComposerDrafts((current) => {
+    const existing = normalizeDraft(current[draftKey]);
+    const draft = {
+      ...withReferencedContextFiles(existing, text, { version: 1, records: [record] }),
+      modelSelection: thread.modelSelection,
+    };
     removed = existing.attachments.filter((attachment) => !draft.attachments.includes(attachment));
     return withComposerDraft(current, draftKey, draft);
   });

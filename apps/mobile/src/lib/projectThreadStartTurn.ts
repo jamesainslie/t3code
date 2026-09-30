@@ -42,6 +42,8 @@ export interface ProjectThreadStartTurnSpec {
   readonly startFromOrigin: boolean;
   /** Generated temp branch for worktree mode; unused for local mode. */
   readonly worktreeBranchName: string;
+  /** The thread this one continues, recorded on the created thread. */
+  readonly continuedFromThreadId?: ThreadId | undefined;
 }
 
 /**
@@ -76,6 +78,9 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
         branch: spec.branch,
         worktreePath: isWorktree ? null : spec.worktreePath,
         createdAt: spec.createdAt,
+        ...(spec.continuedFromThreadId
+          ? { continuedFromThreadId: spec.continuedFromThreadId }
+          : {}),
       },
       ...(isWorktree
         ? {

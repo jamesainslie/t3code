@@ -195,6 +195,8 @@ type NewTaskFlowContextValue = {
   readonly selectBranch: (branch: VcsRef) => void;
   readonly setStartFromOrigin: (value: boolean) => void;
   readonly setUnblocksThreadId: (value: ThreadId | null) => void;
+  /** Thread this draft continues, recorded once it becomes a real thread. */
+  readonly setContinuedFromThreadId: (value: ThreadId | null) => void;
   readonly beginEditingPendingTask: (messageId: string) => boolean;
   readonly finishEditingPendingTask: () => void;
   readonly cancelEditingPendingTask: () => void;
@@ -277,12 +279,14 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   // Not a draft field: the link belongs to this trip through the flow, and a
   // resumed draft in another project must not carry it along.
   const [unblocksThreadId, setUnblocksThreadId] = useState<ThreadId | null>(null);
+  const [continuedFromThreadId, setContinuedFromThreadId] = useState<ThreadId | null>(null);
 
   const reset = useCallback(() => {
     setSelectedEnvironmentId(null);
     setSelectedProjectKey(null);
     setActiveDraftKey(null);
     setUnblocksThreadId(null);
+    setContinuedFromThreadId(null);
     setSubmitting(false);
     setBranchQuery("");
     setExpandedProvider(null);
@@ -751,6 +755,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       // Threads in different environments cannot observe each other, so a
       // pending link cannot survive an environment change.
       setUnblocksThreadId(null);
+      setContinuedFromThreadId(null);
     },
     [projects, selectedProject, carryDraftContentTo],
   );
@@ -953,6 +958,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     }
     setSelectedEnvironmentId(message.environmentId);
     setSelectedProjectKey(scopedProjectKey(message.environmentId, message.creation.projectId));
+    // Saving the edit rebuilds the creation from flow state, so the link
+    // comes back with the task.
+    setContinuedFromThreadId(message.creation.continuedFromThreadId ?? null);
     activeEditingMessageId = message.messageId;
     editingPendingTaskRef.current = message;
     editingRevisionRef.current = capturePendingTaskEditorWriteBaseline(message.messageId);
@@ -1038,11 +1046,13 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
             ? { startFromOrigin: true }
             : {}),
           ...(unblocksThreadId !== null ? { unblocksThreadId } : {}),
+          ...(continuedFromThreadId !== null ? { continuedFromThreadId } : {}),
         },
         createdAt: metadata.createdAt,
       };
     },
     [
+      continuedFromThreadId,
       defaultRuntimeMode,
       editingPendingProject,
       editingPendingTask,
@@ -1204,6 +1214,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectBranch,
       setStartFromOrigin,
       setUnblocksThreadId,
+      setContinuedFromThreadId,
       beginEditingPendingTask,
       finishEditingPendingTask,
       cancelEditingPendingTask,

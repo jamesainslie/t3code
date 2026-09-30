@@ -476,6 +476,22 @@ function AdaptiveWorkspaceLayoutContent(
     [navigation],
   );
 
+  const handleContinueInNewThread = useCallback(
+    (thread: EnvironmentThreadShell) => {
+      navigation.navigate("NewTaskSheet", {
+        screen: "NewTaskDraft",
+        params: {
+          environmentId: String(thread.environmentId),
+          projectId: String(thread.projectId),
+          branch: thread.branch,
+          worktreePath: thread.worktreePath,
+          continuedFromThreadId: String(thread.id),
+        },
+      });
+    },
+    [navigation],
+  );
+
   const handleNewThreadInProject = useCallback(
     (project: EnvironmentProject) => {
       navigation.navigate("NewTaskSheet", {
@@ -626,6 +642,7 @@ function AdaptiveWorkspaceLayoutContent(
                       onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
                       onNewThreadInProject={handleNewThreadInProject}
                       onNewThreadOnBranch={handleNewThreadOnBranch}
+                      onContinueInNewThread={handleContinueInNewThread}
                       onAddThreadDependency={handleAddThreadDependency}
                       onNewThreadToUnblock={handleNewThreadToUnblock}
                       onSelectThread={handleSelectThread}

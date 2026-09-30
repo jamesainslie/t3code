@@ -1042,6 +1042,7 @@ export function useThreadOutboxDrain(): void {
           worktreePath: creation.worktreePath,
           startFromOrigin: creation.startFromOrigin ?? false,
           worktreeBranchName: buildTemporaryWorktreeBranchName(randomHex),
+          continuedFromThreadId: creation.continuedFromThreadId,
         }),
       });
       const { reportFailure } = makeDeliveryHelpers(queuedMessage);
