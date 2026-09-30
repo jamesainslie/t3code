@@ -10,7 +10,8 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { Atom } from "effect/unstable/reactivity";
 import { useMemo } from "react";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -226,6 +227,13 @@ export function readEnvironmentSupportsDependencies(environmentId: EnvironmentId
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadDependencies === true
   );
+}
+
+/** Whether "Continue in new thread" is offered for a project. False until the
+    environment's settings arrive, since off is a real answer they may give. */
+export function readCanContinueThread(environmentId: EnvironmentId, projectId: ProjectId): boolean {
+  const settings = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings;
+  return settings !== undefined && canContinueThread(settings, projectId);
 }
 
 /** Whether the environment's server understands thread.pin/unpin.

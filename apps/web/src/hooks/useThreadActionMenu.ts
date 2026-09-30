@@ -27,6 +27,7 @@ import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
+  readCanContinueThread,
   readEnvironmentSupportsDependencies,
   readEnvironmentSupportsHighlight,
   readEnvironmentSupportsAutoSettleOptOut,
@@ -49,7 +50,7 @@ import {
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { useUiStateStore } from "../uiStateStore";
 import { useCopyToClipboard } from "./useCopyToClipboard";
-import { useNewThreadHandler } from "./useHandleNewThread";
+import { continueInNewThreadOptions, useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
 
@@ -161,6 +162,7 @@ export function useThreadActionMenu(input: {
         const isSnoozed = supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() });
         const items = buildThreadActionMenuItems({
           branch: thread.branch ?? null,
+          canContinueInNewThread: readCanContinueThread(threadRef.environmentId, thread.projectId),
           // The chat header has no project-scoped thread list behind the
           // menu, so the "Filter by project" affordance is sidebar-only.
           projectFilter: null,
@@ -253,6 +255,18 @@ export function useThreadActionMenu(input: {
                 envMode: thread.worktreePath ? "worktree" : "local",
                 startFromOrigin: false,
               }),
+            );
+            if (result._tag === "Failure") {
+              failureToast("Could not create thread", squashAtomCommandFailure(result));
+            }
+            return;
+          }
+          case "continue-in-new-thread": {
+            const result = await settlePromise(() =>
+              handleNewThread(
+                scopeProjectRef(threadRef.environmentId, thread.projectId),
+                continueInNewThreadOptions(thread),
+              ),
             );
             if (result._tag === "Failure") {
               failureToast("Could not create thread", squashAtomCommandFailure(result));

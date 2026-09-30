@@ -1,10 +1,19 @@
-import { ComposerContextId, EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import {
+  ComposerContextId,
+  DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 import { collectComposerContextReferences } from "./composerContextReferences.ts";
+import { applyServerSettingsPatch } from "./serverSettings.ts";
 import {
+  buildContinuePrompt,
   buildThreadChipClipboard,
+  canContinueThread,
   buildThreadContextRecord,
   threadContextId,
   threadContextMarkdown,
@@ -81,5 +90,32 @@ describe("threadContextReference", () => {
     expect(first.length).toBeLessThanOrEqual(128);
     expect(isComposerContextId(first)).toBe(true);
     expect(first).not.toBe(second);
+  });
+
+  it("canContinueThread follows the resolved project level", () => {
+    const otherProjectId = ProjectId.make("project-2");
+    const offByDefault = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      agentThreadHistoryAccess: "off",
+      projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "project" } },
+    });
+    expect(canContinueThread(offByDefault, thread.projectId)).toBe(true);
+    expect(canContinueThread(offByDefault, otherProjectId)).toBe(false);
+
+    const onByDefault = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      agentThreadHistoryAccess: "referenced",
+      projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "off" } },
+    });
+    expect(canContinueThread(onByDefault, thread.projectId)).toBe(false);
+    expect(canContinueThread(onByDefault, otherProjectId)).toBe(true);
+  });
+
+  it("buildContinuePrompt references the source thread", () => {
+    const record = buildThreadContextRecord(thread);
+    const prompt = buildContinuePrompt(record);
+
+    expect(prompt).toBe(`Continue the work from ${threadContextMarkdown(record)}.`);
+    const occurrences = collectComposerContextReferences(prompt);
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0]).toMatchObject({ kind: "thread", contextId: record.contextId });
   });
 });

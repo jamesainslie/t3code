@@ -1217,6 +1217,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   onCompactContext?: (() => void) | undefined;
   compactDisabled: boolean;
   compactDisabledReason: string | null;
+  onContinueInNewThread?: (() => void) | undefined;
 }) {
   return (
     <>
@@ -1227,6 +1228,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           onCompact={props.onCompactContext}
           compactDisabled={props.compactDisabled}
           compactDisabledReason={props.compactDisabledReason}
+          onContinueInNewThread={props.onContinueInNewThread}
         />
       ) : props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
@@ -1450,6 +1452,8 @@ export interface ChatComposerProps {
 
   // Callbacks
   onCompactContext: () => void;
+  /** Offered beside Compact context; absent when the thread cannot be continued. */
+  onContinueInNewThread?: (() => void) | undefined;
   onSend: (e?: { preventDefault: () => void }, intent?: ComposerSubmissionIntent) => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
@@ -1566,6 +1570,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onPageScrollKeyUp,
     onPageScrollRelease,
     onCompactContext,
+    onContinueInNewThread,
     onSend,
     onInterrupt,
     onImplementPlanInNewThread,
@@ -7119,6 +7124,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     }
                     compactDisabledReason={resolvedCompactDisabledReason}
                     {...(compactCommandAvailable ? { onCompactContext: compactThreadContext } : {})}
+                    onContinueInNewThread={onContinueInNewThread}
                   />
                 </div>
               </div>

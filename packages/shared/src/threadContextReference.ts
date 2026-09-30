@@ -3,6 +3,7 @@ import {
   type ComposerContextId,
   type EnvironmentId,
   type ProjectId,
+  type ServerSettings,
   type ThreadContextRecord,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -12,6 +13,7 @@ import {
   sanitizeComposerContextLabel,
   toComposerContextId,
 } from "./composerContextReferences.ts";
+import { resolveProjectSettings } from "./projectSettings.ts";
 
 /** Matches the bound `ThreadContextRecord.title` enforces. */
 const THREAD_TITLE_MAX_CHARS = 2_048;
@@ -74,4 +76,17 @@ export function buildThreadChipClipboard(input: {
       records: [record],
     },
   };
+}
+
+/**
+ * Whether "Continue in new thread" is offered. The new agent can only read the source thread
+ * when the project's thread history access resolves to anything but off.
+ */
+export function canContinueThread(settings: ServerSettings, projectId: ProjectId): boolean {
+  return resolveProjectSettings(settings, projectId).settings.agentThreadHistoryAccess !== "off";
+}
+
+/** The prompt a continuation draft starts with, pointing the new agent at the source thread. */
+export function buildContinuePrompt(record: ThreadContextRecord): string {
+  return `Continue the work from ${threadContextMarkdown(record)}.`;
 }

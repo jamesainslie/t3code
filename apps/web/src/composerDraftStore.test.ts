@@ -1906,6 +1906,55 @@ describe("composerDraftStore project draft thread mapping", () => {
     ).toBeUndefined();
   });
 
+  it("a draft keeps continuedFromThreadId until cleared", () => {
+    const store = useComposerDraftStore.getState();
+    const sourceThreadId = ThreadId.make("thread-source");
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      continuedFromThreadId: sourceThreadId,
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.continuedFromThreadId).toBe(
+      sourceThreadId,
+    );
+
+    // Reopening the same draft or an unrelated context update keeps the link.
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setDraftThreadContext(draftId, { branch: "feature/continue" });
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.continuedFromThreadId).toBe(
+      sourceThreadId,
+    );
+
+    store.setDraftThreadContext(draftId, { continuedFromThreadId: null });
+    expect(
+      useComposerDraftStore.getState().getDraftThread(draftId)?.continuedFromThreadId,
+    ).toBeUndefined();
+  });
+
+  it("a draft drops continuedFromThreadId when its environment changes", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      continuedFromThreadId: ThreadId.make("thread-source"),
+    });
+
+    store.setLogicalProjectDraftThreadId(scopedProjectKey(projectRef), remoteProjectRef, draftId, {
+      threadId,
+    });
+    expect(
+      useComposerDraftStore.getState().getDraftThread(draftId)?.continuedFromThreadId,
+    ).toBeUndefined();
+
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      continuedFromThreadId: ThreadId.make("thread-source"),
+    });
+    store.setDraftThreadContext(draftId, { projectRef: remoteProjectRef });
+    expect(
+      useComposerDraftStore.getState().getDraftThread(draftId)?.continuedFromThreadId,
+    ).toBeUndefined();
+  });
+
   it("clears branch and worktree but keeps env mode when remapping a draft to another environment", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {

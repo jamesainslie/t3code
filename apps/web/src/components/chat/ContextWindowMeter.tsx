@@ -2,7 +2,7 @@ import { Button } from "../ui/button";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { formatContextWindowCompactionMessage } from "./ContextWindowMeter.logic";
-import { Minimize2Icon } from "lucide-react";
+import { MessageSquarePlusIcon, Minimize2Icon } from "lucide-react";
 import { composerFloatingLayerProps } from "./composerEventScope";
 
 function formatPercentage(value: number | null): string | null {
@@ -21,8 +21,18 @@ export function ContextWindowMeter(props: {
   onCompact?: (() => void) | undefined;
   compactDisabled?: boolean | undefined;
   compactDisabledReason?: string | null | undefined;
+  /** Shown when the thread can be picked up by a new thread that references it. */
+  onContinueInNewThread?: (() => void) | undefined;
 }) {
-  const { usage, modelDisplayName, onCompact, compactDisabled, compactDisabledReason } = props;
+  const {
+    usage,
+    modelDisplayName,
+    onCompact,
+    compactDisabled,
+    compactDisabledReason,
+    onContinueInNewThread,
+  } = props;
+  const hasActions = onCompact !== undefined || onContinueInNewThread !== undefined;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -40,7 +50,7 @@ export function ContextWindowMeter(props: {
       <PopoverTrigger
         openOnHover
         delay={150}
-        closeDelay={onCompact ? 150 : 0}
+        closeDelay={hasActions ? 150 : 0}
         render={
           <Button
             size="icon-sm"
@@ -138,24 +148,39 @@ export function ContextWindowMeter(props: {
               {formatContextWindowCompactionMessage(modelDisplayName, usage.autoCompactThreshold)}
             </div>
           ) : null}
-          {onCompact ? (
-            <>
-              <Button
-                size="xs"
-                variant="outline"
-                className="mt-1 w-full justify-center"
-                disabled={compactDisabled}
-                onClick={onCompact}
-              >
-                <Minimize2Icon aria-hidden="true" />
-                Compact context
-              </Button>
-              {compactDisabled && compactDisabledReason ? (
-                <div className="text-pretty text-secondary-label text-2xs">
-                  {compactDisabledReason}
-                </div>
+          {hasActions ? (
+            <div className="mt-1 flex flex-col gap-2">
+              {onCompact ? (
+                <>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    className="w-full justify-center"
+                    disabled={compactDisabled}
+                    onClick={onCompact}
+                  >
+                    <Minimize2Icon aria-hidden="true" />
+                    Compact context
+                  </Button>
+                  {compactDisabled && compactDisabledReason ? (
+                    <div className="text-pretty text-secondary-label text-2xs">
+                      {compactDisabledReason}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
-            </>
+              {onContinueInNewThread ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  className="w-full justify-center"
+                  onClick={onContinueInNewThread}
+                >
+                  <MessageSquarePlusIcon aria-hidden="true" />
+                  Continue in new thread
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </PopoverPopup>

@@ -4,6 +4,7 @@ import { buildThreadActionMenuItems, type ThreadActionMenuState } from "./thread
 
 const baseState: ThreadActionMenuState = {
   branch: null,
+  canContinueInNewThread: false,
   projectFilter: null,
   isPinned: false,
   highlightColor: null,
@@ -123,6 +124,23 @@ describe("buildThreadActionMenuItems", () => {
     expect(withBranch).toContain("copy-branch");
     expect(allIds(baseState)).not.toContain("new-thread-on-branch");
     expect(allIds(baseState)).not.toContain("copy-branch");
+  });
+
+  it("hides Continue in new thread when thread history is off", () => {
+    expect(allIds({ ...baseState, branch: "feat/menu" })).not.toContain("continue-in-new-thread");
+  });
+
+  it("offers it otherwise", () => {
+    const items = buildThreadActionMenuItems({
+      ...baseState,
+      branch: "feat/menu",
+      canContinueInNewThread: true,
+    });
+    const index = items.findIndex((item) => item.id === "continue-in-new-thread");
+    expect(items[index]?.label).toBe("Continue in new thread");
+    expect(items[index - 1]?.id).toBe("new-thread-on-branch");
+    // A thread with no branch can still be continued in the project checkout.
+    expect(ids({ ...baseState, canContinueInNewThread: true })[0]).toBe("continue-in-new-thread");
   });
 
   it("offers Copy as thread chip in the Copy submenu", () => {
