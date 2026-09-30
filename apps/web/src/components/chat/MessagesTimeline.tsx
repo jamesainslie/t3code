@@ -3744,7 +3744,7 @@ function UserMessageThreadContextChip(props: {
   return (
     <UserMessageContextChip
       icon={<MessageSquareIcon />}
-      label={props.record.title}
+      label={shell?.title ?? props.record.title}
       kindLabel="Thread"
       copyMarkdown={props.copyMarkdown}
       kind="neutral"

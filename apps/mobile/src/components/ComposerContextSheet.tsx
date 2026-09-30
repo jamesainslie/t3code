@@ -356,7 +356,7 @@ export function ComposerContextSheet(props: {
                 ) : null}
                 {record.kind === "thread" && "title" in record ? (
                   <>
-                    <ContextField label="Thread" value={record.title} />
+                    <ContextField label="Thread" value={referencedThread?.title ?? record.title} />
                     {referencedThread === null ? (
                       <Text className="text-foreground">
                         This thread is not available on this server.

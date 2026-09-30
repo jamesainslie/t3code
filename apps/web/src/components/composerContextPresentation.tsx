@@ -1,6 +1,7 @@
 import ChatMarkdown from "./ChatMarkdown";
 import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
 import type { PreviewAnnotationPayload, ThreadContextRecord } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { videoMimeType } from "@t3tools/shared/video";
 import { MessageCircleIcon, MessageSquareIcon, MousePointerClickIcon } from "lucide-react";
@@ -10,6 +11,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
 import { useTheme } from "~/hooks/useTheme";
+import { useThreadShell } from "~/state/entities";
 import {
   formatAttachmentUploadProgress,
   type AttachmentUploadState,
@@ -314,6 +316,40 @@ function ComposerPreviewAnnotationDetails({
   );
 }
 
+/** Shows the thread's current title, or the unavailable state when this environment lacks it. */
+function ThreadContextChip(props: {
+  record: ThreadContextRecord;
+  detailsMode: ContextPresentationCapability["details"];
+}) {
+  const { environmentId } = use(ComposerContextActionsContext);
+  const shell = useThreadShell(
+    environmentId === null ? null : scopeThreadRef(environmentId, props.record.threadId),
+  );
+  const label = shell?.title ?? props.record.title;
+  if (environmentId !== null && shell === null) {
+    return (
+      <ContextChipShell
+        kind="neutral"
+        state="unresolved"
+        icon={<MessageSquareIcon />}
+        label={label}
+        aria-label={`Thread, ${label}`}
+        tooltip="Thread not available in this environment"
+      />
+    );
+  }
+  return (
+    <ContextChip
+      icon={<MessageSquareIcon />}
+      label={label}
+      kindLabel="Thread"
+      details={null}
+      detailsMode={props.detailsMode}
+      kind="neutral"
+    />
+  );
+}
+
 function UnresolvedContextChip(props: { label: string }) {
   return (
     <UnresolvedChip
@@ -418,14 +454,7 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
       canRender: (entry) => entry.kind === "thread",
       render: (entry, context, definition) =>
         entry.kind === "thread" ? (
-          <ContextChip
-            icon={<MessageSquareIcon />}
-            label={entry.record.title}
-            kindLabel="Thread"
-            details={null}
-            detailsMode={definition.capabilities.details}
-            kind="neutral"
-          />
+          <ThreadContextChip record={entry.record} detailsMode={definition.capabilities.details} />
         ) : (
           <UnresolvedContextChip label={context.label} />
         ),
