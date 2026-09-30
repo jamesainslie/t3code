@@ -1,3 +1,4 @@
+export * from "./attemptLog.ts";
 export * from "./catalog.ts";
 export * as Connectivity from "./connectivity.ts";
 export * as CredentialStore from "./credentialStore.ts";
@@ -19,7 +20,11 @@ export {
   EnvironmentRegistry,
   PlatformEnvironmentRemovalError,
 } from "./registry.ts";
-export { EnvironmentSupervisor, type EnvironmentSupervisorOptions } from "./supervisor.ts";
+export {
+  type ConnectionAttemptLogEntry,
+  EnvironmentSupervisor,
+  type EnvironmentSupervisorOptions,
+} from "./supervisor.ts";
 export * as Wakeups from "./wakeups.ts";
 
 export { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
