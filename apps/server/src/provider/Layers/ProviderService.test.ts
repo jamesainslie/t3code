@@ -26,6 +26,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionStartInput,
+  ServerSettingsError,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -5236,6 +5237,22 @@ const decodeBrowserAccessThreadShell = Schema.decodeUnknownEffect(OrchestrationT
 
 describe("agent browser access", () => {
   const projectId = ProjectId.make("project-browser-access");
+  const settingsReadError = new ServerSettingsError({
+    settingsPath: "/test/settings.json",
+    operation: "read-file",
+    cause: new Error("settings file unreadable"),
+  });
+  const unreadableSettingsLayer = Layer.succeed(
+    ServerSettings.ServerSettingsService,
+    ServerSettings.ServerSettingsService.of({
+      start: Effect.void,
+      ready: Effect.void,
+      getSettings: Effect.fail(settingsReadError),
+      updateSettings: () => Effect.fail(settingsReadError),
+      streamChanges: Stream.empty,
+      subscribeChanges: Effect.succeed(Stream.empty),
+    }),
+  );
 
   const startSessionWith = (
     access: boolean | { readonly browser: boolean; readonly device: boolean },
@@ -5250,6 +5267,7 @@ describe("agent browser access", () => {
     options?: {
       readonly withoutOrchestration?: boolean;
       readonly threadHistory?: AgentThreadHistoryAccess;
+      readonly unreadableSettings?: boolean;
     },
   ) =>
     Effect.gen(function* () {
@@ -5330,31 +5348,33 @@ describe("agent browser access", () => {
         Layer.provide(directoryLayer),
         Layer.provide(options?.withoutOrchestration ? Layer.empty : projectionLayer),
         Layer.provide(
-          ServerSettings.ServerSettingsService.layerTest({
-            enableAgentBrowserAccess,
-            enableAgentDeviceAccess,
-            ...(options?.threadHistory !== undefined
-              ? { agentThreadHistoryAccess: options.threadHistory }
-              : {}),
-            projectSettingsOverrides:
-              projectOverride === undefined
-                ? {}
-                : typeof projectOverride === "boolean"
-                  ? { [projectId]: { enableAgentBrowserAccess: projectOverride } }
-                  : {
-                      [projectId]: {
-                        ...(projectOverride.browser !== undefined
-                          ? { enableAgentBrowserAccess: projectOverride.browser }
-                          : {}),
-                        ...(projectOverride.device !== undefined
-                          ? { enableAgentDeviceAccess: projectOverride.device }
-                          : {}),
-                        ...(projectOverride.threadHistory !== undefined
-                          ? { agentThreadHistoryAccess: projectOverride.threadHistory }
-                          : {}),
-                      },
-                    },
-          }),
+          options?.unreadableSettings
+            ? unreadableSettingsLayer
+            : ServerSettings.ServerSettingsService.layerTest({
+                enableAgentBrowserAccess,
+                enableAgentDeviceAccess,
+                ...(options?.threadHistory !== undefined
+                  ? { agentThreadHistoryAccess: options.threadHistory }
+                  : {}),
+                projectSettingsOverrides:
+                  projectOverride === undefined
+                    ? {}
+                    : typeof projectOverride === "boolean"
+                      ? { [projectId]: { enableAgentBrowserAccess: projectOverride } }
+                      : {
+                          [projectId]: {
+                            ...(projectOverride.browser !== undefined
+                              ? { enableAgentBrowserAccess: projectOverride.browser }
+                              : {}),
+                            ...(projectOverride.device !== undefined
+                              ? { enableAgentDeviceAccess: projectOverride.device }
+                              : {}),
+                            ...(projectOverride.threadHistory !== undefined
+                              ? { agentThreadHistoryAccess: projectOverride.threadHistory }
+                              : {}),
+                          },
+                        },
+              }),
         ),
         Layer.provide(serverConfigTestLayer),
         Layer.provide(AnalyticsService.layerTest),
@@ -5535,6 +5555,38 @@ describe("agent browser access", () => {
         { threadHistory: "off" },
         { threadHistory: "referenced" },
       );
+      assert.deepEqual(issued, [
+        { threadId, capabilities: ["document-comments", "pull-requests"] },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // Only resolving the thread's project can raise the level above the
+  // environment's "off"; the unresolved-project path would withhold it.
+  it.effect("grants thread history when a project raises it above the environment", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-history-project-raises");
+      const issued = yield* startSessionWith(
+        false,
+        threadId,
+        { threadHistory: "project" },
+        { threadHistory: "off" },
+      );
+      assert.deepEqual(issued, [
+        {
+          threadId,
+          capabilities: ["document-comments", "pull-requests", "thread-history", "thread-search"],
+        },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("withholds every optional capability when settings cannot be read", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-settings-unreadable");
+      const issued = yield* startSessionWith(true, threadId, undefined, {
+        unreadableSettings: true,
+      });
       assert.deepEqual(issued, [
         { threadId, capabilities: ["document-comments", "pull-requests"] },
       ]);

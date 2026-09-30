@@ -871,7 +871,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
    * Deny on an unreadable settings file rather than letting the read failure
    * escape: adding `ServerSettingsError` to `ProviderServiceError` would widen
    * a union every caller handles, for a branch that only decides whether one
-   * optional toolset is attached. Denying is the safe direction — an explicit
+   * optional toolset is attached. Denying is the safe direction. An explicit
    * "off" silently becoming "on" would violate the user's stated choice,
    * whereas the reverse costs an agent one toolset and is visible immediately.
    */
