@@ -73,13 +73,6 @@ describe("reconstructTurns", () => {
       turnId: A,
       payload: { message: "provider crashed" },
     });
-    const erroredTool = activity({
-      id: "e-tool",
-      t: 4,
-      kind: "tool.failed",
-      tone: "error",
-      turnId: B,
-    });
     const turns = reconstructTurns(
       makeThread({
         messages: [
@@ -90,15 +83,27 @@ describe("reconstructTurns", () => {
         ],
         activities: [
           failure,
-          erroredTool,
-          activity({ id: "e-late", t: 6, kind: "runtime.error", tone: "error", turnId: C }),
+          activity({
+            id: "e-start",
+            t: 4,
+            kind: "provider.turn.start.failed",
+            tone: "error",
+            turnId: B,
+          }),
+          // Error-tone activities that are not turn failures leave the state alone.
+          activity({ id: "e-denied", t: 6, kind: "tool.denied", tone: "error", turnId: C }),
         ],
         checkpoints: [checkpoint(A, 1), checkpoint(C, 3)],
         latestTurn: latestTurn(turn("turn-d"), "interrupted"),
       }),
     );
 
-    expect(turns.map((entry) => entry.state)).toEqual(["error", "error", "error", "interrupted"]);
+    expect(turns.map((entry) => entry.state)).toEqual([
+      "error",
+      "error",
+      "completed",
+      "interrupted",
+    ]);
     expect(turns[0]!.activities).toEqual([failure]);
     expect(turns[0]!.checkpoint?.checkpointTurnCount).toBe(1);
     expect(turns[1]!.checkpoint).toBeNull();
@@ -112,6 +117,51 @@ describe("reconstructTurns", () => {
       }),
     );
     expect(recovered[0]!.state).toBe("completed");
+  });
+
+  it("appends an unseen errored or interrupted latest turn as its own turn", () => {
+    const D = turn("turn-d");
+    const failure = activity({
+      id: "e-d",
+      t: 3,
+      kind: "runtime.error",
+      tone: "error",
+      turnId: D,
+      payload: { message: "provider crashed before replying" },
+    });
+    const turns = reconstructTurns(
+      makeThread({
+        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
+        activities: [failure],
+        latestTurn: latestTurn(D, "error"),
+      }),
+    );
+
+    expect(turns).toHaveLength(2);
+    expect(turns[1]).toMatchObject({ n: 2, turnId: D, state: "error" });
+    expect(turns[1]!.userMessages).toEqual([]);
+    expect(turns[1]!.assistantMessages).toEqual([]);
+    expect(turns[1]!.activities).toEqual([failure]);
+
+    const interrupted = reconstructTurns(
+      makeThread({
+        messages: [assistantMessage("a1", 1, A)],
+        latestTurn: latestTurn(D, "interrupted"),
+      }),
+    );
+    expect(interrupted.map((entry) => [entry.turnId, entry.state])).toEqual([
+      [A, "completed"],
+      [D, "interrupted"],
+    ]);
+
+    // A running turn with no messages yet is left to the header status.
+    const running = reconstructTurns(
+      makeThread({
+        messages: [assistantMessage("a1", 1, A)],
+        latestTurn: latestTurn(D, "running"),
+      }),
+    );
+    expect(running).toHaveLength(1);
   });
 
   it("numbers turns from 1 in message order", () => {

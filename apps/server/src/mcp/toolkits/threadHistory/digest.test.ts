@@ -274,4 +274,270 @@ describe("buildThreadDigest", () => {
       digestOf(makeThread(), { callerWorktreePath: "/work/tree-a" }).header.worktreeRelation,
     ).toBe("none");
   });
+
+  it("reports an error when a send fails after the last user message", () => {
+    const A = turn("t1");
+    const startFailure = (id: string, t: number, payload: unknown, summary: string) =>
+      activity({
+        id,
+        t,
+        kind: "provider.turn.start.failed",
+        tone: "error",
+        turnId: null,
+        summary,
+        payload,
+      });
+    const messages = [
+      userMessage("u1", 1),
+      assistantMessage("a1", 2, A),
+      userMessage("u2", 5, "Please continue"),
+    ];
+
+    const failed = digestOf(
+      makeThread({
+        messages,
+        activities: [
+          startFailure("f-old", 3, { message: "stale failure" }, "Old failure"),
+          startFailure("f-new", 5, { message: "Provider session is not running" }, "Failed"),
+        ],
+        latestTurn: latestTurn(A, "completed"),
+      }),
+    );
+    expect(failed.header.status).toEqual({
+      kind: "error",
+      message: "Provider session is not running",
+    });
+    expect(failed.recentTurns.at(-1)).toMatchObject({ n: 2, state: "queued" });
+
+    // Without a payload message the summary is the message.
+    const summaryOnly = digestOf(
+      makeThread({
+        messages,
+        activities: [startFailure("f-new", 6, {}, "Queued message was not sent")],
+        latestTurn: latestTurn(A, "completed"),
+      }),
+    );
+    expect(summaryOnly.header.status).toEqual({
+      kind: "error",
+      message: "Queued message was not sent",
+    });
+
+    // A failure from before the last user message belongs to an earlier send.
+    const stale = digestOf(
+      makeThread({
+        messages,
+        activities: [startFailure("f-old", 3, { message: "stale failure" }, "Old failure")],
+        latestTurn: latestTurn(A, "completed"),
+      }),
+    );
+    expect(stale.header.status).toEqual({ kind: "completed" });
+  });
+
+  it("reports the latest turn's state, not running, for a queued message", () => {
+    const A = turn("t1");
+    const messages = [userMessage("u1", 1), assistantMessage("a1", 2, A), userMessage("u2", 3)];
+
+    const digest = digestOf(makeThread({ messages, latestTurn: latestTurn(A, "completed") }));
+    expect(digest.header.status).toEqual({ kind: "completed" });
+    expect(digest.recentTurns.map((entry) => entry.state)).toEqual(["completed", "queued"]);
+
+    // With no latest turn, the previous turn's state stands in for it.
+    const errored = digestOf(
+      makeThread({
+        messages,
+        activities: [
+          activity({
+            id: "e1",
+            t: 2,
+            kind: "runtime.error",
+            tone: "error",
+            turnId: A,
+            payload: { message: "boom" },
+          }),
+        ],
+      }),
+    );
+    expect(errored.header.status).toEqual({ kind: "error", message: "boom" });
+
+    const onlyQueued = digestOf(makeThread({ messages: [userMessage("u1", 1)] }));
+    expect(onlyQueued.header.status).toEqual({ kind: "completed" });
+  });
+
+  it("keeps an unseen errored latest turn with its errors", () => {
+    const A = turn("t1");
+    const B = turn("t2");
+    const digest = digestOf(
+      makeThread({
+        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
+        activities: [
+          activity({
+            id: "e1",
+            t: 3,
+            kind: "runtime.error",
+            tone: "error",
+            turnId: B,
+            payload: { message: "provider crashed before replying" },
+          }),
+        ],
+        latestTurn: latestTurn(B, "error"),
+      }),
+    );
+
+    expect(digest.recentTurns.map((entry) => [entry.n, entry.state])).toEqual([
+      [1, "completed"],
+      [2, "error"],
+    ]);
+    expect(digest.recentTurns[1]!.errors).toEqual(["provider crashed before replying"]);
+    expect(digest.header.status).toEqual({
+      kind: "error",
+      message: "provider crashed before replying",
+    });
+  });
+
+  it("does not mark a turn as error for a failed checkpoint capture", () => {
+    const A = turn("t1");
+    const B = turn("t2");
+    const digest = digestOf(
+      makeThread({
+        messages: [assistantMessage("a1", 1, A), assistantMessage("a2", 3, B)],
+        activities: [
+          activity({
+            id: "c1",
+            t: 2,
+            kind: "checkpoint.capture.failed",
+            tone: "error",
+            turnId: A,
+            payload: { detail: "git write-tree failed" },
+          }),
+          activity({
+            id: "d1",
+            t: 4,
+            kind: "tool.denied",
+            tone: "error",
+            turnId: B,
+            summary: "Tool call denied",
+          }),
+        ],
+      }),
+    );
+
+    expect(digest.recentTurns.map((entry) => entry.state)).toEqual(["completed", "completed"]);
+    expect(digest.recentTurns[0]!.errors).toEqual([]);
+    // Other error-tone activities are still reported, without failing the turn.
+    expect(digest.recentTurns[1]!.errors).toEqual(["Tool call denied"]);
+    expect(digest.header.status).toEqual({ kind: "completed" });
+  });
+
+  it("does not report context-full after a compaction", () => {
+    const A = turn("t1");
+    const digest = digestOf(
+      makeThread({
+        messages: [assistantMessage("a1", 1, A)],
+        activities: [
+          activity({
+            id: "c1",
+            t: 2,
+            kind: "context-window.updated",
+            turnId: A,
+            payload: { usedTokens: 990, maxTokens: 1000 },
+          }),
+          activity({ id: "c2", t: 3, kind: "context-compaction", turnId: A }),
+        ],
+        latestTurn: latestTurn(A, "completed"),
+      }),
+    );
+
+    expect(digest.header.status).toEqual({ kind: "completed" });
+  });
+
+  it("reports interrupted when the latest turn was interrupted", () => {
+    const A = turn("t1");
+    const digest = digestOf(
+      makeThread({
+        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
+        latestTurn: latestTurn(A, "interrupted"),
+      }),
+    );
+
+    expect(digest.header.status).toEqual({ kind: "interrupted" });
+  });
+
+  it("prefers the turn's error message, then the session error, then a generic one", () => {
+    const A = turn("t1");
+    const messages = [assistantMessage("a1", 1, A)];
+    const session = {
+      threadId: THREAD_ID,
+      status: "error" as const,
+      providerName: "codex",
+      runtimeMode: "full-access" as const,
+      activeTurnId: null,
+      lastError: "session went away",
+      updatedAt: at(3),
+    };
+
+    const fromActivity = digestOf(
+      makeThread({
+        messages,
+        session,
+        activities: [
+          activity({
+            id: "e1",
+            t: 2,
+            kind: "runtime.error",
+            tone: "error",
+            turnId: A,
+            payload: { message: "é".repeat(400) },
+          }),
+        ],
+        latestTurn: latestTurn(A, "error"),
+      }),
+    );
+    const status = fromActivity.header.status;
+    expect(status.kind).toBe("error");
+    const message = status.kind === "error" ? status.message : "";
+    expect(message.startsWith("éé")).toBe(true);
+    expect(message.endsWith("…")).toBe(true);
+    expect(byteLength(message)).toBeLessThanOrEqual(DIGEST_LIMITS.excerptBytes);
+
+    const fromSession = digestOf(
+      makeThread({ messages, session, latestTurn: latestTurn(A, "error") }),
+    );
+    expect(fromSession.header.status).toEqual({ kind: "error", message: "session went away" });
+    expect(fromSession.header.provider).toBe("codex");
+
+    const generic = digestOf(makeThread({ messages, latestTurn: latestTurn(A, "error") }));
+    expect(generic.header.status).toEqual({ kind: "error", message: "Turn failed" });
+  });
+
+  it("falls back to the item type and omits a missing tool status or detail", () => {
+    const A = turn("t1");
+    const tool = (id: string, t: number, payload: unknown) =>
+      activity({
+        id,
+        t,
+        kind: "tool.completed",
+        tone: "tool",
+        turnId: A,
+        summary: "Tool",
+        payload,
+      });
+    const digest = digestOf(
+      makeThread({
+        messages: [assistantMessage("a1", 1, A)],
+        activities: [
+          tool("t-no-status", 2, { itemType: "command_execution", detail: "ls -la" }),
+          tool("t-no-detail", 3, { itemType: "file_change", status: "failed" }),
+          tool("t-bare", 4, { itemType: "web_search" }),
+          tool("t-no-payload", 5, null),
+        ],
+      }),
+    );
+
+    expect(digest.recentTurns[0]!.tools).toEqual([
+      "command_execution: ls -la",
+      "file_change failed",
+      "web_search",
+      "Tool",
+    ]);
+  });
 });

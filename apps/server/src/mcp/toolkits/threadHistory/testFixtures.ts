@@ -22,6 +22,7 @@ export const PROJECT_ID = ProjectId.make("project-history-1");
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
+// Valid for whole seconds 0 <= t < 86_400 (one day); larger values produce an invalid hour.
 export const at = (t: number) =>
   `2026-09-01T${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}:${pad(t % 60)}.000Z`;
 

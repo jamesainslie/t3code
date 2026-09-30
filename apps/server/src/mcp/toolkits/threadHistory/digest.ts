@@ -136,9 +136,13 @@ export function toTurnSummary(turn: ReconstructedTurn): DigestTurnSummary {
   };
 }
 
-/** Skips unreadable rows, as the context meter does, so they never shadow a valid reading. */
+/**
+ * The last context reading, or nothing when a compaction came after it. Skips unreadable rows,
+ * as the context meter does, so they never shadow a valid reading.
+ */
 function lastContextWindow(activities: OrchestrationThread["activities"]) {
   for (const activity of activities.toReversed()) {
+    if (activity.kind === "context-compaction") return undefined;
     if (activity.kind !== "context-window.updated") continue;
     const payload = payloadOf(activity);
     const usedTokens = payload?.usedTokens;
@@ -154,27 +158,45 @@ function deriveStatus(
   thread: OrchestrationThread,
   turns: ReadonlyArray<ReconstructedTurn>,
 ): ThreadDigestStatus {
-  const last = turns.at(-1);
-  // A queued message is work the thread is about to do, so it reads as running.
-  if (
-    thread.latestTurn?.state === "running" ||
-    last?.state === "running" ||
-    last?.state === "queued"
-  ) {
-    return { kind: "running" };
+  const latest = thread.latestTurn;
+  if (latest?.state === "running") return { kind: "running" };
+  if (turns.length === 0) return { kind: "empty" };
+
+  // A queued message whose send failed never gets a turn, only a turn-less failure activity.
+  const queued = turns.at(-1)?.state === "queued" ? turns.at(-1) : undefined;
+  const queuedAt = queued?.userMessages.at(-1)?.createdAt;
+  const sendFailure =
+    queuedAt === undefined
+      ? undefined
+      : thread.activities.findLast(
+          (activity) =>
+            activity.kind === "provider.turn.start.failed" &&
+            activity.turnId === null &&
+            activity.createdAt >= queuedAt,
+        );
+  if (sendFailure) {
+    const message = stringOrUndefined(payloadOf(sendFailure)?.message) ?? sendFailure.summary;
+    return { kind: "error", message: cutToBytes(message, DIGEST_LIMITS.excerptBytes) };
   }
-  if (last === undefined) return { kind: "empty" };
+
+  // The latest turn's recorded state wins; without one, the last turn that ran stands in.
+  const current = latest
+    ? turns.find((entry) => entry.turnId === latest.turnId)
+    : turns.findLast((entry) => entry.state !== "queued");
+  const state = latest?.state ?? current?.state ?? "completed";
+
   const usage = lastContextWindow(thread.activities);
   if (usage && usage.usedTokens / usage.maxTokens >= DIGEST_LIMITS.contextFullRatio) {
     return { kind: "context-full", ...usage };
   }
-  if (last.state === "error") {
-    const lastError = last.activities.findLast(isErrorActivity);
+  if (state === "error") {
+    const lastError = current?.activities.findLast(isErrorActivity);
     const message =
       (lastError ? errorText(lastError) : undefined) ?? thread.session?.lastError ?? "Turn failed";
     return { kind: "error", message: cutToBytes(message, DIGEST_LIMITS.excerptBytes) };
   }
-  return { kind: last.state };
+  // Running returned above, and only the unrecorded trailing turn is ever queued.
+  return { kind: state === "interrupted" ? "interrupted" : "completed" };
 }
 
 /** Open steps of the most recent plan update, as `step (status)`. */

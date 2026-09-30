@@ -25,8 +25,17 @@ interface TurnDraft {
   readonly assistantMessages: OrchestrationMessage[];
 }
 
+/** Activities that fail the turn they belong to. */
+const isTurnFailure = (activity: OrchestrationThreadActivity) =>
+  activity.kind === "runtime.error" || activity.kind === "provider.turn.start.failed";
+
+/**
+ * Activities a digest lists as a turn's errors. Tool denials and task failures are reported
+ * without failing the turn; checkpoint bookkeeping failures are not the agent's work at all.
+ */
 export const isErrorActivity = (activity: OrchestrationThreadActivity) =>
-  activity.kind === "runtime.error" || activity.tone === "error";
+  !activity.kind.startsWith("checkpoint.") &&
+  (isTurnFailure(activity) || activity.tone === "error");
 
 /**
  * Rebuilds turns from message order. User messages carry no turn id, so each one joins the
@@ -66,6 +75,14 @@ export function reconstructTurns(thread: OrchestrationThread): ReadonlyArray<Rec
     const trailing = openTurn(startedUnseen ? latest.turnId : null);
     if (!startedUnseen) queuedTurn = trailing;
   }
+  // A turn that failed or was stopped before replying has no messages; keep it for its errors.
+  if (
+    latest !== null &&
+    !draftsByTurnId.has(latest.turnId) &&
+    (latest.state === "error" || latest.state === "interrupted")
+  ) {
+    openTurn(latest.turnId);
+  }
 
   const activitiesByTurnId = new Map<TurnId, OrchestrationThreadActivity[]>();
   for (const activity of thread.activities) {
@@ -85,7 +102,7 @@ export function reconstructTurns(thread: OrchestrationThread): ReadonlyArray<Rec
         ? "queued"
         : latest !== null && draft.turnId === latest.turnId
           ? latest.state
-          : activities.some(isErrorActivity)
+          : activities.some(isTurnFailure)
             ? "error"
             : "completed";
     return {
