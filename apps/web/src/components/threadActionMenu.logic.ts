@@ -4,7 +4,8 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 /**
  * Ids for the per-thread action menu. Snooze presets are dispatched as
  * `snooze:<presetId>` so the union stays closed while the preset list
- * remains data-driven.
+ * remains data-driven. `snooze:custom` and `snooze:reminder` both open the
+ * custom snooze dialog, the latter with its reminder field focused.
  */
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
@@ -56,6 +57,8 @@ export interface ThreadActionMenuState {
   /** False while the user has turned automatic settlement off for this thread. */
   readonly autoSettleEnabled: boolean;
   readonly isSnoozed: boolean;
+  /** Pending snooze reminder; labels the reminder entry on a snoozed thread. */
+  readonly snoozeReminder: string | null;
   readonly canSnoozeNow: boolean;
   /** Waiting on another thread, so the only parking action left is the way out. */
   readonly isBlocked: boolean;
@@ -68,6 +71,8 @@ export interface ThreadActionMenuState {
     /** Server understands thread.auto-settle.set. */
     readonly autoSettleOptOut: boolean;
     readonly snooze: boolean;
+    /** Server accepts a reminder on thread.snooze. */
+    readonly snoozeReminder: boolean;
     readonly pinning: boolean;
     readonly highlight: boolean;
     readonly titleRegeneration: boolean;
@@ -144,23 +149,39 @@ export function buildThreadActionMenuItems(
       ? [{ id: "release" as const, label: "Wake thread", icon: "clock" }]
       : [
           ...(state.supports.snooze
-            ? [
-                state.isSnoozed
-                  ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
-                  : {
-                      id: "snooze" as const,
-                      label: "Snooze",
-                      icon: "clock",
-                      disabled: !state.canSnoozeNow,
-                      children: [
-                        ...state.snoozePresets.map((preset) => ({
-                          id: `snooze:${preset.id}` as const,
-                          label: `${preset.label} (${preset.whenLabel})`,
-                        })),
-                        { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
-                      ],
-                    },
-              ]
+            ? state.isSnoozed
+              ? [
+                  { id: "unsnooze" as const, label: "Wake thread", icon: "clock" },
+                  // The snooze submenu is gone while snoozed, so the note
+                  // stays editable and removable from here.
+                  ...(state.supports.snoozeReminder
+                    ? [
+                        {
+                          id: "snooze:reminder" as const,
+                          label: state.snoozeReminder ? "Edit reminder…" : "Add reminder…",
+                          icon: "pencil",
+                        },
+                      ]
+                    : []),
+                ]
+              : [
+                  {
+                    id: "snooze" as const,
+                    label: "Snooze",
+                    icon: "clock",
+                    disabled: !state.canSnoozeNow,
+                    children: [
+                      ...state.snoozePresets.map((preset) => ({
+                        id: `snooze:${preset.id}` as const,
+                        label: `${preset.label} (${preset.whenLabel})`,
+                      })),
+                      { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
+                      ...(state.supports.snoozeReminder
+                        ? [{ id: "snooze:reminder" as const, label: "Snooze with reminder…" }]
+                        : []),
+                    ],
+                  },
+                ]
             : []),
           // Disabled rather than hidden for the same reason as snooze: the
           // thread is asking the user something, and hiding the item would

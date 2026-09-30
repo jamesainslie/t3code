@@ -42,12 +42,14 @@ const threadShell = vi.hoisted(() => ({
   environmentId: "undo-env",
   session: null,
 }));
+const capabilities = vi.hoisted(() => ({ snoozeReminder: true }));
 vi.mock("../state/entities", async (original) => ({
   ...(await original<typeof import("../state/entities")>()),
   readEnvironmentSupportsPinning: () => true,
   readEnvironmentSupportsPinReorder: () => true,
   readEnvironmentSupportsSettlement: () => true,
   readEnvironmentSupportsSnooze: () => true,
+  readEnvironmentSupportsSnoozeReminder: () => capabilities.snoozeReminder,
   readThreadShell: () => threadShell,
 }));
 vi.mock("../state/use-atom-command", () => ({
@@ -94,6 +96,7 @@ beforeEach(() => {
   router.state.matches[0]!.params = {};
   threadShell.pinnedAt = null;
   threadShell.snoozedUntil = null;
+  capabilities.snoozeReminder = true;
 });
 afterEach(() => {
   vi.runAllTimers();
@@ -214,5 +217,52 @@ describe("settle and snooze Undo", () => {
       environmentId: target.environmentId,
       input: { threadId: target.threadId, reason: "user" },
     });
+  });
+});
+
+describe("snooze reminders", () => {
+  it("sends the reminder with the snooze", async () => {
+    const snoozedUntil = new Date(Date.now() + 60_000).toISOString();
+    await useThreadActions().snoozeThread(target, snoozedUntil, "Check the deploy");
+    expect(commands.snooze).toHaveBeenCalledExactlyOnceWith({
+      environmentId: target.environmentId,
+      input: { threadId: target.threadId, snoozedUntil, reminder: "Check the deploy" },
+    });
+  });
+
+  it("never sends a reminder to a server that predates it", async () => {
+    capabilities.snoozeReminder = false;
+    const snoozedUntil = new Date(Date.now() + 60_000).toISOString();
+    await useThreadActions().snoozeThread(target, snoozedUntil, "Check the deploy");
+    expect(commands.snooze).toHaveBeenCalledExactlyOnceWith({
+      environmentId: target.environmentId,
+      input: { threadId: target.threadId, snoozedUntil },
+    });
+  });
+
+  it("drops the note before Undo wakes the thread, so the reminder never lands", async () => {
+    const snoozedUntil = new Date(Date.now() + 60_000).toISOString();
+    const actions = useThreadActions();
+    await actions.snoozeThread(target, snoozedUntil, "Check the deploy");
+    await currentUndo()();
+    expect(commands.snooze).toHaveBeenLastCalledWith({
+      environmentId: target.environmentId,
+      input: { threadId: target.threadId, snoozedUntil, reminder: "" },
+    });
+    expect(commands.unsnooze).toHaveBeenCalledOnce();
+    expect(commands.snooze.mock.invocationCallOrder[1]).toBeLessThan(
+      commands.unsnooze.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("offers no wake Undo when editing an already snoozed thread", async () => {
+    threadShell.snoozedUntil = new Date(Date.now() + 60_000).toISOString();
+    useThreadUndoNotice.setState({ notice: null });
+    const add = vi.spyOn(toastManager, "add").mockReturnValue("toast");
+    const actions = useThreadActions();
+    await actions.snoozeThread(target, threadShell.snoozedUntil, "");
+    expect(commands.snooze).toHaveBeenCalledOnce();
+    expect(useThreadUndoNotice.getState().notice).toBeNull();
+    expect(add).not.toHaveBeenCalled();
   });
 });

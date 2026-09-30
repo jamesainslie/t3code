@@ -1,12 +1,19 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  resolveDialogReminder,
+  resolveDialogSnoozedUntil,
+  type CustomSnoozeOptions,
+  type SnoozeChoice,
+} from "./CustomSnoozeDialog.logic";
 import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
 import { CalendarIcon } from "lucide-react";
 import { Calendar } from "./ui/calendar";
 import { weekStartsOn } from "../timestampFormat";
@@ -32,13 +39,21 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 
-type SnoozeChoice = { readonly snoozedUntil: string };
-type Request = { readonly resolve: (choice: SnoozeChoice | null) => void };
+type Request = {
+  readonly id: number;
+  readonly options: CustomSnoozeOptions;
+  readonly resolve: (choice: SnoozeChoice | null) => void;
+};
 const useRequest = create<{ request: Request | null }>(() => ({ request: null }));
+let nextRequestId = 0;
 
-export function requestCustomSnooze(): Promise<SnoozeChoice | null> {
+export function requestCustomSnooze(
+  options: CustomSnoozeOptions = {},
+): Promise<SnoozeChoice | null> {
   useRequest.getState().request?.resolve(null);
-  return new Promise((resolve) => useRequest.setState({ request: { resolve } }));
+  return new Promise((resolve) =>
+    useRequest.setState({ request: { id: nextRequestId++, options, resolve } }),
+  );
 }
 
 function finish(choice: SnoozeChoice | null) {
@@ -50,21 +65,34 @@ function finish(choice: SnoozeChoice | null) {
 export function CustomSnoozeDialogHost() {
   const request = useRequest((state) => state.request);
   useEffect(() => () => finish(null), []);
-  return request ? <CustomSnoozeDialog /> : null;
+  // Keyed per request so a replacing request starts from its own options.
+  return request ? <CustomSnoozeDialog key={request.id} options={request.options} /> : null;
 }
 
-function CustomSnoozeDialog() {
+function CustomSnoozeDialog({ options }: { options: CustomSnoozeOptions }) {
   const id = useId();
-  const [initial] = useState(() => new Date(Date.now() + 3_600_000));
+  const initialSnoozedUntil = options.snoozedUntil ?? null;
+  const initialReminder = options.reminder?.initial ?? null;
+  const [initial] = useState(() =>
+    initialSnoozedUntil ? new Date(initialSnoozedUntil) : new Date(Date.now() + 3_600_000),
+  );
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
   const [date, setDate] = useState(initial);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [time, setTime] = useState(localSnoozeTime(initial));
   const [amount, setAmount] = useState("2");
   const [unit, setUnit] = useState<"minutes" | "hours" | "days">("hours");
+  const [scheduleTouched, setScheduleTouched] = useState(false);
+  const [reminder, setReminder] = useState(initialReminder ?? "");
   const [error, setError] = useState<string | null>(null);
+  const reminderRef = useRef<HTMLTextAreaElement>(null);
   const input: CustomSnoozeInput =
     mode === "date" ? { mode, date: localSnoozeDate(date), time } : { mode, amount, unit };
+  const scheduleChanged = () => {
+    setScheduleTouched(true);
+    setError(null);
+  };
+  const editing = initialSnoozedUntil !== null;
   return (
     <Dialog
       open
@@ -72,12 +100,20 @@ function CustomSnoozeDialog() {
         if (!open) finish(null);
       }}
     >
-      <DialogPopup className="sm:max-w-sm">
+      <DialogPopup
+        className="sm:max-w-sm"
+        {...(options.reminder?.focus ? { initialFocus: reminderRef } : {})}
+      >
         <form
           className="flex min-h-0 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
-            const snoozedUntil = resolveCustomSnooze(input, new Date());
+            const snoozedUntil = resolveDialogSnoozedUntil({
+              schedule: input,
+              initialSnoozedUntil,
+              scheduleTouched,
+              now: new Date(),
+            });
             if (!snoozedUntil) {
               setError(
                 mode === "date"
@@ -86,12 +122,19 @@ function CustomSnoozeDialog() {
               );
               return;
             }
-            finish({ snoozedUntil });
+            const note = options.reminder
+              ? resolveDialogReminder(reminder, initialReminder)
+              : undefined;
+            finish(note === undefined ? { snoozedUntil } : { snoozedUntil, reminder: note });
           }}
         >
           <DialogHeader>
-            <DialogTitle>Custom snooze</DialogTitle>
-            <DialogDescription>Choose when snoozed threads return to your inbox.</DialogDescription>
+            <DialogTitle>{editing ? "Edit snooze" : "Custom snooze"}</DialogTitle>
+            <DialogDescription>
+              {options.reminder
+                ? "Choose when this thread returns. An optional reminder appears in the chat when it wakes."
+                : "Choose when snoozed threads return to your inbox."}
+            </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-4">
@@ -102,7 +145,7 @@ function CustomSnoozeDialog() {
                 onValueChange={(next) => {
                   const value = next[0];
                   if (value === "date" || value === "duration") setMode(value);
-                  setError(null);
+                  scheduleChanged();
                 }}
               >
                 <Toggle value="date">Date and time</Toggle>
@@ -141,7 +184,7 @@ function CustomSnoozeDialog() {
                             onSelect={(selected) => {
                               setDate(selected);
                               setCalendarOpen(false);
-                              setError(null);
+                              scheduleChanged();
                             }}
                           />
                         </PopoverPopup>
@@ -158,7 +201,7 @@ function CustomSnoozeDialog() {
                         value={time}
                         onChange={(event) => {
                           setTime(event.target.value);
-                          setError(null);
+                          scheduleChanged();
                         }}
                       />
                     </Label>
@@ -172,7 +215,7 @@ function CustomSnoozeDialog() {
                       value={amount === "" ? null : Number(amount)}
                       onValueChange={(value) => {
                         setAmount(value === null ? "" : String(value));
-                        setError(null);
+                        scheduleChanged();
                       }}
                     >
                       <Label htmlFor={`${id}-amount`}>Snooze for</Label>
@@ -190,7 +233,7 @@ function CustomSnoozeDialog() {
                         onValueChange={(value) => {
                           if (value === "minutes" || value === "hours" || value === "days")
                             setUnit(value);
-                          setError(null);
+                          scheduleChanged();
                         }}
                       >
                         <SelectTrigger id={`${id}-unit`} className="min-w-0">
@@ -206,6 +249,19 @@ function CustomSnoozeDialog() {
                   </div>
                 )}
               </div>
+              {options.reminder ? (
+                <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-reminder`}>
+                  Reminder
+                  <Textarea
+                    ref={reminderRef}
+                    id={`${id}-reminder`}
+                    value={reminder}
+                    maxLength={SNOOZE_REMINDER_MAX_CHARS}
+                    placeholder="Optional. Shown in the chat when the thread wakes."
+                    onChange={(event) => setReminder(event.target.value)}
+                  />
+                </Label>
+              ) : null}
             </div>
             {error && (
               <p role="alert" className="text-destructive">
@@ -217,7 +273,7 @@ function CustomSnoozeDialog() {
             <Button type="button" variant="outline" onClick={() => finish(null)}>
               Cancel
             </Button>
-            <Button type="submit">Snooze</Button>
+            <Button type="submit">{editing ? "Save" : "Snooze"}</Button>
           </DialogFooter>
         </form>
       </DialogPopup>

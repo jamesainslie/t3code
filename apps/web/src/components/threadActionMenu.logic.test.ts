@@ -14,6 +14,7 @@ const baseState: ThreadActionMenuState = {
   isSettled: false,
   autoSettleEnabled: true,
   isSnoozed: false,
+  snoozeReminder: null,
   canSnoozeNow: true,
   isBlocked: false,
   canAddDependencyNow: true,
@@ -23,6 +24,7 @@ const baseState: ThreadActionMenuState = {
     settlement: true,
     autoSettleOptOut: true,
     snooze: true,
+    snoozeReminder: false,
     pinning: true,
     highlight: true,
     titleRegeneration: true,
@@ -73,6 +75,7 @@ describe("buildThreadActionMenuItems", () => {
           settlement: false,
           autoSettleOptOut: false,
           snooze: false,
+          snoozeReminder: false,
           pinning: false,
           highlight: false,
           titleRegeneration: false,
@@ -156,6 +159,39 @@ describe("buildThreadActionMenuItems", () => {
     expect(snooze?.children?.map((child) => child.id)).toEqual(["snooze:hour", "snooze:custom"]);
   });
 
+  it("offers Snooze with reminder below Custom when the server supports reminders", () => {
+    const withReminders = { ...baseState.supports, snoozeReminder: true };
+    const snooze = buildThreadActionMenuItems({ ...baseState, supports: withReminders }).find(
+      (item) => item.id === "snooze",
+    );
+    expect(snooze?.children?.map((child) => [child.id, child.label])).toEqual([
+      ["snooze:hour", "In 1 hour (3:00 PM)"],
+      ["snooze:custom", "Custom…"],
+      ["snooze:reminder", "Snooze with reminder…"],
+    ]);
+    expect(allIds(baseState)).not.toContain("snooze:reminder");
+  });
+
+  it("offers the way to edit or add a reminder while the thread is snoozed", () => {
+    const withReminders = { ...baseState.supports, snoozeReminder: true };
+    const edit = (snoozeReminder: string | null) => {
+      const items = buildThreadActionMenuItems({
+        ...baseState,
+        isSnoozed: true,
+        snoozeReminder,
+        supports: withReminders,
+      });
+      const index = items.findIndex((item) => item.id === "snooze:reminder");
+      expect(items[index - 1]?.id).toBe("unsnooze");
+      return items[index]?.label;
+    };
+    expect(edit("Check the deploy")).toBe("Edit reminder…");
+    expect(edit(null)).toBe("Add reminder…");
+    expect(
+      allIds({ ...baseState, isSnoozed: true, snoozeReminder: "Check the deploy" }),
+    ).not.toContain("snooze:reminder");
+  });
+
   it("offers the dependency entries directly after snooze", () => {
     const items = buildThreadActionMenuItems(baseState);
     const snoozeIndex = items.findIndex((item) => item.id === "snooze");
@@ -226,6 +262,7 @@ describe("buildThreadActionMenuItems", () => {
           settlement: false,
           autoSettleOptOut: false,
           snooze: false,
+          snoozeReminder: false,
           pinning: false,
           highlight: false,
           titleRegeneration: false,

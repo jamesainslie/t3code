@@ -8,6 +8,7 @@ import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime
 import {
   canAddDependency,
   canSnooze,
+  effectiveSnoozed,
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
@@ -38,6 +39,7 @@ import {
   readEnvironmentSupportsDependencies,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
+  readEnvironmentSupportsSnoozeReminder,
   readEnvironmentThreadRefs,
   readProject,
   readThreadShell,
@@ -52,6 +54,13 @@ import { useClientSettings } from "./useSettings";
 import * as ThreadUndo from "./threadUndo";
 import { showThreadUndoNotice } from "./showThreadUndoNotice";
 import { useAtomCommand } from "../state/use-atom-command";
+
+function snoozeInput(target: ScopedThreadRef, snoozedUntil: string, reminder: string | undefined) {
+  // Version skew: an older server never sees the reminder field.
+  return reminder !== undefined && readEnvironmentSupportsSnoozeReminder(target.environmentId)
+    ? { threadId: target.threadId, snoozedUntil, reminder }
+    : { threadId: target.threadId, snoozedUntil };
+}
 
 export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveBlockedError>()(
   "ThreadArchiveBlockedError",
@@ -892,8 +901,13 @@ export function useThreadActions() {
     [unsnoozeThreadMutation],
   );
 
+  /**
+   * `reminder` follows thread.snooze: omitted keeps any pending note, "" clears
+   * it. Re-snoozing an already snoozed thread (editing its note or wake time)
+   * shows no Undo, since that notice's Undo would wake the thread instead.
+   */
   const snoozeThread = useCallback(
-    async (target: ScopedThreadRef, snoozedUntil: string) => {
+    async (target: ScopedThreadRef, snoozedUntil: string, reminder?: string) => {
       // Version skew: never send the command to a server that predates it.
       if (!readEnvironmentSupportsSnooze(target.environmentId)) {
         return AsyncResult.failure(
@@ -919,11 +933,12 @@ export function useThreadActions() {
           ),
         );
       }
+      const input = snoozeInput(target, snoozedUntil, reminder);
+      if (resolved && effectiveSnoozed(resolved.thread, { now: new Date().toISOString() })) {
+        return snoozeThreadMutation({ environmentId: target.environmentId, input });
+      }
       const action = ThreadUndo.begin("snooze", scopedThreadKey(target));
-      const result = await snoozeThreadMutation({
-        environmentId: target.environmentId,
-        input: { threadId: target.threadId, snoozedUntil },
-      });
+      const result = await snoozeThreadMutation({ environmentId: target.environmentId, input });
       if (result._tag !== "Success") {
         action.finish();
         return result;
@@ -932,7 +947,18 @@ export function useThreadActions() {
       showThreadUndoNotice({
         action: "Snoozed",
         claim: action,
-        undo: () => unsnoozeThread(target),
+        undo: async () => {
+          // Undo is not a wake the user asked for: drop the note first so
+          // the reminder does not land in the chat.
+          if ("reminder" in input && input.reminder) {
+            const cleared = await snoozeThreadMutation({
+              environmentId: target.environmentId,
+              input: { ...input, reminder: "" },
+            });
+            if (cleared._tag !== "Success") return cleared;
+          }
+          return unsnoozeThread(target);
+        },
         failureTitle: "Failed to wake thread",
       });
       return result;
