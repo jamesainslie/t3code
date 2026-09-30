@@ -12,7 +12,6 @@ import {
   TurnId,
   type WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { buildThreadContextRecord } from "@t3tools/shared/threadContextReference";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { Atom, AsyncResult } from "effect/unstable/reactivity";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -2290,19 +2289,12 @@ describe("restorePlanFollowUpComposer", () => {
         },
       ],
       previewAnnotations: [],
-      threadReferences: [
-        buildThreadContextRecord({
-          id: ThreadId.make("thread-referenced"),
-          projectId: ProjectId.make("project-1"),
-          title: "Earlier investigation",
-        }),
-      ],
+      threadReferences: [],
     };
     const writePrompt = vi.fn();
     const writeTerminalContexts = vi.fn();
     const writeReviewComments = vi.fn();
     const writePreviewAnnotations = vi.fn();
-    const writeThreadReferences = vi.fn();
     const resetCursor = vi.fn();
 
     restorePlanFollowUpComposer({
@@ -2311,7 +2303,7 @@ describe("restorePlanFollowUpComposer", () => {
       writeTerminalContexts,
       writeReviewComments,
       writePreviewAnnotations,
-      writeThreadReferences,
+      writeThreadReferences: () => {},
       resetCursor,
     });
 
@@ -2323,8 +2315,6 @@ describe("restorePlanFollowUpComposer", () => {
     expect(writeReviewComments).toHaveBeenCalledWith(snapshot.reviewComments);
     expect(writePreviewAnnotations).toHaveBeenCalledTimes(1);
     expect(writePreviewAnnotations).toHaveBeenCalledWith(snapshot.previewAnnotations);
-    expect(writeThreadReferences).toHaveBeenCalledTimes(1);
-    expect(writeThreadReferences).toHaveBeenCalledWith(snapshot.threadReferences);
     expect(resetCursor).toHaveBeenCalledTimes(1);
     expect(resetCursor).toHaveBeenCalledWith({
       cursor: expect.any(Number),

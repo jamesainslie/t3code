@@ -18,7 +18,7 @@ import {
   formatInlineContextReference,
   removeInlineContextReference,
 } from "./composerContextReferences";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 
 import {
   asKnownContextRecord,
@@ -733,16 +733,11 @@ describe("thread context records", () => {
   });
 
   it("requires the sent text alongside thread references", () => {
-    const input = {
-      terminalContexts: [],
-      reviewComments: [],
-      previewAnnotations: [],
-      threadReferences: [kept],
-    };
     // Checked by typecheck: without the text there is no way to tell which chips are linked.
-    // @ts-expect-error threadReferences without text
-    const build = () => buildMessageContext(input);
-    expect(build).toBeTypeOf("function");
+    type Input = Parameters<typeof buildMessageContext>[0];
+    const base = { terminalContexts: [], reviewComments: [], previewAnnotations: [] };
+    expectTypeOf({ ...base, threadReferences: [kept] }).not.toExtend<Input>();
+    expectTypeOf({ ...base, threadReferences: [kept], text: "" }).toExtend<Input>();
   });
 });
 
