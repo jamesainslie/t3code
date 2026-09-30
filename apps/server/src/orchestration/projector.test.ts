@@ -99,6 +99,7 @@ describe("orchestration projector", () => {
         unsettledAt: null,
         snoozedUntil: null,
         snoozedAt: null,
+        snoozeReminder: null,
         dependencies: [],
         deletedAt: null,
         messages: [],
@@ -301,6 +302,89 @@ describe("orchestration projector", () => {
     );
     expect(unarchived.threads[0]?.archivedAt).toBeNull();
   });
+
+  effectIt.effect("projects the pending snooze reminder through snooze and wake events", () =>
+    Effect.gen(function* () {
+      const now = "2026-01-01T00:00:00.000Z";
+      const wakeAt = "2026-01-01T01:00:00.000Z";
+      const deliveredAt = "2026-01-01T01:00:05.000Z";
+      const eventFields = {
+        aggregateKind: "thread" as const,
+        aggregateId: "thread-1",
+        occurredAt: now,
+        commandId: null,
+      };
+      const snoozed = (sequence: number, reminder?: string | null) =>
+        makeEvent({
+          ...eventFields,
+          sequence,
+          type: "thread.snoozed",
+          payload: {
+            threadId: "thread-1",
+            snoozedUntil: wakeAt,
+            snoozedAt: now,
+            updatedAt: now,
+            ...(reminder === undefined ? {} : { reminder }),
+          },
+        });
+      const created = yield* projectEvent(
+        createEmptyReadModel(now),
+        makeEvent({
+          ...eventFields,
+          sequence: 1,
+          type: "thread.created",
+          payload: {
+            threadId: "thread-1",
+            projectId: "project-1",
+            title: "demo",
+            modelSelection: { provider: "codex", model: "gpt-5-codex" },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+      );
+      expect(created.threads[0]?.snoozeReminder).toBeNull();
+
+      const withNote = yield* projectEvent(created, snoozed(2, "Check the deploy"));
+      expect(withNote.threads[0]?.snoozeReminder).toBe("Check the deploy");
+
+      // Events from before reminders carry no field and mean no note.
+      const legacy = yield* projectEvent(withNote, snoozed(3));
+      expect(legacy.threads[0]?.snoozeReminder).toBeNull();
+
+      const cleared = yield* projectEvent(withNote, snoozed(3, null));
+      expect(cleared.threads[0]?.snoozeReminder).toBeNull();
+
+      const unsnoozed = yield* projectEvent(
+        withNote,
+        makeEvent({
+          ...eventFields,
+          sequence: 3,
+          type: "thread.unsnoozed",
+          payload: { threadId: "thread-1", reason: "user", updatedAt: deliveredAt },
+        }),
+      );
+      expect(unsnoozed.threads[0]?.snoozeReminder).toBeNull();
+
+      const delivered = yield* projectEvent(
+        withNote,
+        makeEvent({
+          ...eventFields,
+          sequence: 3,
+          occurredAt: deliveredAt,
+          type: "thread.snooze-reminder-delivered",
+          payload: { threadId: "thread-1", updatedAt: deliveredAt },
+        }),
+      );
+      expect(delivered.threads[0]?.snoozeReminder).toBeNull();
+      expect(delivered.threads[0]?.updatedAt).toBe(deliveredAt);
+      // A timer wake emits no unsnoozed event, so the snooze fields stay.
+      expect(delivered.threads[0]?.snoozedUntil).toBe(wakeAt);
+    }),
+  );
 
   it("keeps projector forward-compatible for unhandled event types", async () => {
     const now = "2026-01-01T00:00:00.000Z";

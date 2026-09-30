@@ -140,6 +140,7 @@ export function applyThreadDetailEvent(
           autoSettleDisabledAt: null,
           snoozedUntil: null,
           snoozedAt: null,
+          snoozeReminder: null,
           dependencies: [],
           deletedAt: null,
           pullRequests: [],
@@ -217,6 +218,7 @@ export function applyThreadDetailEvent(
           ...thread,
           snoozedUntil: event.payload.snoozedUntil,
           snoozedAt: event.payload.snoozedAt,
+          snoozeReminder: event.payload.reminder ?? null,
           updatedAt: event.payload.updatedAt,
         },
       };
@@ -228,8 +230,17 @@ export function applyThreadDetailEvent(
           ...thread,
           snoozedUntil: null,
           snoozedAt: null,
+          snoozeReminder: null,
           updatedAt: event.payload.updatedAt,
         },
+      };
+
+    // A timer wake delivered the note. The snooze fields stay, since timer
+    // wakes are derived from snoozedUntil passing.
+    case "thread.snooze-reminder-delivered":
+      return {
+        kind: "updated",
+        thread: { ...thread, snoozeReminder: null, updatedAt: event.payload.updatedAt },
       };
 
     case "thread.dependency-added":
