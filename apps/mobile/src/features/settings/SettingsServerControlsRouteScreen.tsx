@@ -554,15 +554,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       Turning it on applies from a thread's next session.
                     </Text>
                   </SettingsSection>
-                  <SettingsSection
-                    title="Recent turns in full"
-                    trailing={
-                      pendingWrites === 0 && uniform("agentThreadHistoryRecentTurns") === null ? (
-                        <MixedValuesLabel projectSelected={projectSelected} />
-                      ) : null
-                    }
-                  >
+                  {/* The stepper shows mixed values itself, so the section has no Mixed label. */}
+                  <SettingsSection title="Recent turns in full">
                     <RecentTurnsStepperRow
+                      projectSelected={projectSelected}
                       value={uniform("agentThreadHistoryRecentTurns")}
                       disabled={disabledFor("agentThreadHistoryRecentTurns")}
                       onValueChange={(value) => write({ agentThreadHistoryRecentTurns: value })}
@@ -695,11 +690,12 @@ function MixedValuesLabel(props: { readonly projectSelected: boolean }) {
 }
 
 function RecentTurnsStepperRow(props: {
+  readonly projectSelected: boolean;
   readonly value: number | null;
   readonly disabled: boolean;
   readonly onValueChange: (value: number) => void;
 }) {
-  const label = "Turns in detail";
+  const label = "Recent turns in full";
   const subtitle = "Earlier turns are reduced to one-line outcomes.";
   // Mixed values resolve to the default in one tap, like a mixed switch resolves to on.
   if (props.value === null) {
@@ -712,7 +708,9 @@ function RecentTurnsStepperRow(props: {
         subtitle={subtitle}
       >
         <Pressable
-          accessibilityLabel={`Set recent turns in full to ${fallback} for selected environments`}
+          accessibilityLabel={`Set recent turns in full to ${fallback} for selected ${
+            props.projectSelected ? "project checkouts" : "environments"
+          }`}
           accessibilityRole="button"
           disabled={props.disabled}
           className="rounded-full bg-subtle px-3 py-2 active:opacity-70"
