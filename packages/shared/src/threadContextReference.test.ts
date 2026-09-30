@@ -49,6 +49,13 @@ describe("threadContextReference", () => {
     );
   });
 
+  it("caps a long title without splitting a surrogate pair", () => {
+    const title = `${"a".repeat(2_047)}\u{1F600}tail`;
+    const record = buildThreadContextRecord({ ...thread, title });
+    expect(record.title).toBe("a".repeat(2_047));
+    expect(record.title.isWellFormed()).toBe(true);
+  });
+
   it("threadContextId is stable for a thread", () => {
     expect(threadContextId(thread.id)).toBe("thread-0b7e6f7a-3c1d-4e5f-9a8b-1c2d3e4f5a6b");
     expect(threadContextId(thread.id)).toBe(threadContextId(ThreadId.make(thread.id)));

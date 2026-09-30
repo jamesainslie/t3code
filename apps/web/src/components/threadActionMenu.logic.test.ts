@@ -129,7 +129,7 @@ describe("buildThreadActionMenuItems", () => {
     expect(allIds(baseState)).toContain("copy-thread-chip");
     const copy = buildThreadActionMenuItems(baseState).find((item) => item.id === "copy");
     expect(copy?.children?.find((child) => child.id === "copy-thread-chip")?.label).toBe(
-      "Copy as thread chip",
+      "Thread chip",
     );
   });
 

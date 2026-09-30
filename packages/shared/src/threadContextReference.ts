@@ -26,8 +26,16 @@ export function threadContextId(threadId: ThreadId): ComposerContextId {
   return ComposerContextId.make(`thread-${threadId.toLowerCase()}`);
 }
 
+/** Cuts at the cap, backing off one unit rather than leaving a lone high surrogate. */
+function capTitle(title: string): string {
+  if (title.length <= THREAD_TITLE_MAX_CHARS) return title;
+  const lastKept = title.charCodeAt(THREAD_TITLE_MAX_CHARS - 1);
+  const isHighSurrogate = lastKept >= 0xd800 && lastKept <= 0xdbff;
+  return title.slice(0, isHighSurrogate ? THREAD_TITLE_MAX_CHARS - 1 : THREAD_TITLE_MAX_CHARS);
+}
+
 export function buildThreadContextRecord(thread: ThreadChipSource): ThreadContextRecord {
-  const title = thread.title.replace(/[\r\n]+/g, " ").slice(0, THREAD_TITLE_MAX_CHARS);
+  const title = capTitle(thread.title.replace(/[\r\n]+/g, " "));
   return {
     version: 1,
     contextId: threadContextId(thread.id),
