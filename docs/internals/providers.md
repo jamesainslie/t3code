@@ -22,8 +22,10 @@ OpenCode also stores persistent approval grants per directory. Automatic full-ac
 `once` so they cannot widen a supervised thread's permissions on a shared external server.
 See the [adapter](../../apps/server/src/provider/Layers/OpenCodeAdapter.ts).
 
-MCP credentials stay scoped to one thread, but the `thread-history` capability lets that thread
-read other threads under the project's `agentThreadHistoryAccess` level. The capability is granted
+For every provider, MCP credentials stay scoped to one thread, but the `thread-history` capability
+lets that thread read other threads under the project's `agentThreadHistoryAccess` level. The level
+governs these tools, not a sandbox: agents with shell access on the host can still read local state
+directly. The capability is granted
 when [ProviderService](../../apps/server/src/provider/Layers/ProviderService.ts) opens the session,
 while the [handlers](../../apps/server/src/mcp/toolkits/threadHistory/handlers.ts) re-resolve the
 level on every call, so lowering it applies to the next call and a running session never reads
