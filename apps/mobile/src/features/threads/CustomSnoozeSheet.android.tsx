@@ -24,7 +24,6 @@ import {
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
@@ -40,6 +39,7 @@ import {
   applySnoozePickerDate,
   applySnoozePickerTime,
   initialCustomSnoozeDate,
+  resolveSheetSnoozedUntil,
   snoozeDateToPickerDate,
 } from "./customSnoozeDate";
 
@@ -86,7 +86,7 @@ export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
       mode === "date"
         ? { mode, date: localSnoozeDate(date), time: localSnoozeTime(date) }
         : { mode, amount: String(amount), unit };
-    const snoozedUntil = resolveCustomSnooze(input, new Date());
+    const snoozedUntil = resolveSheetSnoozedUntil(input, props.initialSnoozedUntil, new Date());
     if (!snoozedUntil) {
       setError(
         mode === "date" ? "Choose a date and time in the future." : "Enter a positive duration.",

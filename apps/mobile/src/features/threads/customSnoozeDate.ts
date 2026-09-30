@@ -1,3 +1,29 @@
+import {
+  localSnoozeDate,
+  localSnoozeTime,
+  resolveCustomSnooze,
+  type CustomSnoozeInput,
+} from "@t3tools/client-runtime/state/thread-settled";
+
+/** The wake time a custom snooze sheet submits. The picker only holds whole
+    minutes, so while it still shows the thread's current wake minute the exact
+    original time is kept: editing only the note must not move the wake or
+    restamp when the thread was snoozed. */
+export function resolveSheetSnoozedUntil(
+  input: CustomSnoozeInput,
+  initialSnoozedUntil: string | null | undefined,
+  now: Date,
+): string | null {
+  const wakeAtMs = initialSnoozedUntil == null ? Number.NaN : Date.parse(initialSnoozedUntil);
+  if (input.mode === "date" && initialSnoozedUntil != null && Number.isFinite(wakeAtMs)) {
+    const wake = new Date(wakeAtMs);
+    if (input.date === localSnoozeDate(wake) && input.time === localSnoozeTime(wake)) {
+      return wakeAtMs > now.getTime() ? initialSnoozedUntil : null;
+    }
+  }
+  return resolveCustomSnooze(input, now);
+}
+
 /** Where the custom snooze picker starts: the current wake time when the
     thread is still snoozed, otherwise an hour from now. */
 export function initialCustomSnoozeDate(snoozedUntil: string | null | undefined, now: Date): Date {

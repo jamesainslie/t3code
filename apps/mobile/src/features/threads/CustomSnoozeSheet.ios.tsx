@@ -28,7 +28,6 @@ import {
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
@@ -41,7 +40,7 @@ import { NativeHeaderToolbar } from "../../native/StackHeader";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import type { CustomSnoozeSheetProps } from "./CustomSnoozeSheet.shared";
-import { initialCustomSnoozeDate } from "./customSnoozeDate";
+import { initialCustomSnoozeDate, resolveSheetSnoozedUntil } from "./customSnoozeDate";
 
 const durationAmounts = Array.from({ length: 99 }, (_, index) => index + 1);
 const SnoozeStack = createNativeStackNavigator<{ CustomSnooze: undefined }>();
@@ -78,7 +77,7 @@ export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
       mode === "date"
         ? { mode, date: localSnoozeDate(date), time: localSnoozeTime(date) }
         : { mode, amount: String(amount), unit };
-    const snoozedUntil = resolveCustomSnooze(input, new Date());
+    const snoozedUntil = resolveSheetSnoozedUntil(input, props.initialSnoozedUntil, new Date());
     if (!snoozedUntil) {
       setError(
         mode === "date" ? "Choose a date and time in the future." : "Enter a positive duration.",

@@ -2,7 +2,6 @@ import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
@@ -18,7 +17,7 @@ import {
 } from "react-native";
 import { AppText } from "../../components/AppText";
 import { SegmentedControl } from "../../components/SegmentedControl";
-import { initialCustomSnoozeDate } from "./customSnoozeDate";
+import { initialCustomSnoozeDate, resolveSheetSnoozedUntil } from "./customSnoozeDate";
 
 export interface CustomSnoozeSheetProps {
   readonly onClose: () => void;
@@ -186,7 +185,11 @@ export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
                   mode === "date"
                     ? { mode, date: localSnoozeDate(date), time: localSnoozeTime(date) }
                     : { mode, amount: amount.replace(",", "."), unit };
-                const snoozedUntil = resolveCustomSnooze(input, new Date());
+                const snoozedUntil = resolveSheetSnoozedUntil(
+                  input,
+                  props.initialSnoozedUntil,
+                  new Date(),
+                );
                 if (!snoozedUntil) {
                   setError(
                     mode === "date"
