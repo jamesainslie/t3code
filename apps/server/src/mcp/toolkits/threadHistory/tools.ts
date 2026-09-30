@@ -1,7 +1,6 @@
 import {
   AgentThreadHistoryAccess,
   AGENT_THREAD_HISTORY_RECENT_TURNS_MAX,
-  McpCapabilityUnavailableError,
   OrchestrationSearchThreadsInput,
   PositiveInt,
   TrimmedNonEmptyString,
@@ -45,7 +44,21 @@ export class ThreadOutOfScopeError extends Schema.TaggedError<ThreadOutOfScopeEr
   { threadId: Schema.String, level: AgentThreadHistoryAccess },
 ) {
   override get message(): string {
+    // Referencing a thread grants nothing while history is off, so do not suggest it.
+    if (this.level === "off") {
+      return `Thread history is off for this thread's project. Ask the user to turn on "Agent thread history" in Settings.`;
+    }
     return `Thread ${this.threadId} is outside what this thread may read (thread history access: ${ACCESS_LABELS[this.level]}). Ask the user to reference the thread in a message, or to raise "Agent thread history" in Settings.`;
+  }
+}
+
+/** The session's credential lacks the thread-history capability, granted only at session start. */
+export class ThreadHistoryOffError extends Schema.TaggedError<ThreadHistoryOffError>()(
+  "ThreadHistoryOffError",
+  {},
+) {
+  override get message(): string {
+    return `Thread history is off for this thread. Ask the user to turn on "Agent thread history" in Settings; it applies from the thread's next session.`;
   }
 }
 
@@ -64,6 +77,7 @@ export class InvalidTurnRangeError extends Schema.TaggedError<InvalidTurnRangeEr
   { beforeTurn: Schema.Number, turnCount: Schema.Number },
 ) {
   override get message(): string {
+    if (this.turnCount === 0) return "This thread has no turns yet.";
     return `beforeTurn must be between 2 and ${this.turnCount + 1}.`;
   }
 }
@@ -78,7 +92,7 @@ export class ThreadHistoryReadFailedError extends Schema.TaggedError<ThreadHisto
 }
 
 export const ThreadHistoryToolError = Schema.Union([
-  McpCapabilityUnavailableError,
+  ThreadHistoryOffError,
   ThreadNotFoundError,
   ThreadOutOfScopeError,
   ThreadSearchOutOfScopeError,
@@ -147,7 +161,7 @@ const ReadThreadTurnsTool = Tool.make("read_thread_turns", {
 
 const FindThreadsTool = Tool.make("find_threads", {
   description:
-    "Search other T3 Code threads by their title and messages. Returns one line per matching thread with its id, title, project, branch, last activity, and status; pass an id to read_thread to pick up its work. Only available when the user allows thread history for this project or all projects.",
+    "Search the message text of other T3 Code threads (titles are not searched). Returns one line per matching thread with its id, title, project, branch, last activity, and status; pass an id to read_thread to pick up its work. Only available when the user allows thread history for this project or all projects.",
   parameters: Schema.Struct({
     query: OrchestrationSearchThreadsInput.fields.query.annotate({
       description: "Words to look for, 2 to 200 characters.",

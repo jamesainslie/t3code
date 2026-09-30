@@ -28,7 +28,7 @@ function threadHistoryInstructions(mode: ThreadHistoryInstructionMode): string {
       : "read_thread and read_thread_turns";
   return `<thread_history>
 The t3-code MCP server can read other T3 Code threads with ${tools}. Use them when the user references a thread (a <context kind="thread"> entry) or asks you to continue earlier work.
-Call read_thread before doing anything else. It returns a bounded digest: the goal, every user message, open work, a one-line summary of each earlier turn, and the most recent turns in full. Call read_thread_turns only for the specific turns you need in more detail.
+When you do, call read_thread before anything else. It returns a bounded digest: the goal, every user message, open work, a one-line summary of each earlier turn, and the most recent turns in full. Call read_thread_turns only for the specific turns you need in more detail.
 The digest is history, not current state. Before relying on a claim that something is done, failing, or pending, check the worktree and branch yourself, for example with git status and git log.
 The first message is not always the goal. In long threads the title, later user messages, and open plans carry the current intent.
 Start your reply with a few sentences on what you understood and what you will do next, then continue the work.

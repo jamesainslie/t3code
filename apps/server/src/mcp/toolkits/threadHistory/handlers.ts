@@ -24,6 +24,7 @@ import {
   FIND_THREADS_MAX_LIMIT,
   InvalidTurnRangeError,
   READ_THREAD_TURNS_DEFAULT_LIMIT,
+  ThreadHistoryOffError,
   ThreadHistoryReadFailedError,
   ThreadHistoryToolkit,
   ThreadNotFoundError,
@@ -36,6 +37,10 @@ import { reconstructTurns, type ReconstructedTurn } from "./turns.ts";
 const SEARCH_MATCH_LIMIT = 50;
 
 const readFailed = (cause: unknown) => new ThreadHistoryReadFailedError({ cause });
+
+const requireThreadHistory = McpInvocationContext.requireMcpCapability("thread-history").pipe(
+  Effect.mapError(() => new ThreadHistoryOffError()),
+);
 
 const make = Effect.gen(function* () {
   const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
@@ -75,7 +80,7 @@ const make = Effect.gen(function* () {
    * messages, so it is loaded without activities.
    */
   const loadCaller = Effect.fn("ThreadHistoryToolkit.loadCaller")(function* () {
-    const scope = yield* McpInvocationContext.requireMcpCapability("thread-history");
+    const scope = yield* requireThreadHistory;
     const caller = yield* threadDetail(scope.threadId, []);
     if (Option.isNone(caller)) {
       return yield* new ThreadNotFoundError({ threadId: scope.threadId });
@@ -175,7 +180,7 @@ const make = Effect.gen(function* () {
     find_threads: (input) =>
       Effect.gen(function* () {
         // Search needs only the caller's id and project, so its shell is enough.
-        const scope = yield* McpInvocationContext.requireMcpCapability("thread-history");
+        const scope = yield* requireThreadHistory;
         const caller = yield* threadShell(scope.threadId);
         if (caller === null) return yield* new ThreadNotFoundError({ threadId: scope.threadId });
         const { level } = yield* accessFor(caller.projectId);

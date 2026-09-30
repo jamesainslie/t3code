@@ -356,14 +356,35 @@ describe("thread history toolkit handlers", () => {
   it.effect("read_thread requires the thread-history capability", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
-      const error = yield* harness
-        .call("read_thread", { threadId: REFERENCED_ID }, ["pull-requests"])
-        .pipe(Effect.flip);
-      expect(error).toMatchObject({
-        _tag: "McpCapabilityUnavailableError",
-        capability: "thread-history",
-        threadId: CALLER_ID,
+      const errors = [
+        yield* harness
+          .call("read_thread", { threadId: REFERENCED_ID }, ["pull-requests"])
+          .pipe(Effect.flip),
+        yield* harness
+          .call("find_threads", { query: "ssh log" }, ["pull-requests"])
+          .pipe(Effect.flip),
+      ];
+      for (const error of errors) {
+        expect(error._tag).toBe("ThreadHistoryOffError");
+        expect(error.message).toBe(
+          'Thread history is off for this thread. Ask the user to turn on "Agent thread history" in Settings; it applies from the thread\'s next session.',
+        );
+      }
+    }),
+  );
+
+  it.effect("read_thread does not suggest references when the level is off", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryAccess: "off" }),
       });
+      const error = yield* harness
+        .call("read_thread", { threadId: REFERENCED_ID })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "ThreadOutOfScopeError", level: "off" });
+      expect(error.message).toBe(
+        'Thread history is off for this thread\'s project. Ask the user to turn on "Agent thread history" in Settings.',
+      );
     }),
   );
 
@@ -505,6 +526,21 @@ describe("thread history toolkit handlers", () => {
         beforeTurn: 13,
       });
       expect(detailedTurns(last)).toEqual([8, 9, 10, 11, 12]);
+    }),
+  );
+
+  it.effect("read_thread_turns says so when the thread has no turns", () =>
+    Effect.gen(function* () {
+      const emptyId = ThreadId.make("thread-empty");
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryAccess: "project" }),
+        threads: [caller, withTurns(emptyId, PROJECT_A, 0)],
+      });
+      const error = yield* harness
+        .call("read_thread_turns", { threadId: emptyId, beforeTurn: 2 })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "InvalidTurnRangeError", turnCount: 0 });
+      expect(error.message).toBe("This thread has no turns yet.");
     }),
   );
 

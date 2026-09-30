@@ -56,7 +56,7 @@ describe("buildRuntimeInstructions", () => {
 
     const search = buildRuntimeInstructions({ harness: "Codex", threadHistory: "search" });
     expect(search).toContain("with read_thread, read_thread_turns, and find_threads. Use them");
-    expect(search).toContain("Call read_thread before doing anything else.");
+    expect(search).toContain("When you do, call read_thread before anything else.");
   });
 
   it("contains no em-dash", () => {
