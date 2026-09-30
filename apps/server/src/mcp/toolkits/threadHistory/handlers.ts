@@ -147,6 +147,10 @@ const make = Effect.gen(function* () {
         const caller = yield* loadCaller();
         const target = yield* loadTarget(caller, input.threadId);
         const project = yield* projectShell(target.projectId);
+        // A deleted source keeps its id in the digest but has no title to show.
+        const source = target.continuedFromThreadId
+          ? yield* threadShell(target.continuedFromThreadId)
+          : null;
         const recentTurns = Math.min(input.recentTurns ?? caller.recentTurns, caller.recentTurns);
         const turns = reconstructTurns(target);
         const thread = yield* withToolCalls(
@@ -156,6 +160,7 @@ const make = Effect.gen(function* () {
         const digest = buildThreadDigest({
           thread,
           projectTitle: project?.title ?? null,
+          continuedFromTitle: source?.title ?? null,
           callerWorktreePath: caller.thread.worktreePath,
           recentTurns,
         });

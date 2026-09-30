@@ -176,6 +176,10 @@ const ProjectionLatestTurnDbRowSchema = Schema.Struct({
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
 });
+const ProjectionThreadContinuationRowSchema = Schema.Struct({
+  threadId: ProjectionThread.fields.threadId,
+  title: ProjectionThread.fields.title,
+});
 const ProjectionStateDbRowSchema = ProjectionState;
 const ProjectionCountsRowSchema = Schema.Struct({
   projectCount: Schema.Number,
@@ -1582,6 +1586,22 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         FROM projection_thread_document_comments
         WHERE thread_id = ${threadId}
         ORDER BY created_at ASC, comment_id ASC
+      `,
+  });
+
+  // Served by idx_projection_threads_continued_from.
+  const listThreadContinuationRows = SqlSchema.findAll({
+    Request: ThreadIdLookupInput,
+    Result: ProjectionThreadContinuationRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          title
+        FROM projection_threads
+        WHERE continued_from_thread_id = ${threadId}
+          AND deleted_at IS NULL
+        ORDER BY created_at ASC, thread_id ASC
       `,
   });
 
@@ -3782,6 +3802,7 @@ pending_approval_requests AS (
         checkpointRows,
         latestTurnRow,
         sessionRow,
+        continuationRows,
       ] = yield* Effect.all([
         getThreadRowById({ threadId, includeArchived }).pipe(
           Effect.mapError(
@@ -3850,6 +3871,14 @@ pending_approval_requests AS (
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:getSession:query",
               "ProjectionSnapshotQuery.getThreadDetailById:getSession:decodeRow",
+            ),
+          ),
+        ),
+        listThreadContinuationRows({ threadId }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getThreadDetailById:listContinuations:query",
+              "ProjectionSnapshotQuery.getThreadDetailById:listContinuations:decodeRows",
             ),
           ),
         ),
@@ -3928,6 +3957,7 @@ pending_approval_requests AS (
         })),
         session: Option.isSome(sessionRow) ? mapSessionRow(sessionRow.value) : null,
         documentComments: documentCommentRows.map(mapDocumentCommentRow),
+        continuedIn: continuationRows,
       };
 
       return Option.some(

@@ -31,11 +31,15 @@ export function canSearchThreads(level: AgentThreadHistoryAccess): boolean {
   return level === "project" || level === "environment";
 }
 
-/** Thread ids the user attached as thread context records on any message of the caller. */
+/**
+ * Thread ids the user pointed the caller at: thread context records on any of its messages,
+ * and the thread it was started to continue.
+ */
 export function collectReferencedThreadIds(
-  caller: Pick<OrchestrationThread, "messages">,
+  caller: Pick<OrchestrationThread, "messages" | "continuedFromThreadId">,
 ): ReadonlySet<ThreadId> {
   const ids = new Set<ThreadId>();
+  if (caller.continuedFromThreadId) ids.add(caller.continuedFromThreadId);
   for (const message of caller.messages) {
     for (const record of message.context?.records ?? []) {
       // Unknown records carry a payload and an arbitrary kind, so exclude them first.

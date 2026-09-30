@@ -1,4 +1,8 @@
-import type { OrchestrationProposedPlan, ThreadDocumentComment } from "@t3tools/contracts";
+import {
+  ThreadId,
+  type OrchestrationProposedPlan,
+  type ThreadDocumentComment,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
 import { buildThreadDigest, DIGEST_LIMITS } from "./digest.ts";
@@ -19,11 +23,16 @@ const byteLength = (text: string) => new TextEncoder().encode(text).length;
 
 const digestOf = (
   thread: ReturnType<typeof makeThread>,
-  options: { readonly callerWorktreePath?: string | null; readonly recentTurns?: number } = {},
+  options: {
+    readonly callerWorktreePath?: string | null;
+    readonly recentTurns?: number;
+    readonly continuedFromTitle?: string | null;
+  } = {},
 ) =>
   buildThreadDigest({
     thread,
     projectTitle: "Project",
+    continuedFromTitle: options.continuedFromTitle ?? null,
     callerWorktreePath: options.callerWorktreePath ?? null,
     recentTurns: options.recentTurns ?? 3,
   });
@@ -273,6 +282,20 @@ describe("buildThreadDigest", () => {
     expect(
       digestOf(makeThread(), { callerWorktreePath: "/work/tree-a" }).header.worktreeRelation,
     ).toBe("none");
+  });
+
+  it("the digest header names the source thread", () => {
+    const source = ThreadId.make("thread-source");
+    const continued = makeThread({ continuedFromThreadId: source });
+
+    expect(
+      digestOf(continued, { continuedFromTitle: "Scheduler work" }).header.continuedFrom,
+    ).toEqual({ threadId: source, title: "Scheduler work" });
+    // A source that can no longer be read keeps its id without a title.
+    expect(digestOf(continued).header.continuedFrom).toEqual({ threadId: source, title: null });
+    expect(
+      digestOf(makeThread(), { continuedFromTitle: "Scheduler work" }).header.continuedFrom,
+    ).toBeNull();
   });
 
   it("reports an error when a send fails after the last user message", () => {

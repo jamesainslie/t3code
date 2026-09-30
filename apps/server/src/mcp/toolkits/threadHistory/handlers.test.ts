@@ -295,6 +295,31 @@ describe("thread history toolkit handlers", () => {
     }),
   );
 
+  it.effect("read_thread reads the source of a continued caller and names it", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        threads: [
+          makeThread({
+            id: CALLER_ID,
+            projectId: PROJECT_A,
+            continuedFromThreadId: OTHER_PROJECT_ID,
+          }),
+          withTurns(OTHER_PROJECT_ID, PROJECT_B, 1, { continuedFromThreadId: REFERENCED_ID }),
+          withTurns(REFERENCED_ID, PROJECT_B, 1),
+        ],
+      });
+      // The source sits in another project, readable at the default referenced level.
+      const text = yield* harness.call("read_thread", { threadId: OTHER_PROJECT_ID });
+      expect(text.split("\n")[0]).toContain(
+        ` continued_from="${REFERENCED_ID}" continued_from_title="Thread ${REFERENCED_ID}"`,
+      );
+      const own = yield* harness.call("read_thread", { threadId: CALLER_ID });
+      expect(own.split("\n")[0]).toContain(
+        ` continued_from="${OTHER_PROJECT_ID}" continued_from_title="Thread ${OTHER_PROJECT_ID}"`,
+      );
+    }),
+  );
+
   it.effect("read_thread picks up a lowered level on the next call", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({

@@ -937,6 +937,13 @@ export const OrchestrationThread = Schema.Struct({
   // Detail-only: comments reach a client with the thread open, never the shell
   // list. Optional so payloads from pre-comment servers still decode.
   documentComments: Schema.optional(Schema.Array(ThreadDocumentComment)),
+  // Detail-only: threads started to continue this one, oldest first, archived
+  // included and deleted left out. Read fresh with each detail snapshot, so a
+  // continuation created while the thread is open appears on the next one.
+  // Optional so payloads from older servers still decode.
+  continuedIn: Schema.optional(
+    Schema.Array(Schema.Struct({ threadId: ThreadId, title: TrimmedNonEmptyString })),
+  ),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 

@@ -147,4 +147,20 @@ describe("thread history scope", () => {
       [EARLIER_THREAD_ID, REFERENCED_THREAD_ID].toSorted(),
     );
   });
+
+  it("a continued thread may read its source at the referenced level", () => {
+    const readsSource = (caller: Parameters<typeof collectReferencedThreadIds>[0]) =>
+      canReadThread({
+        callerThreadId: CALLER_THREAD_ID,
+        callerProjectId: CALLER_PROJECT_ID,
+        targetThreadId: OTHER_THREAD_ID,
+        targetProjectId: OTHER_PROJECT_ID,
+        level: "referenced",
+        referencedThreadIds: collectReferencedThreadIds(caller),
+      });
+
+    expect(readsSource({ messages: [], continuedFromThreadId: OTHER_THREAD_ID })).toBe(true);
+    expect(readsSource({ messages: [], continuedFromThreadId: null })).toBe(false);
+    expect(readsSource({ messages: [] })).toBe(false);
+  });
 });

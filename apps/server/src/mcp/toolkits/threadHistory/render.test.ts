@@ -101,6 +101,7 @@ function makeDigest(overrides: Partial<ThreadDigest> = {}): ThreadDigest {
       createdAt: "2026-09-01T00:00:00.000Z",
       lastActivityAt: "2026-09-01T01:00:00.000Z",
       status: { kind: "completed" },
+      continuedFrom: null,
     },
     goal: "Build the thing.",
     steering: [],
@@ -181,6 +182,25 @@ describe("renderThreadDigest", () => {
       }),
     );
     expect(text).toContain(`title="Fix &quot;quotes&quot; &amp; &lt;tags>"`);
+  });
+
+  it("names the source thread on the thread element", () => {
+    const headerLine = (continuedFrom: ThreadDigest["header"]["continuedFrom"]) =>
+      renderThreadDigest(makeDigest({ header: { ...makeDigest().header, continuedFrom } })).split(
+        "\n",
+      )[0];
+    const source = ThreadId.make("thread-source");
+
+    expect(headerLine({ threadId: source, title: `Port "cron"\nparser` })).toContain(
+      ` continued_from="thread-source" continued_from_title="Port &quot;cron&quot; parser"`,
+    );
+    const untitled = headerLine({ threadId: source, title: null });
+    expect(untitled).toContain(` continued_from="thread-source"`);
+    expect(untitled).not.toContain("continued_from_title");
+    expect(headerLine({ threadId: source, title: "x".repeat(1_000) })).toContain(
+      `continued_from_title="${cutToBytes("x".repeat(1_000), DIGEST_LIMITS.excerptBytes)}"`,
+    );
+    expect(headerLine(null)).not.toContain("continued_from");
   });
 
   it("reports the thread status with its details", () => {
@@ -439,6 +459,7 @@ describe("renderThreadDigest", () => {
         createdAt: "2026-09-01T00:00:00.000Z",
         lastActivityAt: "2026-09-01T02:30:00.000Z",
         status: { kind: "interrupted" },
+        continuedFrom: null,
       },
       goal: "Move the job scheduler onto the queue-backed reactor.\n\nKeep the public API stable.",
       steering: [
@@ -503,6 +524,7 @@ describe("renderThreadDigest", () => {
       buildThreadDigest({
         thread,
         projectTitle: "t3code",
+        continuedFromTitle: null,
         callerWorktreePath: null,
         recentTurns: 3,
       }),

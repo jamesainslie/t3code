@@ -141,6 +141,8 @@ function renderHeader(header: ThreadDigest["header"]): string {
     error: status.kind === "error" ? status.message : null,
     used_tokens: status.kind === "context-full" ? status.usedTokens : null,
     max_tokens: status.kind === "context-full" ? status.maxTokens : null,
+    continued_from: header.continuedFrom?.threadId,
+    continued_from_title: cutAttr(header.continuedFrom?.title ?? null),
   })}>\n`;
 }
 
