@@ -891,6 +891,9 @@ export const OrchestrationThread = Schema.Struct({
   // Optional so payloads from pre-snooze servers still decode.
   snoozedUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  // The note the user attached to the pending snooze, delivered into the
+  // timeline when the thread wakes. Optional so pre-reminder payloads decode.
+  snoozeReminder: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   // "Depends on" is the other overlay on the active lifecycle: the thread
   // stays active and is kept out of the inbox until every link is satisfied
   // (or it raises its hand). Satisfaction is written by the server, never
@@ -990,6 +993,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   unsettledAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   snoozedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  // See OrchestrationThread.snoozeReminder.
+  snoozeReminder: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   dependencies: Schema.optional(Schema.Array(ThreadDependency)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   highlightColor: Schema.optional(Schema.NullOr(ThreadHighlightColor)),
@@ -1264,6 +1269,13 @@ const ThreadUnsettleCommand = Schema.Struct({
   reason: Schema.Literal("user"),
 });
 
+export const SNOOZE_REMINDER_MAX_CHARS = 500;
+
+// A note the user attaches to a snooze. Empty means "clear the note", which is
+// why this allows the empty string after trimming.
+export const SnoozeReminder = TrimmedString.check(Schema.isMaxLength(SNOOZE_REMINDER_MAX_CHARS));
+export type SnoozeReminder = typeof SnoozeReminder.Type;
+
 const ThreadSnoozeCommand = Schema.Struct({
   type: Schema.Literal("thread.snooze"),
   commandId: CommandId,
@@ -1272,6 +1284,9 @@ const ThreadSnoozeCommand = Schema.Struct({
   // will arrive as an optional condition field alongside this; time-based
   // snooze is just the first kind of condition.
   snoozedUntil: IsoDateTime,
+  // Absent keeps the note of a pending snooze, "" clears it, and any other
+  // value replaces it.
+  reminder: Schema.optional(SnoozeReminder),
 });
 
 const ThreadUnsnoozeCommand = Schema.Struct({
@@ -1893,6 +1908,16 @@ export const ProjectSyncApplyCommand = Schema.Struct({
 });
 export type ProjectSyncApplyCommand = typeof ProjectSyncApplyCommand.Type;
 
+// Dispatched by the snooze reminder reactor when a timer wake passes. The
+// decider no-ops unless a note is still pending and due, so duplicate
+// dispatch and races with activity wakes are harmless.
+const ThreadSnoozeReminderDeliverCommand = Schema.Struct({
+  type: Schema.Literal("thread.snooze-reminder.deliver"),
+  commandId: CommandId,
+  threadId: ThreadId,
+});
+export type ThreadSnoozeReminderDeliverCommand = typeof ThreadSnoozeReminderDeliverCommand.Type;
+
 const InternalOrchestrationCommand = Schema.Union([
   ProjectSyncApplyCommand,
   ThreadSyncVisibilityCommand,
@@ -1915,6 +1940,7 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadTitleRefineCommand,
   ThreadPullRequestSyncCommand,
   ThreadPullRequestLinkSyncCommand,
+  ThreadSnoozeReminderDeliverCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -1938,6 +1964,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.unsettled",
   "thread.snoozed",
   "thread.unsnoozed",
+  "thread.snooze-reminder-delivered",
   "thread.dependency-added",
   "thread.dependencies-removed",
   "thread.dependency-satisfied",
@@ -2056,6 +2083,9 @@ export const ThreadSnoozedPayload = Schema.Struct({
   threadId: ThreadId,
   snoozedUntil: IsoDateTime,
   snoozedAt: IsoDateTime,
+  // The note in effect after this snooze, already resolved by the decider
+  // (null means none). Optional so events from before reminders decode.
+  reminder: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,
 });
 
@@ -2068,6 +2098,23 @@ export const ThreadUnsnoozedPayload = Schema.Struct({
   reason: Schema.Literals(["user", "activity"]),
   updatedAt: IsoDateTime,
 });
+
+// A timer wake delivered the pending note, so the projection clears it.
+export const ThreadSnoozeReminderDeliveredPayload = Schema.Struct({
+  threadId: ThreadId,
+  updatedAt: IsoDateTime,
+});
+
+// The delivered note is a regular thread activity of this kind, so server,
+// web, and mobile agree on how to find and render it.
+export const SNOOZE_REMINDER_ACTIVITY_KIND = "snooze.reminder";
+
+export const SnoozeReminderActivityPayload = Schema.Struct({
+  reminder: TrimmedNonEmptyString,
+  snoozedAt: IsoDateTime,
+  snoozedUntil: IsoDateTime,
+});
+export type SnoozeReminderActivityPayload = typeof SnoozeReminderActivityPayload.Type;
 
 export const ThreadDependencyAddedPayload = Schema.Struct({
   threadId: ThreadId,
@@ -2421,6 +2468,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.unsnoozed"),
     payload: ThreadUnsnoozedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.snooze-reminder-delivered"),
+    payload: ThreadSnoozeReminderDeliveredPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

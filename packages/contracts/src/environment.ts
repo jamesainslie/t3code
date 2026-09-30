@@ -125,6 +125,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands thread.snooze / thread.unsnooze commands. Same
       version-skew contract as threadSettlement. */
   threadSnooze: Schema.optionalKey(Schema.Boolean),
+  /** Server accepts a reminder on thread.snooze and delivers it into the
+      timeline on wake. Same version-skew contract as threadSnooze. */
+  threadSnoozeReminder: Schema.optionalKey(Schema.Boolean),
   /** Server understands thread.dependency.add / thread.dependency.remove
       and satisfies links itself. Same version-skew contract as threadSnooze. */
   threadDependencies: Schema.optionalKey(Schema.Boolean),
