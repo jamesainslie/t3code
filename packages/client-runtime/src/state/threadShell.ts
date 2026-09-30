@@ -282,7 +282,8 @@ export function createEnvironmentThreadShellAtoms(input: {
     threadShellsForProjectRefsAtom: (refs: ReadonlyArray<ScopedProjectRef>) =>
       threadShellsForProjectRefsAtomFamily(projectRefCollectionKey(refs)),
     threadShellAtom: (ref: ScopedThreadRef) => threadShellAtomFamily(threadKey(ref)),
-    /** Threads continuing `ref`'s work, oldest first. Deleted threads leave the shell. */
+    /** Threads continuing `ref`'s work, oldest first. Deleted and archived threads leave
+        the shell, so neither is listed. */
     continuedInAtom: (ref: ScopedThreadRef) => continuedInAtomFamily(threadKey(ref)),
   };
 }

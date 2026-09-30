@@ -62,6 +62,8 @@ interface ChatHeaderProps {
   activeThreadTitle: string;
   /** Drafts have no server thread yet, so the title carries no action menu. */
   isServerThread: boolean;
+  /** The thread this one continues, from the thread itself so archived threads keep it. */
+  continuedFromThreadId: ThreadId | null;
   activeProject: EnvironmentProject | null;
   openInCwd: string | null;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
@@ -131,6 +133,7 @@ export const ChatHeader = memo(function ChatHeader({
   draftId,
   activeThreadTitle,
   isServerThread,
+  continuedFromThreadId,
   activeProject,
   openInCwd,
   activeProjectScripts,
@@ -488,7 +491,12 @@ export const ChatHeader = memo(function ChatHeader({
             </Tooltip>
           )}
         </WorkspaceBreadcrumbItem>
-        {isServerThread ? <ThreadContinuationBreadcrumbs threadRef={activeThreadRef} /> : null}
+        {isServerThread ? (
+          <ThreadContinuationBreadcrumbs
+            threadRef={activeThreadRef}
+            continuedFromThreadId={continuedFromThreadId}
+          />
+        ) : null}
       </WorkspaceBreadcrumb>
       <div
         ref={headerActionsRef}
