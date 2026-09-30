@@ -152,10 +152,11 @@ popover. On mobile, open the thread's menu in the thread list.
 
 The new thread opens as a draft on the same branch and worktree, with the same
 model, and starts with a reference to the original thread. Add any instructions,
-then send. Its agent reads the original thread's history and checks the current
-worktree and branch before continuing, since the work may have moved on since.
+then send. Its agent reads the original thread's history and is asked to check the
+current worktree and branch before continuing, since the work may have moved on since.
 
-The option is hidden while **Agent thread history** is **Off** for the project.
+The option is hidden while **Agent thread history** is **Off** for the project, and
+when the environment runs a T3 Code version without it.
 On web and desktop, the chat header links the two threads with **Continued from**
 and **Continued in**. An archived original cannot be opened from that link until
 you unarchive it.
