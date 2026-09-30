@@ -27,6 +27,32 @@ export const DIGEST_LIMITS = {
   contextFullRatio: 0.95,
 } as const;
 
+/** The only activity a digest reads per turn, loaded just for the turns shown in detail. */
+export const DIGEST_TOOL_ACTIVITY_KIND = "tool.completed";
+
+/**
+ * Every other activity kind a digest reads: turn errors (any error-tone kind), plan updates,
+ * and context readings. Tool and task progress rows, the bulk of a thread's payloads, are left out.
+ */
+export const DIGEST_ACTIVITY_KINDS = [
+  "runtime.error",
+  "provider.turn.start.failed",
+  "provider.turn.interrupt.failed",
+  "provider.approval.respond.failed",
+  "provider.user-input.respond.failed",
+  "provider.session.stop.failed",
+  "tool.denied",
+  "task.updated",
+  "task.completed",
+  "turn.plan.updated",
+  "context-window.updated",
+  "context-compaction",
+];
+
+/** Index of the first turn a digest shows in detail. */
+export const recentStart = (turnCount: number, recentTurns: number) =>
+  Math.max(0, turnCount - Math.max(0, recentTurns));
+
 export type ThreadDigestStatus =
   | { readonly kind: "empty" }
   | { readonly kind: "running" }
@@ -121,7 +147,9 @@ export function toTurnDetail(turn: ReconstructedTurn): DigestTurnDetail {
     assistant: nonEmptyTexts(turn.assistantMessages).map((text) =>
       cutToBytes(text, DIGEST_LIMITS.detailMessageBytes),
     ),
-    tools: turn.activities.filter((activity) => activity.kind === "tool.completed").map(toolLine),
+    tools: turn.activities
+      .filter((activity) => activity.kind === DIGEST_TOOL_ACTIVITY_KIND)
+      .map(toolLine),
     files: turn.checkpoint?.files ?? [],
     errors: turn.activities
       .filter(isErrorActivity)
@@ -252,7 +280,7 @@ export function buildThreadDigest(input: {
   );
   const [first, ...later] = userTexts;
 
-  const recentStart = Math.max(0, turns.length - Math.max(0, input.recentTurns));
+  const detailStart = recentStart(turns.length, input.recentTurns);
 
   return {
     header: {
@@ -300,7 +328,7 @@ export function buildThreadDigest(input: {
           url: link.url,
         })),
     },
-    earlierTurns: turns.slice(0, recentStart).map(toTurnSummary),
-    recentTurns: turns.slice(recentStart).map(toTurnDetail),
+    earlierTurns: turns.slice(0, detailStart).map(toTurnSummary),
+    recentTurns: turns.slice(detailStart).map(toTurnDetail),
   };
 }

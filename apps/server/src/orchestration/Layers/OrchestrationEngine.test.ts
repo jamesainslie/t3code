@@ -461,6 +461,7 @@ describe("OrchestrationEngine", () => {
           getThreadRuntimeContext: () => Effect.die("unused"),
           getTurnStartMessage: () => Effect.die("unused"),
           listThreadDocumentComments: () => Effect.die("unused"),
+          listTurnActivities: () => Effect.die("unused"),
           getThreadShellById: () => Effect.succeedNone,
           getThreadDetailById: () => Effect.succeedNone,
           getThreadDetailSnapshot: () => Effect.succeedNone,

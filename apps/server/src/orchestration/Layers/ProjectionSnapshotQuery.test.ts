@@ -3866,4 +3866,45 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
       assert.deepEqual(yield* query.listActivitiesByKind("nope"), []);
     }),
   );
+
+  it.effect("lists one thread's activities of some kinds in some turns, oldest first", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_thread_activities (
+          activity_id, thread_id, turn_id, tone, kind, summary, payload_json, sequence, created_at
+        ) VALUES
+          ('tool-t2-late', 'thread-turns', 'turn-2', 'tool', 'tool.completed', 'Late',
+            '{"detail":"late"}', 4, '2026-03-02T00:00:04.000Z'),
+          ('tool-t2', 'thread-turns', 'turn-2', 'tool', 'tool.completed', 'Tool',
+            '{"detail":"early"}', 3, '2026-03-02T00:00:03.000Z'),
+          ('tool-t1', 'thread-turns', 'turn-1', 'tool', 'tool.completed', 'Older turn',
+            '{}', 1, '2026-03-02T00:00:01.000Z'),
+          ('started-t2', 'thread-turns', 'turn-2', 'tool', 'tool.started', 'Other kind',
+            '{}', 2, '2026-03-02T00:00:02.000Z'),
+          ('tool-other-thread', 'thread-elsewhere', 'turn-2', 'tool', 'tool.completed', 'Other',
+            '{}', 5, '2026-03-02T00:00:05.000Z')
+      `;
+
+      const read = (turnIds: ReadonlyArray<string>) =>
+        query.listTurnActivities({
+          threadId: ThreadId.make("thread-turns"),
+          kinds: ["tool.completed"],
+          turnIds: turnIds.map(asTurnId),
+        });
+      assert.deepEqual(
+        (yield* read(["turn-2"])).map((activity) => [activity.id, activity.payload]),
+        [
+          ["tool-t2", { detail: "early" }],
+          ["tool-t2-late", { detail: "late" }],
+        ],
+      );
+      assert.deepEqual(
+        (yield* read(["turn-1", "turn-2"])).map((activity) => activity.id),
+        ["tool-t1", "tool-t2", "tool-t2-late"],
+      );
+      assert.deepEqual(yield* read([]), []);
+    }),
+  );
 });

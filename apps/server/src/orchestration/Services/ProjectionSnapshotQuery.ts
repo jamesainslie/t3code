@@ -27,6 +27,7 @@ import type {
   ProjectId,
   ThreadDocumentComment,
   ThreadId,
+  TurnId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Option from "effect/Option";
@@ -259,6 +260,17 @@ export interface ProjectionSnapshotQueryShape {
   readonly listThreadDocumentComments: (
     threadId: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ThreadDocumentComment>, ProjectionRepositoryError>;
+
+  /**
+   * Read one thread's activities of the given kinds in the given turns, oldest first, without
+   * hydrating the thread. Thread history uses it to load tool payloads only for the turns it
+   * renders in detail.
+   */
+  readonly listTurnActivities: (input: {
+    readonly threadId: ThreadId;
+    readonly kinds: ReadonlyArray<string>;
+    readonly turnIds: ReadonlyArray<TurnId>;
+  }) => Effect.Effect<ReadonlyArray<OrchestrationThreadActivity>, ProjectionRepositoryError>;
 
   /** Read the active thread and session facts used to ingest provider events. */
   readonly getThreadRuntimeContext: (

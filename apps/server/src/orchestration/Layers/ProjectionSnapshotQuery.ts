@@ -222,6 +222,11 @@ const ThreadActivityKindsLookupInput = Schema.Struct({
   threadId: ThreadId,
   activityKinds: Schema.Array(Schema.String),
 });
+const TurnActivitiesLookupInput = Schema.Struct({
+  threadId: ThreadId,
+  kinds: Schema.Array(Schema.String),
+  turnIds: Schema.Array(TurnId),
+});
 const ThreadActivityIdsLookupInput = Schema.Struct({
   activityIds: Schema.Array(ProjectionThreadActivity.fields.activityId),
 });
@@ -1714,6 +1719,49 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           FROM projection_thread_activities
           WHERE thread_id = ${threadId}
             AND ${sql.in("kind", activityKinds)}
+          ORDER BY
+            sequence DESC,
+            created_at DESC,
+            activity_id DESC
+          LIMIT ${THREAD_DETAIL_ACTIVITY_LIMIT}
+        ) AS recent_activities
+        ORDER BY
+          sequence ASC,
+          created_at ASC,
+          activity_id ASC
+      `,
+  });
+
+  const listTurnActivityRows = SqlSchema.findAll({
+    Request: TurnActivitiesLookupInput,
+    Result: ProjectionThreadActivityDbRowSchema,
+    execute: ({ threadId, kinds, turnIds }) =>
+      sql`
+        SELECT
+          activity_id AS "activityId",
+          thread_id AS "threadId",
+          turn_id AS "turnId",
+          tone,
+          kind,
+          summary,
+          payload_json AS "payload",
+          sequence,
+          created_at AS "createdAt"
+        FROM (
+          SELECT
+            activity_id,
+            thread_id,
+            turn_id,
+            tone,
+            kind,
+            summary,
+            payload_json,
+            sequence,
+            created_at
+          FROM projection_thread_activities
+          WHERE thread_id = ${threadId}
+            AND ${sql.in("kind", kinds)}
+            AND ${sql.in("turn_id", turnIds)}
           ORDER BY
             sequence DESC,
             created_at DESC,
@@ -3457,6 +3505,19 @@ pending_approval_requests AS (
       } satisfies OrchestrationThreadShell);
     });
 
+  const listTurnActivities: ProjectionSnapshotQueryShape["listTurnActivities"] = (input) =>
+    input.kinds.length === 0 || input.turnIds.length === 0
+      ? Effect.succeed([])
+      : listTurnActivityRows(input).pipe(
+          Effect.map((rows) => rows.map(mapThreadActivityRow)),
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.listTurnActivities:query",
+              "ProjectionSnapshotQuery.listTurnActivities:decodeRows",
+            ),
+          ),
+        );
+
   const listThreadDocumentComments: ProjectionSnapshotQueryShape["listThreadDocumentComments"] = (
     threadId,
   ) =>
@@ -3994,6 +4055,7 @@ pending_approval_requests AS (
     getFullThreadDiffContext,
     getThreadShellById,
     listThreadDocumentComments,
+    listTurnActivities,
     getThreadRuntimeContext,
     getTurnStartMessage,
     getThreadDetailById,

@@ -20,11 +20,23 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
-import { ProjectionSnapshotQuery } from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import {
+  ProjectionSnapshotQuery,
+  type ProjectionSnapshotQueryShape,
+  type ProjectionThreadDetailQuery,
+} from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { ThreadHistoryToolkitHandlersLive } from "./handlers.ts";
-import { assistantMessage, at, latestTurn, makeThread, turn, userMessage } from "./testFixtures.ts";
+import {
+  activity,
+  assistantMessage,
+  at,
+  latestTurn,
+  makeThread,
+  turn,
+  userMessage,
+} from "./testFixtures.ts";
 import { ThreadHistoryToolkit } from "./tools.ts";
 
 const PROJECT_A = ProjectId.make("project-a");
@@ -156,11 +168,43 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
 ) {
   const settings = yield* Ref.make(options.settings ?? DEFAULT_SERVER_SETTINGS);
   const searches = yield* Ref.make<ReadonlyArray<OrchestrationSearchThreadsInput>>([]);
+  const detailReads = yield* Ref.make<
+    ReadonlyArray<{ readonly threadId: ThreadId; readonly query: ProjectionThreadDetailQuery }>
+  >([]);
+  const turnActivityReads = yield* Ref.make<
+    ReadonlyArray<Parameters<ProjectionSnapshotQueryShape["listTurnActivities"]>[0]>
+  >([]);
   const threads = new Map((options.threads ?? baseThreads).map((thread) => [thread.id, thread]));
   const dependencies = Layer.mergeAll(
     Layer.mock(ProjectionSnapshotQuery)({
-      getThreadDetailById: (threadId) =>
-        Effect.succeed(Option.fromNullishOr(threads.get(threadId))),
+      // Kind filters apply as SQLite applies them, so tests see only the rows the handler asked for.
+      getThreadDetailById: (threadId, query = {}) =>
+        Ref.update(detailReads, (recorded) => [...recorded, { threadId, query }]).pipe(
+          Effect.as(
+            Option.fromNullishOr(threads.get(threadId)).pipe(
+              Option.map((thread) => {
+                const kinds = query.activityKinds;
+                return kinds === undefined
+                  ? thread
+                  : {
+                      ...thread,
+                      activities: thread.activities.filter((row) => kinds.includes(row.kind)),
+                    };
+              }),
+            ),
+          ),
+        ),
+      listTurnActivities: (input) =>
+        Ref.update(turnActivityReads, (recorded) => [...recorded, input]).pipe(
+          Effect.as(
+            (threads.get(input.threadId)?.activities ?? []).filter(
+              (row) =>
+                input.kinds.includes(row.kind) &&
+                row.turnId !== null &&
+                input.turnIds.includes(row.turnId),
+            ),
+          ),
+        ),
       getThreadShellById: (threadId) => {
         const thread = threads.get(threadId);
         return Effect.succeed(
@@ -194,7 +238,7 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
       Effect.provideService(McpInvocationContext.McpInvocationContext, invocation(capabilities)),
       Effect.provide(dependencies),
     );
-  return { settings, searches, call };
+  return { settings, searches, detailReads, turnActivityReads, call };
 });
 
 /** Turn numbers rendered in detail, in order. */
@@ -287,6 +331,69 @@ describe("thread history toolkit handlers", () => {
         capability: "thread-history",
         threadId: CALLER_ID,
       });
+    }),
+  );
+
+  it.effect("loads tool payloads only for the turns rendered in detail", () =>
+    Effect.gen(function* () {
+      const toolCall = (id: string, t: number, turnNumber: number, command: string) =>
+        activity({
+          id,
+          t,
+          kind: "tool.completed",
+          tone: "tool",
+          turnId: turn(`${REFERENCED_ID}-t${turnNumber}`),
+          payload: { status: "completed", detail: command, data: { toolName: "Bash" } },
+        });
+      const target = withTurns(REFERENCED_ID, PROJECT_B, 6, {
+        activities: [toolCall("tool-1", 12, 1, "vp i"), toolCall("tool-6", 62, 6, "vp test")],
+      });
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryRecentTurns: 2 }),
+        threads: [caller, target, ...baseThreads.slice(2)],
+      });
+
+      const digest = yield* harness.call("read_thread", { threadId: REFERENCED_ID });
+      expect(recentSection(digest)).toContain("Bash completed: vp test");
+      const [callerRead, targetRead] = yield* Ref.get(harness.detailReads);
+      // The caller contributes only its id, project, worktree, and messages.
+      expect(callerRead).toEqual({ threadId: CALLER_ID, query: { activityKinds: [] } });
+      expect(targetRead?.threadId).toBe(REFERENCED_ID);
+      const targetKinds = targetRead?.query.activityKinds ?? [];
+      expect(targetKinds).toContain("runtime.error");
+      for (const kind of ["tool.completed", "tool.updated", "tool.started", "task.progress"]) {
+        expect(targetKinds).not.toContain(kind);
+      }
+      expect(yield* Ref.get(harness.turnActivityReads)).toEqual([
+        {
+          threadId: REFERENCED_ID,
+          kinds: ["tool.completed"],
+          turnIds: [turn(`${REFERENCED_ID}-t5`), turn(`${REFERENCED_ID}-t6`)],
+        },
+      ]);
+
+      const page = yield* harness.call("read_thread_turns", {
+        threadId: REFERENCED_ID,
+        beforeTurn: 3,
+        limit: 2,
+      });
+      expect(page).toContain("Bash completed: vp i");
+      expect((yield* Ref.get(harness.turnActivityReads)).at(-1)?.turnIds).toEqual([
+        turn(`${REFERENCED_ID}-t1`),
+        turn(`${REFERENCED_ID}-t2`),
+      ]);
+    }),
+  );
+
+  it.effect("find_threads reads the caller's shell, not its detail", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryAccess: "project" }),
+        matches: [match(SAME_PROJECT_ID, PROJECT_A)],
+      });
+      const text = yield* harness.call("find_threads", { query: "ssh log" });
+      expect(text).toContain(`id="${SAME_PROJECT_ID}"`);
+      expect(yield* Ref.get(harness.detailReads)).toEqual([]);
     }),
   );
 

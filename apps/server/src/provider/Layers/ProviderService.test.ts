@@ -5307,6 +5307,7 @@ describe("agent browser access", () => {
         getFullThreadDiffContext: () => Effect.die("unused"),
         getThreadRuntimeContext: () => Effect.die("unused"),
         listThreadDocumentComments: () => Effect.die("unused"),
+        listTurnActivities: () => Effect.die("unused"),
         getThreadShellById: (requestedThreadId) =>
           Effect.gen(function* () {
             assert.equal(requestedThreadId, threadId);
