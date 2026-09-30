@@ -17,6 +17,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { DEFAULT_THREAD_HIGHLIGHT_PALETTE, type EnvironmentMachineKind } from "@t3tools/contracts";
+import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
 import {
   canAddDependency,
   canSnooze,
@@ -37,6 +38,7 @@ import { ProviderInstanceIcon } from "../../components/ProviderIcon";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { writeComposerContextClipboard } from "../../lib/composerContextClipboard";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr } from "../../state/use-thread-pr";
@@ -954,6 +956,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "copy-thread-id") {
         copyTextWithHaptic(thread.id, { target: "thread-id" });
       }
+      if (nativeEvent.event === "copy-thread-chip") {
+        const chip = buildThreadChipClipboard({ environmentId: thread.environmentId, thread });
+        writeComposerContextClipboard(chip.text, chip.fragment).catch(() =>
+          Alert.alert("Could not copy", "Try again."),
+        );
+      }
       if (nativeEvent.event === "delete") handleDelete();
       if (nativeEvent.event.startsWith("highlight:")) {
         const highlightSelection = resolveThreadHighlightMenuSelection(
@@ -1424,6 +1432,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   ]
                 : []),
               { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
+              { id: "copy-thread-chip", title: "Copy thread chip", image: "link" },
               ...(blockedRow
                 ? blockedMenuActions
                 : snoozedRow

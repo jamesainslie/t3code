@@ -186,6 +186,8 @@ import {
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { usePreparedConnection } from "../../state/session";
 import { useThreadSelection } from "../../state/use-thread-selection";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { environmentThreadShells } from "../../state/threads";
 import { composerDocumentAttachmentRecord } from "../../lib/composerContext";
 import * as Option from "effect/Option";
 import {
@@ -1843,6 +1845,23 @@ function UserMessageContent(props: UserMessageContentProps) {
     );
     if (record?.kind === "mention" && "path" in record) {
       props.linkHandlers.onLinkPress?.(record.path);
+      return;
+    }
+    // A thread chip opens that thread when this environment knows it; otherwise the sheet shows it.
+    const referencedThread =
+      record?.kind === "thread" && "threadId" in record
+        ? appAtomRegistry.get(
+            environmentThreadShells.threadShellAtom({
+              environmentId: props.environmentId,
+              threadId: record.threadId,
+            }),
+          )
+        : null;
+    if (referencedThread) {
+      navigation.navigate("Thread", {
+        environmentId: String(referencedThread.environmentId),
+        threadId: String(referencedThread.id),
+      });
       return;
     }
     // Documents open in the file screen; pictures, video and PDF keep their native viewers.
