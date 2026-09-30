@@ -10,7 +10,7 @@ import { cutToBytes } from "./text.ts";
 
 // Rendering of thread digests as tagged text for an agent. Every function returns text that
 // stays within `DIGEST_LIMITS.budgetBytes` (or the budget given), as long as that budget can
-// hold the header and the newest turn's user text and files.
+// hold the header and the newest turn's tags, files, and omitted markers.
 
 /** A changed-files list longer than this ends with a count of the files left out. */
 const FILES_BYTES = 300;
@@ -36,18 +36,26 @@ const ELEMENTS = [
   "errors",
   "more",
 ];
-const CLOSING_TAG = new RegExp(`</(?=\\s*(?:${ELEMENTS.join("|")})\\b)`, "gi");
+const ELEMENT_TAG = new RegExp(`<(?=/?(?:${ELEMENTS.join("|")})\\b)`, "gi");
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 const sum = (values: ReadonlyArray<number>) => values.reduce((total, value) => total + value, 0);
 
-/** Neutralizes closing tags of digest elements so a message body cannot end its element. */
+/**
+ * Neutralizes opening, closing, and self-closing tags of digest elements (`<turn` becomes
+ * `<\turn`, `</user>` becomes `<\/user>`), so a message body can neither end its element nor
+ * fake a turn or a cursor.
+ */
 export function escapeBody(text: string): string {
-  return text.replace(CLOSING_TAG, "<\\/");
+  return text.replace(ELEMENT_TAG, "<\\");
 }
 
 const escapeAttr = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(/[\r\n]/g, " ");
 
 /** Renders ` key="value"` pairs in order, skipping null and undefined values. */
 function attrs(values: Record<string, string | number | null | undefined>): string {
@@ -182,20 +190,43 @@ const summaryOf = (turn: DigestTurnDetail): DigestTurnSummary => ({
   files: turn.files,
 });
 
-/**
- * A turn in full. Given a `room` it cannot fill, it keeps the user text and files and fits the
- * newest assistant messages, then errors, then tool calls, into what is left.
- */
-function renderDetail(turn: DigestTurnDetail, room = Number.POSITIVE_INFINITY): string {
-  const open = `<turn${attrs({ n: turn.n, state: turn.state })}>\n`;
-  const user = turn.user.length > 0 ? `<user>${escapeBody(turn.user)}</user>\n` : "";
-  const files =
-    turn.files.length > 0 ? `<files>${escapeBody(filesText(turn.files))}</files>\n` : "";
-  const close = "</turn>\n";
+const assistantMarker = (omitted: number) => `<assistant${attrs({ omitted })}/>\n`;
+
+function detailParts(turn: DigestTurnDetail) {
   const assistant = turn.assistant.map((text) => `<assistant>${escapeBody(text)}</assistant>\n`);
   const tools = turn.tools.map((line) => `${escapeBody(line)}\n`);
   const errors = turn.errors.map((line) => `${escapeBody(line)}\n`);
+  return {
+    open: `<turn${attrs({ n: turn.n, state: turn.state })}>\n`,
+    user: turn.user.length > 0 ? `<user>${escapeBody(turn.user)}</user>\n` : "",
+    files: turn.files.length > 0 ? `<files>${escapeBody(filesText(turn.files))}</files>\n` : "",
+    close: "</turn>\n",
+    assistant,
+    tools,
+    errors,
+    // Largest omitted markers each list could need; a cut list always keeps its marker.
+    markers: {
+      assistant: assistant.length > 0 ? bytes(assistantMarker(assistant.length)) : 0,
+      tools: tools.length > 0 ? bytes(listSection("tools", [], tools.length)) : 0,
+      errors: errors.length > 0 ? bytes(listSection("errors", [], errors.length)) : 0,
+    },
+  };
+}
 
+/** The least a detailed turn renders to without cutting its user text: tags, files, markers. */
+function detailFloor(turn: DigestTurnDetail): number {
+  const { open, user, files, close, markers } = detailParts(turn);
+  return bytes(open + user + files + close) + markers.assistant + markers.tools + markers.errors;
+}
+
+/**
+ * A turn in full. Given a `room` it cannot fill, it keeps the user text and files and fits
+ * errors, then tool calls, then the newest assistant messages into what is left, each cut list
+ * ending with its omitted marker. As a last resort the user text is cut too.
+ */
+function renderDetail(turn: DigestTurnDetail, room = Number.POSITIVE_INFINITY): string {
+  const { open, files, close, assistant, tools, errors, markers, ...parts } = detailParts(turn);
+  let user = parts.user;
   const full = [
     open,
     user,
@@ -207,24 +238,39 @@ function renderDetail(turn: DigestTurnDetail, room = Number.POSITIVE_INFINITY): 
   ].join("");
   if (bytes(full) <= room) return full;
 
-  let left = room - bytes(open) - bytes(user) - bytes(files) - bytes(close);
-  const marker = (omitted: number) => `<assistant${attrs({ omitted })}/>\n`;
-  const markerBound = assistant.length > 0 ? bytes(marker(assistant.length)) : 0;
-  const whole = fitCount(assistant.map(bytes).toReversed(), left - markerBound);
-  let kept = assistant.slice(assistant.length - whole);
-  // When not even the final reply fits whole, it is cut to the space left.
-  const finalReply = turn.assistant.at(-1);
-  if (whole === 0 && finalReply !== undefined) {
-    const wrapper = bytes("<assistant></assistant>\n");
-    const cut = cutToBytes(escapeBody(finalReply), left - markerBound - wrapper);
-    if (cut.length > 0) kept = [`<assistant>${cut}</assistant>\n`];
+  const fixed = bytes(open + files + close);
+  const userRoom = room - fixed - markers.assistant - markers.tools - markers.errors;
+  if (bytes(user) > userRoom) {
+    const cut = cutToBytes(escapeBody(turn.user), userRoom - bytes("<user></user>\n"));
+    user = cut.length > 0 ? `<user>${cut}</user>\n` : "";
   }
-  const omitted = assistant.length - kept.length;
-  const keptAssistant = omitted > 0 && left >= markerBound ? [marker(omitted), ...kept] : kept;
-  left -= sum(keptAssistant.map(bytes));
-  const errorSection = fitSection("errors", errors, left, "last");
+  let left = room - fixed - bytes(user);
+
+  // Room reserved for later lists' markers is released as each list is placed.
+  const errorSection = fitSection(
+    "errors",
+    errors,
+    left - markers.tools - markers.assistant,
+    "last",
+  );
   left -= bytes(errorSection);
-  const toolSection = fitSection("tools", tools, left, "last");
+  const toolSection = fitSection("tools", tools, left - markers.assistant, "last");
+  left -= bytes(toolSection);
+
+  let keptAssistant = assistant;
+  if (sum(assistant.map(bytes)) > left) {
+    const whole = fitCount(assistant.map(bytes).toReversed(), left - markers.assistant);
+    let kept = assistant.slice(assistant.length - whole);
+    // When not even the final reply fits whole, it is cut to the space left.
+    const finalReply = turn.assistant.at(-1);
+    if (whole === 0 && finalReply !== undefined) {
+      const wrapper = bytes("<assistant></assistant>\n");
+      const cut = cutToBytes(escapeBody(finalReply), left - markers.assistant - wrapper);
+      if (cut.length > 0) kept = [`<assistant>${cut}</assistant>\n`];
+    }
+    const omitted = assistant.length - kept.length;
+    keptAssistant = omitted > 0 ? [assistantMarker(omitted), ...kept] : kept;
+  }
   return [open, user, ...keptAssistant, toolSection, files, errorSection, close].join("");
 }
 
@@ -273,16 +319,14 @@ function placeTurns(
     if (recentSize(detailed) <= room) {
       recentLines = [...summaries.slice(0, count - detailed), ...details.slice(count - detailed)];
     } else {
-      // Only the newest turn is left in detail: drop degraded turns oldest first, then cut it.
-      const newestRoom = room - recentWrapper;
-      const newestDetail = details.at(-1)!;
-      const newestSize = detailSizes.at(-1)!;
-      if (newestSize <= newestRoom) {
-        const kept = fitCount(summarySizes.slice(0, -1).toReversed(), newestRoom - newestSize);
-        recentLines = [...summaries.slice(count - 1 - kept, -1), newestDetail];
-      } else {
-        recentLines = [renderDetail(newest, newestRoom)];
-      }
+      // Only the newest turn is left in detail and it does not fit whole. Degraded turns keep
+      // their lines while the newest turn is cut down to its floor; past that they drop oldest
+      // first.
+      const olderSizes = summarySizes.slice(0, -1);
+      const kept = fitCount(olderSizes.toReversed(), room - recentWrapper - detailFloor(newest));
+      const keptSummaries = summaries.slice(count - 1 - kept, -1);
+      const newestRoom = room - recentWrapper - sum(keptSummaries.map(bytes));
+      recentLines = [...keptSummaries, renderDetail(newest, newestRoom)];
     }
   }
   const recentText = newest === undefined ? "" : recentOpen + recentLines.join("") + recentClose;
@@ -317,7 +361,7 @@ function placeTurns(
 /**
  * Renders a digest as tagged text within `budgetBytes`. Header, goal, open work, and steering
  * are placed first (steering drops its oldest messages if they do not fit), leaving room for
- * the newest turn's user text and files; turns share the rest.
+ * the newest turn's user text, files, and omitted markers; turns share the rest.
  */
 export function renderThreadDigest(
   digest: ThreadDigest,
@@ -331,7 +375,7 @@ export function renderThreadDigest(
   const tailBound = bytes(renderMore(nextTurn, turnCount) + CLOSE);
   const newest = recentTurns.at(-1);
   const newestFloor =
-    newest === undefined ? 0 : bytes("<recent_turns>\n</recent_turns>\n" + renderDetail(newest, 0));
+    newest === undefined ? 0 : bytes("<recent_turns>\n</recent_turns>\n") + detailFloor(newest);
 
   let room = budgetBytes - bytes(header) - tailBound - newestFloor;
   const goal = digest.goal === null ? "" : renderGoal(digest.goal, room);

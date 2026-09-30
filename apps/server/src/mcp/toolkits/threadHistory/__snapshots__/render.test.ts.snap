@@ -59,7 +59,10 @@ exports[`renderThreadDigest > renders the golden digest under a tight budget 1`]
 <turn n="10" state="completed">
 <user>Turn 10 request. please please please please please please please please please please please please please please please please please please please please please please please please please pleas…</user>
 <assistant omitted="1"/>
-<assistant>Turn 10 reply 1. working working working working working …</assistant>
+<assistant>Turn 10 reply 1.…</assistant>
+<tools>
+Bash completed: vp test
+</tools>
 <files>src/turn-10.ts +12 -3</files>
 </turn>
 </recent_turns>
