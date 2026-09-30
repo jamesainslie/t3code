@@ -139,6 +139,8 @@ describe("buildThreadActionMenuItems", () => {
     const index = items.findIndex((item) => item.id === "continue-in-new-thread");
     expect(items[index]?.label).toBe("Continue in new thread");
     expect(items[index - 1]?.id).toBe("new-thread-on-branch");
+    // Neighbors that do different things must not look alike.
+    expect(items[index]?.icon).not.toBe(items[index - 1]?.icon);
     // A thread with no branch can still be continued in the project checkout.
     expect(ids({ ...baseState, canContinueInNewThread: true })[0]).toBe("continue-in-new-thread");
   });

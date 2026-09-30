@@ -111,7 +111,7 @@ export function buildThreadActionMenuItems(
           {
             id: "continue-in-new-thread" as const,
             label: "Continue in new thread",
-            icon: "message-square-plus",
+            icon: "link",
           },
         ]
       : []),
