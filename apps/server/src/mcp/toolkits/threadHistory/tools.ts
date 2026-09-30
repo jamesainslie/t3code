@@ -31,9 +31,6 @@ const ACCESS_LABELS: Record<AgentThreadHistoryAccess, string> = {
   environment: "All projects",
 };
 
-const WIDEN_ACCESS =
-  'Ask the user to reference the thread in a message, or to raise "Agent thread history" in Settings.';
-
 export class ThreadNotFoundError extends Schema.TaggedError<ThreadNotFoundError>()(
   "ThreadNotFoundError",
   { threadId: Schema.String },
@@ -48,7 +45,7 @@ export class ThreadOutOfScopeError extends Schema.TaggedError<ThreadOutOfScopeEr
   { threadId: Schema.String, level: AgentThreadHistoryAccess },
 ) {
   override get message(): string {
-    return `Thread ${this.threadId} is outside what this thread may read (thread history access: ${ACCESS_LABELS[this.level]}). ${WIDEN_ACCESS}`;
+    return `Thread ${this.threadId} is outside what this thread may read (thread history access: ${ACCESS_LABELS[this.level]}). Ask the user to reference the thread in a message, or to raise "Agent thread history" in Settings.`;
   }
 }
 
@@ -58,7 +55,7 @@ export class ThreadSearchOutOfScopeError extends Schema.TaggedError<ThreadSearch
   { level: AgentThreadHistoryAccess },
 ) {
   override get message(): string {
-    return `Searching threads needs thread history access of This project or All projects (thread history access: ${ACCESS_LABELS[this.level]}). ${WIDEN_ACCESS}`;
+    return `Searching threads is not allowed at this thread's history access level (${ACCESS_LABELS[this.level]}). Ask the user to raise "Agent thread history" in Settings to This project or All projects.`;
   }
 }
 

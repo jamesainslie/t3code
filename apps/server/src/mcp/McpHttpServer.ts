@@ -37,7 +37,10 @@ import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import { DocumentCommentsToolkitHandlersLive } from "./toolkits/documentComments/handlers.ts";
 import { DocumentCommentsToolkit } from "./toolkits/documentComments/tools.ts";
 import { ThreadHistoryToolkitHandlersLive } from "./toolkits/threadHistory/handlers.ts";
-import { ThreadHistoryToolkit } from "./toolkits/threadHistory/tools.ts";
+import {
+  ThreadHistoryReadFailedError,
+  ThreadHistoryToolkit,
+} from "./toolkits/threadHistory/tools.ts";
 import {
   DeviceScreenshotToolkitHandlersLive,
   DeviceStandardToolkitHandlersLive,
@@ -627,7 +630,8 @@ const TEXT_TOOL_INTERNAL_ERROR = "Tool execution failed due to an internal serve
  * `McpServer.toolkit` would send a string result twice, JSON-escaped as text and again as
  * `structuredContent`. Tools whose result is text for the agent to read are registered by
  * hand: success is one text block, and a declared failure is its message, which tells the
- * agent what to do next.
+ * agent what to do next. Declared failures are routine refusals logged at debug, except
+ * those `isFault` marks as the server's own failure, which are logged at warning.
  */
 const registerTextTool = <T extends Tool.Any, E, R>(
   tool: T,
@@ -639,6 +643,7 @@ const registerTextTool = <T extends Tool.Any, E, R>(
     E,
     McpInvocationContext.McpInvocationContext
   >,
+  isFault: (error: unknown) => boolean,
 ) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
@@ -656,7 +661,8 @@ const registerTextTool = <T extends Tool.Any, E, R>(
         isError: true,
         content: [{ type: "text", text: declared ? error.message : TEXT_TOOL_INTERNAL_ERROR }],
       });
-      return Effect.logWarning(`${tool.name} failed`, { cause }).pipe(Effect.as(result));
+      const log = declared && !isFault(error) ? Effect.logDebug : Effect.logWarning;
+      return log(`${tool.name} failed`, { cause }).pipe(Effect.as(result));
     };
     yield* server.addTool({
       tool: new McpSchema.Tool({
@@ -715,6 +721,7 @@ const registerThreadHistoryTools = Effect.fn("McpHttpServer.registerThreadHistor
             Effect.provideService(ProjectionSnapshotQuery.ProjectionSnapshotQuery, snapshots),
             Effect.provideService(ServerSettings.ServerSettingsService, settings),
           ),
+        Schema.is(ThreadHistoryReadFailedError),
       );
     yield* register("read_thread");
     yield* register("read_thread_turns");

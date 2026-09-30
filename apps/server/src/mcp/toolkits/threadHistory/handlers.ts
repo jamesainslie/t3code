@@ -146,7 +146,8 @@ const make = Effect.gen(function* () {
         const results = [];
         for (const found of matches) {
           if (results.length >= limit) break;
-          if (seen.has(found.threadId)) continue;
+          // The caller is already in its own context, so it is never a result.
+          if (found.threadId === caller.thread.id || seen.has(found.threadId)) continue;
           seen.add(found.threadId);
           // Search lists only what the level covers; referenced threads are read directly.
           const inScope = canReadThread({

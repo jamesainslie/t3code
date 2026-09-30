@@ -8,8 +8,10 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -551,6 +553,14 @@ it.effect("thread history tools return plain text without structured content", (
     expect(missing.content).toEqual([
       { type: "text", text: "Thread thread-unknown was not found in this T3 Code environment." },
     ]);
+
+    // Bad arguments are a protocol error, not a tool result the agent reads as text.
+    const invalid = yield* call({ threadId, recentTurns: 99 }).pipe(Effect.flip);
+    expect(invalid._tag).toBe("InvalidParams");
+
+    // A defect stays a defect; it is never dressed up as an expected failure.
+    const defect = yield* call({ threadId: "thread-defect" }).pipe(Effect.exit);
+    expect(Exit.isFailure(defect) && Cause.hasDies(defect.cause)).toBe(true);
   }).pipe(
     Effect.provide(
       McpHttpServer.ThreadHistoryToolkitRegistrationLive.pipe(
@@ -559,9 +569,11 @@ it.effect("thread history tools return plain text without structured content", (
           Layer.mergeAll(
             Layer.mock(ProjectionSnapshotQuery)({
               getThreadDetailById: (id) =>
-                Effect.succeed(
-                  id === threadId ? Option.some(makeThread({ id: threadId })) : Option.none(),
-                ),
+                id === "thread-defect"
+                  ? Effect.die(new Error("projection exploded"))
+                  : Effect.succeed(
+                      id === threadId ? Option.some(makeThread({ id: threadId })) : Option.none(),
+                    ),
               getProjectShellById: () => Effect.succeedNone,
             }),
             Layer.mock(ServerSettings.ServerSettingsService)({

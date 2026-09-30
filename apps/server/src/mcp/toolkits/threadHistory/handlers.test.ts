@@ -356,6 +356,9 @@ describe("thread history toolkit handlers", () => {
       const harness = yield* makeHarness({ matches: [match(SAME_PROJECT_ID, PROJECT_A)] });
       const error = yield* harness.call("find_threads", { query: "ssh log" }).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "ThreadSearchOutOfScopeError", level: "referenced" });
+      expect(error.message).toBe(
+        'Searching threads is not allowed at this thread\'s history access level (Referenced threads). Ask the user to raise "Agent thread history" in Settings to This project or All projects.',
+      );
       expect(yield* Ref.get(harness.searches)).toEqual([]);
     }),
   );
@@ -369,6 +372,8 @@ describe("thread history toolkit handlers", () => {
         settings: settingsWith({ agentThreadHistoryAccess: "project" }),
         threads: [...baseThreads, ...extra],
         matches: [
+          // The caller's own thread is never a search result.
+          match(CALLER_ID, PROJECT_A),
           match(SAME_PROJECT_ID, PROJECT_A),
           match(OTHER_PROJECT_ID, PROJECT_B),
           // Referenced threads are read directly; search lists only what the level covers.
@@ -389,6 +394,7 @@ describe("thread history toolkit handlers", () => {
       expect(ids).not.toContain(OTHER_PROJECT_ID);
       expect(ids).not.toContain(REFERENCED_ID);
       expect(ids).not.toContain(DELETED_ID);
+      expect(ids).not.toContain(CALLER_ID);
       expect(lines[0]).toContain('project="Alpha"');
       expect(lines[0]).toContain('status="completed"');
 
