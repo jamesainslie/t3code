@@ -80,6 +80,11 @@ export interface ProjectionThreadReadOptions {
   readonly includeArchived?: boolean;
 }
 
+export interface ProjectionThreadSearchOptions extends ProjectionThreadReadOptions {
+  /** Search only this project's threads, applied before the result limit. */
+  readonly projectId?: ProjectId;
+}
+
 export interface ProjectionThreadDetailQuery extends ProjectionThreadReadOptions {
   /**
    * Limit activities before SQLite returns and decodes their payloads.
@@ -180,7 +185,7 @@ export interface ProjectionSnapshotQueryShape {
    */
   readonly searchThreads: (
     input: OrchestrationSearchThreadsInput,
-    options?: ProjectionThreadReadOptions,
+    options?: ProjectionThreadSearchOptions,
   ) => Effect.Effect<OrchestrationSearchThreadsResult, ProjectionRepositoryError>;
 
   /**

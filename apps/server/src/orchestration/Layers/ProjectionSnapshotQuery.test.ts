@@ -3920,6 +3920,43 @@ projectionSnapshotLayer("ProjectionSnapshotQuery thread history reads", (it) => 
       );
     }),
   );
+
+  it.effect("scopes a search to one project before applying the limit", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      const others = Array.from({ length: 55 }, (_, index) => `thread-crowd-${index}`);
+      yield* insertThreads([
+        { id: "thread-own", projectId: "project-own" },
+        ...others.map((id) => ({ id, projectId: "project-crowd" })),
+      ]);
+      // Every other-project thread is newer, so it ranks ahead of the one in the project.
+      yield* sql`UPDATE projection_threads SET updated_at = '2026-03-04T00:00:00.000Z' WHERE project_id = 'project-crowd'`;
+      for (const threadId of ["thread-own", ...others]) {
+        yield* sql`
+          INSERT INTO projection_thread_messages (
+            message_id, thread_id, turn_id, role, text, is_streaming, created_at, updated_at
+          ) VALUES (
+            ${`message-${threadId}`}, ${threadId}, NULL, 'user',
+            'Where is the crowded beacon?', 0, ${timestamp}, ${timestamp}
+          )
+        `;
+      }
+
+      const unscoped = yield* query.searchThreads({ query: "crowded beacon", limit: 50 });
+      assert.equal(unscoped.matches.length, 50);
+      assert.isFalse(unscoped.matches.some((match) => match.threadId === "thread-own"));
+
+      const scoped = yield* query.searchThreads(
+        { query: "crowded beacon", limit: 50 },
+        { projectId: asProjectId("project-own") },
+      );
+      assert.deepEqual(
+        scoped.matches.map((match) => [match.threadId, match.projectId]),
+        [[ThreadId.make("thread-own"), asProjectId("project-own")]],
+      );
+    }),
+  );
 });
 
 projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {

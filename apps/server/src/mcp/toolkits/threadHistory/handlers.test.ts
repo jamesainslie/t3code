@@ -25,6 +25,7 @@ import {
   type ProjectionSnapshotQueryShape,
   type ProjectionThreadDetailQuery,
   type ProjectionThreadReadOptions,
+  type ProjectionThreadSearchOptions,
 } from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -171,7 +172,7 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
   const searches = yield* Ref.make<
     ReadonlyArray<{
       readonly input: OrchestrationSearchThreadsInput;
-      readonly options: ProjectionThreadReadOptions | undefined;
+      readonly options: ProjectionThreadSearchOptions | undefined;
     }>
   >([]);
   const detailReads = yield* Ref.make<
@@ -432,6 +433,20 @@ describe("thread history toolkit handlers", () => {
     }),
   );
 
+  it.effect("find_threads searches every project at the environment level", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryAccess: "environment" }),
+        matches: [match(OTHER_PROJECT_ID, PROJECT_B)],
+      });
+      const text = yield* harness.call("find_threads", { query: "ssh log" });
+      expect(text).toContain(`id="${OTHER_PROJECT_ID}"`);
+      expect(yield* Ref.get(harness.searches)).toEqual([
+        { input: { query: "ssh log", limit: 50 }, options: { includeArchived: true } },
+      ]);
+    }),
+  );
+
   it.effect("read_thread caps recentTurns at the setting", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({
@@ -527,7 +542,10 @@ describe("thread history toolkit handlers", () => {
       });
       const text = yield* harness.call("find_threads", { query: "ssh log" });
       expect(yield* Ref.get(harness.searches)).toEqual([
-        { input: { query: "ssh log", limit: 50 }, options: { includeArchived: true } },
+        {
+          input: { query: "ssh log", limit: 50 },
+          options: { includeArchived: true, projectId: PROJECT_A },
+        },
       ]);
 
       const lines = text.split("\n");

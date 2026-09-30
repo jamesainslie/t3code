@@ -182,10 +182,13 @@ const make = Effect.gen(function* () {
         if (!canSearchThreads(level)) {
           return yield* new ThreadSearchOutOfScopeError({ level });
         }
+        // Scoping in SQL keeps other projects' matches from filling the limit.
         const { matches } = yield* snapshots
           .searchThreads(
             { query: input.query, limit: SEARCH_MATCH_LIMIT },
-            { includeArchived: true },
+            level === "project"
+              ? { includeArchived: true, projectId: caller.projectId }
+              : { includeArchived: true },
           )
           .pipe(Effect.mapError(readFailed));
         const limit = Math.min(input.limit ?? FIND_THREADS_MAX_LIMIT, FIND_THREADS_MAX_LIMIT);

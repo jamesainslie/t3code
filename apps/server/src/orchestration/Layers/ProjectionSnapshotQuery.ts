@@ -194,6 +194,7 @@ const ProjectionThreadSearchRequest = Schema.Struct({
   pattern: Schema.String,
   limit: Schema.Int,
   includeArchived: Schema.Boolean,
+  projectId: Schema.NullOr(ProjectId),
 });
 const ProjectionThreadSearchRow = Schema.Struct({
   threadId: ThreadId,
@@ -1164,7 +1165,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const searchThreadRows = SqlSchema.findAll({
     Request: ProjectionThreadSearchRequest,
     Result: ProjectionThreadSearchRow,
-    execute: ({ pattern, limit, includeArchived }) =>
+    execute: ({ pattern, limit, includeArchived, projectId }) =>
       sql`
         WITH ranked AS (
           SELECT
@@ -1199,6 +1200,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           WHERE threads.deleted_at IS NULL
             AND ${includeArchived ? sql`1 = 1` : sql`threads.archived_at IS NULL`}
             AND projects.deleted_at IS NULL
+            AND ${projectId === null ? sql`1 = 1` : sql`threads.project_id = ${projectId}`}
             AND messages.is_streaming = 0
             -- Only these two roles are searchable, and the CASE above depends
             -- on it: reasoning is deliberately excluded so a thinking trace
@@ -3220,6 +3222,7 @@ pending_approval_requests AS (
       pattern: `%${escapedQuery}%`,
       limit: input.limit ?? 50,
       includeArchived: options?.includeArchived === true,
+      projectId: options?.projectId ?? null,
     }).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
