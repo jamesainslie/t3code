@@ -4,6 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import type {
+  AgentThreadHistoryAccess,
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
   ProviderSendTurnInput,
@@ -5239,8 +5240,17 @@ describe("agent browser access", () => {
   const startSessionWith = (
     access: boolean | { readonly browser: boolean; readonly device: boolean },
     threadId: ThreadId,
-    projectOverride?: boolean | { readonly browser?: boolean; readonly device?: boolean },
-    options?: { readonly withoutOrchestration?: boolean },
+    projectOverride?:
+      | boolean
+      | {
+          readonly browser?: boolean;
+          readonly device?: boolean;
+          readonly threadHistory?: AgentThreadHistoryAccess;
+        },
+    options?: {
+      readonly withoutOrchestration?: boolean;
+      readonly threadHistory?: AgentThreadHistoryAccess;
+    },
   ) =>
     Effect.gen(function* () {
       const enableAgentBrowserAccess = typeof access === "boolean" ? access : access.browser;
@@ -5323,6 +5333,9 @@ describe("agent browser access", () => {
           ServerSettings.ServerSettingsService.layerTest({
             enableAgentBrowserAccess,
             enableAgentDeviceAccess,
+            ...(options?.threadHistory !== undefined
+              ? { agentThreadHistoryAccess: options.threadHistory }
+              : {}),
             projectSettingsOverrides:
               projectOverride === undefined
                 ? {}
@@ -5335,6 +5348,9 @@ describe("agent browser access", () => {
                           : {}),
                         ...(projectOverride.device !== undefined
                           ? { enableAgentDeviceAccess: projectOverride.device }
+                          : {}),
+                        ...(projectOverride.threadHistory !== undefined
+                          ? { agentThreadHistoryAccess: projectOverride.threadHistory }
                           : {}),
                       },
                     },
@@ -5373,7 +5389,7 @@ describe("agent browser access", () => {
       const issued = yield* startSessionWith(false, threadId);
 
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["document-comments", "pull-requests"] },
+        { threadId, capabilities: ["document-comments", "pull-requests", "thread-history"] },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5385,7 +5401,16 @@ describe("agent browser access", () => {
       const issued = yield* startSessionWith(true, threadId);
 
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["device", "document-comments", "preview", "pull-requests"] },
+        {
+          threadId,
+          capabilities: [
+            "device",
+            "document-comments",
+            "preview",
+            "pull-requests",
+            "thread-history",
+          ],
+        },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5397,7 +5422,10 @@ describe("agent browser access", () => {
       const issued = yield* startSessionWith({ browser: false, device: true }, threadId);
 
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["device", "document-comments", "pull-requests"] },
+        {
+          threadId,
+          capabilities: ["device", "document-comments", "pull-requests", "thread-history"],
+        },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5407,7 +5435,7 @@ describe("agent browser access", () => {
       const threadId = asThreadId("thread-project-browser-off");
       const issued = yield* startSessionWith({ browser: true, device: false }, threadId, false);
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["document-comments", "pull-requests"] },
+        { threadId, capabilities: ["document-comments", "pull-requests", "thread-history"] },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5417,7 +5445,10 @@ describe("agent browser access", () => {
       const threadId = asThreadId("thread-project-browser-off-device-on");
       const issued = yield* startSessionWith(true, threadId, false);
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["device", "document-comments", "pull-requests"] },
+        {
+          threadId,
+          capabilities: ["device", "document-comments", "pull-requests", "thread-history"],
+        },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5427,7 +5458,10 @@ describe("agent browser access", () => {
       const threadId = asThreadId("thread-project-browser-on");
       const issued = yield* startSessionWith({ browser: false, device: false }, threadId, true);
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["document-comments", "preview", "pull-requests"] },
+        {
+          threadId,
+          capabilities: ["document-comments", "preview", "pull-requests", "thread-history"],
+        },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5439,7 +5473,10 @@ describe("agent browser access", () => {
         device: true,
       });
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["device", "document-comments", "pull-requests"] },
+        {
+          threadId,
+          capabilities: ["device", "document-comments", "pull-requests", "thread-history"],
+        },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -5456,7 +5493,50 @@ describe("agent browser access", () => {
         { withoutOrchestration: true },
       );
       assert.deepEqual(issued, [
-        { threadId, capabilities: ["document-comments", "preview", "pull-requests"] },
+        {
+          threadId,
+          capabilities: ["document-comments", "preview", "pull-requests", "thread-history"],
+        },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("grants thread-history but not thread-search at the referenced level", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-history-referenced");
+      const issued = yield* startSessionWith(false, threadId);
+      assert.deepEqual(issued, [
+        { threadId, capabilities: ["document-comments", "pull-requests", "thread-history"] },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("grants thread-search at the project level", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-history-project");
+      const issued = yield* startSessionWith(false, threadId, undefined, {
+        threadHistory: "project",
+      });
+      assert.deepEqual(issued, [
+        {
+          threadId,
+          capabilities: ["document-comments", "pull-requests", "thread-history", "thread-search"],
+        },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("withholds thread history when a project turns it off", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-history-project-off");
+      const issued = yield* startSessionWith(
+        false,
+        threadId,
+        { threadHistory: "off" },
+        { threadHistory: "referenced" },
+      );
+      assert.deepEqual(issued, [
+        { threadId, capabilities: ["document-comments", "pull-requests"] },
       ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
