@@ -3693,15 +3693,16 @@ function UserMessageContextChip(props: {
   copyMarkdown: string;
   tooltip?: string;
   kind: ContextChipKind;
-  /** Makes the chip a button. */
+  state?: "unresolved";
+  /** Makes the chip a button named "Open <kind>, <label>". */
   onClick?: () => void;
 }) {
   if (props.onClick) {
-    return (
+    const button = (
       <ContextChip
         kind={props.kind}
         render={<button type="button" />}
-        aria-label={props.kindLabel ? `${props.kindLabel}, ${props.label}` : undefined}
+        aria-label={`Open ${props.kindLabel ? `${props.kindLabel.toLowerCase()}, ` : ""}${props.label}`}
         data-markdown-copy={props.copyMarkdown}
         onClick={props.onClick}
       >
@@ -3709,10 +3710,18 @@ function UserMessageContextChip(props: {
         <ContextChipLabel>{props.label}</ContextChipLabel>
       </ContextChip>
     );
+    if (!props.tooltip) return button;
+    return (
+      <Tooltip>
+        <TooltipTrigger render={button} />
+        <TooltipPopup side="top">{props.tooltip}</TooltipPopup>
+      </Tooltip>
+    );
   }
   return (
     <ContextChipShell
       kind={props.kind}
+      {...(props.state ? { state: props.state } : {})}
       icon={props.icon}
       label={props.label}
       aria-label={props.kindLabel ? `${props.kindLabel}, ${props.label}` : undefined}
@@ -3739,7 +3748,7 @@ function UserMessageThreadContextChip(props: {
       copyMarkdown={props.copyMarkdown}
       kind="neutral"
       {...(shell === null
-        ? { tooltip: "Thread not available in this environment" }
+        ? { tooltip: "Thread not available in this environment", state: "unresolved" as const }
         : {
             onClick: () => {
               void navigate({

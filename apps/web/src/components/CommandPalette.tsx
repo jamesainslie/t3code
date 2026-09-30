@@ -102,6 +102,7 @@ import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments"
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
+import { copyThreadChip } from "../lib/copyThreadChip";
 import {
   appendBrowsePathSegment,
   ensureBrowseDirectoryPath,
@@ -1903,6 +1904,19 @@ function OpenCommandPaletteDialog(props: {
       icon: <LinkIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "thread.copyReference",
       run: copyActiveThreadReference,
+    });
+  }
+
+  if (activeThread !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:copy-thread-chip",
+      searchTerms: ["copy", "thread chip", "reference", "context", "paste"],
+      title: "Copy as thread chip",
+      description: activeThread.title,
+      icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+      run: () =>
+        copyThreadChip({ environmentId: activeThread.environmentId, thread: activeThread }),
     });
   }
 

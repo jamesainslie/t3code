@@ -125,6 +125,14 @@ describe("buildThreadActionMenuItems", () => {
     expect(allIds(baseState)).not.toContain("copy-branch");
   });
 
+  it("offers Copy as thread chip in the Copy submenu", () => {
+    expect(allIds(baseState)).toContain("copy-thread-chip");
+    const copy = buildThreadActionMenuItems(baseState).find((item) => item.id === "copy");
+    expect(copy?.children?.find((child) => child.id === "copy-thread-chip")?.label).toBe(
+      "Copy as thread chip",
+    );
+  });
+
   it("flips lifecycle labels with thread state", () => {
     expect(ids({ ...baseState, isPinned: true, isSettled: true, isSnoozed: true })).toEqual(
       expect.arrayContaining(["unpin", "unsettle", "unsnooze"]),
