@@ -903,7 +903,6 @@ describe("mobile composer drafts", () => {
       modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
     };
     const draftKey = createNewTaskDraft({ environmentId, projectId: source.projectId });
-    setComposerDraftText(draftKey, "left over from an abandoned draft");
 
     seedContinuationDraft(draftKey, source);
 
@@ -958,6 +957,46 @@ describe("mobile composer drafts", () => {
     expect(input.bootstrap.createThread.continuedFromThreadId).toBe(source.id);
     expect(input.message.text).toBe(buildContinuePrompt(record));
     expect(input.message.context?.records).toEqual([record]);
+  });
+
+  it("leads unsent draft content with the continue prompt instead of replacing it", () => {
+    const source = {
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+    };
+    const draftKey = createNewTaskDraft({
+      environmentId: EnvironmentId.make("context-environment"),
+      projectId: source.projectId,
+    });
+    const unsent = contextDraft(0, 1);
+    const image: DraftComposerAttachment = {
+      id: "image-1",
+      type: "image",
+      name: "image.png",
+      mimeType: "image/png",
+      sizeBytes: 3,
+      fileUri: "file:///image.png",
+      previewUri: "file:///image.png",
+    };
+    appAtomRegistry.set(composerDraftsAtom, {
+      ...appAtomRegistry.get(composerDraftsAtom),
+      [draftKey]: {
+        ...getComposerDraftSnapshot(draftKey),
+        text: unsent.text,
+        context: unsent.context,
+        attachments: [image],
+      },
+    });
+
+    seedContinuationDraft(draftKey, source);
+
+    const record = buildThreadContextRecord(source);
+    const draft = getComposerDraftSnapshot(draftKey);
+    expect(draft.text).toBe(`${buildContinuePrompt(record)}\n\n${unsent.text}`);
+    expect(draft.context?.records).toEqual([...unsent.context!.records, record]);
+    expect(draft.attachments).toEqual([image]);
   });
 
   // Hydration is one-shot per module instance and the attachment sweep now

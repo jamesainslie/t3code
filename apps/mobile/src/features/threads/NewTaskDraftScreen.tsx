@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useFontFamily } from "../../lib/useFontFamily";
 import {
+  EnvironmentId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   resolveEnvironmentMachineKind,
@@ -639,31 +640,63 @@ export function NewTaskDraftScreen(props: {
 
   // The route names the blocked thread; the flow holds it until the create
   // succeeds. A plain New task navigation clears it by passing nothing.
-  const setUnblocksThreadId = flow.setUnblocksThreadId;
+  const setUnblocksThread = flow.setUnblocksThread;
+  const routeEnvironmentId = props.initialProjectRef?.environmentId;
   const routeUnblocksThreadId = props.initialProjectRef?.unblocksThreadId;
   useEffect(() => {
     if (props.pendingTaskId || props.draftId) return;
-    setUnblocksThreadId(routeUnblocksThreadId ? ThreadId.make(routeUnblocksThreadId) : null);
-  }, [props.draftId, props.pendingTaskId, routeUnblocksThreadId, setUnblocksThreadId]);
+    setUnblocksThread(
+      routeEnvironmentId && routeUnblocksThreadId
+        ? {
+            environmentId: EnvironmentId.make(routeEnvironmentId),
+            threadId: ThreadId.make(routeUnblocksThreadId),
+          }
+        : null,
+    );
+  }, [
+    props.draftId,
+    props.pendingTaskId,
+    routeEnvironmentId,
+    routeUnblocksThreadId,
+    setUnblocksThread,
+  ]);
 
   // A continuation names its source thread the same way, and opens prefilled
   // once per request, after the draft lands in the source thread's project.
-  const setContinuedFromThreadId = flow.setContinuedFromThreadId;
+  const setContinuedFromThread = flow.setContinuedFromThread;
   const routeContinuedFromThreadId = props.initialProjectRef?.continuedFromThreadId;
   useEffect(() => {
     if (props.pendingTaskId || props.draftId) return;
-    setContinuedFromThreadId(
-      routeContinuedFromThreadId ? ThreadId.make(routeContinuedFromThreadId) : null,
+    setContinuedFromThread(
+      routeEnvironmentId && routeContinuedFromThreadId
+        ? {
+            environmentId: EnvironmentId.make(routeEnvironmentId),
+            threadId: ThreadId.make(routeContinuedFromThreadId),
+          }
+        : null,
     );
-  }, [props.draftId, props.pendingTaskId, routeContinuedFromThreadId, setContinuedFromThreadId]);
-  const seededContinuationRequestRef = useRef<typeof props.initialProjectRef>(undefined);
+  }, [
+    props.draftId,
+    props.pendingTaskId,
+    routeContinuedFromThreadId,
+    routeEnvironmentId,
+    setContinuedFromThread,
+  ]);
+  const handledContinuationRequestRef = useRef<typeof props.initialProjectRef>(undefined);
   useEffect(() => {
     const request = props.initialProjectRef;
     const draftKey = flow.draftKey;
     if (props.pendingTaskId || props.draftId || !draftKey || !selectedProject) return;
-    if (!request?.continuedFromThreadId || seededContinuationRequestRef.current === request) {
+    if (!request?.continuedFromThreadId || handledContinuationRequestRef.current === request) {
       return;
     }
+    if (
+      selectedProject.environmentId !== request.environmentId ||
+      selectedProject.id !== request.projectId
+    ) {
+      return;
+    }
+    handledContinuationRequestRef.current = request;
     // Read once rather than subscribed: the source thread may still be
     // streaming, and only its title and model matter here.
     const source = appAtomRegistry.get(
@@ -672,10 +705,20 @@ export function NewTaskDraftScreen(props: {
         threadId: ThreadId.make(request.continuedFromThreadId),
       }),
     );
-    if (source?.projectId !== selectedProject.id) return;
-    seededContinuationRequestRef.current = request;
+    if (source?.projectId !== selectedProject.id) {
+      // No chip to show means no hidden link either.
+      setContinuedFromThread(null);
+      return;
+    }
     seedContinuationDraft(draftKey, source);
-  }, [flow.draftKey, props.draftId, props.initialProjectRef, props.pendingTaskId, selectedProject]);
+  }, [
+    flow.draftKey,
+    props.draftId,
+    props.initialProjectRef,
+    props.pendingTaskId,
+    selectedProject,
+    setContinuedFromThread,
+  ]);
 
   useEffect(() => {
     // Pending-task editing and draft resumption own project selection (and

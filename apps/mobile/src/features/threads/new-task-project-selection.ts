@@ -1,5 +1,5 @@
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import type { HomeProjectScope } from "../home/homeThreadList";
@@ -106,4 +106,16 @@ export function resolveDraftProjectSelection(
 
   const onlyProject = getOnlySelectableProject(projectScopes);
   return onlyProject ? { kind: "select", project: onlyProject } : { kind: "pick" };
+}
+
+/**
+ * A pending thread link (unblocks, continues) names a thread in one
+ * environment. Threads in different environments cannot observe each other,
+ * so the link survives only while the draft stays in that environment.
+ */
+export function retainThreadLink(
+  link: ScopedThreadRef | null,
+  environmentId: EnvironmentId,
+): ScopedThreadRef | null {
+  return link?.environmentId === environmentId ? link : null;
 }
