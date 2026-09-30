@@ -330,6 +330,7 @@ const PersistedDraftThreadState = Schema.Struct({
   envMode: DraftThreadEnvModeSchema,
   startFromOrigin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   unblocksThreadId: Schema.optionalKey(ThreadId),
+  continuedFromThreadId: Schema.optionalKey(ThreadId),
   promotedTo: Schema.optionalKey(
     Schema.NullOr(
       Schema.Struct({
@@ -465,6 +466,11 @@ export interface DraftSessionState {
    * the draft becomes a real thread, so an abandoned draft leaves no trace.
    */
   unblocksThreadId?: ThreadId;
+  /**
+   * The thread this draft continues. Sent with the first turn so the new
+   * thread records it, then cleared like the unblock link.
+   */
+  continuedFromThreadId?: ThreadId;
   promotedTo?: ScopedThreadRef | null;
 }
 
@@ -537,6 +543,8 @@ interface ComposerDraftStoreState {
       startFromOrigin?: boolean;
       /** Null clears a pending link; undefined leaves the draft's alone. */
       unblocksThreadId?: ThreadId | null;
+      /** Null clears a pending link; undefined leaves the draft's alone. */
+      continuedFromThreadId?: ThreadId | null;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
@@ -556,6 +564,8 @@ interface ComposerDraftStoreState {
       startFromOrigin?: boolean;
       /** Null clears a pending link; undefined leaves the draft's alone. */
       unblocksThreadId?: ThreadId | null;
+      /** Null clears a pending link; undefined leaves the draft's alone. */
+      continuedFromThreadId?: ThreadId | null;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
@@ -574,6 +584,8 @@ interface ComposerDraftStoreState {
       startFromOrigin?: boolean;
       /** Null clears a pending link; undefined leaves the draft's alone. */
       unblocksThreadId?: ThreadId | null;
+      /** Null clears a pending link; undefined leaves the draft's alone. */
+      continuedFromThreadId?: ThreadId | null;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
@@ -1533,6 +1545,7 @@ function createDraftThreadState(
     envMode?: DraftThreadEnvMode;
     startFromOrigin?: boolean;
     unblocksThreadId?: ThreadId | null;
+    continuedFromThreadId?: ThreadId | null;
     runtimeMode?: RuntimeMode;
     interactionMode?: ProviderInteractionMode;
     environmentSelection?: "auto" | "manual";
@@ -1573,6 +1586,12 @@ function createDraftThreadState(
         ? null
         : (existingThread?.unblocksThreadId ?? null)
       : options.unblocksThreadId;
+  const nextContinuedFromThreadId =
+    options?.continuedFromThreadId === undefined
+      ? environmentChanged
+        ? null
+        : (existingThread?.continuedFromThreadId ?? null)
+      : options.continuedFromThreadId;
   const environmentSelection =
     options?.environmentSelection ?? existingThread?.environmentSelection;
   return {
@@ -1600,6 +1619,7 @@ function createDraftThreadState(
       options?.envMode ?? (nextWorktreePath ? "worktree" : (existingThread?.envMode ?? "local")),
     startFromOrigin: nextStartFromOrigin,
     ...(nextUnblocksThreadId ? { unblocksThreadId: nextUnblocksThreadId } : {}),
+    ...(nextContinuedFromThreadId ? { continuedFromThreadId: nextContinuedFromThreadId } : {}),
     promotedTo: null,
   };
 }
@@ -1635,6 +1655,7 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.envMode === right.envMode &&
     left.startFromOrigin === right.startFromOrigin &&
     left.unblocksThreadId === right.unblocksThreadId &&
+    left.continuedFromThreadId === right.continuedFromThreadId &&
     scopedThreadRefsEqual(left.promotedTo, right.promotedTo)
   );
 }
@@ -1786,6 +1807,10 @@ function normalizePersistedDraftThreads(
         ...(typeof candidateDraftThread.unblocksThreadId === "string" &&
         candidateDraftThread.unblocksThreadId.length > 0
           ? { unblocksThreadId: candidateDraftThread.unblocksThreadId as ThreadId }
+          : {}),
+        ...(typeof candidateDraftThread.continuedFromThreadId === "string" &&
+        candidateDraftThread.continuedFromThreadId.length > 0
+          ? { continuedFromThreadId: candidateDraftThread.continuedFromThreadId as ThreadId }
           : {}),
         ...(candidateDraftThread.environmentSelection === "manual" ||
         candidateDraftThread.environmentSelection === "auto"
@@ -2547,6 +2572,9 @@ function toHydratedDraftThreadState(
     ...(persistedDraftThread.unblocksThreadId
       ? { unblocksThreadId: persistedDraftThread.unblocksThreadId }
       : {}),
+    ...(persistedDraftThread.continuedFromThreadId
+      ? { continuedFromThreadId: persistedDraftThread.continuedFromThreadId }
+      : {}),
     ...(persistedDraftThread.environmentSelection
       ? { environmentSelection: persistedDraftThread.environmentSelection }
       : {}),
@@ -2830,6 +2858,12 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                   ? (existing.unblocksThreadId ?? null)
                   : null
                 : options.unblocksThreadId;
+            const nextContinuedFromThreadId =
+              options.continuedFromThreadId === undefined
+                ? nextProjectRef.environmentId === existing.environmentId
+                  ? (existing.continuedFromThreadId ?? null)
+                  : null
+                : options.continuedFromThreadId;
             const environmentSelection =
               options.environmentSelection ??
               (options.branch != null || options.worktreePath != null
@@ -2859,6 +2893,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                 options.envMode ?? (nextWorktreePath ? "worktree" : (existing.envMode ?? "local")),
               startFromOrigin: nextStartFromOrigin,
               ...(nextUnblocksThreadId ? { unblocksThreadId: nextUnblocksThreadId } : {}),
+              ...(nextContinuedFromThreadId
+                ? { continuedFromThreadId: nextContinuedFromThreadId }
+                : {}),
               promotedTo: existing.promotedTo ?? null,
             };
             const isUnchanged =
@@ -2875,6 +2912,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.envMode === existing.envMode &&
               nextDraftThread.startFromOrigin === existing.startFromOrigin &&
               nextDraftThread.unblocksThreadId === existing.unblocksThreadId &&
+              nextDraftThread.continuedFromThreadId === existing.continuedFromThreadId &&
               scopedThreadRefsEqual(nextDraftThread.promotedTo, existing.promotedTo);
             if (isUnchanged) {
               return state;

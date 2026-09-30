@@ -9,6 +9,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
  */
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
+  | "continue-in-new-thread"
   | "filter-by-project"
   | "project-settings"
   | "pin"
@@ -40,6 +41,11 @@ export type ThreadActionMenuId =
 
 export interface ThreadActionMenuState {
   readonly branch: string | null;
+  /**
+   * The project lets agents read thread history, so a new thread can pick up
+   * this one by reference. False for unsent drafts, which have nothing to read.
+   */
+  readonly canContinueInNewThread: boolean;
   /**
    * Project scoping for the thread list. Null on surfaces with no scoped
    * list behind the menu (the chat header), where the item must not show.
@@ -97,6 +103,15 @@ export function buildThreadActionMenuItems(
             id: "new-thread-on-branch" as const,
             label: `New thread on ${state.branch}`,
             icon: "message-square-plus",
+          },
+        ]
+      : []),
+    ...(state.canContinueInNewThread
+      ? [
+          {
+            id: "continue-in-new-thread" as const,
+            label: "Continue in new thread",
+            icon: "link",
           },
         ]
       : []),

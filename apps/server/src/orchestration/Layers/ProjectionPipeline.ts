@@ -657,6 +657,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             highlightColor: null,
             activeOrderKey: null,
             autoSettleDisabledAt: null,
+            continuedFromThreadId: event.payload.continuedFromThreadId ?? null,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
             latestUserMessageAt: null,

@@ -15,6 +15,7 @@ import {
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { isDependencyCandidate } from "@t3tools/client-runtime/state/thread-settled";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   canPreloadBrowsePath,
@@ -51,6 +52,7 @@ import {
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
+  MessageSquarePlusIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
@@ -75,7 +77,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { continueInNewThreadOptions, useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
@@ -758,6 +760,8 @@ function OpenCommandPaletteDialog(props: {
   const activeThreadServerConfig = useServerConfigs().get(
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
+  const canContinueActiveThread =
+    activeThread !== null && canContinueThread(activeThreadServerConfig, activeThread.projectId);
   const activeThreadReferenceCopyTarget =
     referenceThreadRef === null || (pathname === "/pull-requests" && !openPanelPullRequestUrl)
       ? null
@@ -1917,6 +1921,23 @@ function OpenCommandPaletteDialog(props: {
       icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
       run: () =>
         copyThreadChip({ environmentId: activeThread.environmentId, thread: activeThread }),
+    });
+  }
+
+  if (activeThread !== null && canContinueActiveThread) {
+    actionItems.push({
+      kind: "action",
+      value: "action:continue-in-new-thread",
+      searchTerms: ["continue", "new thread", "hand off", "fresh context", "carry over"],
+      title: "Continue in new thread",
+      description: activeThread.title,
+      icon: <MessageSquarePlusIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await handleNewThread(
+          scopeProjectRef(activeThread.environmentId, activeThread.projectId),
+          continueInNewThreadOptions(activeThread),
+        );
+      },
     });
   }
 

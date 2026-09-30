@@ -358,6 +358,76 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-branch-pr-proje
   },
 );
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-continued-from-projection-")))(
+  "continued-from projection",
+  (it) => {
+    it.effect("keeps the continued-from link through later thread events", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const now = "2026-01-01T00:00:00.000Z";
+        const threadId = ThreadId.make("thread-continued-next");
+        const sourceThreadId = ThreadId.make("thread-continued-source");
+        const eventFields = {
+          aggregateKind: "thread" as const,
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: null,
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+        };
+        const readLink = sql<{ readonly continuedFromThreadId: string | null }>`
+          SELECT continued_from_thread_id AS "continuedFromThreadId"
+          FROM projection_threads
+          WHERE thread_id = ${threadId}
+        `;
+
+        yield* projectionPipeline.projectEvent(
+          yield* eventStore.append({
+            ...eventFields,
+            type: "thread.created",
+            eventId: EventId.make("evt-continued-created"),
+            payload: {
+              threadId,
+              projectId: ProjectId.make("project-continued"),
+              title: "Continued thread",
+              modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              createdAt: now,
+              updatedAt: now,
+              continuedFromThreadId: sourceThreadId,
+            },
+          }),
+        );
+        assert.deepEqual(yield* readLink, [{ continuedFromThreadId: sourceThreadId }]);
+
+        yield* projectionPipeline.projectEvent(
+          yield* eventStore.append({
+            ...eventFields,
+            type: "thread.meta-updated",
+            eventId: EventId.make("evt-continued-renamed"),
+            payload: { threadId, title: "Renamed continuation", updatedAt: now },
+          }),
+        );
+        yield* projectionPipeline.projectEvent(
+          yield* eventStore.append({
+            ...eventFields,
+            type: "thread.archived",
+            eventId: EventId.make("evt-continued-archived"),
+            payload: { threadId, archivedAt: now, updatedAt: now },
+          }),
+        );
+        assert.deepEqual(yield* readLink, [{ continuedFromThreadId: sourceThreadId }]);
+      }),
+    );
+  },
+);
+
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
     Effect.gen(function* () {

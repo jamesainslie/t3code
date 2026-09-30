@@ -6,11 +6,13 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import {
   type EnvironmentThreadStatus,
+  type ThreadContinuation,
   mergeEnvironmentThread,
 } from "@t3tools/client-runtime/state/threads";
 import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { Atom } from "effect/unstable/reactivity";
 import { useMemo } from "react";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -32,6 +34,9 @@ const EMPTY_THREAD_REFS_ATOM = Atom.make(EMPTY_THREAD_REFS).pipe(
 );
 const EMPTY_THREAD_SHELL_ATOM = Atom.make<EnvironmentThreadShell | null>(null).pipe(
   Atom.withLabel("web-thread-shell:empty"),
+);
+const EMPTY_CONTINUATIONS_ATOM = Atom.make<ReadonlyArray<ThreadContinuation>>([]).pipe(
+  Atom.withLabel("web-thread-continued-in:empty"),
 );
 const EMPTY_THREAD_DETAIL_ATOM = Atom.make<EnvironmentThread | null>(null).pipe(
   Atom.withLabel("web-thread-detail:empty"),
@@ -100,6 +105,12 @@ export function useProject(ref: ScopedProjectRef | null): EnvironmentProject | n
 export function useThreadShell(ref: ScopedThreadRef | null): EnvironmentThreadShell | null {
   return useAtomValue(
     ref === null ? EMPTY_THREAD_SHELL_ATOM : environmentThreadShells.threadShellAtom(ref),
+  );
+}
+
+export function useContinuedInThreads(ref: ScopedThreadRef | null) {
+  return useAtomValue(
+    ref === null ? EMPTY_CONTINUATIONS_ATOM : environmentThreadShells.continuedInAtom(ref),
   );
 }
 
@@ -225,6 +236,15 @@ export function readEnvironmentSupportsDependencies(environmentId: EnvironmentId
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadDependencies === true
+  );
+}
+
+/** Whether "Continue in new thread" is offered for a project. False until the
+    environment's config arrives, and against servers without continuation support. */
+export function readCanContinueThread(environmentId: EnvironmentId, projectId: ProjectId): boolean {
+  return canContinueThread(
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId),
+    projectId,
   );
 }
 

@@ -4,7 +4,12 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { DEFAULT_SERVER_SETTINGS, type ScopedProjectRef, type ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type ProjectId,
+  type ScopedProjectRef,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import {
@@ -23,6 +28,10 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import {
+  buildContinuePrompt,
+  buildThreadContextRecord,
+} from "@t3tools/shared/threadContextReference";
 import { readProjects, readThreadShell, useProjects, useThread } from "../state/entities";
 import {
   hasExplicitComposerModelSelection,
@@ -42,6 +51,33 @@ interface NewThreadWorkspaceOptions {
   startFromOrigin?: boolean;
   /** Thread this draft is meant to unblock, linked on first send. Null clears one. */
   unblocksThreadId?: ThreadId | null;
+  /** Thread this draft continues, recorded on first send. */
+  continuedFromThread?: ContinuedFromThread;
+}
+
+interface ContinuedFromThread {
+  readonly id: ThreadId;
+  readonly projectId: ProjectId;
+  readonly title: string;
+}
+
+/**
+ * What "Continue in new thread" opens: a draft on the source thread's branch
+ * and worktree that references the source and records it on first send.
+ */
+export function continueInNewThreadOptions(
+  thread: ContinuedFromThread & {
+    readonly branch: string | null;
+    readonly worktreePath: string | null;
+  },
+) {
+  return {
+    branch: thread.branch,
+    worktreePath: thread.worktreePath,
+    envMode: thread.worktreePath ? ("worktree" as const) : ("local" as const),
+    startFromOrigin: false,
+    continuedFromThread: { id: thread.id, projectId: thread.projectId, title: thread.title },
+  };
 }
 
 // The workspace options the caller passed explicitly, shaped for the draft
@@ -56,6 +92,10 @@ function pickExplicitWorkspaceOptions(options: NewThreadWorkspaceOptions | undef
     // Always stated: a new-thread request that does not unblock anything
     // must clear a link left on a reused draft by an abandoned one.
     unblocksThreadId: options?.unblocksThreadId ?? null,
+    continuedFromThreadId: options?.continuedFromThread?.id ?? null,
+    // Load balancing retargets automatic drafts, and a move to another
+    // environment drops the link, so a continuation stays where it was opened.
+    ...(options?.continuedFromThread ? { environmentSelection: "manual" as const } : {}),
   };
 }
 
@@ -77,6 +117,7 @@ export function useNewThreadHandler() {
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
         unblocksThreadId?: ThreadId;
+        continuedFromThread?: ContinuedFromThread;
         replace?: boolean;
       },
       // Which draft the thread ended up in, so a caller that has something to put in it — a
@@ -95,6 +136,8 @@ export function useNewThreadHandler() {
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
         setModelSelection,
+        addThreadReference,
+        setPrompt,
       } = useComposerDraftStore.getState();
       const requestingRouteHref = router.state.location.href;
       const routeChangedSinceRequest = () => router.state.location.href !== requestingRouteHref;
@@ -167,6 +210,26 @@ export function useNewThreadHandler() {
           projectFile,
         ).settings.defaultThreadEnvMode;
       };
+      const continuedFromThread = options?.continuedFromThread;
+      const continuedFromModelSelection = continuedFromThread
+        ? (readThreadShell(scopeThreadRef(projectRef.environmentId, continuedFromThread.id))
+            ?.modelSelection ?? null)
+        : null;
+      // A continuation opens prefilled: the chip record and the prompt that
+      // references it land in the same tick, and the source thread's model
+      // outranks the project default. Runs before navigation so the composer
+      // mounts with them.
+      const seedContinuation = (destinationDraftId: DraftId) => {
+        if (!continuedFromThread) return;
+        const record = buildThreadContextRecord(continuedFromThread);
+        addThreadReference(destinationDraftId, record);
+        setPrompt(destinationDraftId, buildContinuePrompt(record));
+        if (continuedFromModelSelection) {
+          setModelSelection(destinationDraftId, continuedFromModelSelection, {
+            replaceOptions: true,
+          });
+        }
+      };
       const logicalProjectKey = project
         ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
         : scopedProjectKey(projectRef);
@@ -223,7 +286,7 @@ export function useNewThreadHandler() {
           // context alone entirely — the user may have just picked a branch
           // in the composer. Model selection has its own explicit-pick rule
           // below and does not follow this guard.
-          let workspaceContext: NewThreadWorkspaceOptions | null = null;
+          let workspaceContext: ReturnType<typeof pickExplicitWorkspaceOptions> | null = null;
           if (hasExplicitWorkspaceOption) {
             workspaceContext = pickExplicitWorkspaceOptions(options);
           } else if (!isDraftAlreadyOpen) {
@@ -259,12 +322,17 @@ export function useNewThreadHandler() {
               branch: null,
               worktreePath: null,
               unblocksThreadId: null,
+              continuedFromThreadId: null,
               envMode: defaultEnvMode,
               startFromOrigin: resolveNewDraftStartFromOrigin({
                 envMode: defaultEnvMode,
                 newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
               }),
             };
+          } else {
+            // The open draft keeps the workspace the user may have just
+            // picked, but a plain new thread must not inherit a pending link.
+            workspaceContext = { unblocksThreadId: null, continuedFromThreadId: null };
           }
           if (workspaceContext) {
             setDraftThreadContext(emptyStoredDraftThread.draftId, {
@@ -310,6 +378,7 @@ export function useNewThreadHandler() {
               ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
             },
           );
+          seedContinuation(emptyStoredDraftThread.draftId);
           const opened = {
             draftId: emptyStoredDraftThread.draftId,
             threadId: emptyStoredDraftThread.threadId,
@@ -357,6 +426,7 @@ export function useNewThreadHandler() {
           interactionMode: latestActiveDraftThread.interactionMode,
           ...pickExplicitWorkspaceOptions(options),
         });
+        seedContinuation(currentRouteTarget.draftId);
         return Promise.resolve({
           draftId: currentRouteTarget.draftId,
           threadId: latestActiveDraftThread.threadId,
@@ -400,6 +470,7 @@ export function useNewThreadHandler() {
             interactionMode: racedDraft.interactionMode,
             ...pickExplicitWorkspaceOptions(options),
           });
+          seedContinuation(racedDraft.draftId);
           await router.navigate({
             to: "/draft/$draftId",
             params: { draftId: racedDraft.draftId },
@@ -420,6 +491,12 @@ export function useNewThreadHandler() {
               newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
             }),
           ...(options?.unblocksThreadId ? { unblocksThreadId: options.unblocksThreadId } : {}),
+          ...(continuedFromThread
+            ? {
+                continuedFromThreadId: continuedFromThread.id,
+                environmentSelection: "manual" as const,
+              }
+            : {}),
           runtimeMode: defaultRuntimeMode,
           ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
         });
@@ -430,6 +507,7 @@ export function useNewThreadHandler() {
           // state. The project default wins when both are present.
           setModelSelection(draftId, modelSelectionOverride, { replaceOptions: true });
         }
+        seedContinuation(draftId);
         await router.navigate({
           to: "/draft/$draftId",
           params: { draftId },

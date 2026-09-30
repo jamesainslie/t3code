@@ -42,6 +42,8 @@ export interface ProjectThreadStartTurnSpec {
   readonly startFromOrigin: boolean;
   /** Generated temp branch for worktree mode; unused for local mode. */
   readonly worktreeBranchName: string;
+  /** The thread this one continues, recorded on the created thread. */
+  readonly continuedFromThreadId?: ThreadId | undefined;
 }
 
 /**
@@ -50,7 +52,20 @@ export interface ProjectThreadStartTurnSpec {
  * offline outbox drain so both deliver identical commands.
  */
 export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpec) {
-  const title = deriveThreadTitleFromPrompt(spec.text);
+  // The link rides only while the message still carries the source's chip, so
+  // removing the chip also drops the new agent's read grant.
+  const continuationSource = spec.continuedFromThreadId
+    ? spec.context?.records.flatMap((record) =>
+        !("payload" in record) &&
+        record.kind === "thread" &&
+        record.threadId === spec.continuedFromThreadId
+          ? [record]
+          : [],
+      )[0]
+    : undefined;
+  const title = deriveThreadTitleFromPrompt(
+    continuationSource ? `Continue: ${continuationSource.title}` : spec.text,
+  );
   const isWorktree = spec.workspaceMode === "worktree";
   return {
     commandId: CommandId.make(spec.commandId),
@@ -76,6 +91,7 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
         branch: spec.branch,
         worktreePath: isWorktree ? null : spec.worktreePath,
         createdAt: spec.createdAt,
+        ...(continuationSource ? { continuedFromThreadId: spec.continuedFromThreadId } : {}),
       },
       ...(isWorktree
         ? {

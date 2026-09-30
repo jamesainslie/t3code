@@ -41,7 +41,7 @@ and other phone-only settings ignore the filter.
 ## Defaults and inheritance
 
 General contains the model and workspace for new threads. Integrations controls agent browser
-access. Source Control contains automatic pull, the default pull request merge method, the GitHub
+and thread history access. Source Control contains automatic pull, the default pull request merge method, the GitHub
 account and text generation. The same rows edit environment defaults or project overrides depending
 on the project crumb. The GitHub account row appears only while a project is selected and the
 environment's `gh` has more than one signed-in account; its environment-wide rules live under
@@ -64,6 +64,29 @@ selected to override it there) to **Top level only** to stop at the ones the rep
 itself, or **Skip** to leave them for a setup script. It resolves in the same order as the
 workspace default: a `"worktreeSubmodules"` value in the `t3.json` of the branch being checked out
 applies when the project and environment are both on **Inherit**.
+
+## Agent thread history
+
+Agents can read other threads to pick up earlier work, for example when you
+[continue a thread in a new one](./thread-sidebar.md#continue-work-in-a-new-thread). On web and
+desktop, open **Settings → Integrations** and find **Agent access**. On mobile, open
+**Settings → Agent behavior**. Select a project to override the environment's value.
+
+**Agent thread history** sets which threads an agent can read:
+
+- **Off**: no other threads.
+- **Referenced threads**, the default: threads you reference in a message, and the thread a
+  continuation started from.
+- **This project**: any thread in the same project. Agents can also search for threads.
+- **All projects**: any thread in the environment, with search across projects.
+
+Referenced threads stay readable at every level except **Off**, even when they belong to another
+project. Archived threads can be read like active ones. Turning access on from **Off** applies from
+a thread's next session. Other changes, including lowering it, apply immediately.
+
+**Recent turns in full**, from 0 to 10 and 3 by default, sets how many of a thread's latest turns
+an agent reads in detail. Earlier turns are reduced to one-line outcomes, and the agent can ask for
+specific ones in full.
 
 ## Storage cleanup
 

@@ -131,6 +131,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands thread.dependency.add / thread.dependency.remove
       and satisfies links itself. Same version-skew contract as threadSnooze. */
   threadDependencies: Schema.optionalKey(Schema.Boolean),
+  /** Server records thread.create's continuedFromThreadId and grants the new agent
+      read access to that thread. Same version-skew contract as threadSnooze. */
+  threadContinuation: Schema.optionalKey(Schema.Boolean),
   /** Server streams themes an environment publishes. Absent on servers from
       before environment themes shipped, which never emit the events -- so a
       client reconnecting to one must drop published themes rather than keep

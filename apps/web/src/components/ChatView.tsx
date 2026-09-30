@@ -84,6 +84,7 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
 import { truncate } from "@t3tools/shared/String";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   getTerminalLabel,
@@ -274,7 +275,7 @@ import {
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { continueInNewThreadOptions, useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -431,7 +432,9 @@ import {
   agentControlledBrowserCloseConfirmation,
   branchMismatchKey,
   buildExpiredTerminalContextToastCopy,
+  buildBootstrapCreateThread,
   buildLocalDraftThread,
+  resolveDraftContinuation,
   buildLoadingThreadFromShell,
   buildRunningThreadTurnInterruptInput,
   buildThreadTurnInterruptInput,
@@ -7359,6 +7362,30 @@ export default function ChatView(props: ChatViewProps) {
     ],
   );
 
+  // Drafts have no history for a new agent to read, so only sent threads offer it.
+  const onContinueInNewThread =
+    activeServerThread !== null && canContinueThread(serverConfig, activeServerThread.projectId)
+      ? () => {
+          void settlePromise(() =>
+            handleNewThread(
+              scopeProjectRef(activeServerThread.environmentId, activeServerThread.projectId),
+              continueInNewThreadOptions(activeServerThread),
+            ),
+          ).then((result) => {
+            if (result._tag === "Failure") {
+              const error = squashAtomCommandFailure(result);
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not create thread",
+                  description: error instanceof Error ? error.message : "An error occurred.",
+                }),
+              );
+            }
+          });
+        }
+      : undefined;
+
   const onCompactContext = async () => {
     if (compactDisabled || !activeThread || !clientSettingsHydrated || sendInFlightRef.current) {
       return;
@@ -8157,6 +8184,16 @@ export default function ChatView(props: ChatViewProps) {
         };
       }),
     );
+    // The draft continues another thread: every thread this send creates
+    // records it while its chip remains, and a finished send clears it like
+    // the unblock link.
+    const continuedFromThreadId = isLocalDraftThread
+      ? (draftThread?.continuedFromThreadId ?? null)
+      : null;
+    const continuation = resolveDraftContinuation({
+      continuedFromThreadId,
+      threadReferences: composerThreadReferencesSnapshot,
+    });
     if (multipleModelSelections !== null) {
       const failedSelections: ModelSelection[] = [];
       let clearedDraft = false;
@@ -8175,7 +8212,8 @@ export default function ChatView(props: ChatViewProps) {
           ),
         );
         const title = truncate(
-          citationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
+          continuation?.titleSeed ||
+            citationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
             composerAttachmentsSnapshot[0]?.name ||
             "New thread",
         );
@@ -8236,7 +8274,7 @@ export default function ChatView(props: ChatViewProps) {
                   runtimeMode,
                   interactionMode: target.interactionMode,
                   bootstrap: {
-                    createThread: {
+                    createThread: buildBootstrapCreateThread({
                       projectId: activeProject.id,
                       title,
                       modelSelection: target.selection,
@@ -8245,7 +8283,8 @@ export default function ChatView(props: ChatViewProps) {
                       branch: activeThreadBranch,
                       worktreePath: null,
                       createdAt: messageCreatedAt,
-                    },
+                      continuation,
+                    }),
                     prepareWorktree: {
                       projectCwd: activeProject.workspaceRoot,
                       baseBranch: activeThreadBranch!,
@@ -8338,6 +8377,11 @@ export default function ChatView(props: ChatViewProps) {
         }
         if (failedSelections.length === 0 && turnUsesAttachmentUploads) {
           releaseDraftAttachments(composerAttachmentsSnapshot);
+        }
+        // A restored draft retries its failed selections, which still continue
+        // the source thread, so the link only goes once every thread started.
+        if (failedSelections.length === 0 && continuedFromThreadId) {
+          setDraftThreadContext(composerDraftTarget, { continuedFromThreadId: null });
         }
       } catch (error) {
         failedSelections.push(...multipleModelSelections);
@@ -8500,7 +8544,8 @@ export default function ChatView(props: ChatViewProps) {
         firstComposerImageName = firstComposerImage.name;
       }
     }
-    let titleSeed = citationsToPlainText(stripInlineContextReferences(trimmed)).trim();
+    let titleSeed =
+      continuation?.titleSeed ?? citationsToPlainText(stripInlineContextReferences(trimmed)).trim();
     if (!titleSeed) {
       if (firstComposerImageName) {
         titleSeed = `Image: ${firstComposerImageName}`;
@@ -8574,7 +8619,7 @@ export default function ChatView(props: ChatViewProps) {
           ? {
               ...(isLocalDraftThread
                 ? {
-                    createThread: {
+                    createThread: buildBootstrapCreateThread({
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
@@ -8583,7 +8628,8 @@ export default function ChatView(props: ChatViewProps) {
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
                       createdAt: activeThread.createdAt,
-                    },
+                      continuation,
+                    }),
                   }
                 : {}),
               ...(baseBranchForWorktree
@@ -8809,6 +8855,11 @@ export default function ChatView(props: ChatViewProps) {
           );
         }
       }
+    }
+    // The new thread recorded its source; a surviving draft record must not
+    // attach it to the next thread too.
+    if (turnStartSucceeded && continuedFromThreadId) {
+      setDraftThreadContext(composerDraftTarget, { continuedFromThreadId: null });
     }
     // The draft was started to unblock another thread, and that thread now
     // exists: park the waiting thread on it. The new thread stands whatever
@@ -10043,6 +10094,7 @@ export default function ChatView(props: ChatViewProps) {
             {...(routeKind === "draft" && draftId ? { draftId } : {})}
             activeThreadTitle={activeThread.title}
             isServerThread={isServerThread}
+            continuedFromThreadId={activeServerThread?.continuedFromThreadId ?? null}
             activeProject={activeProject}
             openInCwd={gitCwd}
             activeProjectScripts={activeProjectScripts}
@@ -10392,6 +10444,7 @@ export default function ChatView(props: ChatViewProps) {
                               onPageScrollKeyUp={onComposerPageScrollKeyUp}
                               onPageScrollRelease={onComposerPageScrollRelease}
                               onCompactContext={onCompactContext}
+                              onContinueInNewThread={onContinueInNewThread}
                               onSend={onSend}
                               onInterrupt={onInterrupt}
                               onImplementPlanInNewThread={onImplementPlanInNewThread}

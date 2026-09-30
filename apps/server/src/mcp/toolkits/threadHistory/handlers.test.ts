@@ -295,6 +295,46 @@ describe("thread history toolkit handlers", () => {
     }),
   );
 
+  it.effect("read_thread reads the source of a continued caller and names it", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        threads: [
+          makeThread({
+            id: CALLER_ID,
+            projectId: PROJECT_A,
+            continuedFromThreadId: OTHER_PROJECT_ID,
+          }),
+          withTurns(OTHER_PROJECT_ID, PROJECT_B, 1),
+        ],
+      });
+      // The source sits in another project, readable at the default referenced level.
+      const text = yield* harness.call("read_thread", { threadId: OTHER_PROJECT_ID });
+      expect(text.startsWith(`<thread id="${OTHER_PROJECT_ID}"`)).toBe(true);
+      const own = yield* harness.call("read_thread", { threadId: CALLER_ID });
+      expect(own.split("\n")[0]).toContain(
+        ` continued_from="${OTHER_PROJECT_ID}" continued_from_title="Thread ${OTHER_PROJECT_ID}"`,
+      );
+    }),
+  );
+
+  it.effect("read_thread names a target's source only when the caller could read it", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        threads: [
+          caller,
+          withTurns(REFERENCED_ID, PROJECT_B, 1, { continuedFromThreadId: OTHER_PROJECT_ID }),
+          withTurns(OTHER_PROJECT_ID, PROJECT_B, 1),
+        ],
+      });
+      // The caller references the target but not the target's source.
+      const header = (yield* harness.call("read_thread", { threadId: REFERENCED_ID })).split(
+        "\n",
+      )[0];
+      expect(header).toContain(` continued_from="${OTHER_PROJECT_ID}"`);
+      expect(header).not.toContain("continued_from_title");
+    }),
+  );
+
   it.effect("read_thread picks up a lowered level on the next call", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({

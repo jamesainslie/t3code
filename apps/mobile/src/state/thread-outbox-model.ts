@@ -46,6 +46,9 @@ const QueuedThreadCreationSchema = Schema.Struct({
   // creation makes. The link is dispatched once the create succeeds, so an
   // abandoned draft leaves no trace.
   unblocksThreadId: Schema.optional(ThreadId),
+  // "Continue in new thread": the thread this creation continues, recorded
+  // on the created thread by the server.
+  continuedFromThreadId: Schema.optional(ThreadId),
 });
 
 export const QueuedThreadMessageSchema = Schema.Struct({
@@ -78,6 +81,7 @@ export interface QueuedThreadCreation {
   readonly worktreePath: string | null;
   readonly startFromOrigin?: boolean;
   readonly unblocksThreadId?: ThreadId;
+  readonly continuedFromThreadId?: ThreadId;
 }
 
 export interface QueuedThreadMessage {

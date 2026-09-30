@@ -142,6 +142,7 @@ export function applyThreadDetailEvent(
           snoozedAt: null,
           snoozeReminder: null,
           dependencies: [],
+          continuedFromThreadId: event.payload.continuedFromThreadId ?? null,
           deletedAt: null,
           pullRequests: [],
           messages: [],

@@ -91,6 +91,8 @@ export interface ThreadDigest {
     readonly createdAt: string;
     readonly lastActivityAt: string;
     readonly status: ThreadDigestStatus;
+    /** The thread this one continues. Its title is null when the source can no longer be read. */
+    readonly continuedFrom: { readonly threadId: ThreadId; readonly title: string | null } | null;
   };
   readonly goal: string | null;
   readonly steering: ReadonlyArray<{ readonly turn: number; readonly text: string }>;
@@ -269,6 +271,8 @@ function lastActivityAt(thread: OrchestrationThread): string {
 export function buildThreadDigest(input: {
   readonly thread: OrchestrationThread;
   readonly projectTitle: string | null;
+  /** Title of the thread `thread` continues, when that thread exists and the caller may read it. */
+  readonly continuedFromTitle: string | null;
   readonly callerWorktreePath: string | null;
   readonly recentTurns: number;
 }): ThreadDigest {
@@ -300,6 +304,9 @@ export function buildThreadDigest(input: {
       createdAt: thread.createdAt,
       lastActivityAt: lastActivityAt(thread),
       status: deriveStatus(thread, turns),
+      continuedFrom: thread.continuedFromThreadId
+        ? { threadId: thread.continuedFromThreadId, title: input.continuedFromTitle }
+        : null,
     },
     goal: first ? cutToBytes(first.text, DIGEST_LIMITS.goalBytes) : null,
     steering: later.map((entry) => ({

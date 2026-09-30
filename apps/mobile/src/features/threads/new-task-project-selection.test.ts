@@ -1,4 +1,4 @@
-import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
@@ -8,6 +8,7 @@ import {
   getProjectScopeSelectionTarget,
   resolveDraftProjectSelection,
   resolveEnvironmentProjectMatch,
+  retainThreadLink,
 } from "./new-task-project-selection";
 
 function makeProject(
@@ -179,5 +180,21 @@ describe("filterProjectScopes", () => {
     expect(matches[0]).toBe(code);
     expect(getProjectScopeSelectionTarget(matches[0]!, EnvironmentId.make("mac"))).toBe(mac);
     expect(code.projects).toEqual([mac, server]);
+  });
+});
+
+describe("pending thread links across project moves", () => {
+  it("keeps a link while the draft stays in its environment and drops it for good on a move away", () => {
+    const home = EnvironmentId.make("home");
+    const link = { environmentId: home, threadId: ThreadId.make("source-thread") };
+
+    // The route names the link, then applies its own project on the same machine.
+    const afterRouteProject = retainThreadLink(link, home);
+    expect(afterRouteProject).toBe(link);
+
+    // Moving the draft to another machine drops it, and coming back does not revive it.
+    const afterMove = retainThreadLink(afterRouteProject, EnvironmentId.make("server"));
+    expect(afterMove).toBeNull();
+    expect(retainThreadLink(afterMove, home)).toBeNull();
   });
 });

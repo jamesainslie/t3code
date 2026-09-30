@@ -129,7 +129,7 @@ import {
   useThreadSelectionStore,
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { continueInNewThreadOptions, useHandleNewThread } from "../hooks/useHandleNewThread";
 import {
   isCommandPaletteOpen,
   openCommandPalette,
@@ -143,6 +143,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import {
+  readCanContinueThread,
   readThreadShell,
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
@@ -4346,6 +4347,7 @@ export default function Sidebar() {
           api.contextMenu.show(
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
+              canContinueInNewThread: readCanContinueThread(thread.environmentId, thread.projectId),
               projectFilter: threadProjectGroup
                 ? {
                     label: threadProjectGroup.displayName,
@@ -4425,6 +4427,25 @@ export default function Sidebar() {
                 envMode: thread.worktreePath ? "worktree" : "local",
                 startFromOrigin: false,
               }),
+            );
+            if (result._tag === "Failure") {
+              const error = squashAtomCommandFailure(result);
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not create thread",
+                  description: error instanceof Error ? error.message : "An error occurred.",
+                }),
+              );
+            }
+            return;
+          }
+          case "continue-in-new-thread": {
+            const result = await settlePromise(() =>
+              handleNewThreadRef.current(
+                scopeProjectRef(thread.environmentId, thread.projectId),
+                continueInNewThreadOptions(thread),
+              ),
             );
             if (result._tag === "Failure") {
               const error = squashAtomCommandFailure(result);

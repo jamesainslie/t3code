@@ -12959,6 +12959,67 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("forwards the continued-from thread when a draft bootstraps its thread", () =>
+    Effect.gen(function* () {
+      const dispatchedCommands: Array<OrchestrationCommand> = [];
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            dispatch: (command) =>
+              Effect.sync(() => {
+                dispatchedCommands.push(command);
+                return { sequence: dispatchedCommands.length };
+              }),
+            readEvents: () => Stream.empty,
+          },
+        },
+      });
+
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const sourceThreadId = ThreadId.make("thread-continued-source");
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.turn.start",
+            commandId: CommandId.make("cmd-continued-bootstrap"),
+            threadId: ThreadId.make("thread-continued-next"),
+            message: {
+              messageId: MessageId.make("msg-continued-bootstrap"),
+              role: "user",
+              text: "pick up where we left off",
+              attachments: [],
+            },
+            modelSelection: defaultModelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            bootstrap: {
+              createThread: {
+                projectId: defaultProjectId,
+                title: "Continued",
+                modelSelection: defaultModelSelection,
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                createdAt,
+                continuedFromThreadId: sourceThreadId,
+              },
+              runSetupScript: false,
+            },
+            createdAt,
+          }),
+        ),
+      );
+
+      const createCommand = dispatchedCommands.find((command) => command.type === "thread.create");
+      assert.equal(
+        createCommand?.type === "thread.create" ? createCommand.continuedFromThreadId : undefined,
+        sourceThreadId,
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("does not report a deleted bootstrap thread when cleanup fails", () =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];

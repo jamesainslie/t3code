@@ -136,6 +136,31 @@ and copying a thread reference. A copied reference uses the thread's pull reques
 link when available, otherwise its thread ID. See [keybindings](./keybindings.md)
 for custom configuration.
 
+To point an agent at another thread, copy it as a chip and paste it into any
+composer. On web and desktop, choose **Copy → Thread chip** from the thread's menu
+or **Copy as thread chip** in the command palette. On mobile, choose **Copy thread
+chip** from the thread's menu. The agent can read a thread you reference this way,
+even from another project, unless [agent thread history](./project-settings.md#agent-thread-history)
+is **Off**.
+
+## Continue work in a new thread
+
+When a thread's context is filling up, choose **Continue in new thread** to carry
+its work into a fresh conversation. On web and desktop, it is in the thread's menu
+in the sidebar and chat header, in the command palette, and in the context meter's
+popover. On mobile, open the thread's menu in the thread list.
+
+The new thread opens as a draft on the same branch and worktree, with the same
+model, and starts with a reference to the original thread. Add any instructions,
+then send. Its agent reads the original thread's history and is asked to check the
+current worktree and branch before continuing, since the work may have moved on since.
+
+The option is hidden while **Agent thread history** is **Off** for the project, and
+when the environment runs a T3 Code version without it.
+On web and desktop, the chat header links the two threads with **Continued from**
+and **Continued in**. An archived original cannot be opened from that link until
+you unarchive it.
+
 ## Inspect agent work
 
 On web and desktop, use **Agents** to follow work delegated to subagents.

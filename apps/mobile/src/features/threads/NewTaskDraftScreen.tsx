@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useFontFamily } from "../../lib/useFontFamily";
 import {
+  EnvironmentId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   resolveEnvironmentMachineKind,
@@ -98,6 +99,7 @@ import {
   getComposerDraftSnapshot,
   mergeComposerDraftContent,
   restoreComposerDraftSnapshot,
+  seedContinuationDraft,
   updateComposerDraftSettings,
   scheduleUnusedComposerAttachmentCleanup,
   type ComposerDraft,
@@ -128,6 +130,7 @@ import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { selectIncomingShareAttachmentsForServer } from "../sharing/incoming-share-model";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { serverEnvironment } from "../../state/server";
+import { environmentThreadShells } from "../../state/threads";
 import { fileRoutePathSegments } from "../files/filePath";
 
 function NewTaskWorkspaceIcon(props: {
@@ -183,6 +186,8 @@ export function NewTaskDraftScreen(props: {
     readonly worktreePath?: string | null;
     /** Thread that waits on the thread this draft becomes. */
     readonly unblocksThreadId?: string;
+    /** Thread whose work this draft continues. */
+    readonly continuedFromThreadId?: string;
     /** The project was just added by a clone that is still running. */
     readonly cloning?: boolean;
   };
@@ -635,12 +640,85 @@ export function NewTaskDraftScreen(props: {
 
   // The route names the blocked thread; the flow holds it until the create
   // succeeds. A plain New task navigation clears it by passing nothing.
-  const setUnblocksThreadId = flow.setUnblocksThreadId;
+  const setUnblocksThread = flow.setUnblocksThread;
+  const routeEnvironmentId = props.initialProjectRef?.environmentId;
   const routeUnblocksThreadId = props.initialProjectRef?.unblocksThreadId;
   useEffect(() => {
     if (props.pendingTaskId || props.draftId) return;
-    setUnblocksThreadId(routeUnblocksThreadId ? ThreadId.make(routeUnblocksThreadId) : null);
-  }, [props.draftId, props.pendingTaskId, routeUnblocksThreadId, setUnblocksThreadId]);
+    setUnblocksThread(
+      routeEnvironmentId && routeUnblocksThreadId
+        ? {
+            environmentId: EnvironmentId.make(routeEnvironmentId),
+            threadId: ThreadId.make(routeUnblocksThreadId),
+          }
+        : null,
+    );
+  }, [
+    props.draftId,
+    props.pendingTaskId,
+    routeEnvironmentId,
+    routeUnblocksThreadId,
+    setUnblocksThread,
+  ]);
+
+  // A continuation names its source thread the same way, and opens prefilled
+  // once per request, after the draft lands in the source thread's project.
+  const setContinuedFromThread = flow.setContinuedFromThread;
+  const routeContinuedFromThreadId = props.initialProjectRef?.continuedFromThreadId;
+  useEffect(() => {
+    if (props.pendingTaskId || props.draftId) return;
+    setContinuedFromThread(
+      routeEnvironmentId && routeContinuedFromThreadId
+        ? {
+            environmentId: EnvironmentId.make(routeEnvironmentId),
+            threadId: ThreadId.make(routeContinuedFromThreadId),
+          }
+        : null,
+    );
+  }, [
+    props.draftId,
+    props.pendingTaskId,
+    routeContinuedFromThreadId,
+    routeEnvironmentId,
+    setContinuedFromThread,
+  ]);
+  const handledContinuationRequestRef = useRef<typeof props.initialProjectRef>(undefined);
+  useEffect(() => {
+    const request = props.initialProjectRef;
+    const draftKey = flow.draftKey;
+    if (props.pendingTaskId || props.draftId || !draftKey || !selectedProject) return;
+    if (!request?.continuedFromThreadId || handledContinuationRequestRef.current === request) {
+      return;
+    }
+    if (
+      selectedProject.environmentId !== request.environmentId ||
+      selectedProject.id !== request.projectId
+    ) {
+      return;
+    }
+    handledContinuationRequestRef.current = request;
+    // Read once rather than subscribed: the source thread may still be
+    // streaming, and only its title and model matter here.
+    const source = appAtomRegistry.get(
+      environmentThreadShells.threadShellAtom({
+        environmentId: selectedProject.environmentId,
+        threadId: ThreadId.make(request.continuedFromThreadId),
+      }),
+    );
+    if (source?.projectId !== selectedProject.id) {
+      // No chip to show means no hidden link either.
+      setContinuedFromThread(null);
+      return;
+    }
+    seedContinuationDraft(draftKey, source);
+  }, [
+    flow.draftKey,
+    props.draftId,
+    props.initialProjectRef,
+    props.pendingTaskId,
+    selectedProject,
+    setContinuedFromThread,
+  ]);
 
   useEffect(() => {
     // Pending-task editing and draft resumption own project selection (and

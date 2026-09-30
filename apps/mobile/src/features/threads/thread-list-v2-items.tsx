@@ -521,6 +521,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
   readonly onDeleteThread: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
+  /** Opens a new-thread draft on this thread's branch that references it. */
+  readonly onContinueInNewThread: (thread: EnvironmentThreadShell) => void;
+  /** The project lets agents read thread history, so a new thread can pick
+      this one up by reference. */
+  readonly continueSupported: boolean;
   readonly onRenameThread: (thread: EnvironmentThreadShell) => void;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => void;
   readonly onSettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
@@ -593,6 +598,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onRenameThread,
     onRegenerateThreadTitle,
     onNewThreadOnBranch,
+    onContinueInNewThread,
     onSettleThread,
     onSnoozeThread,
     onUnsnoozeThread,
@@ -937,6 +943,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
       if (nativeEvent.event === "new-thread-on-branch") onNewThreadOnBranch(thread);
+      if (nativeEvent.event === "continue-in-new-thread") onContinueInNewThread(thread);
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
@@ -998,6 +1005,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       }
     },
     [
+      onContinueInNewThread,
       onHighlightThread,
       onNewThreadOnBranch,
       thread,
@@ -1435,6 +1443,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                       id: "new-thread-on-branch",
                       title: getThreadListV2NewBranchMenuTitle(thread.branch),
                       image: "square.and.pencil",
+                    },
+                  ]
+                : []),
+              ...(props.continueSupported
+                ? [
+                    {
+                      id: "continue-in-new-thread",
+                      title: "Continue in new thread",
+                      image: "arrow.turn.down.right",
                     },
                   ]
                 : []),

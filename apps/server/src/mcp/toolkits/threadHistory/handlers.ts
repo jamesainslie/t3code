@@ -77,7 +77,7 @@ const make = Effect.gen(function* () {
 
   /**
    * The calling thread and its live settings. References come only from the caller's own
-   * messages, so it is loaded without activities.
+   * messages and the thread it continues, so it is loaded without activities.
    */
   const loadCaller = Effect.fn("ThreadHistoryToolkit.loadCaller")(function* () {
     const scope = yield* requireThreadHistory;
@@ -88,23 +88,32 @@ const make = Effect.gen(function* () {
     return { thread: caller.value, ...(yield* accessFor(caller.value.projectId)) };
   });
 
+  type Caller = Effect.Success<ReturnType<typeof loadCaller>>;
+
+  const callerMayRead = (
+    caller: Caller,
+    target: { readonly id: ThreadId; readonly projectId: ProjectId },
+  ) =>
+    canReadThread({
+      callerThreadId: caller.thread.id,
+      callerProjectId: caller.thread.projectId,
+      targetThreadId: target.id,
+      targetProjectId: target.projectId,
+      level: caller.level,
+      referencedThreadIds: collectReferencedThreadIds(caller.thread),
+    });
+
   /** The target thread without tool calls, once the caller's level allows reading it. */
   const loadTarget = Effect.fn("ThreadHistoryToolkit.loadTarget")(function* (
-    caller: Effect.Success<ReturnType<typeof loadCaller>>,
+    caller: Caller,
     rawThreadId: string,
   ) {
     const threadId = ThreadId.make(rawThreadId);
     const target = yield* threadDetail(threadId, DIGEST_ACTIVITY_KINDS);
     if (Option.isNone(target)) return yield* new ThreadNotFoundError({ threadId });
-    const allowed = canReadThread({
-      callerThreadId: caller.thread.id,
-      callerProjectId: caller.thread.projectId,
-      targetThreadId: target.value.id,
-      targetProjectId: target.value.projectId,
-      level: caller.level,
-      referencedThreadIds: collectReferencedThreadIds(caller.thread),
-    });
-    if (!allowed) return yield* new ThreadOutOfScopeError({ threadId, level: caller.level });
+    if (!callerMayRead(caller, target.value)) {
+      return yield* new ThreadOutOfScopeError({ threadId, level: caller.level });
+    }
     return target.value;
   });
 
@@ -147,6 +156,12 @@ const make = Effect.gen(function* () {
         const caller = yield* loadCaller();
         const target = yield* loadTarget(caller, input.threadId);
         const project = yield* projectShell(target.projectId);
+        // The source keeps its id in the digest; its title shows only when the caller could
+        // read it, so a deleted or out-of-scope source stays untitled.
+        const source = target.continuedFromThreadId
+          ? yield* threadShell(target.continuedFromThreadId)
+          : null;
+        const sourceTitle = source && callerMayRead(caller, source) ? source.title : null;
         const recentTurns = Math.min(input.recentTurns ?? caller.recentTurns, caller.recentTurns);
         const turns = reconstructTurns(target);
         const thread = yield* withToolCalls(
@@ -156,6 +171,7 @@ const make = Effect.gen(function* () {
         const digest = buildThreadDigest({
           thread,
           projectTitle: project?.title ?? null,
+          continuedFromTitle: sourceTitle,
           callerWorktreePath: caller.thread.worktreePath,
           recentTurns,
         });

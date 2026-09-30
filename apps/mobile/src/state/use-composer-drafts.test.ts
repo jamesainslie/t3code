@@ -148,11 +148,20 @@ vi.mock("../features/sharing/incoming-share-storage", () => ({
 }));
 
 import type { DraftComposerAttachment } from "../lib/composerImages";
-import { reidentifyComposerContext } from "../lib/composerContext";
+import {
+  reidentifyComposerContext,
+  serializeComposerMessageForServer,
+} from "../lib/composerContext";
+import { buildProjectThreadStartTurnInput } from "../lib/projectThreadStartTurn";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
-import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
+import {
+  buildContinuePrompt,
+  buildThreadChipClipboard,
+  buildThreadContextRecord,
+} from "@t3tools/shared/threadContextReference";
 import { appAtomRegistry } from "./atom-registry";
 import { threadOutboxManager } from "./thread-outbox";
+import { decodeQueuedThreadMessage, encodeQueuedThreadMessage } from "./thread-outbox-model";
 import {
   appendComposerDraftAttachments,
   captureComposerDraftInsertion,
@@ -188,6 +197,7 @@ import {
   insertComposerDraftContext,
   insertComposerDraftText,
   rememberComposerDraftSelection,
+  seedContinuationDraft,
   setComposerDraftAttachmentUpload,
   waitForComposerDraftsLoaded,
   setStickyComposerModelSelection,
@@ -882,6 +892,137 @@ describe("mobile composer drafts", () => {
     const draft = getComposerDraftSnapshot(draftKey);
     expect(draft.context?.records).toEqual(chip.fragment.records);
     expect(draft.text.split(chip.text)).toHaveLength(3);
+  });
+
+  it("a continue draft sends continuedFromThreadId and the thread chip on first send", () => {
+    const environmentId = EnvironmentId.make("context-environment");
+    const source = {
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+    };
+    const draftKey = createNewTaskDraft({ environmentId, projectId: source.projectId });
+
+    seedContinuationDraft(draftKey, source);
+
+    const record = buildThreadContextRecord(source);
+    const draft = getComposerDraftSnapshot(draftKey);
+    expect(draft.text).toBe(buildContinuePrompt(record));
+    expect(draft.context?.records).toEqual([record]);
+    expect(draft.modelSelection).toEqual(source.modelSelection);
+
+    // The link rides the queued creation through the persisted outbox.
+    const queued = decodeQueuedThreadMessage(
+      encodeQueuedThreadMessage({
+        environmentId,
+        threadId: ThreadId.make("thread-next"),
+        messageId: MessageId.make("message-next"),
+        commandId: CommandId.make("command-next"),
+        text: draft.text,
+        ...(draft.context ? { context: draft.context } : {}),
+        attachments: draft.attachments,
+        modelSelection: source.modelSelection,
+        creation: {
+          projectId: source.projectId,
+          workspaceMode: "local",
+          branch: "feature/earlier",
+          worktreePath: null,
+          continuedFromThreadId: source.id,
+        },
+        createdAt: "2026-09-30T12:00:00.000Z",
+      }),
+    );
+    const creation = queued.creation!;
+    const input = buildProjectThreadStartTurnInput({
+      ...serializeComposerMessageForServer(queued.text, queued.context, true),
+      projectId: creation.projectId,
+      projectCwd: "/workspace",
+      threadId: queued.threadId,
+      commandId: queued.commandId,
+      messageId: queued.messageId,
+      createdAt: queued.createdAt,
+      uploadedAttachments: [],
+      modelSelection: source.modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      workspaceMode: creation.workspaceMode,
+      branch: creation.branch,
+      worktreePath: creation.worktreePath,
+      startFromOrigin: false,
+      worktreeBranchName: "unused",
+      continuedFromThreadId: creation.continuedFromThreadId,
+    });
+
+    expect(input.bootstrap.createThread.continuedFromThreadId).toBe(source.id);
+    expect(input.message.text).toBe(buildContinuePrompt(record));
+    expect(input.message.context?.records).toEqual([record]);
+  });
+
+  it("leads unsent draft content with the continue prompt instead of replacing it", () => {
+    const source = {
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+    };
+    const draftKey = createNewTaskDraft({
+      environmentId: EnvironmentId.make("context-environment"),
+      projectId: source.projectId,
+    });
+    const unsent = contextDraft(0, 1);
+    const image: DraftComposerAttachment = {
+      id: "image-1",
+      type: "image",
+      name: "image.png",
+      mimeType: "image/png",
+      sizeBytes: 3,
+      fileUri: "file:///image.png",
+      previewUri: "file:///image.png",
+    };
+    appAtomRegistry.set(composerDraftsAtom, {
+      ...appAtomRegistry.get(composerDraftsAtom),
+      [draftKey]: {
+        ...getComposerDraftSnapshot(draftKey),
+        text: unsent.text,
+        context: unsent.context,
+        attachments: [image],
+      },
+    });
+
+    seedContinuationDraft(draftKey, source);
+
+    const record = buildThreadContextRecord(source);
+    const draft = getComposerDraftSnapshot(draftKey);
+    expect(draft.text).toBe(`${buildContinuePrompt(record)}\n\n${unsent.text}`);
+    expect(draft.context?.records).toEqual([...unsent.context!.records, record]);
+    expect(draft.attachments).toEqual([image]);
+  });
+
+  it("does not repeat the continue prompt when the draft already starts with it", () => {
+    const source = {
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+    };
+    const draftKey = createNewTaskDraft({
+      environmentId: EnvironmentId.make("context-environment"),
+      projectId: source.projectId,
+    });
+    const prompt = buildContinuePrompt(buildThreadContextRecord(source));
+
+    seedContinuationDraft(draftKey, source);
+    seedContinuationDraft(draftKey, source);
+    expect(getComposerDraftSnapshot(draftKey).text).toBe(prompt);
+
+    const edited = `${prompt}\n\nAlso run the tests.`;
+    setComposerDraftText(draftKey, edited);
+    seedContinuationDraft(draftKey, source);
+    expect(getComposerDraftSnapshot(draftKey).text).toBe(edited);
+    expect(getComposerDraftSnapshot(draftKey).context?.records).toEqual([
+      buildThreadContextRecord(source),
+    ]);
   });
 
   // Hydration is one-shot per module instance and the attachment sweep now

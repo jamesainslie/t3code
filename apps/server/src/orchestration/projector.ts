@@ -472,6 +472,7 @@ export function projectEvent(
             snoozedAt: null,
             snoozeReminder: null,
             dependencies: [],
+            continuedFromThreadId: payload.continuedFromThreadId ?? null,
             deletedAt: null,
             messages: [],
             activities: [],
