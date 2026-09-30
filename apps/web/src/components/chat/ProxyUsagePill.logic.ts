@@ -21,7 +21,7 @@ export interface ProxyWindowView {
   readonly label: string;
   readonly usedPercent: number;
   readonly tone: ProxyTone;
-  /** `"↻ 2h 08m"`; empty when the source never observed a reset. */
+  /** Countdown to this window's own reset; empty when the source never observed one. */
   readonly resetText: string;
 }
 
@@ -109,7 +109,7 @@ function accountView(
       label: shortLabel(window),
       usedPercent: window.usedPercent,
       tone: windowTone(window.usedPercent, threshold),
-      resetText: window.resetsAt ? `↻ ${countdown(window.resetsAt, input.now, input.seconds)}` : "",
+      resetText: countdown(window.resetsAt, input.now, input.seconds),
     };
   });
   const session = account.usageLimits.windows.find((window) => window.id === "five_hour");
