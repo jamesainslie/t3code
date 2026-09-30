@@ -26,9 +26,7 @@ const TONE_TEXT: Record<AttemptLogTone, string> = {
 };
 
 /** The environment's saved SSH target, when the desktop app brings it up over SSH. */
-export function sshTargetOf(
-  environment: EnvironmentPresentation,
-): DesktopSshEnvironmentTarget | null {
+function sshTargetOf(environment: EnvironmentPresentation): DesktopSshEnvironmentTarget | null {
   const { entry } = environment;
   return entry.target._tag === "SshConnectionTarget" &&
     Option.isSome(entry.profile) &&
