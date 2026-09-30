@@ -653,8 +653,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const threadDetail = yield* snapshotQuery.getThreadDetailById(ThreadId.make("thread-1"));
       assert.equal(threadDetail._tag, "Some");
       if (threadDetail._tag === "Some") {
-        // Only detail reads list continuations.
-        assert.deepEqual(threadDetail.value, { ...snapshot.threads[0]!, continuedIn: [] });
+        assert.deepEqual(threadDetail.value, snapshot.threads[0]);
       }
 
       const threadShell = yield* snapshotQuery.getThreadShellById(ThreadId.make("thread-1"));
@@ -4159,41 +4158,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery continuations", (it) => {
       assert.strictEqual(
         Option.getOrThrow(yield* query.getThreadDetailById(source)).continuedFromThreadId,
         null,
-      );
-    }),
-  );
-
-  it.effect("detail lists threads continued from it, excluding deleted", () =>
-    Effect.gen(function* () {
-      const query = yield* ProjectionSnapshotQuery;
-      const sql = yield* SqlClient.SqlClient;
-      const at = (minute: number) => `2026-09-02T00:0${minute}:00.000Z`;
-      yield* sql`INSERT INTO projection_projects (project_id, title, workspace_root, scripts_json, created_at, updated_at)
-        VALUES ('project-continued-in', 'Continued in', '/continued-in', '[]', ${at(0)}, ${at(0)})`;
-      yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, created_at, updated_at, continued_from_thread_id, archived_at, deleted_at)
-        VALUES
-          ('t-origin', 'project-continued-in', 'Origin', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at(0)}, ${at(0)}, NULL, NULL, NULL),
-          ('t-later', 'project-continued-in', 'Later', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at(3)}, ${at(3)}, 't-origin', NULL, NULL),
-          ('t-dropped', 'project-continued-in', 'Dropped', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at(2)}, ${at(2)}, 't-origin', NULL, ${at(4)}),
-          ('t-filed', 'project-continued-in', 'Filed', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at(1)}, ${at(1)}, 't-origin', ${at(4)}, NULL)`;
-
-      const origin = ThreadId.make("t-origin");
-      // Archived continuations stay linked; deleted ones are gone. Oldest first.
-      const expected = [
-        { threadId: ThreadId.make("t-filed"), title: "Filed" },
-        { threadId: ThreadId.make("t-later"), title: "Later" },
-      ];
-      assert.deepStrictEqual(
-        Option.getOrThrow(yield* query.getThreadDetailById(origin)).continuedIn,
-        expected,
-      );
-      assert.deepStrictEqual(
-        Option.getOrThrow(yield* query.getThreadDetailSnapshot(origin)).thread.continuedIn,
-        expected,
-      );
-      assert.deepStrictEqual(
-        Option.getOrThrow(yield* query.getThreadDetailById(ThreadId.make("t-later"))).continuedIn,
-        [],
       );
     }),
   );

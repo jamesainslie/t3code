@@ -271,7 +271,7 @@ function lastActivityAt(thread: OrchestrationThread): string {
 export function buildThreadDigest(input: {
   readonly thread: OrchestrationThread;
   readonly projectTitle: string | null;
-  /** Title of the thread `thread` continues, when it continues one that still exists. */
+  /** Title of the thread `thread` continues, when that thread exists and the caller may read it. */
   readonly continuedFromTitle: string | null;
   readonly callerWorktreePath: string | null;
   readonly recentTurns: number;
