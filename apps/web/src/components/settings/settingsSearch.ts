@@ -637,6 +637,22 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["allow disable enable open drive preview tools sessions project override"],
   },
   {
+    id: "agent-thread-history",
+    title: "Agent thread history",
+    to: "/settings/integrations",
+    scope: "project-defaults",
+    searchTerms: [
+      "read other threads conversations continue work referenced project all projects off tools project override",
+    ],
+  },
+  {
+    id: "agent-thread-history-recent-turns",
+    title: "Recent turns in full",
+    to: "/settings/integrations",
+    scope: "project-defaults",
+    searchTerms: ["thread history summary digest messages count project override"],
+  },
+  {
     id: "device-hosts",
     title: "Device hosts",
     to: "/settings/integrations",
