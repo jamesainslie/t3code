@@ -860,14 +860,25 @@ describe("mobile composer drafts", () => {
         title: "Earlier investigation",
       },
     });
+    const copied = chip.fragment.records[0]!;
+    // The second copy came from a producer that minted its own id for the same thread.
+    const borrowedId = ComposerContextId.make("borrowed-id");
+    const pastes = [
+      { text: chip.text, records: chip.fragment.records },
+      {
+        text: chip.text.replace(copied.contextId, borrowedId),
+        records: [{ ...copied, contextId: borrowedId }],
+      },
+    ];
     let next = 0;
-    const paste = () =>
-      insertComposerDraftContext(
-        draftKey,
-        reidentifyComposerContext(chip.text, chip.fragment.records, () => `paste-${++next}`),
-      );
-    expect(paste()).toBe(true);
-    expect(paste()).toBe(true);
+    for (const { text, records } of pastes) {
+      expect(
+        insertComposerDraftContext(
+          draftKey,
+          reidentifyComposerContext(text, records, () => `paste-${++next}`),
+        ),
+      ).toBe(true);
+    }
     const draft = getComposerDraftSnapshot(draftKey);
     expect(draft.context?.records).toEqual(chip.fragment.records);
     expect(draft.text.split(chip.text)).toHaveLength(3);

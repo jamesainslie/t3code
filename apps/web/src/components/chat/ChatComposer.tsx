@@ -218,6 +218,7 @@ import {
   uploadedAttachmentContextRecord,
   fileContextReference,
   imageContextReference,
+  importedThreadContextRecord,
   previewAnnotationContextId,
   previewAnnotationContextRecord,
   previewAnnotationFromRecord,
@@ -3055,8 +3056,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           }
           case "thread": {
             // One id per thread, so a repeat paste refreshes the record under the same chip.
-            addComposerDraftThreadReference(composerDraftTarget, record);
-            rewritten.set(record.contextId, record.contextId);
+            const imported = importedThreadContextRecord(record);
+            addComposerDraftThreadReference(composerDraftTarget, imported);
+            rewritten.set(record.contextId, imported.contextId);
             break;
           }
           default:

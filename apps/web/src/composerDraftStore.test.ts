@@ -6,6 +6,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import * as Schema from "effect/Schema";
 import {
+  ComposerContextId,
   defaultInstanceIdForDriver,
   EnvironmentId,
   MessageId,
@@ -14,6 +15,7 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   ThreadId,
+  type ComposerContextClipboardFragment,
   type ModelSelection,
   type PreviewAnnotationPayload,
   type ProviderOptionSelection,
@@ -21,6 +23,12 @@ import {
 import { createModelSelection } from "@t3tools/shared/model";
 import { collectCitations, serializeCitation } from "@t3tools/shared/assistantCitations";
 import {
+  COMPOSER_CONTEXT_CLIPBOARD_MIME,
+  encodeComposerContextFragment,
+} from "@t3tools/shared/composerContextClipboard";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import {
+  buildThreadChipClipboard,
   buildThreadContextRecord,
   threadContextMarkdown,
 } from "@t3tools/shared/threadContextReference";
@@ -82,7 +90,11 @@ import {
 } from "./composerDraftStore";
 import { removeLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 import { insertInlineContextReference } from "./lib/composerContextReferences";
-import { terminalContextReference } from "./lib/composerContextRecords";
+import { importPastedComposerText } from "./components/composerInlineTokenPaste";
+import {
+  importedThreadContextRecord,
+  terminalContextReference,
+} from "./lib/composerContextRecords";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   formatTerminalContextReference,
@@ -1235,6 +1247,60 @@ describe("composerDraftStore thread references", () => {
 
     store.clearComposerContent(threadRef);
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+
+  it("keeps one record and a valid link when the same thread is pasted twice", () => {
+    const store = useComposerDraftStore.getState();
+    const chip = buildThreadChipClipboard({
+      environmentId: TEST_ENVIRONMENT_ID,
+      thread: {
+        id: ThreadId.make("import:claudeAgent:0b7e6f7a-3c1d-4e5f-9a8b-1c2d3e4f5a6b"),
+        projectId: ProjectId.make("project-a"),
+        title: "Imported session",
+      },
+    });
+    const copied = chip.fragment.records[0]!;
+    // A second producer minted its own id for the same thread.
+    const borrowedId = ComposerContextId.make("borrowed-id");
+    const pastes = [
+      chip,
+      {
+        text: chip.text.replace(copied.contextId, borrowedId),
+        fragment: { ...chip.fragment, records: [{ ...copied, contextId: borrowedId }] },
+      },
+    ];
+    const importFragment = (fragment: ComposerContextClipboardFragment) =>
+      new Map(
+        fragment.records.flatMap((record) => {
+          if (record.kind !== "thread" || !("threadId" in record)) return [];
+          const imported = importedThreadContextRecord(record);
+          store.addThreadReference(threadRef, imported);
+          return [[record.contextId, imported.contextId] as const];
+        }),
+      );
+
+    const pastedTexts = pastes.map(({ text, fragment }) =>
+      importPastedComposerText(
+        {
+          getData: (type) =>
+            type === "text/plain"
+              ? text
+              : type === COMPOSER_CONTEXT_CLIPBOARD_MIME
+                ? (encodeComposerContextFragment(fragment) ?? "")
+                : "",
+        },
+        importFragment,
+      ),
+    );
+
+    const records = draftFor(threadId, TEST_ENVIRONMENT_ID)?.threadReferences ?? [];
+    expect(records).toHaveLength(1);
+    expect(records[0]?.contextId).toBe(copied.contextId);
+    for (const text of pastedTexts) {
+      expect(collectComposerContextReferences(text).map((ref) => ref.contextId)).toEqual([
+        copied.contextId,
+      ]);
+    }
   });
 });
 

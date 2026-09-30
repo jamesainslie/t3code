@@ -24,6 +24,7 @@ import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
 } from "@t3tools/shared/composerContextReferences";
+import { threadContextId } from "@t3tools/shared/threadContextReference";
 
 import {
   type ComposerContextReference,
@@ -294,6 +295,14 @@ export function attachmentContextRecord(
 
 export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
   return { kind: "thread", contextId: record.contextId, label: record.label };
+}
+
+/**
+ * A pasted thread record takes its id from its thread, never from the clipboard, so a crafted
+ * id cannot land on another chip and one thread stays one record whoever copied it.
+ */
+export function importedThreadContextRecord(record: ThreadContextRecord): ThreadContextRecord {
+  return { ...record, contextId: threadContextId(record.threadId) };
 }
 
 /**

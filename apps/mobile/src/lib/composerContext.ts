@@ -181,7 +181,8 @@ export function uploadedComposerContext(
 
 /**
  * Imports with fresh identities so a pasted record cannot overwrite an existing snapshot.
- * A thread chip keeps its per-thread id, so pasting the same thread twice stays one record.
+ * A thread chip's id is rebuilt from its thread, ignoring the pasted id, so pasting the same
+ * thread twice stays one record whoever produced the copy.
  */
 export function reidentifyComposerContext(
   text: string,
@@ -191,10 +192,8 @@ export function reidentifyComposerContext(
   const ids = new Map(
     records.map((record) => [
       record.contextId,
-      record.kind === "thread" &&
-      "threadId" in record &&
-      record.contextId === threadContextId(record.threadId)
-        ? record.contextId
+      record.kind === "thread" && "threadId" in record
+        ? threadContextId(record.threadId)
         : ComposerContextId.make(createId()),
     ]),
   );
