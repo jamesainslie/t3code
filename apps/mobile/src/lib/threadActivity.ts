@@ -5,7 +5,12 @@ import {
   requestKindFromRequestType,
   type PendingApproval,
 } from "@t3tools/client-runtime/pending-requests";
-import { UserInputAttachmentAnswerPayload, isToolLifecycleItemType } from "@t3tools/contracts";
+import {
+  SNOOZE_REMINDER_ACTIVITY_KIND,
+  SnoozeReminderActivityPayload,
+  UserInputAttachmentAnswerPayload,
+  isToolLifecycleItemType,
+} from "@t3tools/contracts";
 import type {
   OrchestrationLatestTurn,
   OrchestrationThread,
@@ -83,6 +88,8 @@ export interface ThreadFeedActivity {
 
 export interface WorkLogEntry {
   readonly questionAnswer?: UserInputAttachmentAnswerPayload;
+  /** A delivered snooze note, rendered as its own "Reminder" row. */
+  readonly snoozeReminder?: SnoozeReminderActivityPayload;
   id: string;
   createdAt: string;
   turnId: TurnId | null;
@@ -276,6 +283,15 @@ export function isContextCompactionActivityGroup(
   return (
     entry.activities.length === 1 &&
     entry.activities[0]?.workEntry.sourceActivityKind === "context-compaction"
+  );
+}
+
+/** A delivered snooze note always sits alone in its group. */
+export function isSnoozeReminderActivityGroup(
+  entry: Extract<ThreadFeedEntry, { readonly type: "activity-group" }>,
+): boolean {
+  return (
+    entry.activities.length === 1 && entry.activities[0]?.workEntry.snoozeReminder !== undefined
   );
 }
 
@@ -474,6 +490,7 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
 }
 
 const decodeQuestionAttachmentAnswer = Schema.decodeUnknownOption(UserInputAttachmentAnswerPayload);
+const decodeSnoozeReminder = Schema.decodeUnknownOption(SnoozeReminderActivityPayload);
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const payload =
@@ -524,6 +541,11 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       if (activity.kind !== "user-input.answer-submitted") return {};
       const answer = decodeQuestionAttachmentAnswer(activity.payload);
       return Option.isSome(answer) ? { questionAnswer: answer.value } : {};
+    })(),
+    ...(() => {
+      if (activity.kind !== SNOOZE_REMINDER_ACTIVITY_KIND) return {};
+      const reminder = decodeSnoozeReminder(activity.payload);
+      return Option.isSome(reminder) ? { snoozeReminder: reminder.value } : {};
     })(),
   };
   const toolCallId =
@@ -1584,7 +1606,8 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
 
     const isStandalone =
       entry.activity.workEntry.sourceActivityKind === "context-compaction" ||
-      entry.activity.workEntry.questionAnswer !== undefined;
+      entry.activity.workEntry.questionAnswer !== undefined ||
+      entry.activity.workEntry.snoozeReminder !== undefined;
     if (isStandalone || firstActivityEntry?.turnId !== entry.turnId) {
       flushGroup();
     }
@@ -1902,6 +1925,7 @@ function activityRunTurnId(entry: ThreadFeedEntry): TurnId | null {
   if (
     entry.type === "activity-group" &&
     !isContextCompactionActivityGroup(entry) &&
+    !isSnoozeReminderActivityGroup(entry) &&
     !isUserInputActivityGroup(entry) &&
     entry.activities.every(
       (activity) => !activity.workEntry.agentSpawn && activity.workEntry.tone !== "error",
@@ -2069,7 +2093,11 @@ function appendPresentedFeedEntry(
     result.push(entry);
     return;
   }
-  if (isContextCompactionActivityGroup(entry) || isUserInputActivityGroup(entry)) {
+  if (
+    isContextCompactionActivityGroup(entry) ||
+    isSnoozeReminderActivityGroup(entry) ||
+    isUserInputActivityGroup(entry)
+  ) {
     result.push(entry);
     return;
   }

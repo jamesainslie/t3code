@@ -264,7 +264,12 @@ export function useThreadListActions(): {
   readonly archiveThread: (thread: EnvironmentThreadShell) => void;
   readonly confirmDeleteThread: (thread: EnvironmentThreadShell) => void;
   readonly settleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly snoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => Promise<boolean>;
+  /** `reminder` absent keeps any existing note; an empty string clears it. */
+  readonly snoozeThread: (
+    thread: EnvironmentThreadShell,
+    snoozedUntil: string,
+    reminder?: string,
+  ) => Promise<boolean>;
   readonly unsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly addThreadDependency: (
     thread: EnvironmentThreadShell,
@@ -326,7 +331,7 @@ export function useThreadListActions(): {
     [executeAction],
   );
   const snoozeThread = useCallback(
-    async (thread: EnvironmentThreadShell, snoozedUntil: string) => {
+    async (thread: EnvironmentThreadShell, snoozedUntil: string, reminder?: string) => {
       const key = scopedThreadKey(thread.environmentId, thread.id);
       if (snoozeInFlightThreadKeys.current.has(key)) {
         return false;
@@ -359,6 +364,7 @@ export function useThreadListActions(): {
               input: {
                 threadId: thread.id,
                 snoozedUntil,
+                ...(reminder !== undefined ? { reminder } : {}),
               },
             }),
           (result) => result._tag === "Success",

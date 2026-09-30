@@ -5,6 +5,7 @@ import {
   resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -17,13 +18,24 @@ import {
 } from "react-native";
 import { AppText } from "../../components/AppText";
 import { SegmentedControl } from "../../components/SegmentedControl";
+import { initialCustomSnoozeDate } from "./customSnoozeDate";
 
-export function CustomSnoozeSheet(props: {
+export interface CustomSnoozeSheetProps {
   readonly onClose: () => void;
-  readonly onSnooze: (snoozedUntil: string) => void;
-}) {
+  /** `reminder` is the note to send, or undefined when the sheet has no note field. */
+  readonly onSnooze: (snoozedUntil: string, reminder: string | undefined) => void;
+  /** The thread's current wake time, so a re-snooze can change only the note. */
+  readonly initialSnoozedUntil?: string | null;
+  /** Shows the note field. Only set when the server accepts reminders. */
+  readonly reminder?: { readonly initialValue: string; readonly autoFocus: boolean };
+}
+
+export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
-  const [date, setDate] = useState(() => new Date(Date.now() + 3_600_000));
+  const [date, setDate] = useState(() =>
+    initialCustomSnoozeDate(props.initialSnoozedUntil, new Date()),
+  );
+  const [reminder, setReminder] = useState(props.reminder?.initialValue ?? "");
   const [picker, setPicker] = useState<"date" | "time" | null>(null);
   const [amount, setAmount] = useState("2");
   const [unit, setUnit] = useState<"minutes" | "hours" | "days">("hours");
@@ -137,6 +149,22 @@ export function CustomSnoozeSheet(props: {
               </View>
             </View>
           )}
+          {props.reminder && (
+            <View className="gap-3">
+              <AppText>Reminder</AppText>
+              <TextInput
+                multiline
+                autoFocus={props.reminder.autoFocus}
+                accessibilityLabel="Reminder"
+                placeholder="Shown in the chat when the thread wakes"
+                maxLength={SNOOZE_REMINDER_MAX_CHARS}
+                textAlignVertical="top"
+                className="min-h-20 rounded-xl bg-subtle px-3 py-3 text-base text-foreground"
+                value={reminder}
+                onChangeText={setReminder}
+              />
+            </View>
+          )}
           {error && (
             <AppText accessibilityRole="alert" className="text-danger-foreground">
               {error}
@@ -167,7 +195,7 @@ export function CustomSnoozeSheet(props: {
                   );
                   return;
                 }
-                props.onSnooze(snoozedUntil);
+                props.onSnooze(snoozedUntil, props.reminder ? reminder : undefined);
                 props.onClose();
               }}
             >

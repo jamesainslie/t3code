@@ -153,6 +153,7 @@ import {
   deriveThreadFeedPresentation,
   deriveUnsettledTurnId,
   isContextCompactionActivityGroup,
+  isSnoozeReminderActivityGroup,
   type ThreadFeedEntry,
   type ThreadFeedLatestTurn,
 } from "../../lib/threadActivity";
@@ -1499,6 +1500,31 @@ function renderFeedEntry(
     );
   }
 
+  if (entry.type === "activity-group" && isSnoozeReminderActivityGroup(entry)) {
+    const reminder = entry.activities[0]!.workEntry.snoozeReminder!;
+    const snoozedAtLabel = new Date(reminder.snoozedAt).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return (
+      <View
+        accessible
+        accessibilityLabel={`Reminder from ${snoozedAtLabel}: ${reminder.reminder}`}
+        className="mb-3 gap-1 rounded-xl bg-subtle px-3 py-2"
+      >
+        <View className="flex-row items-center gap-1.5">
+          <SymbolView name="clock" size={12} tintColor={iconSubtleColor} type="monochrome" />
+          <Text className="font-t3-medium text-xs text-foreground-muted">
+            Reminder · snoozed {snoozedAtLabel}
+          </Text>
+        </View>
+        <Text className="text-sm text-foreground">{reminder.reminder}</Text>
+      </View>
+    );
+  }
+
   if (entry.type === "message") {
     const { message } = entry;
     if (message.role === "reasoning") {
@@ -2749,7 +2775,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         case "thinking":
           return WORK_GROUP_TOGGLE_HEIGHT;
         case "activity-group":
-          if (isContextCompactionActivityGroup(entry)) {
+          if (isContextCompactionActivityGroup(entry) || isSnoozeReminderActivityGroup(entry)) {
             return undefined;
           }
           // Expanded rows append a variable detail block — fall back to

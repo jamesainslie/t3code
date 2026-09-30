@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applySnoozePickerDate,
   applySnoozePickerTime,
+  initialCustomSnoozeDate,
   snoozeDateToPickerDate,
 } from "./customSnoozeDate";
 
@@ -32,5 +33,29 @@ describe("custom snooze calendar conversion", () => {
       20, 8, 15, 0,
     ]);
     expect(date.getHours()).toBe(23);
+  });
+});
+
+describe("initial custom snooze date", () => {
+  const now = new Date("2026-09-30T12:00:00.000Z");
+
+  it("starts an hour out when the thread is not snoozed", () => {
+    expect(initialCustomSnoozeDate(null, now).toISOString()).toBe("2026-09-30T13:00:00.000Z");
+    expect(initialCustomSnoozeDate(undefined, now).toISOString()).toBe("2026-09-30T13:00:00.000Z");
+  });
+
+  it("starts at the current wake time when re-snoozing, so only the note has to change", () => {
+    expect(initialCustomSnoozeDate("2026-10-02T09:00:00.000Z", now).toISOString()).toBe(
+      "2026-10-02T09:00:00.000Z",
+    );
+  });
+
+  it("ignores a wake time that has passed or does not parse", () => {
+    expect(initialCustomSnoozeDate("2026-09-30T11:00:00.000Z", now).toISOString()).toBe(
+      "2026-09-30T13:00:00.000Z",
+    );
+    expect(initialCustomSnoozeDate("not a date", now).toISOString()).toBe(
+      "2026-09-30T13:00:00.000Z",
+    );
   });
 });

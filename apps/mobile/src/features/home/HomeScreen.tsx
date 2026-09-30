@@ -10,6 +10,7 @@ import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
+import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 import {
   type EnvironmentId,
   resolveEnvironmentMachineKind,
@@ -101,6 +102,7 @@ interface HomeScreenProps {
   readonly onSnoozeThread: (
     thread: EnvironmentThreadShell,
     snoozedUntil: string,
+    reminder?: string,
   ) => Promise<boolean>;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onAddThreadDependency: (thread: EnvironmentThreadShell) => void;
@@ -412,8 +414,8 @@ export function HomeScreen(props: HomeScreenProps) {
   // optimistic holds.
   const handleSettleThread = props.onSettleThread;
   const handleSnoozeThread = useCallback(
-    (thread: EnvironmentThreadShell, snoozedUntil: string) => {
-      void props.onSnoozeThread(thread, snoozedUntil);
+    (thread: EnvironmentThreadShell, snoozedUntil: string, reminder?: string) => {
+      void props.onSnoozeThread(thread, snoozedUntil, reminder);
     },
     [props.onSnoozeThread],
   );
@@ -525,6 +527,15 @@ export function HomeScreen(props: HomeScreenProps) {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadSnooze === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const snoozeReminderEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (supportsSnoozeReminder(config.environment.capabilities)) {
         supported.add(environmentId);
       }
     }
@@ -859,6 +870,7 @@ export function HomeScreen(props: HomeScreenProps) {
           settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
           onSettleThread={handleSettleThread}
           snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
+          snoozeReminderSupported={snoozeReminderEnvironmentIds.has(thread.environmentId)}
           dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
           highlightSupported={highlightEnvironmentIds.has(thread.environmentId)}
@@ -921,6 +933,7 @@ export function HomeScreen(props: HomeScreenProps) {
       resolveProviderInstance,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
+      snoozeReminderEnvironmentIds,
       dependencyEnvironmentIds,
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
