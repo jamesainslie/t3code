@@ -7362,9 +7362,7 @@ export default function ChatView(props: ChatViewProps) {
 
   // Drafts have no history for a new agent to read, so only sent threads offer it.
   const onContinueInNewThread =
-    activeServerThread !== null &&
-    serverConfig !== null &&
-    canContinueThread(serverConfig.settings, activeServerThread.projectId)
+    activeServerThread !== null && canContinueThread(serverConfig, activeServerThread.projectId)
       ? () => {
           void settlePromise(() =>
             handleNewThread(

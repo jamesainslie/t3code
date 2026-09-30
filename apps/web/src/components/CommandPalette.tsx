@@ -761,9 +761,7 @@ function OpenCommandPaletteDialog(props: {
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
   const canContinueActiveThread =
-    activeThread !== null &&
-    activeThreadServerConfig !== undefined &&
-    canContinueThread(activeThreadServerConfig.settings, activeThread.projectId);
+    activeThread !== null && canContinueThread(activeThreadServerConfig, activeThread.projectId);
   const activeThreadReferenceCopyTarget =
     referenceThreadRef === null || (pathname === "/pull-requests" && !openPanelPullRequestUrl)
       ? null

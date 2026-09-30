@@ -92,21 +92,46 @@ describe("threadContextReference", () => {
     expect(first).not.toBe(second);
   });
 
+  const continuationServer = (settings: typeof DEFAULT_SERVER_SETTINGS) => ({
+    settings,
+    environment: { capabilities: { threadContinuation: true } },
+  });
+
   it("canContinueThread follows the resolved project level", () => {
     const otherProjectId = ProjectId.make("project-2");
-    const offByDefault = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      agentThreadHistoryAccess: "off",
-      projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "project" } },
-    });
+    const offByDefault = continuationServer(
+      applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+        agentThreadHistoryAccess: "off",
+        projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "project" } },
+      }),
+    );
     expect(canContinueThread(offByDefault, thread.projectId)).toBe(true);
     expect(canContinueThread(offByDefault, otherProjectId)).toBe(false);
 
-    const onByDefault = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      agentThreadHistoryAccess: "referenced",
-      projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "off" } },
-    });
+    const onByDefault = continuationServer(
+      applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+        agentThreadHistoryAccess: "referenced",
+        projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "off" } },
+      }),
+    );
     expect(canContinueThread(onByDefault, thread.projectId)).toBe(false);
     expect(canContinueThread(onByDefault, otherProjectId)).toBe(true);
+  });
+
+  it("canContinueThread is false for servers that do not advertise continuation", () => {
+    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      agentThreadHistoryAccess: "project",
+    });
+    expect(
+      canContinueThread({ settings, environment: { capabilities: {} } }, thread.projectId),
+    ).toBe(false);
+    expect(
+      canContinueThread(
+        { settings, environment: { capabilities: { threadContinuation: false } } },
+        thread.projectId,
+      ),
+    ).toBe(false);
+    expect(canContinueThread(undefined, thread.projectId)).toBe(false);
   });
 
   it("buildContinuePrompt references the source thread", () => {

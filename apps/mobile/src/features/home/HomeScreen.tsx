@@ -829,15 +829,14 @@ export function HomeScreen(props: HomeScreenProps) {
         );
       }
       const thread = item.item.thread;
-      const environmentSettings = serverConfigs.get(thread.environmentId)?.settings;
       return (
         <ThreadListV2Row
           onNewThreadOnBranch={props.onNewThreadOnBranch}
           onContinueInNewThread={props.onContinueInNewThread}
-          continueSupported={
-            environmentSettings !== undefined &&
-            canContinueThread(environmentSettings, thread.projectId)
-          }
+          continueSupported={canContinueThread(
+            serverConfigs.get(thread.environmentId),
+            thread.projectId,
+          )}
           thread={thread}
           variant={item.item.variant}
           hasQueuedMessages={item.hasQueuedMessages}

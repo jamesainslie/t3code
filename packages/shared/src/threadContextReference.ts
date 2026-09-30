@@ -2,6 +2,7 @@ import {
   type ComposerContextClipboardFragment,
   type ComposerContextId,
   type EnvironmentId,
+  type ExecutionEnvironmentCapabilities,
   type ProjectId,
   type ServerSettings,
   type ThreadContextRecord,
@@ -78,12 +79,26 @@ export function buildThreadChipClipboard(input: {
   };
 }
 
+interface ContinuationServer {
+  readonly settings: ServerSettings;
+  readonly environment: {
+    readonly capabilities: Pick<ExecutionEnvironmentCapabilities, "threadContinuation">;
+  };
+}
+
 /**
- * Whether "Continue in new thread" is offered. The new agent can only read the source thread
- * when the project's thread history access resolves to anything but off.
+ * Whether "Continue in new thread" is offered. The server must advertise continuation, and the
+ * new agent can only read the source thread when the project's thread history access resolves
+ * to anything but off. False until the environment's config arrives.
  */
-export function canContinueThread(settings: ServerSettings, projectId: ProjectId): boolean {
-  return resolveProjectSettings(settings, projectId).settings.agentThreadHistoryAccess !== "off";
+export function canContinueThread(
+  server: ContinuationServer | null | undefined,
+  projectId: ProjectId,
+): boolean {
+  if (server?.environment.capabilities.threadContinuation !== true) return false;
+  return (
+    resolveProjectSettings(server.settings, projectId).settings.agentThreadHistoryAccess !== "off"
+  );
 }
 
 /** The prompt a continuation draft starts with, pointing the new agent at the source thread. */

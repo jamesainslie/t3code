@@ -240,10 +240,12 @@ export function readEnvironmentSupportsDependencies(environmentId: EnvironmentId
 }
 
 /** Whether "Continue in new thread" is offered for a project. False until the
-    environment's settings arrive, since off is a real answer they may give. */
+    environment's config arrives, and against servers without continuation support. */
 export function readCanContinueThread(environmentId: EnvironmentId, projectId: ProjectId): boolean {
-  const settings = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings;
-  return settings !== undefined && canContinueThread(settings, projectId);
+  return canContinueThread(
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId),
+    projectId,
+  );
 }
 
 /** Whether the environment's server understands thread.pin/unpin.
