@@ -2,7 +2,11 @@ import {
   requestKindFromRequestType,
   type PendingApproval,
 } from "@t3tools/client-runtime/pending-requests";
-import { UserInputAttachmentAnswerPayload } from "@t3tools/contracts";
+import {
+  SNOOZE_REMINDER_ACTIVITY_KIND,
+  SnoozeReminderActivityPayload,
+  UserInputAttachmentAnswerPayload,
+} from "@t3tools/contracts";
 import { foldUserInputActivities } from "@t3tools/client-runtime/work-log/user-input";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -55,6 +59,8 @@ export {
 
 export interface WorkLogEntry {
   questionAnswer?: UserInputAttachmentAnswerPayload;
+  /** Present on `snooze.reminder` rows whose payload decodes. */
+  snoozeReminder?: SnoozeReminderActivityPayload;
   id: string;
   createdAt: string;
   turnId?: TurnId | null;
@@ -538,6 +544,7 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
 }
 
 const decodeQuestionAttachmentAnswer = Schema.decodeUnknownOption(UserInputAttachmentAnswerPayload);
+const decodeSnoozeReminderPayload = Schema.decodeUnknownOption(SnoozeReminderActivityPayload);
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const cachedEntry = derivedWorkLogEntryByActivity.get(activity);
@@ -593,6 +600,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (activity.kind === "user-input.answer-submitted") {
     const answer = decodeQuestionAttachmentAnswer(payload);
     if (Option.isSome(answer)) entry.questionAnswer = answer.value;
+  }
+  if (activity.kind === SNOOZE_REMINDER_ACTIVITY_KIND) {
+    const reminder = decodeSnoozeReminderPayload(payload);
+    if (Option.isSome(reminder)) entry.snoozeReminder = reminder.value;
   }
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);

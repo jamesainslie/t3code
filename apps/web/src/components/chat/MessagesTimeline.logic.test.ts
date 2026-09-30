@@ -41,6 +41,7 @@ import {
   deriveTimelineEntriesWithState,
   type WorkLogEntry,
   type TimelineEntriesProjection,
+  type TimelineEntry,
 } from "../../session-logic";
 import { isImageAttachment, type ChatMessage, type TurnDiffSummary } from "../../types";
 
@@ -1360,6 +1361,243 @@ describe("deriveMessagesTimelineRows", () => {
         label: "Compacted context 899K → 19K tokens",
       },
     ]);
+  });
+
+  describe("snooze reminders", () => {
+    const reminderEntry = (
+      overrides: { turnId?: TurnId | null; withPayload?: boolean } = {},
+    ): TimelineEntry => ({
+      id: "reminder-entry",
+      kind: "work",
+      createdAt: "2026-01-01T00:00:10Z",
+      entry: {
+        id: "reminder",
+        createdAt: "2026-01-01T00:00:10Z",
+        turnId: overrides.turnId ?? null,
+        label: "Check whether CI went green",
+        tone: "info",
+        sourceActivityKind: "snooze.reminder",
+        ...(overrides.withPayload === false
+          ? {}
+          : {
+              snoozeReminder: {
+                reminder: "Check whether CI went green",
+                snoozedAt: "2026-01-01T00:00:01Z",
+                snoozedUntil: "2026-01-01T00:00:10Z",
+              },
+            }),
+      },
+    });
+    const toolEntry = (id: string, second: number, turnId: TurnId | null): TimelineEntry => {
+      const createdAt = `2026-01-01T00:00:${String(second).padStart(2, "0")}Z`;
+      return {
+        id: `${id}-entry`,
+        kind: "work",
+        createdAt,
+        entry: {
+          id,
+          createdAt,
+          turnId,
+          label: "Ran command",
+          command: "bun test",
+          tone: "tool",
+          sourceActivityKind: "tool.completed",
+          toolLifecycleStatus: "completed",
+        },
+      };
+    };
+    const reminderRowsIn = (rows: ReadonlyArray<MessagesTimelineRow>) =>
+      rows.filter((row) => row.kind === "snooze-reminder");
+    const rowHoldsReminderEntry = (row: MessagesTimelineRow) =>
+      (row.kind === "activity-group" &&
+        row.entries.some((entry) => entry.id === "reminder-entry")) ||
+      ((row.kind === "work" || row.kind === "work-live") &&
+        row.groupedEntries.some((entry) => entry.id === "reminder"));
+
+    it("gives a snooze reminder its own row", () => {
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries: [reminderEntry()],
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
+
+      expect(rows).toEqual([
+        {
+          kind: "snooze-reminder",
+          id: "reminder-entry",
+          createdAt: "2026-01-01T00:00:10Z",
+          reminder: "Check whether CI went green",
+          snoozedAt: "2026-01-01T00:00:01Z",
+        },
+      ]);
+    });
+
+    it("falls back to the activity summary when the payload is missing", () => {
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries: [reminderEntry({ withPayload: false })],
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
+
+      expect(rows).toEqual([
+        {
+          kind: "snooze-reminder",
+          id: "reminder-entry",
+          createdAt: "2026-01-01T00:00:10Z",
+          reminder: "Check whether CI went green",
+          snoozedAt: null,
+        },
+      ]);
+    });
+
+    it("never folds a reminder into neighboring work groups", () => {
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries: [
+          toolEntry("before-1", 1, null),
+          toolEntry("before-2", 2, null),
+          reminderEntry(),
+          toolEntry("after-1", 11, null),
+          toolEntry("after-2", 12, null),
+        ],
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
+
+      expect(reminderRowsIn(rows)).toHaveLength(1);
+      expect(rows.some(rowHoldsReminderEntry)).toBe(false);
+      const reminderIndex = rows.findIndex((row) => row.kind === "snooze-reminder");
+      expect(rows[reminderIndex - 1]?.kind).toBe("work-toggle");
+      expect(rows[reminderIndex + 1]?.kind).toBe("work-toggle");
+    });
+
+    it("stays visible when the turn around it folds", () => {
+      const turnId = TurnId.make("turn-1");
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: "user-entry",
+            kind: "message",
+            createdAt: "2026-01-01T00:00:00Z",
+            message: {
+              id: MessageId.make("user-1"),
+              role: "user",
+              text: "Run the tests",
+              turnId: null,
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:00:00Z",
+              streaming: false,
+            },
+          },
+          toolEntry("work-1", 5, turnId),
+          reminderEntry({ turnId }),
+          {
+            id: "assistant-entry",
+            kind: "message",
+            createdAt: "2026-01-01T00:00:20Z",
+            message: {
+              id: MessageId.make("assistant-1"),
+              role: "assistant",
+              text: "Tests pass.",
+              turnId,
+              createdAt: "2026-01-01T00:00:20Z",
+              updatedAt: "2026-01-01T00:00:20Z",
+              streaming: false,
+            },
+          },
+        ],
+        latestTurn: {
+          turnId,
+          state: "completed",
+          startedAt: "2026-01-01T00:00:00Z",
+          completedAt: "2026-01-01T00:00:20Z",
+        },
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
+
+      expect(rows.map((row) => row.kind)).toEqual([
+        "message",
+        "turn-fold",
+        "snooze-reminder",
+        "message",
+      ]);
+    });
+
+    it("is not absorbed by live turn activity", () => {
+      const turnId = TurnId.make("turn-1");
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: "user-entry",
+            kind: "message",
+            createdAt: "2026-01-01T00:00:00Z",
+            message: {
+              id: MessageId.make("user-1"),
+              role: "user",
+              text: "Run the tests",
+              turnId: null,
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:00:00Z",
+              streaming: false,
+            },
+          },
+          {
+            id: "reasoning-entry",
+            kind: "message",
+            createdAt: "2026-01-01T00:00:02Z",
+            message: {
+              id: MessageId.make("reasoning-1"),
+              role: "reasoning",
+              text: "Thinking about tests",
+              turnId,
+              createdAt: "2026-01-01T00:00:02Z",
+              updatedAt: "2026-01-01T00:00:02Z",
+              streaming: false,
+            },
+          },
+          reminderEntry({ turnId }),
+          toolEntry("work-1", 12, turnId),
+        ],
+        latestTurn: {
+          turnId,
+          state: "running",
+          startedAt: "2026-01-01T00:00:00Z",
+          completedAt: null,
+        },
+        isWorking: true,
+        activeTurnStartedAt: "2026-01-01T00:00:00Z",
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
+
+      expect(reminderRowsIn(rows)).toHaveLength(1);
+      expect(rows.some(rowHoldsReminderEntry)).toBe(false);
+    });
+
+    it("reuses an unchanged reminder row", () => {
+      const input = {
+        timelineEntries: [reminderEntry()],
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      };
+      const initial = computeStableMessagesTimelineRows(deriveMessagesTimelineRows(input), {
+        byId: new Map(),
+        result: [],
+      });
+      const next = computeStableMessagesTimelineRows(deriveMessagesTimelineRows(input), initial);
+
+      expect(next).toBe(initial);
+    });
   });
 
   it("keeps subagent spawn rows outside turn folds even after they settle", () => {

@@ -108,6 +108,7 @@ import remarkGfm from "remark-gfm";
 import type { Root, RootContent } from "mdast";
 import { T3Wordmark } from "../T3Wordmark";
 import {
+  AlarmClockIcon,
   BotIcon,
   BrainIcon,
   CheckIcon,
@@ -1774,6 +1775,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "work-toggle" ? <WorkGroupToggleTimelineRow row={row} /> : null}
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
+      {row.kind === "snooze-reminder" ? <SnoozeReminderTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -1943,6 +1945,52 @@ function ContextCompactionTimelineRow({
           timestampFormat={ctx.timestampFormat}
           options={ctx.eventTimestamps}
           className="pe-1.5"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The note a user left when snoozing, delivered when the thread woke. */
+function SnoozeReminderTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "snooze-reminder" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  return (
+    <div
+      role="note"
+      aria-label="Reminder"
+      className="mx-auto flex w-full max-w-(--chat-max-width) items-start gap-2 rounded-lg border border-border/70 px-3 py-2"
+    >
+      <AlarmClockIcon
+        aria-hidden="true"
+        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5 text-muted-foreground text-xs">
+          <span className="font-medium">Reminder</span>
+          {row.snoozedAt ? (
+            <Tooltip>
+              <TooltipTrigger render={<span className="tabular-nums" />}>
+                snoozed {formatDayAwareTimestamp(row.snoozedAt, ctx.timestampFormat)}
+              </TooltipTrigger>
+              <TooltipPopup>
+                {formatChatTimestampTooltip(row.snoozedAt, ctx.timestampFormat)}
+              </TooltipPopup>
+            </Tooltip>
+          ) : null}
+        </div>
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-foreground text-sm">
+          {row.reminder}
+        </p>
+      </div>
+      {ctx.eventTimestamps ? (
+        <ChatEventTimestamp
+          iso={row.createdAt}
+          timestampFormat={ctx.timestampFormat}
+          options={ctx.eventTimestamps}
         />
       ) : null}
     </div>

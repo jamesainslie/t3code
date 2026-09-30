@@ -2497,3 +2497,47 @@ describe("session activity performance", () => {
     });
   });
 });
+
+describe("deriveWorkLogEntries snooze reminders", () => {
+  it("keeps the reminder payload on a snooze reminder entry", () => {
+    const [entry] = deriveWorkLogEntries([
+      makeActivity({
+        id: "reminder",
+        createdAt: "2026-09-30T12:00:00.000Z",
+        kind: "snooze.reminder",
+        summary: "Check whether CI went green",
+        tone: "info",
+        payload: {
+          reminder: "Check whether CI went green",
+          snoozedAt: "2026-09-30T09:00:00.000Z",
+          snoozedUntil: "2026-09-30T12:00:00.000Z",
+        },
+      }),
+    ]);
+
+    expect(entry).toMatchObject({
+      id: "reminder",
+      label: "Check whether CI went green",
+      sourceActivityKind: "snooze.reminder",
+      snoozeReminder: {
+        reminder: "Check whether CI went green",
+        snoozedAt: "2026-09-30T09:00:00.000Z",
+        snoozedUntil: "2026-09-30T12:00:00.000Z",
+      },
+    });
+  });
+
+  it("leaves the payload off when it does not decode", () => {
+    const [entry] = deriveWorkLogEntries([
+      makeActivity({
+        kind: "snooze.reminder",
+        summary: "Check whether CI went green",
+        tone: "info",
+        payload: { reminder: "Check whether CI went green" },
+      }),
+    ]);
+
+    expect(entry?.sourceActivityKind).toBe("snooze.reminder");
+    expect(entry?.snoozeReminder).toBeUndefined();
+  });
+});
