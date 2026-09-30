@@ -16,6 +16,9 @@ const SIBLING_THREAD_ID = ThreadId.make("thread-sibling");
 const OTHER_THREAD_ID = ThreadId.make("thread-other");
 const REFERENCED_THREAD_ID = ThreadId.make("thread-referenced");
 const OTHER_PROJECT_ID = ProjectId.make("project-other");
+const EARLIER_THREAD_ID = ThreadId.make("thread-earlier");
+const PAYLOAD_THREAD_ID = ThreadId.make("thread-in-payload");
+const TEXT_THREAD_ID = ThreadId.make("thread-in-text");
 
 type Relation = "self" | "sameProject" | "otherProject" | "referencedOtherProject";
 
@@ -48,11 +51,15 @@ const rows: ReadonlyArray<readonly [AgentThreadHistoryAccess, Relation, boolean]
   ["environment", "referencedOtherProject", true],
 ];
 
-function userMessage(id: string, context?: OrchestrationMessage["context"]): OrchestrationMessage {
+function userMessage(
+  id: string,
+  context?: OrchestrationMessage["context"],
+  text = "hello",
+): OrchestrationMessage {
   return {
     id: MessageId.make(id),
     role: "user",
-    text: "hello",
+    text,
     ...(context ? { context } : {}),
     turnId: null,
     streaming: false,
@@ -85,31 +92,59 @@ describe("thread history scope", () => {
   it("collects thread ids from thread records in any message", () => {
     const referenced = collectReferencedThreadIds({
       messages: [
-        userMessage("message-1"),
-        userMessage("message-2", {
+        userMessage("message-1", {
           version: 1,
           records: [
             {
               version: 1,
-              contextId: ComposerContextId.make("context-thread"),
-              label: "Earlier work",
+              contextId: ComposerContextId.make("context-earlier"),
+              label: "Earliest work",
               kind: "thread",
-              threadId: REFERENCED_THREAD_ID,
-              projectId: OTHER_PROJECT_ID,
-              title: "Earlier work",
-            },
-            {
-              version: 1,
-              contextId: ComposerContextId.make("context-mention"),
-              label: "README.md",
-              kind: "mention",
-              path: "README.md",
+              threadId: EARLIER_THREAD_ID,
+              projectId: CALLER_PROJECT_ID,
+              title: "Earliest work",
             },
           ],
         }),
+        userMessage(
+          "message-2",
+          {
+            version: 1,
+            records: [
+              {
+                version: 1,
+                contextId: ComposerContextId.make("context-thread"),
+                label: "Earlier work",
+                kind: "thread",
+                threadId: REFERENCED_THREAD_ID,
+                projectId: OTHER_PROJECT_ID,
+                title: "Earlier work",
+              },
+              {
+                version: 1,
+                contextId: ComposerContextId.make("context-mention"),
+                label: "README.md",
+                kind: "mention",
+                path: "README.md",
+              },
+              // A kind this build does not know, whose payload happens to name a thread.
+              {
+                version: 1,
+                contextId: ComposerContextId.make("context-future"),
+                label: "Future kind",
+                kind: "future-thread",
+                payload: { kind: "thread", threadId: PAYLOAD_THREAD_ID },
+              },
+            ],
+          },
+          // Thread ids in message text, linked or raw, are not references.
+          `See [Other](t3-context://v1/thread/${TEXT_THREAD_ID}) and ${TEXT_THREAD_ID}`,
+        ),
       ],
     });
 
-    expect([...referenced]).toEqual([REFERENCED_THREAD_ID]);
+    expect([...referenced].toSorted()).toEqual(
+      [EARLIER_THREAD_ID, REFERENCED_THREAD_ID].toSorted(),
+    );
   });
 });
