@@ -36,7 +36,7 @@ const ELEMENTS = [
   "errors",
   "more",
 ];
-const ELEMENT_TAG = new RegExp(`<(?=/?(?:${ELEMENTS.join("|")})\\b)`, "gi");
+const ELEMENT_TAG = new RegExp(`<(?=\\s*/?\\s*(?:${ELEMENTS.join("|")})\\b)`, "gi");
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 const sum = (values: ReadonlyArray<number>) => values.reduce((total, value) => total + value, 0);

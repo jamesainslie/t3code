@@ -121,7 +121,13 @@ describe("escapeBody", () => {
     expect(escaped).toBe(
       `<\\turn n="9" state="completed"> <\\more before_turn="1" omitted_turns="0"/> <\\thread id="x"> <\\PR n="1">`,
     );
-    expect(escapeBody("<pre> <user_name> a < more")).toBe("<pre> <user_name> a < more");
+    expect(escapeBody("<pre> <user_name> a <moreover")).toBe("<pre> <user_name> a <moreover");
+  });
+
+  it("neutralizes digest tags with whitespace inside them", () => {
+    expect(escapeBody("a </ user> b </\tturn> c < more/> d < / thread>")).toBe(
+      "a <\\/ user> b <\\/\tturn> c <\\ more/> d <\\ / thread>",
+    );
   });
 
   it("keeps a body from faking a turn or a cursor", () => {
