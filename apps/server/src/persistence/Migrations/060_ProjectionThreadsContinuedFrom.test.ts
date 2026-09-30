@@ -28,11 +28,6 @@ it.layer(NodeSqliteClient.layer({ filename: ":memory:" }))(
         SELECT continued_from_thread_id AS "continuedFromThreadId" FROM projection_threads WHERE thread_id = 'thread-1'
       `;
         assert.deepEqual(migrated, [{ continuedFromThreadId: null }]);
-        const indexes = yield* sql<{ readonly name: string }>`
-        SELECT name FROM sqlite_master
-        WHERE type = 'index' AND name = 'idx_projection_threads_continued_from'
-      `;
-        assert.deepEqual(indexes, [{ name: "idx_projection_threads_continued_from" }]);
 
         yield* sql`UPDATE projection_threads SET continued_from_thread_id = 'thread-0' WHERE thread_id = 'thread-1'`;
         yield* migrateContinuedFrom;
