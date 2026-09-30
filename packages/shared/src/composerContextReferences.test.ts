@@ -1,4 +1,9 @@
-import type { ComposerContextId, ComposerContextRecord } from "@t3tools/contracts";
+import {
+  ComposerContextId,
+  type ComposerContextRecord,
+  ProjectId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -251,6 +256,26 @@ describe("provider projection", () => {
     });
     expect(projected).toContain("path: src/nested/index.ts");
     expect(projected).toContain("name: pinchtab");
+  });
+
+  it("projects a thread reference with its id and title", () => {
+    const projected = projectComposerContextForProvider({
+      text: "Continue [Fix login](t3-context://v1/thread/thread-abc)",
+      records: [
+        {
+          version: 1,
+          contextId: ComposerContextId.make("thread-abc"),
+          kind: "thread",
+          label: "Fix login",
+          threadId: ThreadId.make("abc"),
+          projectId: ProjectId.make("p1"),
+          title: "Fix login",
+        },
+      ],
+    });
+    expect(projected).toContain("[Thread: Fix login; ref=thread-abc]");
+    expect(projected).toContain('<context kind="thread" id="thread-abc">');
+    expect(projected).toContain("threadId: abc");
   });
 
   it("marks duplicate identities unavailable instead of choosing one payload", () => {

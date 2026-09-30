@@ -233,6 +233,12 @@ function formatComposerContextProviderPayload(record: KnownComposerContextRecord
       return `path: ${record.path}`;
     case "skill":
       return `name: ${record.name}`;
+    case "thread":
+      return [
+        `threadId: ${record.threadId}`,
+        `title: ${record.title}`,
+        `projectId: ${record.projectId}`,
+      ].join("\n");
   }
 }
 
