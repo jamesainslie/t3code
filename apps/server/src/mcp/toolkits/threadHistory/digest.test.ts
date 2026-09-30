@@ -309,7 +309,32 @@ describe("buildThreadDigest", () => {
     });
     expect(failed.recentTurns.at(-1)).toMatchObject({ n: 2, state: "queued" });
 
-    // Without a payload message the summary is the message.
+    // The reactor writes `{ detail, requestId }`, so the detail stands in for a message.
+    const detailText = "The queued message was canceled before it could resume. ".repeat(10);
+    const realShape = digestOf(
+      makeThread({
+        messages,
+        activities: [
+          startFailure(
+            "f-real",
+            5,
+            { detail: detailText, requestId: "u2" },
+            "Queued message was not sent",
+          ),
+        ],
+        latestTurn: latestTurn(A, "completed"),
+      }),
+    );
+    const realStatus = realShape.header.status;
+    const realMessage = realStatus.kind === "error" ? realStatus.message : "";
+    expect(realStatus.kind).toBe("error");
+    expect(realMessage.startsWith("The queued message was canceled before it could resume.")).toBe(
+      true,
+    );
+    expect(realMessage.endsWith("…")).toBe(true);
+    expect(byteLength(realMessage)).toBeLessThanOrEqual(DIGEST_LIMITS.excerptBytes);
+
+    // Without a payload message or detail the summary is the message.
     const summaryOnly = digestOf(
       makeThread({
         messages,

@@ -175,7 +175,12 @@ function deriveStatus(
             activity.createdAt >= queuedAt,
         );
   if (sendFailure) {
-    const message = stringOrUndefined(payloadOf(sendFailure)?.message) ?? sendFailure.summary;
+    // The reactor writes `{ detail, requestId }`; the detail says why the send failed.
+    const payload = payloadOf(sendFailure);
+    const message =
+      stringOrUndefined(payload?.message) ??
+      stringOrUndefined(payload?.detail) ??
+      sendFailure.summary;
     return { kind: "error", message: cutToBytes(message, DIGEST_LIMITS.excerptBytes) };
   }
 
