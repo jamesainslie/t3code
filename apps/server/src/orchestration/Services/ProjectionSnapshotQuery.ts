@@ -72,7 +72,15 @@ export type ProjectionThreadPullRequests = Pick<
   "id" | "projectId" | "settledOverride" | "settledAt" | "pullRequests"
 >;
 
-export interface ProjectionThreadDetailQuery {
+export interface ProjectionThreadReadOptions {
+  /**
+   * Also read archived threads. Thread history reads them like active ones;
+   * deleted threads stay unreadable.
+   */
+  readonly includeArchived?: boolean;
+}
+
+export interface ProjectionThreadDetailQuery extends ProjectionThreadReadOptions {
   /**
    * Limit activities before SQLite returns and decodes their payloads.
    * Any explicit filter omits pinned-request reads. An empty list also skips
@@ -172,6 +180,7 @@ export interface ProjectionSnapshotQueryShape {
    */
   readonly searchThreads: (
     input: OrchestrationSearchThreadsInput,
+    options?: ProjectionThreadReadOptions,
   ) => Effect.Effect<OrchestrationSearchThreadsResult, ProjectionRepositoryError>;
 
   /**
@@ -251,6 +260,7 @@ export interface ProjectionSnapshotQueryShape {
    */
   readonly getThreadShellById: (
     threadId: ThreadId,
+    options?: ProjectionThreadReadOptions,
   ) => Effect.Effect<Option.Option<OrchestrationThreadShell>, ProjectionRepositoryError>;
 
   /**

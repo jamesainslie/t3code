@@ -3820,6 +3820,108 @@ it.effect("reads a full sweep from unsettled threads and every project", () => {
   }).pipe(Effect.provide(layer));
 });
 
+projectionSnapshotLayer("ProjectionSnapshotQuery thread history reads", (it) => {
+  const timestamp = "2026-03-03T00:00:00.000Z";
+  const insertThreads = (
+    rows: ReadonlyArray<{
+      readonly id: string;
+      readonly projectId: string;
+      readonly archived?: boolean;
+      readonly deleted?: boolean;
+    }>,
+  ) =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const row of rows) {
+        yield* sql`
+          INSERT OR IGNORE INTO projection_projects (
+            project_id, title, workspace_root, scripts_json, created_at, updated_at
+          ) VALUES (
+            ${row.projectId}, ${`Project ${row.projectId}`}, ${`/tmp/${row.projectId}`}, '[]',
+            ${timestamp}, ${timestamp}
+          )
+        `;
+        yield* sql`
+          INSERT INTO projection_threads (
+            thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode,
+            latest_turn_id, created_at, updated_at, archived_at, deleted_at
+          ) VALUES (
+            ${row.id}, ${row.projectId}, ${`Thread ${row.id}`},
+            '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default',
+            ${`${row.id}-turn`}, ${timestamp}, ${timestamp},
+            ${row.archived === true ? timestamp : null}, ${row.deleted === true ? timestamp : null}
+          )
+        `;
+        yield* sql`
+          INSERT INTO projection_turns (
+            thread_id, turn_id, pending_message_id, assistant_message_id, state,
+            requested_at, started_at, completed_at, checkpoint_files_json
+          ) VALUES (
+            ${row.id}, ${`${row.id}-turn`}, NULL, NULL, 'completed',
+            ${timestamp}, ${timestamp}, ${timestamp}, '[]'
+          )
+        `;
+      }
+    });
+
+  it.effect("reads archived threads only when asked, and never deleted ones", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      yield* insertThreads([
+        { id: "thread-shelved", projectId: "project-archive", archived: true },
+        { id: "thread-removed", projectId: "project-archive", archived: true, deleted: true },
+      ]);
+      const shelved = ThreadId.make("thread-shelved");
+      const removed = ThreadId.make("thread-removed");
+
+      assert.isTrue(Option.isNone(yield* query.getThreadDetailById(shelved)));
+      assert.isTrue(Option.isNone(yield* query.getThreadShellById(shelved)));
+
+      const detail = yield* query.getThreadDetailById(shelved, {
+        activityKinds: [],
+        includeArchived: true,
+      });
+      assert.equal(Option.getOrNull(detail)?.archivedAt, timestamp);
+      assert.equal(Option.getOrNull(detail)?.latestTurn?.state, "completed");
+      const shell = yield* query.getThreadShellById(shelved, { includeArchived: true });
+      assert.equal(Option.getOrNull(shell)?.latestTurn?.turnId, asTurnId("thread-shelved-turn"));
+
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadDetailById(removed, { includeArchived: true })),
+      );
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadShellById(removed, { includeArchived: true })),
+      );
+    }),
+  );
+
+  it.effect("searches archived threads only when asked", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertThreads([
+        { id: "thread-search-shelved", projectId: "project-archive", archived: true },
+      ]);
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, turn_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES (
+          'message-shelved', 'thread-search-shelved', NULL, 'user',
+          'Where did the shelved lantern go?', 0, ${timestamp}, ${timestamp}
+        )
+      `;
+
+      const ids = (result: { readonly matches: ReadonlyArray<{ readonly threadId: ThreadId }> }) =>
+        result.matches.map((match) => match.threadId);
+      assert.deepEqual(ids(yield* query.searchThreads({ query: "shelved lantern" })), []);
+      assert.deepEqual(
+        ids(yield* query.searchThreads({ query: "shelved lantern" }, { includeArchived: true })),
+        [ThreadId.make("thread-search-shelved")],
+      );
+    }),
+  );
+});
+
 projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
   it.effect("lists one kind across active threads only, without hydrating the threads", () =>
     Effect.gen(function* () {

@@ -24,6 +24,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
   type ProjectionThreadDetailQuery,
+  type ProjectionThreadReadOptions,
 } from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -167,7 +168,12 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
   options: HarnessOptions = {},
 ) {
   const settings = yield* Ref.make(options.settings ?? DEFAULT_SERVER_SETTINGS);
-  const searches = yield* Ref.make<ReadonlyArray<OrchestrationSearchThreadsInput>>([]);
+  const searches = yield* Ref.make<
+    ReadonlyArray<{
+      readonly input: OrchestrationSearchThreadsInput;
+      readonly options: ProjectionThreadReadOptions | undefined;
+    }>
+  >([]);
   const detailReads = yield* Ref.make<
     ReadonlyArray<{ readonly threadId: ThreadId; readonly query: ProjectionThreadDetailQuery }>
   >([]);
@@ -175,13 +181,18 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
     ReadonlyArray<Parameters<ProjectionSnapshotQueryShape["listTurnActivities"]>[0]>
   >([]);
   const threads = new Map((options.threads ?? baseThreads).map((thread) => [thread.id, thread]));
+  // Like the real queries, archived threads are found only when asked for.
+  const lookup = (threadId: ThreadId, read: ProjectionThreadReadOptions = {}) =>
+    Option.fromNullishOr(threads.get(threadId)).pipe(
+      Option.filter((thread) => thread.archivedAt === null || read.includeArchived === true),
+    );
   const dependencies = Layer.mergeAll(
     Layer.mock(ProjectionSnapshotQuery)({
       // Kind filters apply as SQLite applies them, so tests see only the rows the handler asked for.
       getThreadDetailById: (threadId, query = {}) =>
         Ref.update(detailReads, (recorded) => [...recorded, { threadId, query }]).pipe(
           Effect.as(
-            Option.fromNullishOr(threads.get(threadId)).pipe(
+            lookup(threadId, query).pipe(
               Option.map((thread) => {
                 const kinds = query.activityKinds;
                 return kinds === undefined
@@ -205,18 +216,17 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
             ),
           ),
         ),
-      getThreadShellById: (threadId) => {
-        const thread = threads.get(threadId);
-        return Effect.succeed(
-          thread === undefined || thread.deletedAt !== null
-            ? Option.none()
-            : Option.some(shellOf(thread)),
-        );
-      },
+      getThreadShellById: (threadId, read) =>
+        Effect.succeed(
+          lookup(threadId, read).pipe(
+            Option.filter((thread) => thread.deletedAt === null),
+            Option.map(shellOf),
+          ),
+        ),
       getProjectShellById: (projectId) =>
         Effect.succeed(Option.fromNullishOr(projects.get(projectId))),
-      searchThreads: (input) =>
-        Ref.update(searches, (recorded) => [...recorded, input]).pipe(
+      searchThreads: (input, searchOptions) =>
+        Ref.update(searches, (recorded) => [...recorded, { input, options: searchOptions }]).pipe(
           Effect.as({ matches: options.matches ?? [] }),
         ),
     }),
@@ -320,6 +330,28 @@ describe("thread history toolkit handlers", () => {
     }),
   );
 
+  it.effect("reads and finds archived threads like active ones", () =>
+    Effect.gen(function* () {
+      const archivedId = ThreadId.make("thread-archived");
+      const harness = yield* makeHarness({
+        settings: settingsWith({ agentThreadHistoryAccess: "project" }),
+        threads: [
+          caller,
+          withTurns(REFERENCED_ID, PROJECT_B, 2, { archivedAt: at(400) }),
+          withTurns(archivedId, PROJECT_A, 1, { archivedAt: at(400) }),
+        ],
+        matches: [match(archivedId, PROJECT_A)],
+      });
+
+      const referenced = yield* harness.call("read_thread", { threadId: REFERENCED_ID });
+      expect(referenced.startsWith(`<thread id="${REFERENCED_ID}"`)).toBe(true);
+      const page = yield* harness.call("read_thread_turns", { threadId: archivedId });
+      expect(detailedTurns(page)).toEqual([1]);
+      const found = yield* harness.call("find_threads", { query: "ssh log" });
+      expect(found).toContain(`id="${archivedId}"`);
+    }),
+  );
+
   it.effect("read_thread requires the thread-history capability", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
@@ -357,7 +389,10 @@ describe("thread history toolkit handlers", () => {
       expect(recentSection(digest)).toContain("Bash completed: vp test");
       const [callerRead, targetRead] = yield* Ref.get(harness.detailReads);
       // The caller contributes only its id, project, worktree, and messages.
-      expect(callerRead).toEqual({ threadId: CALLER_ID, query: { activityKinds: [] } });
+      expect(callerRead).toEqual({
+        threadId: CALLER_ID,
+        query: { activityKinds: [], includeArchived: true },
+      });
       expect(targetRead?.threadId).toBe(REFERENCED_ID);
       const targetKinds = targetRead?.query.activityKinds ?? [];
       expect(targetKinds).toContain("runtime.error");
@@ -491,7 +526,9 @@ describe("thread history toolkit handlers", () => {
         ],
       });
       const text = yield* harness.call("find_threads", { query: "ssh log" });
-      expect(yield* Ref.get(harness.searches)).toEqual([{ query: "ssh log", limit: 50 }]);
+      expect(yield* Ref.get(harness.searches)).toEqual([
+        { input: { query: "ssh log", limit: 50 }, options: { includeArchived: true } },
+      ]);
 
       const lines = text.split("\n");
       const ids = lines.map((line) => /id="([^"]+)"/.exec(line)?.[1]);

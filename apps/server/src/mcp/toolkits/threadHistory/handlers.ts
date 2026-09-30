@@ -41,9 +41,10 @@ const make = Effect.gen(function* () {
   const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
+  // Archived threads hold finished work an agent may pick up, so they read like active ones.
   const threadDetail = (threadId: ThreadId, activityKinds: ReadonlyArray<string>) =>
     snapshots
-      .getThreadDetailById(threadId, { activityKinds })
+      .getThreadDetailById(threadId, { activityKinds, includeArchived: true })
       .pipe(
         Effect.mapError(readFailed),
         Effect.map(Option.filter((thread) => thread.deletedAt === null)),
@@ -51,7 +52,7 @@ const make = Effect.gen(function* () {
 
   const threadShell = (threadId: ThreadId) =>
     snapshots
-      .getThreadShellById(threadId)
+      .getThreadShellById(threadId, { includeArchived: true })
       .pipe(Effect.map(Option.getOrNull), Effect.mapError(readFailed));
 
   const projectShell = (projectId: ProjectId) =>
@@ -182,7 +183,10 @@ const make = Effect.gen(function* () {
           return yield* new ThreadSearchOutOfScopeError({ level });
         }
         const { matches } = yield* snapshots
-          .searchThreads({ query: input.query, limit: SEARCH_MATCH_LIMIT })
+          .searchThreads(
+            { query: input.query, limit: SEARCH_MATCH_LIMIT },
+            { includeArchived: true },
+          )
           .pipe(Effect.mapError(readFailed));
         const limit = Math.min(input.limit ?? FIND_THREADS_MAX_LIMIT, FIND_THREADS_MAX_LIMIT);
         const seen = new Set<ThreadId>();
