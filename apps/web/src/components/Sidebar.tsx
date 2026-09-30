@@ -1,4 +1,5 @@
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
+import { customSnoozeOptions, type SnoozeChoice } from "./CustomSnoozeDialog.logic";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { useAtomValue } from "@effect/atom-react";
@@ -23,6 +24,7 @@ import {
   dependencyWaitLabel,
   effectiveBlocked,
   effectiveSnoozed,
+  supportsSnoozeReminder,
 } from "@t3tools/client-runtime/state/thread-settled";
 import {
   resolveSettledThreadTimestamp,
@@ -221,7 +223,7 @@ import {
   type TerminalStatusIndicator,
   useLinkedThreadPullRequest,
 } from "./ThreadStatusIndicators";
-import { resolveSnoozePresets, snoozeWakeLabel, type SnoozePreset } from "./Sidebar.snooze";
+import { resolveSnoozePresets, snoozeWakeLabel } from "./Sidebar.snooze";
 import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
 import { ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
@@ -339,6 +341,7 @@ function SidebarThreadTooltip({
   branchMismatch,
   terminalStatus,
   terminalProcessCount,
+  snoozeReminder,
 }: {
   thread: SidebarThreadSummary;
   project: ProjectFaviconProject | null;
@@ -355,6 +358,11 @@ function SidebarThreadTooltip({
   } | null;
   terminalStatus: TerminalStatusIndicator | null;
   terminalProcessCount: number;
+  /**
+   * Pending note of a snoozed row. The row's wake label yields to the wake
+   * button on hover, so the note previews here instead.
+   */
+  snoozeReminder: string | null;
 }) {
   const driverKind = providerEntry?.driverKind ?? null;
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
@@ -365,6 +373,14 @@ function SidebarThreadTooltip({
         <div className="min-w-0 truncate text-xs leading-tight font-medium text-foreground">
           {thread.title}
         </div>
+        {snoozeReminder ? (
+          <div className="flex min-w-0 items-start gap-2 pl-0.5 text-xs text-info-foreground">
+            <AlarmClockIcon aria-hidden className="mt-0.5 size-3 shrink-0 stroke-current" />
+            <div className="line-clamp-4 min-w-0 flex-1 wrap-break-word whitespace-pre-line leading-5">
+              {snoozeReminder}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-1.5 pl-0.5 text-xs text-muted-foreground">
           {projectDisplayName ? (
             <div className="flex min-w-0 items-center gap-2">
@@ -452,10 +468,17 @@ function SidebarThreadTooltip({
 function SnoozeMenuButton(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSnooze: (preset: Pick<SnoozePreset, "snoozedUntil">) => void;
+  onSnooze: (choice: SnoozeChoice) => void;
+  reminderSupported: boolean;
   timestampFormat: TimestampFormat;
 }) {
-  const { open, onOpenChange, onSnooze, timestampFormat } = props;
+  const { open, onOpenChange, onSnooze, reminderSupported, timestampFormat } = props;
+  const openCustomSnooze = async (focusReminder: boolean) => {
+    const choice = await requestCustomSnooze(
+      customSnoozeOptions({ focusReminder, supportsReminder: reminderSupported, snoozed: null }),
+    );
+    if (choice) onSnooze(choice);
+  };
   // Presets resolve at open time so "In 1 hour" is relative to the click,
   // not to when the row mounted.
   const presets = useMemo(
@@ -499,14 +522,23 @@ function SnoozeMenuButton(props: {
         ))}
         <MenuSeparator />
         <MenuItem
-          onClick={async (event) => {
+          onClick={(event) => {
             event.stopPropagation();
-            const choice = await requestCustomSnooze();
-            if (choice) onSnooze(choice);
+            void openCustomSnooze(false);
           }}
         >
           Custom…
         </MenuItem>
+        {reminderSupported ? (
+          <MenuItem
+            onClick={(event) => {
+              event.stopPropagation();
+              void openCustomSnooze(true);
+            }}
+          >
+            Snooze with reminder…
+          </MenuItem>
+        ) : null}
       </MenuPopup>
     </Menu>
   );
@@ -991,6 +1023,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   settlementSupported: boolean;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
+  // Same contract for the reminder on thread.snooze.
+  snoozeReminderSupported: boolean;
   // Same contract for thread.dependency.add/remove.
   dependenciesSupported: boolean;
   // Pinned threads show the same pin marker in active, settled, and snoozed
@@ -1033,7 +1067,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   onContextMenu: (threadRef: ScopedThreadRef, position: { x: number; y: number }) => void;
   onSettle: (threadRef: ScopedThreadRef) => void;
   onUnsettle: (threadRef: ScopedThreadRef) => void;
-  onSnooze: (threadRef: ScopedThreadRef, preset: Pick<SnoozePreset, "snoozedUntil">) => void;
+  onSnooze: (threadRef: ScopedThreadRef, choice: SnoozeChoice) => void;
   onUnsnooze: (threadRef: ScopedThreadRef) => void;
   onRelease: (threadRef: ScopedThreadRef) => void;
   onUnpin: (threadRef: ScopedThreadRef) => void;
@@ -1245,6 +1279,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       branchMismatch={branchMismatch}
       terminalStatus={terminalStatus}
       terminalProcessCount={terminalProcessCount}
+      snoozeReminder={variantAction === "unsnooze" ? (thread.snoozeReminder ?? null) : null}
     />
   );
 
@@ -1377,9 +1412,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     },
     [onUnpin, threadRef],
   );
-  const handleSnoozePreset = useCallback(
-    (preset: Pick<SnoozePreset, "snoozedUntil">) => {
-      onSnooze(threadRef, preset);
+  const handleSnoozeChoice = useCallback(
+    (choice: SnoozeChoice) => {
+      onSnooze(threadRef, choice);
     },
     [onSnooze, threadRef],
   );
@@ -1964,7 +1999,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                         <SnoozeMenuButton
                           open={snoozeMenuOpen}
                           onOpenChange={setSnoozeMenuOpen}
-                          onSnooze={handleSnoozePreset}
+                          onSnooze={handleSnoozeChoice}
+                          reminderSupported={props.snoozeReminderSupported}
                           timestampFormat={props.timestampFormat}
                         />
                       ) : null}
@@ -2219,6 +2255,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
           branchMismatch={branchMismatch}
           terminalStatus={terminalStatus}
           terminalProcessCount={runningTerminalIds.length}
+          snoozeReminder={null}
         />
       </Tooltip>
     </li>
@@ -3952,7 +3989,7 @@ export default function Sidebar() {
   const performSnooze = useCallback(
     async (
       threadRef: ScopedThreadRef,
-      preset: Pick<SnoozePreset, "snoozedUntil">,
+      choice: SnoozeChoice,
       opts: { coSnoozingKeys?: ReadonlySet<string> } = {},
     ) => {
       const threadKey = scopedThreadKey(threadRef);
@@ -3962,9 +3999,12 @@ export default function Sidebar() {
       snoozingThreadKeysRef.current.add(threadKey);
       try {
         // Snoozing the open thread moves you forward, same as settle —
-        // both park the thread you're done with for now.
-        const navigateAfterSnooze = planForwardNavigation(threadKey, opts.coSnoozingKeys);
-        const result = await snoozeThread(threadRef, preset.snoozedUntil);
+        // both park the thread you're done with for now. Re-snoozing a
+        // snoozed thread only edits its wake time or note, so it stays put.
+        const navigateAfterSnooze = snoozedThreadKeysRef.current.has(threadKey)
+          ? null
+          : planForwardNavigation(threadKey, opts.coSnoozingKeys);
+        const result = await snoozeThread(threadRef, choice.snoozedUntil, choice.reminder);
         if (result._tag === "Failure") {
           // Never navigate away from a thread that did not snooze.
           return isAtomCommandInterrupted(result)
@@ -3994,11 +4034,11 @@ export default function Sidebar() {
   const attemptSnooze = useCallback(
     (
       threadRef: ScopedThreadRef,
-      preset: Pick<SnoozePreset, "snoozedUntil">,
+      choice: SnoozeChoice,
       opts: { coSnoozingKeys?: ReadonlySet<string> } = {},
     ) => {
       void (async () => {
-        const outcome = await performSnooze(threadRef, preset, opts);
+        const outcome = await performSnooze(threadRef, choice, opts);
         if (outcome.status === "failure") {
           toastManager.add(
             stackedThreadToast({
@@ -4268,6 +4308,9 @@ export default function Sidebar() {
           true;
         const supportsSnooze =
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true;
+        const reminderSupported = supportsSnoozeReminder(
+          serverConfigs.get(thread.environmentId)?.environment.capabilities,
+        );
         const supportsPinning =
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true;
         const supportsAutoSettleOptOut =
@@ -4313,6 +4356,7 @@ export default function Sidebar() {
               isSettled,
               autoSettleEnabled: thread.autoSettleDisabledAt == null,
               isSnoozed,
+              snoozeReminder: thread.snoozeReminder ?? null,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
               isBlocked,
               canAddDependencyNow: canAddDependency(thread, { now: new Date().toISOString() }),
@@ -4323,6 +4367,7 @@ export default function Sidebar() {
                 settlement: supportsSettlement,
                 autoSettleOptOut: supportsAutoSettleOptOut,
                 snooze: supportsSnooze,
+                snoozeReminder: reminderSupported,
                 pinning: supportsPinning,
                 highlight: supportsHighlight,
                 titleRegeneration: supportsTitleRegeneration,
@@ -4340,11 +4385,17 @@ export default function Sidebar() {
           return;
         }
         if (clicked.value?.startsWith("snooze:")) {
-          const preset =
-            clicked.value === "snooze:custom"
-              ? await requestCustomSnooze()
+          const choice =
+            clicked.value === "snooze:custom" || clicked.value === "snooze:reminder"
+              ? await requestCustomSnooze(
+                  customSnoozeOptions({
+                    focusReminder: clicked.value === "snooze:reminder",
+                    supportsReminder: reminderSupported,
+                    snoozed: isSnoozed ? thread : null,
+                  }),
+                )
               : snoozePresets.find((candidate) => `snooze:${candidate.id}` === clicked.value);
-          if (preset) attemptSnooze(threadRef, preset);
+          if (choice) attemptSnooze(threadRef, choice);
           return;
         }
         switch (clicked.value) {
@@ -5007,6 +5058,9 @@ export default function Sidebar() {
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
                                 .threadSnooze === true
                             }
+                            snoozeReminderSupported={supportsSnoozeReminder(
+                              serverConfigs.get(thread.environmentId)?.environment.capabilities,
+                            )}
                             dependenciesSupported={
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
                                 .threadDependencies === true

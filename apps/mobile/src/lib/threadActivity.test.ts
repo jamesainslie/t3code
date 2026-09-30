@@ -19,6 +19,7 @@ import {
   buildThreadFeed,
   deriveThreadFeedPresentation,
   isPendingUserInputOptionSelected,
+  isSnoozeReminderActivityGroup,
   setPendingUserInputCustomAnswer,
   togglePendingUserInputOptionSelection,
   workEntryRowLabel,
@@ -483,6 +484,57 @@ describe("buildThreadFeed", () => {
         activities: [{ summary: "Compacted context 899K → 19K tokens" }],
       },
     ]);
+  });
+
+  it("keeps a snooze reminder as its own row, never grouped with neighbouring work", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-snooze-reminder"),
+      projectId: ProjectId.make("project-1"),
+      title: "Snooze reminder",
+      activities: [
+        makeActivity({
+          id: EventId.make("warning-before"),
+          kind: "runtime.warning",
+          summary: "Runtime warning",
+          createdAt: "2026-09-01T00:00:00.000Z",
+        }),
+        makeActivity({
+          id: EventId.make("snooze-reminder:cmd-1"),
+          kind: "snooze.reminder",
+          summary: "Check the deploy",
+          createdAt: "2026-09-01T00:00:01.000Z",
+          payload: {
+            reminder: "Check the deploy",
+            snoozedAt: "2026-08-31T20:00:00.000Z",
+            snoozedUntil: "2026-09-01T00:00:00.000Z",
+          },
+        }),
+        makeActivity({
+          id: EventId.make("warning-after"),
+          kind: "runtime.warning",
+          summary: "Another warning",
+          createdAt: "2026-09-01T00:00:02.000Z",
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread);
+    const presented = deriveThreadFeedPresentation(feed, null, new Set());
+    const reminderRow = presented.find((row) => row.id === "snooze-reminder:cmd-1");
+    expect(reminderRow?.type).toBe("activity-group");
+    if (reminderRow?.type !== "activity-group") return;
+    expect(isSnoozeReminderActivityGroup(reminderRow)).toBe(true);
+    expect(reminderRow.activities).toHaveLength(1);
+    expect(reminderRow.activities[0]?.workEntry.snoozeReminder).toEqual({
+      reminder: "Check the deploy",
+      snoozedAt: "2026-08-31T20:00:00.000Z",
+      snoozedUntil: "2026-09-01T00:00:00.000Z",
+    });
+    for (const row of presented) {
+      if (row.type !== "activity-group" || row === reminderRow) continue;
+      expect(row.activities.map((activity) => activity.id)).not.toContain("snooze-reminder:cmd-1");
+      expect(isSnoozeReminderActivityGroup(row)).toBe(false);
+    }
   });
 
   it("keeps long Claude commands expandable without repeating them in full detail", () => {

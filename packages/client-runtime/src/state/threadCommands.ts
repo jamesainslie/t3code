@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 
 import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
-import { canAddDependency, canSnooze } from "./threadSettled.ts";
+import { canAddDependency, canSnooze, resolveSnoozeReminder } from "./threadSettled.ts";
 import { applyThreadDependenciesRemoved, applyThreadDependencyAdded } from "@t3tools/contracts";
 
 import {
@@ -359,6 +359,7 @@ export function createThreadEnvironmentAtoms<R, E>(
             pinnedAt: null,
             pinOrderKey: null,
             snoozedAt: null,
+            snoozeReminder: null,
             snoozedUntil: null,
             dependencies: [],
           },
@@ -379,6 +380,7 @@ export function createThreadEnvironmentAtoms<R, E>(
             hasPendingUserInput: false,
             snoozedUntil: input.snoozedUntil,
             snoozedAt: thread.snoozedUntil === input.snoozedUntil ? (thread.snoozedAt ?? now) : now,
+            snoozeReminder: resolveSnoozeReminder(thread, input.reminder),
             dependencies: [],
           },
     ),
@@ -386,6 +388,7 @@ export function createThreadEnvironmentAtoms<R, E>(
       ...thread,
       snoozedUntil: null,
       snoozedAt: null,
+      snoozeReminder: null,
     })),
     addDependency: optimistic.wrap(commands.addDependency, (thread, input, now, accepted) =>
       !accepted && !canAddDependency(thread, { now })
@@ -396,6 +399,7 @@ export function createThreadEnvironmentAtoms<R, E>(
             hasPendingUserInput: false,
             snoozedUntil: null,
             snoozedAt: null,
+            snoozeReminder: null,
             dependencies: applyThreadDependencyAdded(thread.dependencies, {
               dependsOnThreadId: input.dependsOnThreadId,
               linkedAt: now,
@@ -419,6 +423,7 @@ export function createThreadEnvironmentAtoms<R, E>(
         : {}),
       snoozedUntil: null,
       snoozedAt: null,
+      snoozeReminder: null,
       dependencies: [],
     })),
     unpin: optimistic.wrap(commands.unpin, (thread) => ({

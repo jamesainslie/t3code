@@ -32,6 +32,7 @@ import {
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
 import type { QueuedComposerMessage } from "../../queuedMessageStore";
 import {
+  SNOOZE_REMINDER_ACTIVITY_KIND,
   type MessageId,
   type OrchestrationLatestTurn,
   type TurnId,
@@ -337,6 +338,11 @@ const LIVE_ACTIVITY_ROW_ID = "live-activity-row";
 
 type ActivityEntry = Extract<TimelineEntry, { kind: "message" | "work" }>;
 
+/** A delivered snooze note is for the user, so it never hides inside agent work. */
+function isSnoozeReminderEntry(entry: TimelineEntry): boolean {
+  return entry.kind === "work" && entry.entry.sourceActivityKind === SNOOZE_REMINDER_ACTIVITY_KIND;
+}
+
 function isActivityEntry(entry: TimelineEntry): entry is ActivityEntry {
   return entry.kind === "message"
     ? entry.message.role === "reasoning"
@@ -344,6 +350,7 @@ function isActivityEntry(entry: TimelineEntry): entry is ActivityEntry {
         entry.entry.agentSpawn === undefined &&
         entry.entry.questionAnswer === undefined &&
         entry.entry.sourceActivityKind !== "context-compaction" &&
+        !isSnoozeReminderEntry(entry) &&
         entry.entry.tone !== "error";
 }
 
@@ -406,6 +413,14 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       label: string;
+    }
+  | {
+      kind: "snooze-reminder";
+      id: string;
+      createdAt: string;
+      reminder: string;
+      /** When the note was written; null for a payload that did not decode. */
+      snoozedAt: string | null;
     }
   | {
       kind: "message";
@@ -760,10 +775,13 @@ function deriveTurnFolds(input: {
       ) {
         continue;
       }
-      // User input and subagent batches stay visible after their turn settles.
+      // User input, subagent batches, and snooze notes stay visible after their
+      // turn settles.
       if (
         entry.kind === "work" &&
-        (entry.entry.questionAnswer !== undefined || entry.entry.agentSpawn !== undefined)
+        (entry.entry.questionAnswer !== undefined ||
+          entry.entry.agentSpawn !== undefined ||
+          isSnoozeReminderEntry(entry))
       ) {
         continue;
       }
@@ -1050,6 +1068,7 @@ export function deriveMessagesTimelineRows(input: {
       entry.kind !== "work" ||
       entry.entry.questionAnswer !== undefined ||
       entry.entry.sourceActivityKind === "context-compaction" ||
+      isSnoozeReminderEntry(entry) ||
       entry.entry.tone === "error"
     ) {
       break;
@@ -1228,6 +1247,17 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (timelineEntry.kind === "work" && isSnoozeReminderEntry(timelineEntry)) {
+      nextRows.push({
+        kind: "snooze-reminder",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        reminder: timelineEntry.entry.snoozeReminder?.reminder ?? timelineEntry.entry.label,
+        snoozedAt: timelineEntry.entry.snoozeReminder?.snoozedAt ?? null,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "work") {
       if (
         timelineEntry.entry.agentSpawn !== undefined ||
@@ -1259,6 +1289,7 @@ export function deriveMessagesTimelineRows(input: {
           nextEntry.entry.agentSpawn !== undefined ||
           nextEntry.entry.questionAnswer !== undefined ||
           nextEntry.entry.sourceActivityKind === "context-compaction" ||
+          isSnoozeReminderEntry(nextEntry) ||
           nextEntry.entry.tone === "error" ||
           activeWorkEntryIds.has(nextEntry.id) ||
           collapsedEntryIds.has(nextEntry.id) ||
@@ -1650,6 +1681,13 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "context-compaction": {
       const bc = b as typeof a;
       return a.createdAt === bc.createdAt && a.label === bc.label;
+    }
+
+    case "snooze-reminder": {
+      const bs = b as typeof a;
+      return (
+        a.createdAt === bs.createdAt && a.reminder === bs.reminder && a.snoozedAt === bs.snoozedAt
+      );
     }
 
     case "proposed-plan":

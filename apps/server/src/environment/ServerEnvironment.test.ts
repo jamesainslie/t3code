@@ -181,6 +181,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       expect(second.capabilities.threadPullRequestLinking).toBe(true);
       expect(second.capabilities.threadDocumentComments).toBe(true);
       expect(second.capabilities.gitHubAccountRouting).toBe(true);
+      expect(second.capabilities.threadSnoozeReminder).toBe(true);
       expect(second.capabilities.agentActivityPublishing).toBe(false);
     }),
   );

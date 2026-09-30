@@ -21,6 +21,7 @@ import {
   canAddDependency,
   canSnooze,
   resolveSnoozePresets,
+  resolveSnoozeReminder,
 } from "@t3tools/client-runtime/state/thread-settled";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
@@ -521,7 +522,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onRenameThread: (thread: EnvironmentThreadShell) => void;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => void;
   readonly onSettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
-  readonly onSnoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => void;
+  /** `reminder` absent keeps any existing note; an empty string clears it. */
+  readonly onSnoozeThread: (
+    thread: EnvironmentThreadShell,
+    snoozedUntil: string,
+    reminder?: string,
+  ) => void;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => void;
   /** Opens the dependency picker for this thread. */
   readonly onAddThreadDependency: (thread: EnvironmentThreadShell) => void;
@@ -544,6 +550,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly settlementSupported: boolean;
   /** False on servers that predate thread.snooze/unsnooze. */
   readonly snoozeSupported: boolean;
+  /** False on servers that predate snooze reminders. */
+  readonly snoozeReminderSupported: boolean;
   /** False on servers that predate thread dependencies. */
   readonly dependenciesSupported: boolean;
   /** False on servers that predate thread.pin/unpin. */
@@ -639,7 +647,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     [onRegenerateThreadTitle, thread],
   );
   const handleSettle = useCallback(() => onSettleThread(thread), [onSettleThread, thread]);
-  const [customSnoozeOpen, setCustomSnoozeOpen] = useState(false);
+  // "reminder" opens the sheet with the note field focused.
+  const [customSnooze, setCustomSnooze] = useState<"custom" | "reminder" | null>(null);
   // A recycled cell reassigns this mounted row to a different thread without
   // remounting it, and the render closure stops running while list equality
   // says the item is unchanged — so any row-local UI state must be dismissed
@@ -651,10 +660,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const [boundIdentity, setBoundIdentity] = useState(rowIdentity);
   if (boundIdentity !== rowIdentity) {
     setBoundIdentity(rowIdentity);
-    setCustomSnoozeOpen(false);
+    setCustomSnooze(null);
   }
   const handleSnooze = useCallback(
-    (snoozedUntil: string) => onSnoozeThread(thread, snoozedUntil),
+    (snoozedUntil: string, reminder?: string) => onSnoozeThread(thread, snoozedUntil, reminder),
     [onSnoozeThread, thread],
   );
   const handleUnsnooze = useCallback(() => onUnsnoozeThread(thread), [onUnsnoozeThread, thread]);
@@ -714,8 +723,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         subtitle: preset.whenLabel,
       })),
       { id: "snooze:custom", title: "Custom…" },
+      ...(props.snoozeReminderSupported
+        ? [{ id: "snooze:reminder", title: "Snooze with reminder…" }]
+        : []),
     ],
-    [snoozePresets],
+    [props.snoozeReminderSupported, snoozePresets],
   );
   // Pinned cards keep the full lifecycle menu; only the pin item flips to
   // Unpin. (Settling a pinned thread clears the pin server-side; snoozing
@@ -886,15 +898,19 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     ],
     [arrangementMenuItems, autoSettleMenuItems, highlightMenuItems, titleMenuItems],
   );
+  // Re-snoozing from the shelf is how a pending note is read, edited, or removed.
   const snoozedMenuActions = useMemo<MenuAction[]>(
     () => [
       SNOOZED_MENU_ACTIONS[0]!,
+      ...(props.snoozeReminderSupported
+        ? [{ id: "snooze:reminder", title: "Snooze with reminder…", image: "text.bubble" }]
+        : []),
       ...highlightMenuItems,
       ...titleMenuItems,
       ...autoSettleMenuItems,
       SNOOZED_MENU_ACTIONS[1]!,
     ],
-    [autoSettleMenuItems, highlightMenuItems, titleMenuItems],
+    [autoSettleMenuItems, highlightMenuItems, props.snoozeReminderSupported, titleMenuItems],
   );
   const blockedMenuActions = useMemo<MenuAction[]>(
     () => [
@@ -948,7 +964,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         return;
       }
       if (nativeEvent.event === "snooze:custom") {
-        setCustomSnoozeOpen(true);
+        setCustomSnooze("custom");
+        return;
+      }
+      if (nativeEvent.event === "snooze:reminder") {
+        setCustomSnooze("reminder");
         return;
       }
       const snoozeSelection = resolveThreadListV2SnoozeMenuSelection({
@@ -983,7 +1003,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleUnsettle,
       handleUnsnooze,
       snoozePresets,
-      setCustomSnoozeOpen,
+      setCustomSnooze,
     ],
   );
   const primaryAction = useMemo(() => {
@@ -1356,8 +1376,20 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   return (
     <View collapsable={false}>
-      {customSnoozeOpen && (
-        <CustomSnoozeSheet onClose={() => setCustomSnoozeOpen(false)} onSnooze={handleSnooze} />
+      {customSnooze !== null && (
+        <CustomSnoozeSheet
+          onClose={() => setCustomSnooze(null)}
+          onSnooze={handleSnooze}
+          initialSnoozedUntil={thread.snoozedUntil}
+          {...(props.snoozeReminderSupported
+            ? {
+                reminder: {
+                  initialValue: resolveSnoozeReminder(thread, undefined) ?? "",
+                  autoFocus: customSnooze === "reminder",
+                },
+              }
+            : {})}
+        />
       )}
       <ThreadSwipeable
         dormant={dormant}

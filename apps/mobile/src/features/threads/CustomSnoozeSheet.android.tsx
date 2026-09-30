@@ -5,11 +5,13 @@ import {
   DateTimePicker,
   Host,
   FilledTonalIconButton,
+  OutlinedTextField,
   Row,
   Shape,
   Surface,
   Text,
   TextButton,
+  useNativeState,
 } from "@expo/ui/jetpack-compose";
 import {
   padding,
@@ -22,9 +24,9 @@ import {
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
 import { requireNativeModule } from "expo";
 import { useEffect, useState } from "react";
 import { AppState, useWindowDimensions } from "react-native";
@@ -32,14 +34,14 @@ import { AppState, useWindowDimensions } from "react-native";
 import { OverlayPortal } from "../../components/OverlayPortal";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
-import type { CustomSnoozeSheet as SharedCustomSnoozeSheet } from "./CustomSnoozeSheet.shared";
+import type { CustomSnoozeSheetProps } from "./CustomSnoozeSheet.shared";
 import {
   applySnoozePickerDate,
   applySnoozePickerTime,
+  initialCustomSnoozeDate,
+  resolveSheetSnoozedUntil,
   snoozeDateToPickerDate,
 } from "./customSnoozeDate";
-
-type Props = Parameters<typeof SharedCustomSnoozeSheet>[0];
 
 const roundedCorner = Shape.RoundedCorner;
 
@@ -57,7 +59,7 @@ function systemUses24HourClock() {
   return requireNativeModule<{ is24HourFormat(): boolean }>("T3NativeControls").is24HourFormat();
 }
 
-export function CustomSnoozeSheet(props: Props) {
+export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
   const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
   const [is24Hour, setIs24Hour] = useState(systemUses24HourClock);
   useEffect(() => {
@@ -68,9 +70,13 @@ export function CustomSnoozeSheet(props: Props) {
   }, []);
   const titleTypography = useScaledTextRole("title");
   const bodyTypography = useScaledTextRole("footnote");
+  const inputTypography = useScaledTextRole("body");
   const { width: windowWidth } = useWindowDimensions();
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
-  const [date, setDate] = useState(() => new Date(Date.now() + 3_600_000));
+  const [date, setDate] = useState(() =>
+    initialCustomSnoozeDate(props.initialSnoozedUntil, new Date()),
+  );
+  const reminderText = useNativeState(props.reminder?.initialValue ?? "");
   const [picker, setPicker] = useState<"date" | "time">("date");
   const [amount, setAmount] = useState(2);
   const [unit, setUnit] = useState<"minutes" | "hours" | "days">("hours");
@@ -80,14 +86,14 @@ export function CustomSnoozeSheet(props: Props) {
       mode === "date"
         ? { mode, date: localSnoozeDate(date), time: localSnoozeTime(date) }
         : { mode, amount: String(amount), unit };
-    const snoozedUntil = resolveCustomSnooze(input, new Date());
+    const snoozedUntil = resolveSheetSnoozedUntil(input, props.initialSnoozedUntil, new Date());
     if (!snoozedUntil) {
       setError(
         mode === "date" ? "Choose a date and time in the future." : "Enter a positive duration.",
       );
       return;
     }
-    props.onSnooze(snoozedUntil);
+    props.onSnooze(snoozedUntil, props.reminder ? reminderText.get() : undefined);
     props.onClose();
   };
   const pickerColors = {
@@ -231,6 +237,31 @@ export function CustomSnoozeSheet(props: Props) {
                 verticalArrangement={{ spacedBy: 16 }}
                 modifiers={[fillMaxWidth(), padding(24, 8, 24, 24)]}
               >
+                {props.reminder ? (
+                  <OutlinedTextField
+                    autoFocus={props.reminder.autoFocus}
+                    value={reminderText}
+                    maxLength={SNOOZE_REMINDER_MAX_CHARS}
+                    minLines={1}
+                    maxLines={3}
+                    textStyle={inputTypography}
+                    colors={{
+                      focusedTextColor: colors["--color-foreground"],
+                      unfocusedTextColor: colors["--color-foreground"],
+                      focusedIndicatorColor: colors["--color-focus"],
+                      unfocusedIndicatorColor: colors["--color-border"],
+                      cursorColor: colors["--color-focus"],
+                    }}
+                    modifiers={[fillMaxWidth()]}
+                  >
+                    <OutlinedTextField.Label>
+                      <Text style={bodyTypography}>Reminder</Text>
+                    </OutlinedTextField.Label>
+                    <OutlinedTextField.Placeholder>
+                      <Text style={bodyTypography}>Shown in the chat when the thread wakes</Text>
+                    </OutlinedTextField.Placeholder>
+                  </OutlinedTextField>
+                ) : null}
                 {error ? (
                   <Text style={bodyTypography} color={colors["--color-danger-foreground"]}>
                     {error}

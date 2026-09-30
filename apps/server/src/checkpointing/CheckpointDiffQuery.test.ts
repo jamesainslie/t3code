@@ -84,6 +84,7 @@ describe("CheckpointDiffQuery.layer", () => {
             getShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request the orchestration shell snapshot"),
             getDeletedWorktreeThreads: () => Effect.die("unused"),
+            listPendingSnoozeReminders: () => Effect.die("unused"),
             listThreadsWithPullRequests: () => Effect.die("unused"),
             getArchivedShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request archived shell snapshots"),
@@ -203,6 +204,7 @@ describe("CheckpointDiffQuery.layer", () => {
             getShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request the orchestration shell snapshot"),
             getDeletedWorktreeThreads: () => Effect.die("unused"),
+            listPendingSnoozeReminders: () => Effect.die("unused"),
             listThreadsWithPullRequests: () => Effect.die("unused"),
             getArchivedShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request archived shell snapshots"),
@@ -297,6 +299,7 @@ describe("CheckpointDiffQuery.layer", () => {
             getShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request the orchestration shell snapshot"),
             getDeletedWorktreeThreads: () => Effect.die("unused"),
+            listPendingSnoozeReminders: () => Effect.die("unused"),
             listThreadsWithPullRequests: () => Effect.die("unused"),
             getArchivedShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request archived shell snapshots"),
@@ -376,6 +379,7 @@ describe("CheckpointDiffQuery.layer", () => {
             getShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request the orchestration shell snapshot"),
             getDeletedWorktreeThreads: () => Effect.die("unused"),
+            listPendingSnoozeReminders: () => Effect.die("unused"),
             listThreadsWithPullRequests: () => Effect.die("unused"),
             getArchivedShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request archived shell snapshots"),
@@ -440,6 +444,7 @@ describe("CheckpointDiffQuery.layer", () => {
             getShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request the orchestration shell snapshot"),
             getDeletedWorktreeThreads: () => Effect.die("unused"),
+            listPendingSnoozeReminders: () => Effect.die("unused"),
             listThreadsWithPullRequests: () => Effect.die("unused"),
             getArchivedShellSnapshot: () =>
               Effect.die("CheckpointDiffQuery should not request archived shell snapshots"),

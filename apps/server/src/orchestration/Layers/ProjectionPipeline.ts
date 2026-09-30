@@ -650,6 +650,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             unsettledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
+            snoozeReminder: null,
             dependencies: [],
             pinnedAt: null,
             pinOrderKey: null,
@@ -750,6 +751,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             snoozedUntil: event.payload.snoozedUntil,
             snoozedAt: event.payload.snoozedAt,
+            // The decider resolves the note in effect. Legacy events carry none.
+            snoozeReminder: event.payload.reminder ?? null,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -766,6 +769,23 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             snoozedUntil: null,
             snoozedAt: null,
+            snoozeReminder: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.snooze-reminder-delivered": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          // Timer wakes are derived from snoozedUntil, so only the note clears.
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            snoozeReminder: null,
             updatedAt: event.payload.updatedAt,
           });
           return;

@@ -13,6 +13,7 @@ import {
   ThreadUnsettledPayload as ContractsThreadUnsettledPayloadSchema,
   ThreadSnoozedPayload as ContractsThreadSnoozedPayloadSchema,
   ThreadUnsnoozedPayload as ContractsThreadUnsnoozedPayloadSchema,
+  ThreadSnoozeReminderDeliveredPayload as ContractsThreadSnoozeReminderDeliveredPayloadSchema,
   ThreadPinnedPayload as ContractsThreadPinnedPayloadSchema,
   ThreadDependencyAddedPayload as ContractsThreadDependencyAddedPayloadSchema,
   ThreadDependenciesRemovedPayload as ContractsThreadDependenciesRemovedPayloadSchema,
@@ -58,6 +59,8 @@ export const ThreadUnarchivedPayload = ContractsThreadUnarchivedPayloadSchema;
 export const ThreadUnsettledPayload = ContractsThreadUnsettledPayloadSchema;
 export const ThreadSnoozedPayload = ContractsThreadSnoozedPayloadSchema;
 export const ThreadUnsnoozedPayload = ContractsThreadUnsnoozedPayloadSchema;
+export const ThreadSnoozeReminderDeliveredPayload =
+  ContractsThreadSnoozeReminderDeliveredPayloadSchema;
 export const ThreadPinnedPayload = ContractsThreadPinnedPayloadSchema;
 export const ThreadDependencyAddedPayload = ContractsThreadDependencyAddedPayloadSchema;
 export const ThreadDependenciesRemovedPayload = ContractsThreadDependenciesRemovedPayloadSchema;

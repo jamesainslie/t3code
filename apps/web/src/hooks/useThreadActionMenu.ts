@@ -1,4 +1,5 @@
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
+import { customSnoozeOptions } from "../components/CustomSnoozeDialog.logic";
 import { openThreadDependencyPicker } from "../commandPaletteBus";
 import { scopeProjectRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -32,6 +33,7 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
+  readEnvironmentSupportsSnoozeReminder,
   readEnvironmentSupportsTitleRegeneration,
   readThreadShell,
   useProjects,
@@ -147,6 +149,7 @@ export function useThreadActionMenu(input: {
           settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
           autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
           snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
+          snoozeReminder: readEnvironmentSupportsSnoozeReminder(threadRef.environmentId),
           pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
           highlight: readEnvironmentSupportsHighlight(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
@@ -154,6 +157,7 @@ export function useThreadActionMenu(input: {
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
+        const isSnoozed = supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() });
         const items = buildThreadActionMenuItems({
           branch: thread.branch ?? null,
           // The chat header has no project-scoped thread list behind the
@@ -164,7 +168,8 @@ export function useThreadActionMenu(input: {
           highlightPalette: threadHighlightPalette,
           isSettled: supports.settlement && thread.settledOverride === "settled",
           autoSettleEnabled: thread.autoSettleDisabledAt == null,
-          isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
+          isSnoozed,
+          snoozeReminder: thread.snoozeReminder ?? null,
           canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
           isBlocked: supports.dependencies && effectiveBlocked(thread),
           canAddDependencyNow: canAddDependency(thread, { now: now.toISOString() }),
@@ -190,12 +195,22 @@ export function useThreadActionMenu(input: {
           return;
         }
         if (action.startsWith("snooze:")) {
-          const preset =
-            action === "snooze:custom"
-              ? await requestCustomSnooze()
+          const choice =
+            action === "snooze:custom" || action === "snooze:reminder"
+              ? await requestCustomSnooze(
+                  customSnoozeOptions({
+                    focusReminder: action === "snooze:reminder",
+                    supportsReminder: supports.snoozeReminder,
+                    snoozed: isSnoozed ? thread : null,
+                  }),
+                )
               : snoozePresets.find((candidate) => `snooze:${candidate.id}` === action);
-          if (!preset) return;
-          const result = await snoozeThread(threadRef, preset.snoozedUntil);
+          if (!choice) return;
+          const result = await snoozeThread(
+            threadRef,
+            choice.snoozedUntil,
+            "reminder" in choice ? choice.reminder : undefined,
+          );
           if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
             failureToast("Failed to snooze thread", squashAtomCommandFailure(result));
           }

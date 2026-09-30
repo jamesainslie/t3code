@@ -14,6 +14,7 @@ import {
   OrchestrationCommand,
   OrchestrationDispatchCommandError,
   OrchestrationEvent,
+  OrchestrationEventType,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetTurnDiffInput,
   OrchestrationLatestTurn,
@@ -34,6 +35,8 @@ import {
   ThreadTurnDiff,
   ThreadTurnStartRequestedPayload,
   SnapShotAccessibility,
+  SNOOZE_REMINDER_ACTIVITY_KIND,
+  SnoozeReminderActivityPayload,
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
 } from "./orchestration.ts";
@@ -662,6 +665,151 @@ it.effect("decodes thread settle and unsettle commands", () =>
   }),
 );
 
+it.effect("decodes thread.snooze with an optional reminder", () =>
+  Effect.gen(function* () {
+    const base = {
+      type: "thread.snooze",
+      commandId: "cmd-snooze-1",
+      threadId: "thread-1",
+      snoozedUntil: "2026-01-02T00:00:00.000Z",
+    };
+
+    const withoutReminder = yield* decodeClientOrchestrationCommand(base);
+    if (withoutReminder.type !== "thread.snooze") return assert.fail("expected thread.snooze");
+    // Absent means "keep any existing note", so it must stay absent.
+    assert.strictEqual("reminder" in withoutReminder, false);
+
+    // Empty after trim is allowed and means "clear the note".
+    const cleared = yield* decodeClientOrchestrationCommand({ ...base, reminder: "   " });
+    if (cleared.type !== "thread.snooze") return assert.fail("expected thread.snooze");
+    assert.strictEqual(cleared.reminder, "");
+
+    const withReminder = yield* decodeClientOrchestrationCommand({
+      ...base,
+      reminder: "  check the deploy  ",
+    });
+    if (withReminder.type !== "thread.snooze") return assert.fail("expected thread.snooze");
+    assert.strictEqual(withReminder.reminder, "check the deploy");
+
+    const atLimit = yield* decodeClientOrchestrationCommand({
+      ...base,
+      reminder: "a".repeat(500),
+    });
+    if (atLimit.type !== "thread.snooze") return assert.fail("expected thread.snooze");
+    assert.strictEqual(atLimit.reminder?.length, 500);
+
+    const tooLong = yield* Effect.exit(
+      decodeClientOrchestrationCommand({ ...base, reminder: "a".repeat(501) }),
+    );
+    assert.strictEqual(tooLong._tag, "Failure");
+  }),
+);
+
+it.effect("keeps snooze reminder delivery internal to the server", () =>
+  Effect.gen(function* () {
+    const deliver = {
+      type: "thread.snooze-reminder.deliver",
+      commandId: "cmd-deliver-1",
+      threadId: "thread-1",
+    };
+
+    const internal = yield* decodeOrchestrationCommand(deliver);
+    assert.strictEqual(internal.type, "thread.snooze-reminder.deliver");
+
+    const fromClient = yield* Effect.exit(decodeClientOrchestrationCommand(deliver));
+    assert.strictEqual(fromClient._tag, "Failure");
+  }),
+);
+
+it.effect("decodes snooze events with and without a reminder", () =>
+  Effect.gen(function* () {
+    const eventBase = {
+      aggregateKind: "thread",
+      aggregateId: "thread-1",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      causationEventId: null,
+      metadata: {},
+    };
+    const snoozedPayload = {
+      threadId: "thread-1",
+      snoozedUntil: "2026-01-02T00:00:00.000Z",
+      snoozedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    // Written before reminders existed.
+    const legacy = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 1,
+      eventId: "event-snooze-legacy",
+      type: "thread.snoozed",
+      commandId: "cmd-snooze-legacy",
+      correlationId: "cmd-snooze-legacy",
+      payload: snoozedPayload,
+    });
+    if (legacy.type !== "thread.snoozed") return assert.fail("expected thread.snoozed");
+    assert.strictEqual(legacy.payload.reminder, undefined);
+
+    const withReminder = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 2,
+      eventId: "event-snooze-reminder",
+      type: "thread.snoozed",
+      commandId: "cmd-snooze-reminder",
+      correlationId: "cmd-snooze-reminder",
+      payload: { ...snoozedPayload, reminder: "check the deploy" },
+    });
+    if (withReminder.type !== "thread.snoozed") return assert.fail("expected thread.snoozed");
+    assert.strictEqual(withReminder.payload.reminder, "check the deploy");
+
+    const cleared = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 3,
+      eventId: "event-snooze-cleared",
+      type: "thread.snoozed",
+      commandId: "cmd-snooze-cleared",
+      correlationId: "cmd-snooze-cleared",
+      payload: { ...snoozedPayload, reminder: null },
+    });
+    if (cleared.type !== "thread.snoozed") return assert.fail("expected thread.snoozed");
+    assert.strictEqual(cleared.payload.reminder, null);
+
+    const delivered = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 4,
+      eventId: "event-reminder-delivered",
+      type: "thread.snooze-reminder-delivered",
+      commandId: "cmd-deliver-1",
+      correlationId: "cmd-deliver-1",
+      payload: { threadId: "thread-1", updatedAt: "2026-01-02T00:00:00.000Z" },
+    });
+    assert.strictEqual(delivered.type, "thread.snooze-reminder-delivered");
+    assert.ok(OrchestrationEventType.literals.includes("thread.snooze-reminder-delivered"));
+  }),
+);
+
+it.effect("decodes the shared snooze reminder activity payload", () =>
+  Effect.gen(function* () {
+    assert.strictEqual(SNOOZE_REMINDER_ACTIVITY_KIND, "snooze.reminder");
+    const decodePayload = Schema.decodeUnknownEffect(SnoozeReminderActivityPayload);
+    const payload = yield* decodePayload({
+      reminder: "check the deploy",
+      snoozedAt: "2026-01-01T00:00:00.000Z",
+      snoozedUntil: "2026-01-02T00:00:00.000Z",
+    });
+    assert.strictEqual(payload.reminder, "check the deploy");
+
+    const empty = yield* Effect.exit(
+      decodePayload({
+        reminder: "  ",
+        snoozedAt: "2026-01-01T00:00:00.000Z",
+        snoozedUntil: "2026-01-02T00:00:00.000Z",
+      }),
+    );
+    assert.strictEqual(empty._tag, "Failure");
+  }),
+);
+
 it.effect("defaults settled fields when decoding historical thread data", () =>
   Effect.gen(function* () {
     const common = {
@@ -699,6 +847,29 @@ it.effect("defaults settled fields when decoding historical thread data", () =>
     assert.strictEqual(thread.settledAt, null);
     assert.strictEqual(shell.settledOverride, null);
     assert.strictEqual(shell.settledAt, null);
+    // Pre-reminder servers omit the field; newer ones carry it through.
+    assert.strictEqual(shell.snoozeReminder, undefined);
+    const remindedShell = yield* decodeOrchestrationThreadShell({
+      ...common,
+      latestUserMessageAt: null,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+      snoozedUntil: "2026-01-02T00:00:00.000Z",
+      snoozedAt: "2026-01-01T00:00:00.000Z",
+      snoozeReminder: "check the deploy",
+    });
+    assert.strictEqual(remindedShell.snoozeReminder, "check the deploy");
+    const remindedThread = yield* decodeOrchestrationThread({
+      ...common,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      activities: [],
+      checkpoints: [],
+      snoozeReminder: null,
+    });
+    assert.strictEqual(remindedThread.snoozeReminder, null);
     // Pre-link servers omit the array entirely.
     assert.deepStrictEqual(thread.pullRequests, []);
     assert.deepStrictEqual(shell.pullRequests, []);

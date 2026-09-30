@@ -8,6 +8,7 @@ import {
   type EnvironmentThreadStatus,
   mergeEnvironmentThread,
 } from "@t3tools/client-runtime/state/threads";
+import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
@@ -207,6 +208,14 @@ export function readEnvironmentSupportsSnooze(environmentId: EnvironmentId): boo
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadSnooze === true
+  );
+}
+
+/** Whether the environment's server accepts a reminder on thread.snooze.
+    Same version-skew contract as settlement. */
+export function readEnvironmentSupportsSnoozeReminder(environmentId: EnvironmentId): boolean {
+  return supportsSnoozeReminder(
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities,
   );
 }
 

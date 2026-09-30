@@ -490,6 +490,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           unsettledAt: null,
           snoozedUntil: null,
           snoozedAt: null,
+          snoozeReminder: null,
           dependencies: [],
           pinnedAt: "2026-02-24T00:00:01.000Z",
           pinOrderKey: "gm",
@@ -620,6 +621,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           unsettledAt: null,
           snoozedUntil: null,
           snoozedAt: null,
+          snoozeReminder: null,
           dependencies: [],
           pinnedAt: "2026-02-24T00:00:01.000Z",
           pinOrderKey: "gm",
@@ -3864,6 +3866,62 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
         [["setup-live", "worktree-setup", { phase: "running" }]],
       );
       assert.deepEqual(yield* query.listActivitiesByKind("nope"), []);
+    }),
+  );
+});
+
+projectionSnapshotLayer("ProjectionSnapshotQuery snooze reminders", (it) => {
+  it.effect("exposes the pending note on every thread read and lists due candidates", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      const at = "2026-09-01T00:00:00.000Z";
+      yield* sql`INSERT INTO projection_projects (project_id, title, workspace_root, scripts_json, created_at, updated_at)
+        VALUES ('project-reminders', 'Reminders', '/reminders', '[]', ${at}, ${at})`;
+      yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, created_at, updated_at, snoozed_until, snoozed_at, snooze_reminder, archived_at, deleted_at)
+        VALUES
+          ('t-noted', 'project-reminders', 'Noted', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, '2026-09-10T00:00:00.000Z', ${at}, 'Check the deploy', NULL, NULL),
+          ('t-later', 'project-reminders', 'Later', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, '2026-09-12T00:00:00.000Z', ${at}, 'Ping review', NULL, NULL),
+          ('t-plain', 'project-reminders', 'Plain', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, '2026-09-05T00:00:00.000Z', ${at}, NULL, NULL, NULL),
+          ('t-archived', 'project-reminders', 'Archived', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, '2026-09-05T00:00:00.000Z', ${at}, 'Shelved note', ${at}, NULL),
+          ('t-deleted', 'project-reminders', 'Deleted', '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default', ${at}, ${at}, '2026-09-05T00:00:00.000Z', ${at}, 'Gone note', NULL, ${at})`;
+
+      const noted = ThreadId.make("t-noted");
+      const plain = ThreadId.make("t-plain");
+      const reminderOf = (
+        threads: ReadonlyArray<{
+          readonly id: ThreadId;
+          readonly snoozeReminder?: string | null | undefined;
+        }>,
+        threadId: ThreadId,
+      ) => threads.find((thread) => thread.id === threadId)?.snoozeReminder;
+
+      for (const threads of [
+        (yield* query.getShellSnapshot()).threads,
+        (yield* query.getSnapshot()).threads,
+        (yield* query.getCommandReadModel()).threads,
+      ]) {
+        assert.strictEqual(reminderOf(threads, noted), "Check the deploy");
+        assert.strictEqual(reminderOf(threads, plain), null);
+      }
+      assert.strictEqual(
+        reminderOf((yield* query.getArchivedShellSnapshot()).threads, ThreadId.make("t-archived")),
+        "Shelved note",
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* query.getThreadShellById(noted)).snoozeReminder,
+        "Check the deploy",
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* query.getThreadDetailById(noted)).snoozeReminder,
+        "Check the deploy",
+      );
+
+      // Archived and deleted threads never deliver, so they are not candidates.
+      assert.deepStrictEqual(yield* query.listPendingSnoozeReminders(), [
+        { threadId: noted, snoozedUntil: "2026-09-10T00:00:00.000Z" },
+        { threadId: ThreadId.make("t-later"), snoozedUntil: "2026-09-12T00:00:00.000Z" },
+      ]);
     }),
   );
 });

@@ -68,6 +68,7 @@ import {
   ThreadUnarchivedPayload,
   ThreadUnsettledPayload,
   ThreadUnsnoozedPayload,
+  ThreadSnoozeReminderDeliveredPayload,
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
@@ -469,6 +470,7 @@ export function projectEvent(
             autoSettleDisabledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
+            snoozeReminder: null,
             dependencies: [],
             deletedAt: null,
             messages: [],
@@ -578,6 +580,7 @@ export function projectEvent(
           threads: updateThread(nextBase.threads, payload.threadId, {
             snoozedUntil: payload.snoozedUntil,
             snoozedAt: payload.snoozedAt,
+            snoozeReminder: payload.reminder ?? null,
             updatedAt: payload.updatedAt,
           }),
         })),
@@ -590,6 +593,23 @@ export function projectEvent(
           threads: updateThread(nextBase.threads, payload.threadId, {
             snoozedUntil: null,
             snoozedAt: null,
+            snoozeReminder: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.snooze-reminder-delivered":
+      return decodeForEvent(
+        ThreadSnoozeReminderDeliveredPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            snoozeReminder: null,
             updatedAt: payload.updatedAt,
           }),
         })),

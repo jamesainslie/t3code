@@ -270,6 +270,83 @@ describe("remote thread lifecycle commands", () => {
     }),
   );
 
+  it.effect("sends a snooze reminder and previews the note", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      const result = h.commands.snooze.run(h.registry, {
+        environmentId: ENVIRONMENT_ID,
+        input: {
+          threadId: THREAD_ID,
+          snoozedUntil: "2099-01-01T00:00:00.000Z",
+          reminder: "Check CI",
+        },
+      });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]?.snoozeReminder).toBe("Check CI");
+      const request = yield* Queue.take(h.requests);
+      expect(request.command).toMatchObject({ type: "thread.snooze", reminder: "Check CI" });
+      yield* Deferred.succeed(request.reply, { sequence: 2 });
+      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
+    }),
+  );
+
+  it.effect("keeps the existing note when a re-snooze sends no reminder", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), {
+        ...SNAPSHOT,
+        threads: [
+          {
+            ...SNAPSHOT.threads[0]!,
+            snoozedUntil: "2099-01-01T00:00:00.000Z",
+            snoozedAt: NOW,
+            snoozeReminder: "Check CI",
+          },
+        ],
+      });
+      const result = h.commands.snooze.run(h.registry, {
+        environmentId: ENVIRONMENT_ID,
+        input: { threadId: THREAD_ID, snoozedUntil: "2099-02-01T00:00:00.000Z" },
+      });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({
+        snoozedUntil: "2099-02-01T00:00:00.000Z",
+        snoozeReminder: "Check CI",
+      });
+      const request = yield* Queue.take(h.requests);
+      expect(request.command.type).toBe("thread.snooze");
+      expect("reminder" in request.command).toBe(false);
+      yield* Deferred.succeed(request.reply, { sequence: 2 });
+      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
+    }),
+  );
+
+  it.effect("drops the previewed note when a snoozed thread wakes", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), {
+        ...SNAPSHOT,
+        threads: [
+          {
+            ...SNAPSHOT.threads[0]!,
+            snoozedUntil: "2099-01-01T00:00:00.000Z",
+            snoozedAt: NOW,
+            snoozeReminder: "Check CI",
+          },
+        ],
+      });
+      const result = h.commands.unsnooze.run(h.registry, {
+        environmentId: ENVIRONMENT_ID,
+        input: { threadId: THREAD_ID, reason: "user" },
+      });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({
+        snoozedUntil: null,
+        snoozeReminder: null,
+      });
+      const request = yield* Queue.take(h.requests);
+      yield* Deferred.succeed(request.reply, { sequence: 2 });
+      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
+    }),
+  );
+
   for (const action of ["settle", "snooze"] as const) {
     it.effect(`restores a confirmed ${action} when a queued undo fails`, () =>
       Effect.gen(function* () {

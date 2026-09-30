@@ -6085,6 +6085,9 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadShell !== null &&
     supportsSnooze &&
     effectiveSnoozed(activeThreadShell, { now: snoozeNow });
+  const activeThreadSnoozeReminder = activeThreadSnoozed
+    ? (activeThreadShell?.snoozeReminder ?? null)
+    : null;
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
   void snoozeWakeTick;
   // Waiting on other threads is the other way to park a thread, and it wins
@@ -6486,11 +6489,30 @@ export default function ChatView(props: ChatViewProps) {
       variant: "info",
       icon: wakes ? <AlarmClockIcon /> : <CheckCircle2Icon />,
       title:
-        parked === "blocked"
-          ? // dependencyWaitLabel already counts ("Waiting on 3 threads"), so
-            // the banner only re-cases its first letter.
-            `This thread is ${(activeThreadWaitLabel ?? "Waiting on another thread").replace(/^W/, "w")}`
-          : `This thread is ${parked}`,
+        parked === "blocked" ? (
+          // dependencyWaitLabel already counts ("Waiting on 3 threads"), so
+          // the banner only re-cases its first letter.
+          `This thread is ${(activeThreadWaitLabel ?? "Waiting on another thread").replace(/^W/, "w")}`
+        ) : parked === "snoozed" && activeThreadSnoozeReminder !== null ? (
+          // The note stays out of the banner body, which keeps its
+          // one-line height; hovering the title previews it.
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className="cursor-default underline decoration-dotted underline-offset-2" />
+              }
+            >
+              This thread is snoozed with a reminder
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              <div className="max-w-80 wrap-break-word whitespace-pre-line">
+                {activeThreadSnoozeReminder}
+              </div>
+            </TooltipPopup>
+          </Tooltip>
+        ) : (
+          `This thread is ${parked}`
+        ),
       description: `Send a message to ${wakes ? "wake" : "unsettle"}`,
       actions: (
         <Button
@@ -6513,6 +6535,7 @@ export default function ChatView(props: ChatViewProps) {
     activeThread?.id,
     activeThreadBlocked,
     activeThreadSettled,
+    activeThreadSnoozeReminder,
     activeThreadSnoozed,
     activeThreadWaitLabel,
     handleReleaseActiveThread,

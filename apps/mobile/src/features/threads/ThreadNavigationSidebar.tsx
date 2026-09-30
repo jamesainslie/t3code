@@ -9,6 +9,7 @@ import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
+import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
@@ -330,6 +331,15 @@ function ThreadNavigationSidebarPane(
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
       if (config.environment.capabilities.threadSnooze === true) {
+        supported.add(environmentId);
+      }
+    }
+    return supported;
+  }, [serverConfigs]);
+  const snoozeReminderEnvironmentIds = useMemo(() => {
+    const supported = new Set<EnvironmentId>();
+    for (const [environmentId, config] of serverConfigs) {
+      if (supportsSnoozeReminder(config.environment.capabilities)) {
         supported.add(environmentId);
       }
     }
@@ -813,6 +823,7 @@ function ThreadNavigationSidebarPane(
               settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
               onSettleThread={settleThread}
               snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
+              snoozeReminderSupported={snoozeReminderEnvironmentIds.has(thread.environmentId)}
               dependenciesSupported={dependencyEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
               highlightSupported={highlightEnvironmentIds.has(thread.environmentId)}
@@ -916,6 +927,7 @@ function ThreadNavigationSidebarPane(
       showMoreSettled,
       sidebarScrollGesture,
       snoozeEnvironmentIds,
+      snoozeReminderEnvironmentIds,
       dependencyEnvironmentIds,
       snoozeThread,
       releaseThreadDependencies,

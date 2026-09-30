@@ -120,6 +120,7 @@ describe("applyThreadDetailEvent", () => {
         expect(result.thread.branch).toBe("main");
         expect(result.thread.messages).toEqual([]);
         expect(result.thread.session).toBeNull();
+        expect(result.thread.snoozeReminder).toBeNull();
       }
     });
   });
@@ -461,6 +462,72 @@ describe("applyThreadDetailEvent", () => {
       if (on.kind === "updated") {
         expect(on.thread.autoSettleDisabledAt).toBeNull();
       }
+    });
+  });
+
+  describe("snooze reminders", () => {
+    const snoozedAt = "2026-04-01T05:00:00.000Z";
+    const wakeAt = "2026-04-01T06:00:00.000Z";
+    const deliveredAt = "2026-04-01T06:00:05.000Z";
+    const snooze = (reminder?: string | null) =>
+      applyThreadDetailEvent(baseThread, {
+        ...baseEventFields,
+        sequence: 9,
+        occurredAt: snoozedAt,
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-1"),
+        type: "thread.snoozed",
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          snoozedUntil: wakeAt,
+          snoozedAt,
+          updatedAt: snoozedAt,
+          ...(reminder === undefined ? {} : { reminder }),
+        },
+      });
+    const snoozedWithNote = () => {
+      const result = snooze("Check the deploy");
+      if (result.kind !== "updated") throw new Error("expected thread.snoozed to update");
+      return result.thread;
+    };
+
+    it("stores the note from thread.snoozed, and none for events without one", () => {
+      expect(snoozedWithNote().snoozeReminder).toBe("Check the deploy");
+      for (const result of [snooze(), snooze(null)]) {
+        expect(result.kind).toBe("updated");
+        if (result.kind === "updated") expect(result.thread.snoozeReminder).toBeNull();
+      }
+    });
+
+    it("clears the note on thread.unsnoozed", () => {
+      const result = applyThreadDetailEvent(snoozedWithNote(), {
+        ...baseEventFields,
+        sequence: 10,
+        occurredAt: deliveredAt,
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-1"),
+        type: "thread.unsnoozed",
+        payload: { threadId: ThreadId.make("thread-1"), reason: "user", updatedAt: deliveredAt },
+      });
+      expect(result.kind).toBe("updated");
+      if (result.kind === "updated") expect(result.thread.snoozeReminder).toBeNull();
+    });
+
+    it("clears the note on delivery and keeps the timer snooze fields", () => {
+      const result = applyThreadDetailEvent(snoozedWithNote(), {
+        ...baseEventFields,
+        sequence: 10,
+        occurredAt: deliveredAt,
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-1"),
+        type: "thread.snooze-reminder-delivered",
+        payload: { threadId: ThreadId.make("thread-1"), updatedAt: deliveredAt },
+      });
+      expect(result.kind).toBe("updated");
+      if (result.kind !== "updated") return;
+      expect(result.thread.snoozeReminder).toBeNull();
+      expect(result.thread.updatedAt).toBe(deliveredAt);
+      expect(result.thread.snoozedUntil).toBe(wakeAt);
     });
   });
 

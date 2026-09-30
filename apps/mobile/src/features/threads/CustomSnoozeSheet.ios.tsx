@@ -7,6 +7,8 @@ import {
   RNHostView,
   Spacer,
   Text,
+  TextField,
+  useNativeState,
   VStack,
 } from "@expo/ui/swift-ui";
 import {
@@ -17,16 +19,18 @@ import {
   foregroundStyle,
   frame,
   labelsHidden,
+  lineLimit,
   padding,
   pickerStyle,
   tag,
+  textFieldStyle,
 } from "@expo/ui/swift-ui/modifiers";
 import {
   localSnoozeDate,
   localSnoozeTime,
-  resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 import { NavigationContainer, NavigationIndependentTree } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -35,6 +39,8 @@ import { useMobileNavigationTheme } from "../../lib/useMobileNavigationTheme";
 import { NativeHeaderToolbar } from "../../native/StackHeader";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import type { CustomSnoozeSheetProps } from "./CustomSnoozeSheet.shared";
+import { initialCustomSnoozeDate, resolveSheetSnoozedUntil } from "./customSnoozeDate";
 
 const durationAmounts = Array.from({ length: 99 }, (_, index) => index + 1);
 const SnoozeStack = createNativeStackNavigator<{ CustomSnooze: undefined }>();
@@ -48,19 +54,19 @@ const units = [
   { value: "days", label: "Days" },
 ] as const;
 
-export function CustomSnoozeSheet(props: {
-  readonly onClose: () => void;
-  readonly onSnooze: (snoozedUntil: string) => void;
-}) {
+export function CustomSnoozeSheet(props: CustomSnoozeSheetProps) {
   const { width, height } = useWindowDimensions();
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
-  const [date, setDate] = useState(() => new Date(Date.now() + 3_600_000));
+  const [date, setDate] = useState(() =>
+    initialCustomSnoozeDate(props.initialSnoozedUntil, new Date()),
+  );
+  const reminderText = useNativeState(props.reminder?.initialValue ?? "");
   const [amount, setAmount] = useState(2);
   const [unit, setUnit] = useState<"minutes" | "hours" | "days">("hours");
   const [error, setError] = useState<string | null>(null);
   const { themeVariables: colors, themeAppearance } = useAppearancePreferences();
   const popoverWidth = Math.min(360, width - 32);
-  const popoverHeight = Math.min(error ? 364 : 324, height - 96);
+  const popoverHeight = Math.min((error ? 364 : 324) + (props.reminder ? 72 : 0), height - 96);
   const updateDate = (value: Date) => {
     setDate(value);
     setError(null);
@@ -71,14 +77,14 @@ export function CustomSnoozeSheet(props: {
       mode === "date"
         ? { mode, date: localSnoozeDate(date), time: localSnoozeTime(date) }
         : { mode, amount: String(amount), unit };
-    const snoozedUntil = resolveCustomSnooze(input, new Date());
+    const snoozedUntil = resolveSheetSnoozedUntil(input, props.initialSnoozedUntil, new Date());
     if (!snoozedUntil) {
       setError(
         mode === "date" ? "Choose a date and time in the future." : "Enter a positive duration.",
       );
       return;
     }
-    props.onSnooze(snoozedUntil);
+    props.onSnooze(snoozedUntil, props.reminder ? reminderText.get() : undefined);
     props.onClose();
   };
 
@@ -195,6 +201,16 @@ export function CustomSnoozeSheet(props: {
                     </Picker>
                   </HStack>
                 )}
+                {props.reminder ? (
+                  <TextField
+                    text={reminderText}
+                    axis="vertical"
+                    autoFocus={props.reminder.autoFocus}
+                    maxLength={SNOOZE_REMINDER_MAX_CHARS}
+                    placeholder="Reminder, shown when the thread wakes"
+                    modifiers={[textFieldStyle("roundedBorder"), lineLimit({ min: 1, max: 3 })]}
+                  />
+                ) : null}
                 {error ? (
                   <Text
                     modifiers={[

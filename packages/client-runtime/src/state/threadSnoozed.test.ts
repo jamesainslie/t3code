@@ -8,7 +8,9 @@ import {
   effectiveSnoozed,
   hasQueuedTurnStart,
   resolveSnoozePresets,
+  resolveSnoozeReminder,
   snoozeWakeLabel,
+  supportsSnoozeReminder,
   threadRaisedHandWhileSnoozed,
   threadWokeAt,
   type ThreadSnoozeShell,
@@ -369,5 +371,40 @@ describe("resolveSnoozePresets", () => {
     ]);
     const tomorrow = new Date(presets.find((preset) => preset.id === "tomorrow")!.snoozedUntil);
     expect(tomorrow.getDay()).toBe(1);
+  });
+});
+
+describe("resolveSnoozeReminder", () => {
+  const snoozed = { snoozedUntil: FUTURE_WAKE, snoozeReminder: "Check CI" };
+
+  it("keeps the note of a pending snooze when no reminder is sent", () => {
+    expect(resolveSnoozeReminder(snoozed, undefined)).toBe("Check CI");
+  });
+
+  it("has no note when an awake thread is snoozed without one", () => {
+    expect(resolveSnoozeReminder({ snoozedUntil: null, snoozeReminder: null }, undefined)).toBe(
+      null,
+    );
+    expect(resolveSnoozeReminder({ snoozedUntil: null }, undefined)).toBe(null);
+  });
+
+  it("clears the note on an empty or blank reminder", () => {
+    expect(resolveSnoozeReminder(snoozed, "")).toBe(null);
+    expect(resolveSnoozeReminder(snoozed, "   ")).toBe(null);
+  });
+
+  it("replaces the note with the trimmed reminder", () => {
+    expect(resolveSnoozeReminder(snoozed, "  Ask about the deploy \n")).toBe(
+      "Ask about the deploy",
+    );
+  });
+});
+
+describe("supportsSnoozeReminder", () => {
+  it("treats a server without the capability as unsupported", () => {
+    expect(supportsSnoozeReminder(undefined)).toBe(false);
+    expect(supportsSnoozeReminder({})).toBe(false);
+    expect(supportsSnoozeReminder({ threadSnoozeReminder: false })).toBe(false);
+    expect(supportsSnoozeReminder({ threadSnoozeReminder: true })).toBe(true);
   });
 });

@@ -160,6 +160,13 @@ local time zone, or a duration in minutes, hours, or days. Durations start when
 you confirm; one day means 24 hours. On web and desktop, you can also snooze
 several selected threads together. Choose **Wake thread** to bring a thread back early.
 
+To remember why you snoozed a thread, choose **Snooze → Snooze with reminder…**
+and add a note. The note appears in the chat whenever the thread wakes, whether
+its time comes, you wake it, or new activity brings it back. Only you see it;
+the agent does not. On web and desktop, hover a snoozed thread's wake time to
+read the note, or choose **Edit reminder…** to change or clear it. Picking a
+preset to re-snooze keeps the note.
+
 ## Wait on another thread
 
 When a thread is stuck on something you plan to fix elsewhere, choose **Start a
