@@ -26,7 +26,7 @@ interface TurnDraft {
 }
 
 /** Activities that fail the turn they belong to. */
-const isTurnFailure = (activity: OrchestrationThreadActivity) =>
+export const isTurnFailure = (activity: OrchestrationThreadActivity) =>
   activity.kind === "runtime.error" || activity.kind === "provider.turn.start.failed";
 
 /**

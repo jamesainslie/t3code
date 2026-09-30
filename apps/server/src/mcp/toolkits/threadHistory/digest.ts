@@ -9,6 +9,7 @@ import * as Predicate from "effect/Predicate";
 import { cutToBytes } from "./text.ts";
 import {
   isErrorActivity,
+  isTurnFailure,
   reconstructTurns,
   type DigestTurnState,
   type ReconstructedTurn,
@@ -98,8 +99,13 @@ function toolLine(activity: OrchestrationThreadActivity): string {
   return cutToBytes(detail ? `${head}: ${detail}` : head, DIGEST_LIMITS.toolDetailBytes);
 }
 
-const errorText = (activity: OrchestrationThreadActivity) =>
-  stringOrUndefined(payloadOf(activity)?.message) ?? activity.summary;
+/** Runtime errors carry `message`; failed provider commands carry `{ detail, requestId }`. */
+function errorText(activity: OrchestrationThreadActivity): string {
+  const payload = payloadOf(activity);
+  return (
+    stringOrUndefined(payload?.message) ?? stringOrUndefined(payload?.detail) ?? activity.summary
+  );
+}
 
 const nonEmptyTexts = (messages: ReconstructedTurn["assistantMessages"]) =>
   messages.map((message) => message.text).filter((text) => text.trim().length > 0);
@@ -177,13 +183,10 @@ function deriveStatus(
             activity.createdAt >= queuedAt,
         );
   if (sendFailure) {
-    // The reactor writes `{ detail, requestId }`; the detail says why the send failed.
-    const payload = payloadOf(sendFailure);
-    const message =
-      stringOrUndefined(payload?.message) ??
-      stringOrUndefined(payload?.detail) ??
-      sendFailure.summary;
-    return { kind: "error", message: cutToBytes(message, DIGEST_LIMITS.excerptBytes) };
+    return {
+      kind: "error",
+      message: cutToBytes(errorText(sendFailure), DIGEST_LIMITS.excerptBytes),
+    };
   }
 
   // The latest turn's recorded state wins; without one, the last turn that ran stands in.
@@ -197,7 +200,9 @@ function deriveStatus(
     return { kind: "context-full", ...usage };
   }
   if (state === "error") {
-    const lastError = current?.activities.findLast(isErrorActivity);
+    // What failed the turn explains it better than a denial or task failure logged after it.
+    const lastError =
+      current?.activities.findLast(isTurnFailure) ?? current?.activities.findLast(isErrorActivity);
     const message =
       (lastError ? errorText(lastError) : undefined) ?? thread.session?.lastError ?? "Turn failed";
     return { kind: "error", message: cutToBytes(message, DIGEST_LIMITS.excerptBytes) };

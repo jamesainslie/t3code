@@ -534,6 +534,64 @@ describe("buildThreadDigest", () => {
     expect(generic.header.status).toEqual({ kind: "error", message: "Turn failed" });
   });
 
+  it("reads a failed turn start's detail for its errors, outcome, and status", () => {
+    const A = turn("t1");
+    const B = turn("t2");
+    const detail = "Codex exited before the turn started: missing auth";
+    const thread = makeThread({
+      messages: [userMessage("u1", 1), assistantMessage("a1", 2, A), userMessage("u2", 3)],
+      activities: [
+        // The reactor writes `{ detail, requestId }` for a failed turn start.
+        activity({
+          id: "f1",
+          t: 4,
+          kind: "provider.turn.start.failed",
+          tone: "error",
+          turnId: B,
+          summary: "Provider turn start failed",
+          payload: { detail, requestId: "request-1" },
+        }),
+      ],
+      latestTurn: latestTurn(B, "error"),
+    });
+
+    const digest = digestOf(thread);
+    expect(digest.recentTurns[1]!.errors).toEqual([detail]);
+    expect(digest.header.status).toEqual({ kind: "error", message: detail });
+    expect(digestOf(thread, { recentTurns: 0 }).earlierTurns[1]!.outcome).toBe(detail);
+  });
+
+  it("reports the turn failure over a later tool denial in the status", () => {
+    const A = turn("t1");
+    const digest = digestOf(
+      makeThread({
+        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
+        activities: [
+          activity({
+            id: "e1",
+            t: 3,
+            kind: "runtime.error",
+            tone: "error",
+            turnId: A,
+            payload: { message: "provider crashed" },
+          }),
+          activity({
+            id: "d1",
+            t: 4,
+            kind: "tool.denied",
+            tone: "error",
+            turnId: A,
+            summary: "Tool call denied",
+          }),
+        ],
+        latestTurn: latestTurn(A, "error"),
+      }),
+    );
+
+    expect(digest.recentTurns[0]!.errors).toEqual(["provider crashed", "Tool call denied"]);
+    expect(digest.header.status).toEqual({ kind: "error", message: "provider crashed" });
+  });
+
   it("falls back to the item type and omits a missing tool status or detail", () => {
     const A = turn("t1");
     const tool = (id: string, t: number, payload: unknown) =>
