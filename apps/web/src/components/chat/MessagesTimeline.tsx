@@ -1935,15 +1935,16 @@ function ContextCompactionTimelineRow({
       <span className="flex shrink-0 items-center gap-1.5">
         <Minimize2Icon aria-hidden="true" className="size-3" />
         {row.label}
-        {ctx.eventTimestamps ? (
-          <ChatEventTimestamp
-            iso={row.createdAt}
-            timestampFormat={ctx.timestampFormat}
-            options={ctx.eventTimestamps}
-          />
-        ) : null}
       </span>
       <span className="h-px flex-1 bg-border/70" />
+      {ctx.eventTimestamps ? (
+        <ChatEventTimestamp
+          iso={row.createdAt}
+          timestampFormat={ctx.timestampFormat}
+          options={ctx.eventTimestamps}
+          className="pe-1.5"
+        />
+      ) : null}
     </div>
   );
 }
@@ -2277,19 +2278,15 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       </div>
       <div
         className={cn(
-          "flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums",
-          // With event timestamps on, only the actions wait for hover.
+          "flex w-full max-w-[80%] items-center justify-end text-xs tabular-nums",
+          // With event timestamps on, only the actions wait for hover, and the time follows them
+          // on the timestamp edge (see TimelineRowTimestamp).
+          ctx.eventTimestamps ? "pe-1.5" : "pe-1",
           !ctx.eventTimestamps && USER_MESSAGE_META_HOVER_CLASS_NAME,
         )}
       >
         <div className="flex shrink-0 items-center gap-2">
-          {ctx.eventTimestamps ? (
-            <ChatEventTimestamp
-              iso={row.message.createdAt}
-              timestampFormat={ctx.timestampFormat}
-              options={ctx.eventTimestamps}
-            />
-          ) : (
+          {ctx.eventTimestamps ? null : (
             <Tooltip>
               <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
                 {formatDayAwareTimestamp(row.message.createdAt, ctx.timestampFormat)}
@@ -2328,6 +2325,13 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
               />
             )}
           </div>
+          {ctx.eventTimestamps ? (
+            <ChatEventTimestamp
+              iso={row.message.createdAt}
+              timestampFormat={ctx.timestampFormat}
+              options={ctx.eventTimestamps}
+            />
+          ) : null}
         </div>
       </div>
     </div>
@@ -2395,6 +2399,10 @@ function RevertUserMessageButton({
  * layout. Visibility changes immediately so leaving flow cannot overlap text
  * during a fade-out. Place it before any trailing disclosure control so
  * revealing the time does not move the chevron.
+ *
+ * With event timestamps on, every row's time instead ends 6px inside the row's
+ * outer edge, after any disclosure control, so the times form one column: the
+ * row's end padding plus the timestamp's own end spacing add up to that edge.
  */
 function TimelineRowTimestamp({
   createdAt,
@@ -2572,10 +2580,12 @@ function AssistantMessageMeta({
         copyButton
       )}
       {!message.streaming && ctx.eventTimestamps ? (
+        // Both callers pad the row by `px-1`; this adds the rest of the timestamp edge.
         <ChatEventTimestamp
           iso={message.updatedAt}
           timestampFormat={ctx.timestampFormat}
           options={ctx.eventTimestamps}
+          className="ms-auto pe-0.5"
         />
       ) : null}
       {!message.streaming && !ctx.eventTimestamps && (
@@ -2662,15 +2672,16 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
           {label}
           {shimmer ? <ActivityShimmerOverlay>{label}</ActivityShimmerOverlay> : null}
         </span>
+        {backgroundWorktreeSetup ? (
+          <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
+        ) : null}
         {eventTimestamps && row.createdAt ? (
           <ChatEventTimestamp
             iso={row.createdAt}
             timestampFormat={timestampFormat}
             options={eventTimestamps}
+            className="ms-auto pe-0.5"
           />
-        ) : null}
-        {backgroundWorktreeSetup ? (
-          <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
         ) : null}
       </div>
     </div>
@@ -2815,7 +2826,7 @@ function ActivityGroupTimelineRow({
             iso={row.createdAt}
             timestampFormat={ctx.timestampFormat}
             options={ctx.eventTimestamps}
-            className="ms-auto ps-2 pe-1"
+            className="ms-auto ps-2 pe-1.5"
           />
         ) : null}
       </button>
@@ -3425,7 +3436,7 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
           iso={row.entry.createdAt}
           timestampFormat={ctx.timestampFormat}
           options={ctx.eventTimestamps}
-          className="ms-auto ps-2 pe-1"
+          className="ms-auto ps-2 pe-1.5"
         />
       ) : null}
     </button>
@@ -4862,7 +4873,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
   onToggleEntry?: ((collapsed: boolean) => void) | undefined;
 }) {
   const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel } = props;
-  const { threadRef, onImageExpand, timestampFormat } = use(TimelineRowCtx);
+  const { threadRef, onImageExpand, timestampFormat, eventTimestamps } = use(TimelineRowCtx);
   const groupView = use(WorkGroupViewCtx);
   const [expanded, setExpanded] = useState(
     () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
@@ -5020,7 +5031,12 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
           !toolIconAcceptsTint(entryIconName, entryToolIcon) ? (
             <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
           ) : null}
-          <TimelineRowTimestamp createdAt={workEntry.createdAt} timestampFormat={timestampFormat} />
+          {eventTimestamps ? null : (
+            <TimelineRowTimestamp
+              createdAt={workEntry.createdAt}
+              timestampFormat={timestampFormat}
+            />
+          )}
           <span
             className={cn(
               "flex size-4 shrink-0 items-center justify-center",
@@ -5035,6 +5051,12 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
               )}
             />
           </span>
+          {eventTimestamps ? (
+            <TimelineRowTimestamp
+              createdAt={workEntry.createdAt}
+              timestampFormat={timestampFormat}
+            />
+          ) : null}
         </div>
       </div>
       {expanded && viewedImage && threadRef ? (
