@@ -608,6 +608,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           unsettled_at AS "unsettledAt",
           snoozed_until AS "snoozedUntil",
           snoozed_at AS "snoozedAt",
+          snooze_reminder AS "snoozeReminder",
           dependencies_json AS "dependencies",
           pinned_at AS "pinnedAt",
           pin_order_key AS "pinOrderKey",
@@ -658,6 +659,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           unsettled_at AS "unsettledAt",
           snoozed_until AS "snoozedUntil",
           snoozed_at AS "snoozedAt",
+          snooze_reminder AS "snoozeReminder",
           dependencies_json AS "dependencies",
           pinned_at AS "pinnedAt",
           pin_order_key AS "pinOrderKey",
@@ -709,6 +711,33 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       ),
     );
 
+  const listPendingSnoozeReminderRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: Schema.Struct({
+      threadId: ThreadId,
+      snoozedUntil: IsoDateTime,
+    }),
+    execute: () => sql`
+      SELECT thread_id AS "threadId", snoozed_until AS "snoozedUntil"
+      FROM projection_threads
+      WHERE snooze_reminder IS NOT NULL
+        AND snoozed_until IS NOT NULL
+        AND archived_at IS NULL
+        AND deleted_at IS NULL
+      ORDER BY snoozed_until ASC, thread_id ASC
+    `,
+  });
+  const listPendingSnoozeReminders: ProjectionSnapshotQueryShape["listPendingSnoozeReminders"] =
+    () =>
+      listPendingSnoozeReminderRows(undefined).pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "ProjectionSnapshotQuery.listPendingSnoozeReminders:query",
+            "ProjectionSnapshotQuery.listPendingSnoozeReminders:decodeRows",
+          ),
+        ),
+      );
+
   const listArchivedThreadRows = SqlSchema.findAll({
     Request: Schema.Void,
     Result: ProjectionThreadDbRowSchema,
@@ -735,6 +764,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           unsettled_at AS "unsettledAt",
           snoozed_until AS "snoozedUntil",
           snoozed_at AS "snoozedAt",
+          snooze_reminder AS "snoozeReminder",
           dependencies_json AS "dependencies",
           pinned_at AS "pinnedAt",
           pin_order_key AS "pinOrderKey",
@@ -1362,6 +1392,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           unsettled_at AS "unsettledAt",
           snoozed_until AS "snoozedUntil",
           snoozed_at AS "snoozedAt",
+          snooze_reminder AS "snoozeReminder",
           dependencies_json AS "dependencies",
           pinned_at AS "pinnedAt",
           pin_order_key AS "pinOrderKey",
@@ -2477,6 +2508,7 @@ pending_approval_requests AS (
                 pinnedAt: row.pinnedAt,
                 pinOrderKey: row.pinOrderKey ?? null,
                 highlightColor: row.highlightColor ?? null,
+                snoozeReminder: row.snoozeReminder ?? null,
                 activeOrderKey: row.activeOrderKey ?? null,
                 autoSettleDisabledAt: row.autoSettleDisabledAt ?? null,
                 titleRegeneration: mapTitleRegeneration(row),
@@ -2738,6 +2770,7 @@ pending_approval_requests AS (
                   pinnedAt: row.pinnedAt,
                   pinOrderKey: row.pinOrderKey ?? null,
                   highlightColor: row.highlightColor ?? null,
+                  snoozeReminder: row.snoozeReminder ?? null,
                   activeOrderKey: row.activeOrderKey ?? null,
                   autoSettleDisabledAt: row.autoSettleDisabledAt ?? null,
                   titleRegeneration: mapTitleRegeneration(row),
@@ -2902,6 +2935,7 @@ pending_approval_requests AS (
                         pinnedAt: row.pinnedAt,
                         pinOrderKey: row.pinOrderKey ?? null,
                         highlightColor: row.highlightColor ?? null,
+                        snoozeReminder: row.snoozeReminder ?? null,
                         activeOrderKey: row.activeOrderKey ?? null,
                         autoSettleDisabledAt: row.autoSettleDisabledAt ?? null,
                         titleRegeneration: mapTitleRegeneration(row),
@@ -3090,6 +3124,7 @@ pending_approval_requests AS (
                   pinnedAt: row.pinnedAt,
                   pinOrderKey: row.pinOrderKey ?? null,
                   highlightColor: row.highlightColor ?? null,
+                  snoozeReminder: row.snoozeReminder ?? null,
                   activeOrderKey: row.activeOrderKey ?? null,
                   autoSettleDisabledAt: row.autoSettleDisabledAt ?? null,
                   titleRegeneration: mapTitleRegeneration(row),
@@ -3441,6 +3476,7 @@ pending_approval_requests AS (
         pinnedAt: threadRow.value.pinnedAt,
         pinOrderKey: threadRow.value.pinOrderKey ?? null,
         highlightColor: threadRow.value.highlightColor ?? null,
+        snoozeReminder: threadRow.value.snoozeReminder ?? null,
         activeOrderKey: threadRow.value.activeOrderKey ?? null,
         autoSettleDisabledAt: threadRow.value.autoSettleDisabledAt ?? null,
         titleRegeneration: mapTitleRegeneration(threadRow.value),
@@ -3769,6 +3805,7 @@ pending_approval_requests AS (
         pinnedAt: threadRow.value.pinnedAt,
         pinOrderKey: threadRow.value.pinOrderKey ?? null,
         highlightColor: threadRow.value.highlightColor ?? null,
+        snoozeReminder: threadRow.value.snoozeReminder ?? null,
         activeOrderKey: threadRow.value.activeOrderKey ?? null,
         autoSettleDisabledAt: threadRow.value.autoSettleDisabledAt ?? null,
         titleRegeneration: mapTitleRegeneration(threadRow.value),
@@ -3981,6 +4018,7 @@ pending_approval_requests AS (
     listThreadsWithPullRequests,
     getArchivedShellSnapshot,
     getDeletedWorktreeThreads,
+    listPendingSnoozeReminders,
     searchThreads,
     getSnapshotSequence,
     getCounts,

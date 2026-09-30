@@ -48,6 +48,8 @@ export const ProjectionThread = Schema.Struct({
   unsettledAt: Schema.NullOr(IsoDateTime),
   snoozedUntil: Schema.NullOr(IsoDateTime),
   snoozedAt: Schema.NullOr(IsoDateTime),
+  // The note delivered into the timeline when the pending snooze wakes.
+  snoozeReminder: Schema.optional(Schema.NullOr(Schema.String)),
   // Null in rows written before the column existed; readers treat it as [].
   dependencies: Schema.optional(Schema.NullOr(Schema.Array(ThreadDependency))),
   pinnedAt: Schema.NullOr(IsoDateTime),

@@ -618,6 +618,69 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         assert.deepEqual(rows, [{ highlightColor: color }]);
       }
 
+      // Snooze reminder: snoozed writes the note (a legacy payload without
+      // one means none), delivery clears only the note, unsnooze clears it.
+      const reminderWakeAt = "2026-01-02T00:00:00.000Z";
+      const reminderEvents = [
+        {
+          type: "thread.snoozed",
+          payload: { snoozedAt: now, snoozedUntil: reminderWakeAt, reminder: "Check the deploy" },
+          expected: { snoozeReminder: "Check the deploy", snoozedUntil: reminderWakeAt },
+        },
+        {
+          type: "thread.snooze-reminder-delivered",
+          payload: {},
+          expected: { snoozeReminder: null, snoozedUntil: reminderWakeAt },
+        },
+        {
+          type: "thread.snoozed",
+          payload: { snoozedAt: now, snoozedUntil: reminderWakeAt, reminder: "Ping review" },
+          expected: { snoozeReminder: "Ping review", snoozedUntil: reminderWakeAt },
+        },
+        {
+          type: "thread.snoozed",
+          payload: { snoozedAt: now, snoozedUntil: reminderWakeAt },
+          expected: { snoozeReminder: null, snoozedUntil: reminderWakeAt },
+        },
+        {
+          type: "thread.snoozed",
+          payload: { snoozedAt: now, snoozedUntil: reminderWakeAt, reminder: "Ping review" },
+          expected: { snoozeReminder: "Ping review", snoozedUntil: reminderWakeAt },
+        },
+        {
+          type: "thread.unsnoozed",
+          payload: { reason: "user" },
+          expected: { snoozeReminder: null, snoozedUntil: null },
+        },
+      ] as const;
+      for (const [index, event] of reminderEvents.entries()) {
+        yield* eventStore.append({
+          type: event.type,
+          eventId: EventId.make(`evt-snooze-reminder-${index}`),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-1"),
+          occurredAt: "2026-01-01T00:00:00.700Z",
+          commandId: CommandId.make(`cmd-snooze-reminder-${index}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            ...event.payload,
+            threadId: ThreadId.make("thread-1"),
+            updatedAt: orderUpdatedAt,
+          },
+        });
+        yield* projectionPipeline.bootstrap;
+        const rows = yield* sql<{
+          readonly snoozeReminder: string | null;
+          readonly snoozedUntil: string | null;
+        }>`
+          SELECT snooze_reminder AS "snoozeReminder", snoozed_until AS "snoozedUntil"
+          FROM projection_threads WHERE thread_id = 'thread-1'
+        `;
+        assert.deepEqual(rows, [event.expected]);
+      }
+
       // Settled lifecycle through the DB pipeline: thread.settled writes the
       // override + timestamp, thread.unsettled(user) flips to the active pin.
       yield* eventStore.append({

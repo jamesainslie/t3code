@@ -21,7 +21,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         yield* runMigrations({ toMigrationInclusive: 57 });
         assert.notOk((yield* readThreadColumns).includes("auto_settle_disabled_at"));
 
-        const executed = yield* runMigrations();
+        const executed = yield* runMigrations({ toMigrationInclusive: 58 });
 
         assert.deepStrictEqual(
           executed.map(([id]) => id),
@@ -42,7 +42,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         yield* runMigrations({ toMigrationInclusive: 57 });
         yield* sql`ALTER TABLE projection_threads ADD COLUMN auto_settle_disabled_at TEXT`;
 
-        const executed = yield* runMigrations();
+        const executed = yield* runMigrations({ toMigrationInclusive: 58 });
 
         assert.deepStrictEqual(
           executed.map(([id]) => id),

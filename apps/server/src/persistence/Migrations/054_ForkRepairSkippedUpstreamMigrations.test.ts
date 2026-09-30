@@ -72,7 +72,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
 
         assert.deepStrictEqual(
           executed.map(([id]) => id),
-          [51, 52, 53, 54, 55, 56, 57, 58],
+          [51, 52, 53, 54, 55, 56, 57, 58, 59],
         );
         const state = yield* readState;
         assert.deepStrictEqual(state.pullRequests, [{ threadId: "thread-linked", number: 42 }]);

@@ -166,6 +166,16 @@ export interface ProjectionSnapshotQueryShape {
   >;
 
   /**
+   * Read active (not deleted, not archived) threads whose snooze still holds
+   * an undelivered reminder, soonest wake first. The reminder reactor decides
+   * which are due, since timer wakes emit no event.
+   */
+  readonly listPendingSnoozeReminders: () => Effect.Effect<
+    ReadonlyArray<{ readonly threadId: ThreadId; readonly snoozedUntil: string }>,
+    ProjectionRepositoryError
+  >;
+
+  /**
    * Search active thread navigation metadata, user messages, and canonical
    * assistant outputs without hydrating thread detail snapshots.
    */
