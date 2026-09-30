@@ -342,6 +342,7 @@ describe("RpcSessionFactory", () => {
       expect(error).toMatchObject({
         reason: "transport",
         message: "Test environment disconnected.",
+        socketClose: { code: 1012, reason: "service restart" },
       });
       expect(configStreamError).toMatchObject({ _tag: "RpcClientError" });
       yield* Effect.yieldNow;
@@ -816,6 +817,7 @@ describe("RpcSessionFactory", () => {
           const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
             target: TARGET,
             state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
+            attemptLog: Stream.make([]),
             session: activeSession,
             prepared: yield* SubscriptionRef.make(Option.some(PREPARED)),
             connect: Effect.void,

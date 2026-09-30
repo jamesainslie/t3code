@@ -121,6 +121,7 @@ describe("createAssetEnvironmentAtoms", () => {
                 phase: "connected" as const,
               }),
               session: yield* SubscriptionRef.make(Option.some(session)),
+              attemptLog: Stream.make([]),
               prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
               connect: Effect.void,
               disconnect: Effect.void,

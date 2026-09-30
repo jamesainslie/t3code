@@ -113,6 +113,7 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
       phase: "connected",
     }),
     session: yield* SubscriptionRef.make(Option.some(session)),
+    attemptLog: Stream.make([]),
     prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
     connect: Effect.void,
     disconnect: Effect.void,

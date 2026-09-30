@@ -88,6 +88,7 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
     target: QUERY_ENVIRONMENT,
     state: supervisorState,
     session: supervisorSession,
+    attemptLog: Stream.make([]),
     prepared: yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(Option.none()),
     connect: Effect.void,
     disconnect: Effect.void,

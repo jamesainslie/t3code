@@ -360,6 +360,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     target: originTarget,
     state: yield* SubscriptionRef.make(connectionState),
     session: yield* SubscriptionRef.make(Option.some(session(client))),
+    attemptLog: Stream.make([]),
     prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
     connect: Effect.void,
     disconnect: Effect.void,

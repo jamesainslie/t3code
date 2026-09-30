@@ -155,6 +155,7 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
     target: TARGET,
     state: connectionState,
     session: sessionRef,
+    attemptLog: Stream.make([]),
     prepared: yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(
       Option.some({
         environmentId: TARGET.environmentId,

@@ -209,6 +209,7 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
     target: TARGET,
     state: supervisorState,
+    attemptLog: Stream.make([]),
     session: supervisorSession,
     prepared,
     connect: Effect.void,

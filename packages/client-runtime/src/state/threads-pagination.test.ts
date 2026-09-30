@@ -190,6 +190,7 @@ const makeHarness = Effect.fn("TestThreadPagination.makeHarness")(function* (opt
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
     target: TARGET,
     state: supervisorState,
+    attemptLog: Stream.make([]),
     session: supervisorSession,
     prepared,
     connect: Effect.void,

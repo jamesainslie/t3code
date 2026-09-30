@@ -123,6 +123,21 @@ export function createEnvironmentCatalogAtoms<R, E>(
     ),
   );
 
+  /** The environment's recent connection attempts; only a mounted details panel follows it. */
+  const attemptLogAtom = Atom.family((environmentId: EnvironmentIdType) =>
+    runtime.atom(
+      followStreamInEnvironment(
+        environmentId,
+        Stream.unwrap(
+          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+            Effect.map((supervisor) => supervisor.attemptLog),
+          ),
+        ),
+      ),
+      { initialValue: [] as ReadonlyArray<EnvironmentSupervisor.ConnectionAttemptLogEntry> },
+    ),
+  );
+
   const register = createRuntimeCommand(runtime, {
     label: "environment-catalog:register",
     scheduler: commandScheduler,
@@ -179,6 +194,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     networkStatusAtom,
     networkStatusValueAtom,
     stateAtom,
+    attemptLogAtom,
     register,
     remove,
     removeRelayEnvironments,

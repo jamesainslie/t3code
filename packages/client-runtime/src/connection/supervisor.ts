@@ -18,6 +18,7 @@ import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
 import {
   type ConnectionAttemptError,
+  type ConnectionAttemptStage,
   type ConnectionTarget,
   ConnectionTransientError,
   type NetworkStatus,
@@ -195,11 +196,33 @@ function failureFromExit<A>(
   };
 }
 
+/** How many attempt log entries a supervisor keeps: about a dozen failed attempts. */
+export const ATTEMPT_LOG_LIMIT = 50;
+
+/** One step of connecting, kept so a reconnecting environment can show what happened. */
+export type ConnectionAttemptLogEntry = { readonly at: number; readonly attempt: number } & (
+  | { readonly kind: "started" | "connected" | "ended" | "offline" }
+  | { readonly kind: "stage"; readonly stage: ConnectionAttemptStage }
+  | { readonly kind: "failed"; readonly error: ConnectionAttemptError }
+  | { readonly kind: "retrying"; readonly retryAt: number }
+);
+
+type ConnectionAttemptLogStep = ConnectionAttemptLogEntry extends infer Entry
+  ? Entry extends unknown
+    ? Omit<Entry, "at">
+    : never
+  : never;
+
 export class EnvironmentSupervisor extends Context.Service<
   EnvironmentSupervisor,
   {
     readonly target: ConnectionTarget;
     readonly state: SubscriptionRef.SubscriptionRef<SupervisorConnectionState>;
+    /**
+     * The newest steps of connecting, oldest first: the current log, then each change. Kept
+     * apart from `state` so appending never wakes the many listeners that follow the state.
+     */
+    readonly attemptLog: Stream.Stream<ReadonlyArray<ConnectionAttemptLogEntry>>;
     readonly session: SubscriptionRef.SubscriptionRef<Option.Option<RpcSession.RpcSession>>;
     readonly prepared: SubscriptionRef.SubscriptionRef<Option.Option<PreparedConnection>>;
     readonly connect: Effect.Effect<void>;
@@ -248,6 +271,14 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   );
   const session = yield* SubscriptionRef.make<Option.Option<RpcSession.RpcSession>>(Option.none());
   const prepared = yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(Option.none());
+  const attemptLog = yield* SubscriptionRef.make<ReadonlyArray<ConnectionAttemptLogEntry>>([]);
+  const record = Effect.fnUntraced(function* (step: ConnectionAttemptLogStep) {
+    const at = yield* Clock.currentTimeMillis;
+    yield* SubscriptionRef.update(attemptLog, (log) => [
+      ...log.slice(-(ATTEMPT_LOG_LIMIT - 1)),
+      { ...step, at } as ConnectionAttemptLogEntry,
+    ]);
+  });
 
   const clearLease = Effect.all(
     [SubscriptionRef.set(session, Option.none()), SubscriptionRef.set(prepared, Option.none())],
@@ -282,6 +313,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
     if ("prepared" in progress) {
       yield* SubscriptionRef.set(prepared, Option.some(progress.prepared));
     }
+    yield* record({ attempt, kind: "stage", stage: progress.stage });
     yield* setState(
       connectingState(yield* Ref.get(intent), generation, attempt, lastFailure, progress.stage),
     );
@@ -578,6 +610,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       lastFailure: null,
       retryAt: null,
     });
+    yield* record({ attempt, kind: "connected" });
 
     const connectedExit = yield* Effect.raceFirst(
       active.lease.session.closed.pipe(
@@ -660,6 +693,10 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       if (currentIntent.network === "offline") {
         yield* clearLease;
         yield* setState(offlineState(currentIntent, generation, failureCount + 1, latestFailure));
+        // Every signal re-enters this branch while offline; one entry covers the stretch.
+        if ((yield* SubscriptionRef.get(attemptLog)).at(-1)?.kind !== "offline") {
+          yield* record({ attempt: failureCount + 1, kind: "offline" });
+        }
         const applicationActivated = yield* waitForSignal;
         if (applicationActivated) {
           resetRetryLadder();
@@ -669,6 +706,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
 
       const attempt = failureCount + 1;
       const nextGeneration = generation + 1;
+      yield* record({ attempt, kind: "started" });
       const outcome: AttemptOutcome = yield* Effect.scoped(
         runAttempt(attempt, nextGeneration, latestFailure, pendingRetry),
       );
@@ -683,6 +721,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         }
       }
       if (outcome._tag === "Interrupted") {
+        yield* record({ attempt, kind: "ended" });
         if (outcome.resetRetry) {
           resetRetryLadder();
         }
@@ -692,6 +731,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       const attemptSpan: Option.Option<Tracer.Span> = outcome.failure.attemptSpan;
       const error: ConnectionAttemptError = outcome.failure.error;
       latestFailure = error;
+      yield* record({ attempt, kind: "failed", error });
       if (error._tag === "ConnectionBlockedError") {
         const blockedIntent = yield* Ref.get(intent);
         yield* setState({
@@ -717,6 +757,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         // backoff rung. Only this first attempt skips the ladder; if it fails
         // too, normal backoff resumes.
         resetRetryLadder();
+        yield* record({ attempt, kind: "retrying", retryAt: yield* Clock.currentTimeMillis });
         yield* setState(connectingState(yield* Ref.get(intent), generation, 1, error));
         continue;
       }
@@ -730,6 +771,8 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         reason: error.reason,
       }));
       const failedIntent = yield* Ref.get(intent);
+      const retryAt = (yield* Clock.currentTimeMillis) + delayMs;
+      yield* record({ attempt, kind: "retrying", retryAt });
       yield* setState({
         desired: failedIntent.desired,
         network: failedIntent.network,
@@ -738,7 +781,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         attempt,
         generation,
         lastFailure: error,
-        retryAt: (yield* Clock.currentTimeMillis) + delayMs,
+        retryAt,
       });
       const applicationActivated = yield* waitForRetrySignal(delayMs);
       if (applicationActivated) {
@@ -791,6 +834,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   return EnvironmentSupervisor.of({
     target,
     state,
+    attemptLog: SubscriptionRef.changes(attemptLog),
     session,
     prepared,
     connect,
