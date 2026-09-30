@@ -11,6 +11,7 @@ import {
   type PreviewAnnotationPayload,
   type ThreadContextRecord,
   type ProviderInteractionMode,
+  type RuntimeMode,
   ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
@@ -1387,4 +1388,41 @@ export function restorePlanFollowUpComposer(input: {
     prompt: input.snapshot.prompt,
     detectTrigger: true,
   });
+}
+
+/**
+ * The thread a draft continues, while the draft still holds that thread's chip record.
+ * Removing the chip drops the link, and with it the new agent's read grant. The title seed
+ * names the source, since the stripped prompt alone reads "Continue the work from .".
+ */
+export function resolveDraftContinuation(input: {
+  readonly continuedFromThreadId: ThreadId | null | undefined;
+  readonly threadReferences: ReadonlyArray<ThreadContextRecord>;
+}): { readonly continuedFromThreadId: ThreadId; readonly titleSeed: string } | null {
+  if (!input.continuedFromThreadId) return null;
+  const source = input.threadReferences.find(
+    (record) => record.threadId === input.continuedFromThreadId,
+  );
+  return source
+    ? { continuedFromThreadId: source.threadId, titleSeed: `Continue: ${source.title}` }
+    : null;
+}
+
+/** The `bootstrap.createThread` a draft's first send starts its thread with. */
+export function buildBootstrapCreateThread(input: {
+  readonly projectId: ProjectId;
+  readonly title: string;
+  readonly modelSelection: ModelSelection;
+  readonly runtimeMode: RuntimeMode;
+  readonly interactionMode: ProviderInteractionMode;
+  readonly branch: string | null;
+  readonly worktreePath: string | null;
+  readonly createdAt: string;
+  readonly continuation: { readonly continuedFromThreadId: ThreadId } | null;
+}) {
+  const { continuation, ...createThread } = input;
+  return {
+    ...createThread,
+    ...(continuation ? { continuedFromThreadId: continuation.continuedFromThreadId } : {}),
+  };
 }

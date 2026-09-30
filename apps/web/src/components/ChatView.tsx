@@ -432,7 +432,9 @@ import {
   agentControlledBrowserCloseConfirmation,
   branchMismatchKey,
   buildExpiredTerminalContextToastCopy,
+  buildBootstrapCreateThread,
   buildLocalDraftThread,
+  resolveDraftContinuation,
   buildLoadingThreadFromShell,
   buildRunningThreadTurnInterruptInput,
   buildThreadTurnInterruptInput,
@@ -8183,10 +8185,15 @@ export default function ChatView(props: ChatViewProps) {
       }),
     );
     // The draft continues another thread: every thread this send creates
-    // records it, and a finished send clears it like the unblock link.
+    // records it while its chip remains, and a finished send clears it like
+    // the unblock link.
     const continuedFromThreadId = isLocalDraftThread
       ? (draftThread?.continuedFromThreadId ?? null)
       : null;
+    const continuation = resolveDraftContinuation({
+      continuedFromThreadId,
+      threadReferences: composerThreadReferencesSnapshot,
+    });
     if (multipleModelSelections !== null) {
       const failedSelections: ModelSelection[] = [];
       let clearedDraft = false;
@@ -8205,7 +8212,8 @@ export default function ChatView(props: ChatViewProps) {
           ),
         );
         const title = truncate(
-          citationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
+          continuation?.titleSeed ||
+            citationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
             composerAttachmentsSnapshot[0]?.name ||
             "New thread",
         );
@@ -8266,7 +8274,7 @@ export default function ChatView(props: ChatViewProps) {
                   runtimeMode,
                   interactionMode: target.interactionMode,
                   bootstrap: {
-                    createThread: {
+                    createThread: buildBootstrapCreateThread({
                       projectId: activeProject.id,
                       title,
                       modelSelection: target.selection,
@@ -8275,8 +8283,8 @@ export default function ChatView(props: ChatViewProps) {
                       branch: activeThreadBranch,
                       worktreePath: null,
                       createdAt: messageCreatedAt,
-                      ...(continuedFromThreadId ? { continuedFromThreadId } : {}),
-                    },
+                      continuation,
+                    }),
                     prepareWorktree: {
                       projectCwd: activeProject.workspaceRoot,
                       baseBranch: activeThreadBranch!,
@@ -8536,7 +8544,8 @@ export default function ChatView(props: ChatViewProps) {
         firstComposerImageName = firstComposerImage.name;
       }
     }
-    let titleSeed = citationsToPlainText(stripInlineContextReferences(trimmed)).trim();
+    let titleSeed =
+      continuation?.titleSeed ?? citationsToPlainText(stripInlineContextReferences(trimmed)).trim();
     if (!titleSeed) {
       if (firstComposerImageName) {
         titleSeed = `Image: ${firstComposerImageName}`;
@@ -8610,7 +8619,7 @@ export default function ChatView(props: ChatViewProps) {
           ? {
               ...(isLocalDraftThread
                 ? {
-                    createThread: {
+                    createThread: buildBootstrapCreateThread({
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
@@ -8619,8 +8628,8 @@ export default function ChatView(props: ChatViewProps) {
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
                       createdAt: activeThread.createdAt,
-                      ...(continuedFromThreadId ? { continuedFromThreadId } : {}),
-                    },
+                      continuation,
+                    }),
                   }
                 : {}),
               ...(baseBranchForWorktree

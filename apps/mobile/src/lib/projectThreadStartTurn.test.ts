@@ -6,6 +6,10 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { serializeCitation } from "@t3tools/shared/assistantCitations";
+import {
+  buildContinuePrompt,
+  buildThreadContextRecord,
+} from "@t3tools/shared/threadContextReference";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -100,4 +104,49 @@ describe("new thread on an existing branch", () => {
       expect(input.threadId).toBe("new-thread");
     },
   );
+});
+
+describe("continuing another thread", () => {
+  const source = buildThreadContextRecord({
+    id: ThreadId.make("thread-earlier"),
+    projectId: ProjectId.make("project"),
+    title: "Earlier investigation",
+  });
+  const spec = {
+    projectId: ProjectId.make("project"),
+    projectCwd: "/workspace",
+    threadId: "new-thread",
+    commandId: "command",
+    messageId: "message",
+    createdAt: "2026-09-30T00:00:00Z",
+    text: buildContinuePrompt(source),
+    uploadedAttachments: [],
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6-sol" },
+    runtimeMode: "full-access" as const,
+    interactionMode: "default" as const,
+    workspaceMode: "local" as const,
+    branch: null,
+    worktreePath: null,
+    startFromOrigin: false,
+    worktreeBranchName: "unused",
+    continuedFromThreadId: source.threadId,
+  };
+
+  it("records the source and titles the thread after it while the chip is present", () => {
+    const input = buildProjectThreadStartTurnInput({
+      ...spec,
+      context: { version: 1, records: [source] },
+    });
+
+    expect(input.bootstrap.createThread.continuedFromThreadId).toBe(source.threadId);
+    expect(input.titleSeed).toBe("Continue: Earlier investigation");
+    expect(input.bootstrap.createThread.title).toBe(input.titleSeed);
+  });
+
+  it("drops the link and the source title once the chip was removed", () => {
+    const input = buildProjectThreadStartTurnInput({ ...spec, text: "Start over" });
+
+    expect(input.bootstrap.createThread).not.toHaveProperty("continuedFromThreadId");
+    expect(input.titleSeed).toBe("Start over");
+  });
 });

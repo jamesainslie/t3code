@@ -21,6 +21,7 @@ import type { Thread, ThreadShell, TurnDiffSummary } from "../types";
 import { deriveProviderInstanceEntries, NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import type { CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { buildThreadContextRecord } from "@t3tools/shared/threadContextReference";
 import {
   type RightPanelSurface,
   pullRequestSurface,
@@ -37,8 +38,10 @@ import {
   branchMismatchKey,
   buildExpiredTerminalContextToastCopy,
   buildLoadingThreadFromShell,
+  buildBootstrapCreateThread,
   buildRunningThreadTurnInterruptInput,
   buildThreadTurnInterruptInput,
+  resolveDraftContinuation,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   deriveLockedProvider,
@@ -2430,5 +2433,62 @@ describe("worktree setup visibility", () => {
       ...settledDone,
       sequence: 9,
     });
+  });
+});
+
+describe("continuation bootstrap", () => {
+  const source = buildThreadContextRecord({
+    id: ThreadId.make("thread-source"),
+    projectId: ProjectId.make("project-1"),
+    title: "Earlier investigation",
+  });
+  const otherChip = buildThreadContextRecord({
+    id: ThreadId.make("thread-other"),
+    projectId: ProjectId.make("project-1"),
+    title: "Unrelated thread",
+  });
+  const createFields = {
+    projectId: ProjectId.make("project-1"),
+    title: "Continue: Earlier investigation",
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+    runtimeMode: "full-access" as const,
+    interactionMode: "default" as const,
+    branch: "feature/earlier",
+    worktreePath: null,
+    createdAt: "2026-09-30T12:00:00.000Z",
+  };
+
+  it("forwards the link and titles the thread after its source while the chip is present", () => {
+    const continuation = resolveDraftContinuation({
+      continuedFromThreadId: source.threadId,
+      threadReferences: [otherChip, source],
+    });
+
+    expect(continuation).toEqual({
+      continuedFromThreadId: source.threadId,
+      titleSeed: "Continue: Earlier investigation",
+    });
+    expect(buildBootstrapCreateThread({ ...createFields, continuation })).toEqual({
+      ...createFields,
+      continuedFromThreadId: source.threadId,
+    });
+  });
+
+  it("omits the link once the source chip was removed from the draft", () => {
+    const continuation = resolveDraftContinuation({
+      continuedFromThreadId: source.threadId,
+      threadReferences: [otherChip],
+    });
+
+    expect(continuation).toBeNull();
+    const createThread = buildBootstrapCreateThread({ ...createFields, continuation });
+    expect(createThread).toEqual(createFields);
+    expect(createThread).not.toHaveProperty("continuedFromThreadId");
+  });
+
+  it("omits the link for drafts that do not continue a thread", () => {
+    expect(
+      resolveDraftContinuation({ continuedFromThreadId: undefined, threadReferences: [source] }),
+    ).toBeNull();
   });
 });
