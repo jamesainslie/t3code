@@ -151,10 +151,12 @@ function LedgerRow({
           account.windows.map((window) => (
             <div
               key={window.key}
-              className="grid grid-cols-[1.25rem_1fr] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
+              className="grid grid-cols-[1.25rem_1fr_3rem] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
             >
               <span className="truncate">{window.label}</span>
               <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
+              {/* Every window counts down to its own reset; the runway column only shows the one that governs. */}
+              <span className="text-right tabular-nums">{window.resetText}</span>
             </div>
           ))
         )}
@@ -438,7 +440,8 @@ export function ProxyUsagePill({
         side="bottom"
         align="end"
         padding="none"
-        className="w-[21rem] max-w-none text-left whitespace-normal"
+        // Wide enough that each window's reset countdown leaves its meter the same length.
+        className="w-[24.5rem] max-w-none text-left whitespace-normal"
       >
         {snapshot ? (
           <Ledger environmentId={environmentId} snapshot={snapshot} threshold={threshold} />

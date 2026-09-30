@@ -202,6 +202,21 @@ describe("deriveProxyPill", () => {
     expect(deriveProxyPill(snapshot(), now)!.accounts[1]?.runwayText).toBe("1h 42m");
   });
 
+  it("counts down to every window's reset, not only the one that comes first", () => {
+    const pill = deriveProxyPill(snapshot(), now, { seconds: true })!;
+    // The runway follows the sooner session reset; the weekly reset still gets its own clock.
+    expect(pill.accounts[1]?.windows.map((window) => [window.label, window.resetText])).toEqual([
+      ["5h", "1:42:00"],
+      ["7d", "3d 18h"],
+    ]);
+    const unknown = deriveProxyPill(
+      snapshot({ accounts: [account("new", [["seven_day", 5]], { state: "ready", inflight: 0 })] }),
+      now,
+      { seconds: true },
+    )!;
+    expect(unknown.accounts[0]?.windows[0]?.resetText).toBe("");
+  });
+
   it("marks a signed-in source that failed to read as offline", () => {
     const pill = deriveProxyPill(
       snapshot({ accounts: [], error: "The gateway did not answer." }),
