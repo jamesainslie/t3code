@@ -50,6 +50,7 @@ import {
   SshPasswordPromptError,
   SshReadinessError,
 } from "./errors.ts";
+import { SshOutputObserver } from "./output.ts";
 
 const DEFAULT_REMOTE_PORT = FORK_IDENTITY.defaultPort;
 const REMOTE_PORT_SCAN_WINDOW = 200;
@@ -904,6 +905,8 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       timeoutMs: isNodeScriptRunner(runner)
         ? REMOTE_LAUNCH_TIMEOUT_MS
         : REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
+      // The launch answers with its port and server kind, never a credential.
+      observe: { source: "launch", stdout: true },
       ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
       ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
       ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
@@ -1036,6 +1039,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
     remoteCommandArgs: ["sh", "-s"],
     stdin: buildRemoteLogTailScript(target),
     timeoutMs: 10_000,
+    observe: { source: "remote-log", stdout: true },
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
@@ -1138,6 +1142,8 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
   | NetService.NetService
   | Scope.Scope
 > {
+  // Captured here so the stderr monitor reports to it whichever fiber ends up running it.
+  const observer = yield* SshOutputObserver;
   const hostSpec = yield* buildSshHostSpecEffect(input.resolvedTarget);
   const childEnvironment = yield* buildSshChildEnvironment({
     ...(input.authOptions.authSecret === undefined
@@ -1238,7 +1244,12 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     scope,
   };
   const exitFailure = Effect.all(
-    [collectProcessOutput(child.stderr), child.exitCode.pipe(Effect.map(Number))],
+    [
+      collectProcessOutput(child.stderr, (text) =>
+        observer({ source: "tunnel", stream: "stderr", text }),
+      ),
+      child.exitCode.pipe(Effect.map(Number)),
+    ],
     { concurrency: "unbounded" },
   ).pipe(
     Effect.mapError(
@@ -1521,7 +1532,18 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       key: input.key,
       target: input.resolvedTarget,
       operation: (authOptions) =>
-        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner),
+        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
+          // A launch that reached the host but hung or answered nonsense leaves its reason in
+          // the server log; the read reports it through the output observer. A failure to
+          // connect at all has nothing to read, and the launch script tails the log itself
+          // when the server exits early.
+          Effect.tapError((error) =>
+            error._tag === "SshLaunchError" ||
+            (error._tag === "SshCommandError" && error.timedOut === true)
+              ? readRemoteServerLogTail(input.resolvedTarget, authOptions).pipe(Effect.ignore)
+              : Effect.void,
+          ),
+        ),
     });
     const remotePort = remoteLaunch.remotePort;
     yield* Effect.logDebug("ssh.environment.remotePort.ready", {

@@ -17,6 +17,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { SshPasswordPrompt } from "./auth.ts";
 import { SshCommandError } from "./errors.ts";
+import { SshOutputObserver, type SshOutputChunk } from "./output.ts";
 import {
   buildRemoteLaunchScript,
   buildRemotePairingScript,
@@ -705,6 +706,162 @@ describe("ssh tunnel scripts", () => {
         );
       }),
   );
+});
+
+describe("ssh environment output", () => {
+  const target = {
+    alias: "devbox",
+    hostname: "devbox.example.com",
+    username: "julius",
+    port: 2222,
+  } as const;
+  const encode = (text: string) => Stream.make(new TextEncoder().encode(text));
+  const makeExitedProcess = (input: {
+    readonly stdout?: string;
+    readonly stderr?: string;
+    readonly exitCode?: number;
+  }) =>
+    ChildProcessSpawner.makeHandle({
+      pid: ChildProcessSpawner.ProcessId(123),
+      stdout: input.stdout === undefined ? Stream.empty : encode(input.stdout),
+      stderr: input.stderr === undefined ? Stream.empty : encode(input.stderr),
+      all: Stream.empty,
+      exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(input.exitCode ?? 0)),
+      isRunning: Effect.succeed(false),
+      kill: () => Effect.void,
+      stdin: Sink.drain,
+      getInputFd: () => Sink.drain,
+      getOutputFd: () => Stream.empty,
+      unref: Effect.succeed(Effect.void),
+    });
+  const REMOTE_LOG = "Error: listen EADDRINUSE 127.0.0.1:3773\n";
+
+  /** Routes each ssh invocation by its shape: resolve, tunnel, launch, or a bare script. */
+  const managerLayer = (input: {
+    readonly launch: () => ChildProcessSpawner.ChildProcessHandle;
+    readonly tunnel?: () => ChildProcessSpawner.ChildProcessHandle;
+    readonly http?: HttpClient.HttpClient;
+    readonly runner?: typeof ARCHIVE | typeof NODE_SCRIPT;
+  }) =>
+    Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make((command) =>
+          Effect.sync(() => {
+            const args = commandArgs(command);
+            if (args.includes("-G")) return makeExitedProcess({ stdout: "\n" });
+            if (args.includes("-N")) return input.tunnel?.() ?? makeRunningProcess(() => {});
+            if (args.includes("--")) return input.launch();
+            // Pairing and the log tail are both bare `sh -s` scripts. A pairing answer
+            // that leaked would show up as its credential in the observed output.
+            return makeExitedProcess({
+              stdout: `${REMOTE_LOG}{"credential":"LCL4R2TPHDKQ"}\n`,
+            });
+          }),
+        ),
+      ),
+      Layer.succeed(HttpClient.HttpClient, input.http ?? testHttpClient),
+      Layer.succeed(NetService.NetService, testNetService),
+      SshPasswordPrompt.disabledLayer,
+      SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(input.runner ?? ARCHIVE) }),
+      TestClock.layer(),
+    );
+
+  const observed = () => {
+    const chunks: Array<SshOutputChunk> = [];
+    const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(
+        Effect.provideService(SshOutputObserver, (chunk) =>
+          Effect.sync(() => {
+            chunks.push(chunk);
+          }),
+        ),
+      );
+    return { chunks, provide };
+  };
+
+  it.effect("reports launch output while connecting, but never the pairing credential", () => {
+    const { chunks, provide } = observed();
+    return Effect.gen(function* () {
+      const manager = yield* SshEnvironmentManager;
+      yield* provide(manager.ensureEnvironment(target, { issuePairingToken: true }));
+
+      assert.deepInclude(chunks, {
+        source: "launch",
+        stream: "stderr",
+        text: "installing t3 1.2.3\n",
+      });
+      assert.deepInclude(chunks, {
+        source: "launch",
+        stream: "stdout",
+        text: '{"remotePort":3773}\n',
+      });
+      assert.isFalse(chunks.some((chunk) => chunk.text.includes("LCL4R2TPHDKQ")));
+    }).pipe(
+      Effect.provide(
+        managerLayer({
+          launch: () =>
+            makeExitedProcess({
+              stdout: '{"remotePort":3773}\n',
+              stderr: "installing t3 1.2.3\n",
+            }),
+        }),
+      ),
+    );
+  });
+
+  it.effect("reads the remote server log when a launch times out", () => {
+    const { chunks, provide } = observed();
+    return Effect.gen(function* () {
+      const manager = yield* SshEnvironmentManager;
+      const fiber = yield* Effect.forkChild(
+        Effect.result(provide(manager.ensureEnvironment(target))),
+      );
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.seconds(90));
+      const result = yield* Fiber.join(fiber);
+
+      assert.isTrue(Result.isFailure(result));
+      assert.deepInclude(chunks, {
+        source: "remote-log",
+        stream: "stdout",
+        text: `${REMOTE_LOG}{"credential":"LCL4R2TPHDKQ"}\n`,
+      });
+    }).pipe(
+      Effect.provide(
+        managerLayer({ launch: () => makeRunningProcess(() => {}), runner: NODE_SCRIPT }),
+      ),
+    );
+  });
+
+  it.effect("reports the tunnel's own error and the remote log when the tunnel dies", () => {
+    const { chunks, provide } = observed();
+    return Effect.gen(function* () {
+      const manager = yield* SshEnvironmentManager;
+      const result = yield* Effect.result(provide(manager.ensureEnvironment(target)));
+
+      assert.isTrue(Result.isFailure(result));
+      assert.deepInclude(chunks, {
+        source: "tunnel",
+        stream: "stderr",
+        text: "channel 2: open failed: connect failed: Connection refused\n",
+      });
+      assert.isTrue(chunks.some((chunk) => chunk.source === "remote-log"));
+    }).pipe(
+      Effect.provide(
+        managerLayer({
+          launch: () => makeExitedProcess({ stdout: '{"remotePort":3773}\n' }),
+          tunnel: () =>
+            makeExitedProcess({
+              stderr: "channel 2: open failed: connect failed: Connection refused\n",
+              exitCode: 255,
+            }),
+          http: hangingHttpClient,
+        }),
+      ),
+    );
+  });
 });
 
 // The archive runner is generated shell; string assertions cannot prove the

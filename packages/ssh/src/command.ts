@@ -13,6 +13,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { buildSshChildEnvironment, type SshAuthOptions } from "./auth.ts";
 import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
+import { SshOutputObserver, type SshOutputSource } from "./output.ts";
 
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
@@ -39,6 +40,11 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly timeoutMs?: number;
+  /**
+   * Report this command's output to the `SshOutputObserver` as it arrives. stderr only unless
+   * `stdout` is set; never set it for a command whose stdout carries a credential.
+   */
+  readonly observe?: { readonly source: SshOutputSource; readonly stdout?: boolean };
 }
 
 export function parseSshResolveOutput(alias: string, stdout: string): DesktopSshEnvironmentTarget {
@@ -121,22 +127,31 @@ export function getLastNonEmptyOutputLine(stdout: string): string | null {
   );
 }
 
+/** The whole stream as text; `onChunk` sees each decoded chunk as it arrives. */
 export const collectProcessOutput = <E>(
   stream: Stream.Stream<Uint8Array, E>,
+  onChunk?: (text: string) => Effect.Effect<void>,
 ): Effect.Effect<string, E> =>
   stream.pipe(
     Stream.decodeText(),
+    onChunk === undefined ? (decoded) => decoded : Stream.tap(onChunk),
     Stream.runFold(
       () => "",
       (acc, chunk) => acc + chunk,
     ),
   );
 
+const TOKEN_KEYS = "access_token|bearerToken|credential|pairingToken|token";
+
+/** Masks credentials in SSH output: JSON token fields and token parameters in URLs. */
+export function redactSshOutput(output: string): string {
+  return output
+    .replace(new RegExp(`("(?:${TOKEN_KEYS})"\\s*:\\s*")[^"]+(")`, "giu"), "$1[redacted]$2")
+    .replace(new RegExp(`([#?&](?:${TOKEN_KEYS})=)[^\\s&#"']+`, "giu"), "$1[redacted]");
+}
+
 function redactSshErrorOutput(output: string): string {
-  const redacted = output.replace(
-    /("(?:access_token|bearerToken|credential|pairingToken|token)"\s*:\s*")[^"]+(")/giu,
-    "$1[redacted]$2",
-  );
+  const redacted = redactSshOutput(output);
   return redacted.length > MAX_SSH_ERROR_OUTPUT_LENGTH
     ? `${redacted.slice(0, MAX_SSH_ERROR_OUTPUT_LENGTH)}\n[truncated]`
     : redacted;
@@ -238,10 +253,19 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
       ),
     );
 
+  const observer = yield* SshOutputObserver;
+  const observe = input.observe;
+  const report =
+    observe === undefined
+      ? () => undefined
+      : (stream: "stdout" | "stderr") =>
+          stream === "stdout" && observe.stdout !== true
+            ? undefined
+            : (text: string) => observer({ source: observe.source, stream, text });
   const [stdout, stderr, exitCode] = yield* Effect.all(
     [
-      collectProcessOutput(child.stdout),
-      collectProcessOutput(child.stderr),
+      collectProcessOutput(child.stdout, report("stdout")),
+      collectProcessOutput(child.stderr, report("stderr")),
       child.exitCode.pipe(Effect.map(Number)),
     ],
     { concurrency: "unbounded" },
@@ -316,6 +340,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
               command: ["ssh"],
               exitCode: null,
               stderr: "",
+              timedOut: true,
               message: `SSH command timed out after ${input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS}ms.`,
             });
           }),

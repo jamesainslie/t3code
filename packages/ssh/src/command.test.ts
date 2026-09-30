@@ -14,9 +14,11 @@ import {
   baseSshArgs,
   getLastNonEmptyOutputLine,
   parseSshResolveOutput,
+  redactSshOutput,
   runSshCommand,
 } from "./command.ts";
 import { SshCommandError } from "./errors.ts";
+import { SshOutputObserver, type SshOutputChunk } from "./output.ts";
 
 const encoder = new TextEncoder();
 
@@ -38,12 +40,12 @@ const makeFailedProcess = (input: { readonly stdout: string; readonly stderr?: s
   });
 };
 
-const makeNeverFinishingProcess = () => {
+const makeNeverFinishingProcess = (stderr: Stream.Stream<Uint8Array> = Stream.empty) => {
   let finish: ((exitCode: ChildProcessSpawner.ExitCode) => void) | null = null;
   return ChildProcessSpawner.makeHandle({
     pid: ChildProcessSpawner.ProcessId(123),
     stdout: Stream.empty,
-    stderr: Stream.empty,
+    stderr,
     all: Stream.empty,
     exitCode: Effect.callback<ChildProcessSpawner.ExitCode>((resume) => {
       finish = (exitCode) => resume(Effect.succeed(exitCode));
@@ -197,5 +199,101 @@ describe("ssh command", () => {
         assert.include(result.failure.message, "SSH command timed out after 1ms.");
       }
     }).pipe(Effect.provide(processLayer));
+  });
+
+  const target = { alias: "devbox", hostname: "devbox.example.com", username: null, port: null };
+
+  const observing = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+    const chunks: Array<SshOutputChunk> = [];
+    return {
+      chunks,
+      run: effect.pipe(
+        Effect.provideService(SshOutputObserver, (chunk) =>
+          Effect.sync(() => {
+            chunks.push(chunk);
+          }),
+        ),
+      ),
+    };
+  };
+
+  it.effect(
+    "reports output as it arrives, so a command that times out keeps what it printed",
+    () => {
+      const spawner = ChildProcessSpawner.make(() =>
+        Effect.succeed(
+          makeNeverFinishingProcess(
+            Stream.concat(Stream.make(encoder.encode("waiting for server\n")), Stream.never),
+          ),
+        ),
+      );
+      const processLayer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        TestClock.layer(),
+      );
+
+      return Effect.gen(function* () {
+        const { chunks, run } = observing(
+          Effect.result(runSshCommand(target, { timeoutMs: 1, observe: { source: "launch" } })),
+        );
+        const fiber = yield* Effect.forkChild(run);
+        yield* Effect.yieldNow;
+        yield* TestClock.adjust(Duration.millis(1));
+        const result = yield* Fiber.join(fiber);
+
+        assert.deepEqual(chunks, [
+          { source: "launch", stream: "stderr", text: "waiting for server\n" },
+        ]);
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) {
+          assert.isTrue(result.failure._tag === "SshCommandError" && result.failure.timedOut);
+        }
+      }).pipe(Effect.provide(processLayer));
+    },
+  );
+
+  it.effect("observes only what the caller opts into, and stdout only when asked", () => {
+    const spawner = ChildProcessSpawner.make(() =>
+      Effect.succeed(
+        makeFailedProcess({ stdout: '{"credential":"secret"}\n', stderr: "denied\n" }),
+      ),
+    );
+    const processLayer = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+
+    return Effect.gen(function* () {
+      const unobserved = observing(Effect.result(runSshCommand(target)));
+      yield* unobserved.run;
+      assert.deepEqual(unobserved.chunks, []);
+
+      const stderrOnly = observing(
+        Effect.result(runSshCommand(target, { observe: { source: "launch" } })),
+      );
+      yield* stderrOnly.run;
+      assert.deepEqual(stderrOnly.chunks, [
+        { source: "launch", stream: "stderr", text: "denied\n" },
+      ]);
+
+      const both = observing(
+        Effect.result(runSshCommand(target, { observe: { source: "remote-log", stdout: true } })),
+      );
+      yield* both.run;
+      assert.sameDeepMembers(both.chunks, [
+        { source: "remote-log", stream: "stdout", text: '{"credential":"secret"}\n' },
+        { source: "remote-log", stream: "stderr", text: "denied\n" },
+      ]);
+    }).pipe(Effect.provide(processLayer));
+  });
+
+  it("redacts tokens in JSON fields and pairing links", () => {
+    assert.equal(
+      redactSshOutput(
+        '{"pairingToken":"abc123"} pairingUrl: http://localhost:5733/pair#token=E5YZ6LG6 and https://h/x?a=1&access_token=Q9&b=2',
+      ),
+      '{"pairingToken":"[redacted]"} pairingUrl: http://localhost:5733/pair#token=[redacted] and https://h/x?a=1&access_token=[redacted]&b=2',
+    );
   });
 });

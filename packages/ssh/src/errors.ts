@@ -15,6 +15,8 @@ export class SshCommandError extends Data.TaggedError("SshCommandError")<{
   readonly exitCode: number | null;
   readonly stderr: string;
   readonly stdout?: string;
+  /** The command was stopped at its timeout rather than exiting on its own. */
+  readonly timedOut?: boolean;
   readonly cause?: unknown;
 }> {}
 
