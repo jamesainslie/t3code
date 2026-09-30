@@ -148,7 +148,9 @@ vi.mock("../features/sharing/incoming-share-storage", () => ({
 }));
 
 import type { DraftComposerAttachment } from "../lib/composerImages";
+import { reidentifyComposerContext } from "../lib/composerContext";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
+import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
 import { appAtomRegistry } from "./atom-registry";
 import { threadOutboxManager } from "./thread-outbox";
 import {
@@ -846,6 +848,40 @@ describe("mobile composer drafts", () => {
     expect(clearComposerDraftContentState(restored, draftKey)[draftKey]?.context).toBeUndefined();
     setComposerDraftText(draftKey, "Fix next");
     expect(getComposerDraftSnapshot(draftKey).context).toBeUndefined();
+  });
+
+  it("keeps one record when the same thread chip is pasted twice", () => {
+    const draftKey = "context-environment:thread-chip-twice";
+    const chip = buildThreadChipClipboard({
+      environmentId: EnvironmentId.make("context-environment"),
+      thread: {
+        id: ThreadId.make("thread-earlier"),
+        projectId: ProjectId.make("project-1"),
+        title: "Earlier investigation",
+      },
+    });
+    const copied = chip.fragment.records[0]!;
+    // The second copy came from a producer that minted its own id for the same thread.
+    const borrowedId = ComposerContextId.make("borrowed-id");
+    const pastes = [
+      { text: chip.text, records: chip.fragment.records },
+      {
+        text: chip.text.replace(copied.contextId, borrowedId),
+        records: [{ ...copied, contextId: borrowedId }],
+      },
+    ];
+    let next = 0;
+    for (const { text, records } of pastes) {
+      expect(
+        insertComposerDraftContext(
+          draftKey,
+          reidentifyComposerContext(text, records, () => `paste-${++next}`),
+        ),
+      ).toBe(true);
+    }
+    const draft = getComposerDraftSnapshot(draftKey);
+    expect(draft.context?.records).toEqual(chip.fragment.records);
+    expect(draft.text.split(chip.text)).toHaveLength(3);
   });
 
   // Hydration is one-shot per module instance and the attachment sweep now

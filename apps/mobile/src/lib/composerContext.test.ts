@@ -4,8 +4,10 @@ import {
   ProjectId,
   ProviderInstanceId,
   ComposerContextId,
+  ThreadId,
   type OrchestrationMessageContext,
 } from "@t3tools/contracts";
+import { buildThreadContextRecord, threadContextId } from "@t3tools/shared/threadContextReference";
 import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
 import {
   collectComposerContextReferences,
@@ -188,6 +190,36 @@ describe("mobile composer context", () => {
       screenshotContextId: "copy-2",
     });
     expect(annotation.contextId).toBe("preview-1");
+  });
+
+  it("rebuilds a thread record's id from its own thread, whatever id it was pasted under", () => {
+    const earlier = buildThreadContextRecord({
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+    });
+    const other = buildThreadContextRecord({
+      id: ThreadId.make("thread-other"),
+      projectId: ProjectId.make("project-1"),
+      title: "Other investigation",
+    });
+    // One record under a producer's own id, one claiming the other thread's chip id.
+    const pasted = [
+      { ...earlier, contextId: ComposerContextId.make("import-x") },
+      { ...other, contextId: earlier.contextId },
+    ];
+    const text = pasted.map(formatComposerContextReference).join(" ");
+    const imported = reidentifyComposerContext(text, pasted, () => {
+      throw new Error("thread records never take a random id");
+    });
+    const expected = [
+      threadContextId(ThreadId.make("thread-earlier")),
+      threadContextId(ThreadId.make("thread-other")),
+    ];
+    expect(imported.context.records.map((record) => record.contextId)).toEqual(expected);
+    expect(collectComposerContextReferences(imported.text).map((ref) => ref.contextId)).toEqual(
+      expected,
+    );
   });
 
   it("binds uploaded files to their wire ids and preserves terminal payloads for every provider", () => {

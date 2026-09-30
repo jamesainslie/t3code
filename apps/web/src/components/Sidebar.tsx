@@ -136,6 +136,7 @@ import {
   openThreadDependencyPicker,
 } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
+import { copyThreadChip } from "../lib/copyThreadChip";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -767,7 +768,8 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
     composer.files.length +
     composer.terminalContexts.length +
     composer.previewAnnotations.length +
-    composer.reviewComments.length;
+    composer.reviewComments.length +
+    composer.threadReferences.length;
   const preview =
     promptPreview.length > 0
       ? promptPreview
@@ -4549,6 +4551,9 @@ export default function Sidebar() {
             return;
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+            return;
+          case "copy-thread-chip":
+            await copyThreadChip({ environmentId: thread.environmentId, thread });
             return;
           case "archive": {
             if (confirmThreadArchive) {

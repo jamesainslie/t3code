@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { ComposerContextId, EnvironmentId } from "@t3tools/contracts";
+import { ComposerContextId, EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
+import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
 
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -140,6 +141,25 @@ describe("mobile context clipboard imports", () => {
     });
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.download).not.toHaveBeenCalled();
+  });
+
+  it("imports a pasted thread chip as a record", async () => {
+    const chip = buildThreadChipClipboard({
+      environmentId: EnvironmentId.make("source"),
+      thread: {
+        id: ThreadId.make("thread-earlier"),
+        projectId: ProjectId.make("project-1"),
+        title: "Earlier investigation",
+      },
+    });
+    const result = await importComposerContextClipboard(
+      { text: chip.text, fragment: encodeComposerContextFragment(chip.fragment)!, html: "" },
+      0,
+      new AbortController().signal,
+    );
+    expect(result?.context.records).toEqual(chip.fragment.records);
+    expect(result?.text).toContain(chip.text);
+    expect(result?.attachments).toEqual([]);
   });
 
   it("refuses an overflowing context paste before copying files", async () => {

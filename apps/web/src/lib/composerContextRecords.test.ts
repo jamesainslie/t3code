@@ -3,17 +3,22 @@ import {
   EnvironmentId,
   MessageId,
   OrchestrationMessageContext,
+  ProjectId,
   ThreadId,
   type PreviewAnnotationPayload,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
+import {
+  buildThreadContextRecord,
+  threadContextMarkdown,
+} from "@t3tools/shared/threadContextReference";
 
 import {
   formatInlineContextReference,
   removeInlineContextReference,
 } from "./composerContextReferences";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 
 import {
   asKnownContextRecord,
@@ -680,6 +685,59 @@ describe("attachment context records", () => {
       ],
     });
     expect(context?.records.map((record) => record.kind)).toEqual(["file"]);
+  });
+});
+
+describe("thread context records", () => {
+  const kept = buildThreadContextRecord({
+    id: ThreadId.make("thread-kept"),
+    projectId: ProjectId.make("project-a"),
+    title: "Plan the migration",
+  });
+  const deleted = buildThreadContextRecord({
+    id: ThreadId.make("thread-deleted"),
+    projectId: ProjectId.make("project-a"),
+    title: "Old investigation",
+  });
+
+  it("includes thread references in the message context", () => {
+    const context = buildMessageContext({
+      terminalContexts: [],
+      reviewComments: [],
+      previewAnnotations: [],
+      threadReferences: [kept],
+      text: `Continue from ${threadContextMarkdown(kept)}`,
+    });
+    expect(context?.records).toEqual([kept]);
+    expect(decodeMessageContext(context)).toEqual(context);
+  });
+
+  it("omits a thread reference whose link was deleted from the prompt", () => {
+    const context = buildMessageContext({
+      terminalContexts: [],
+      reviewComments: [],
+      previewAnnotations: [],
+      threadReferences: [kept, deleted],
+      text: `Continue from ${threadContextMarkdown(kept)}`,
+    });
+    expect(context?.records.map((record) => record.contextId)).toEqual([kept.contextId]);
+    expect(
+      buildMessageContext({
+        terminalContexts: [],
+        reviewComments: [],
+        previewAnnotations: [],
+        threadReferences: [deleted],
+        text: "No chips left",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("requires the sent text alongside thread references", () => {
+    // Checked by typecheck: without the text there is no way to tell which chips are linked.
+    type Input = Parameters<typeof buildMessageContext>[0];
+    const base = { terminalContexts: [], reviewComments: [], previewAnnotations: [] };
+    expectTypeOf({ ...base, threadReferences: [kept] }).not.toExtend<Input>();
+    expectTypeOf({ ...base, threadReferences: [kept], text: "" }).toExtend<Input>();
   });
 });
 

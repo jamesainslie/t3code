@@ -15,6 +15,7 @@ import type {
   PreviewAnnotationPayload,
   ReviewCommentContextRecord,
   TerminalContextRecord,
+  ThreadContextRecord,
   ThreadId,
 } from "@t3tools/contracts";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
@@ -23,6 +24,7 @@ import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
 } from "@t3tools/shared/composerContextReferences";
+import { threadContextId } from "@t3tools/shared/threadContextReference";
 
 import {
   type ComposerContextReference,
@@ -291,12 +293,34 @@ export function attachmentContextRecord(
   return attachment.type === "image" ? { ...base, kind: "image" } : { ...base, kind: "file" };
 }
 
-export function buildMessageContext(input: {
-  terminalContexts: ReadonlyArray<TerminalContextDraft>;
-  reviewComments: ReadonlyArray<ReviewCommentContext>;
-  previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
-  attachments?: ReadonlyArray<BoundComposerAttachment>;
-}): OrchestrationMessageContext | undefined {
+export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
+  return { kind: "thread", contextId: record.contextId, label: record.label };
+}
+
+/**
+ * A pasted thread record takes its id from its thread, never from the clipboard, so a crafted
+ * id cannot land on another chip and one thread stays one record whoever copied it.
+ */
+export function importedThreadContextRecord(record: ThreadContextRecord): ThreadContextRecord {
+  return { ...record, contextId: threadContextId(record.threadId) };
+}
+
+/**
+ * Thread references come with the text being sent: a reference travels only while its link is
+ * still in that text, so passing one without the other is a type error.
+ */
+type ThreadReferencesInput =
+  | { threadReferences?: never; text?: never }
+  | { threadReferences: ReadonlyArray<ThreadContextRecord>; text: string };
+
+export function buildMessageContext(
+  input: {
+    terminalContexts: ReadonlyArray<TerminalContextDraft>;
+    reviewComments: ReadonlyArray<ReviewCommentContext>;
+    previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
+    attachments?: ReadonlyArray<BoundComposerAttachment>;
+  } & ThreadReferencesInput,
+): OrchestrationMessageContext | undefined {
   // An annotation's screenshot travels as the image attachment that reuses its id.
   const screenshotAttachmentIds = new Set(
     (input.attachments ?? []).flatMap(({ attachment }) =>
@@ -313,6 +337,12 @@ export function buildMessageContext(input: {
     ),
     ...(input.attachments ?? []).map(attachmentContextRecord),
   ];
+  if (input.threadReferences && input.threadReferences.length > 0) {
+    const linkedIds = new Set<string>(
+      collectComposerContextReferences(input.text).map((occurrence) => occurrence.contextId),
+    );
+    records.push(...input.threadReferences.filter((record) => linkedIds.has(record.contextId)));
+  }
   return records.length === 0 ? undefined : { version: 1, records };
 }
 

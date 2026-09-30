@@ -77,7 +77,10 @@ export async function sendQueuedMessage(
       prompt: message.prompt,
       imageCount: attachments.length,
       terminalContexts: message.terminalContexts,
-      elementContextCount: message.previewAnnotations.length + message.reviewComments.length,
+      elementContextCount:
+        message.previewAnnotations.length +
+        message.reviewComments.length +
+        (message.threadReferences?.length ?? 0),
     });
     // Only expired terminal context was left. Retrying would block the queue
     // on every boundary, so drop it and let the queue move on.
@@ -168,6 +171,8 @@ export async function sendQueuedMessage(
       terminalContexts: sendableTerminalContexts,
       reviewComments: message.reviewComments,
       previewAnnotations: message.previewAnnotations,
+      threadReferences: message.threadReferences ?? [],
+      text: prompt,
       attachments: attachments.map((attachment, index) => ({
         attachment,
         attachmentId: wireAttachments[index]?.id ?? attachment.id,

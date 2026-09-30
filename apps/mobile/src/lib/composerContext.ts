@@ -19,6 +19,7 @@ import {
   collectComposerInlineTokens,
   type ComposerInlineToken,
 } from "@t3tools/shared/composerInlineTokens";
+import { threadContextId } from "@t3tools/shared/threadContextReference";
 
 const isMessageContext = Schema.is(OrchestrationMessageContext);
 const decodeMessageContext = Schema.decodeUnknownOption(OrchestrationMessageContext);
@@ -178,14 +179,23 @@ export function uploadedComposerContext(
   };
 }
 
-/** Imports with fresh identities so a pasted record cannot overwrite an existing snapshot. */
+/**
+ * Imports with fresh identities so a pasted record cannot overwrite an existing snapshot.
+ * A thread chip's id is rebuilt from its thread, ignoring the pasted id, so pasting the same
+ * thread twice stays one record whoever produced the copy.
+ */
 export function reidentifyComposerContext(
   text: string,
   records: readonly ComposerContextRecord[],
   createId: () => string,
 ) {
   const ids = new Map(
-    records.map((record) => [record.contextId, ComposerContextId.make(createId())]),
+    records.map((record) => [
+      record.contextId,
+      record.kind === "thread" && "threadId" in record
+        ? threadContextId(record.threadId)
+        : ComposerContextId.make(createId()),
+    ]),
   );
   return {
     text: replaceComposerContextReferences(text, (ref) =>

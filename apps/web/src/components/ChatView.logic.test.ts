@@ -2289,6 +2289,7 @@ describe("restorePlanFollowUpComposer", () => {
         },
       ],
       previewAnnotations: [],
+      threadReferences: [],
     };
     const writePrompt = vi.fn();
     const writeTerminalContexts = vi.fn();
@@ -2302,6 +2303,7 @@ describe("restorePlanFollowUpComposer", () => {
       writeTerminalContexts,
       writeReviewComments,
       writePreviewAnnotations,
+      writeThreadReferences: () => {},
       resetCursor,
     });
 
