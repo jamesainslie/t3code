@@ -148,7 +148,9 @@ vi.mock("../features/sharing/incoming-share-storage", () => ({
 }));
 
 import type { DraftComposerAttachment } from "../lib/composerImages";
+import { reidentifyComposerContext } from "../lib/composerContext";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
+import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
 import { appAtomRegistry } from "./atom-registry";
 import { threadOutboxManager } from "./thread-outbox";
 import {
@@ -846,6 +848,29 @@ describe("mobile composer drafts", () => {
     expect(clearComposerDraftContentState(restored, draftKey)[draftKey]?.context).toBeUndefined();
     setComposerDraftText(draftKey, "Fix next");
     expect(getComposerDraftSnapshot(draftKey).context).toBeUndefined();
+  });
+
+  it("keeps one record when the same thread chip is pasted twice", () => {
+    const draftKey = "context-environment:thread-chip-twice";
+    const chip = buildThreadChipClipboard({
+      environmentId: EnvironmentId.make("context-environment"),
+      thread: {
+        id: ThreadId.make("thread-earlier"),
+        projectId: ProjectId.make("project-1"),
+        title: "Earlier investigation",
+      },
+    });
+    let next = 0;
+    const paste = () =>
+      insertComposerDraftContext(
+        draftKey,
+        reidentifyComposerContext(chip.text, chip.fragment.records, () => `paste-${++next}`),
+      );
+    expect(paste()).toBe(true);
+    expect(paste()).toBe(true);
+    const draft = getComposerDraftSnapshot(draftKey);
+    expect(draft.context?.records).toEqual(chip.fragment.records);
+    expect(draft.text.split(chip.text)).toHaveLength(3);
   });
 
   // Hydration is one-shot per module instance and the attachment sweep now

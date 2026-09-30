@@ -32,6 +32,7 @@ import { ComposerContextAttachment } from "./ComposerContextAttachment";
 import { AppText as Text } from "./AppText";
 import { SymbolView } from "./AppSymbol";
 import { ContextSheetSize } from "./ContextSheetSize";
+import { useThreadShell } from "../state/entities";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { getMobileTerminalTheme } from "../features/terminal/terminalTheme";
 
@@ -101,6 +102,11 @@ export function ComposerContextSheet(props: {
   const [bodyHeight, setBodyHeight] = useState(0);
   const measuredHeight = headerHeight + bodyHeight;
   const record = props.record;
+  const referencedThread = useThreadShell(
+    record?.kind === "thread" && "threadId" in record && props.environmentId
+      ? { environmentId: props.environmentId, threadId: record.threadId }
+      : null,
+  );
   const localAttachment =
     record && "attachmentId" in record
       ? props.attachments?.find((entry) => entry.id === record.attachmentId)
@@ -347,6 +353,16 @@ export function ComposerContextSheet(props: {
                 ) : null}
                 {record.kind === "mention" ? (
                   <ContextField label="Path" value={record.path} code />
+                ) : null}
+                {record.kind === "thread" && "title" in record ? (
+                  <>
+                    <ContextField label="Thread" value={record.title} />
+                    {referencedThread === null ? (
+                      <Text className="text-foreground">
+                        This thread is not available on this server.
+                      </Text>
+                    ) : null}
+                  </>
                 ) : null}
                 {record.kind === "skill" ? (
                   <View className="gap-3">

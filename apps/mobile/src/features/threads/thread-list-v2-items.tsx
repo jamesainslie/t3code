@@ -37,7 +37,7 @@ import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { ProviderInstanceIcon } from "../../components/ProviderIcon";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
 import { cn } from "../../lib/cn";
-import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { copyTextWithHaptic, playCopyHaptic } from "../../lib/copyTextWithHaptic";
 import { writeComposerContextClipboard } from "../../lib/composerContextClipboard";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
@@ -958,8 +958,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       }
       if (nativeEvent.event === "copy-thread-chip") {
         const chip = buildThreadChipClipboard({ environmentId: thread.environmentId, thread });
-        writeComposerContextClipboard(chip.text, chip.fragment).catch(() =>
-          Alert.alert("Could not copy", "Try again."),
+        writeComposerContextClipboard(chip.text, chip.fragment).then(
+          () => playCopyHaptic({ target: "thread-chip" }),
+          () => Alert.alert("Could not copy", "Try again."),
         );
       }
       if (nativeEvent.event === "delete") handleDelete();

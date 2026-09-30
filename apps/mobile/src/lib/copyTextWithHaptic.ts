@@ -37,7 +37,6 @@ export async function tryCopyTextWithHaptic(
   options: CopyTextWithHapticOptions = {},
 ): Promise<boolean> {
   const target = options.target ?? "text";
-  const feedback = options.feedback ?? "light-impact";
 
   const clipboardWrite = (async () => {
     try {
@@ -50,6 +49,15 @@ export async function tryCopyTextWithHaptic(
     }
   })();
 
+  playCopyHaptic(options);
+
+  return await clipboardWrite;
+}
+
+/** The copy confirmation haptic, for copies that write the clipboard some other way. */
+export function playCopyHaptic(options: CopyTextWithHapticOptions = {}): void {
+  const target = options.target ?? "text";
+  const feedback = options.feedback ?? "light-impact";
   void (async () => {
     try {
       if (feedback === "selection") {
@@ -62,8 +70,6 @@ export async function tryCopyTextWithHaptic(
       console.error(error.message, { _tag: error._tag, target, feedback, stack: error.stack });
     }
   })();
-
-  return await clipboardWrite;
 }
 
 export function copyTextWithHaptic(value: string, options: CopyTextWithHapticOptions = {}): void {

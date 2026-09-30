@@ -4,8 +4,10 @@ import {
   ProjectId,
   ProviderInstanceId,
   ComposerContextId,
+  ThreadId,
   type OrchestrationMessageContext,
 } from "@t3tools/contracts";
+import { buildThreadContextRecord, threadContextId } from "@t3tools/shared/threadContextReference";
 import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
 import {
   collectComposerContextReferences,
@@ -188,6 +190,31 @@ describe("mobile composer context", () => {
       screenshotContextId: "copy-2",
     });
     expect(annotation.contextId).toBe("preview-1");
+  });
+
+  it("gives a thread record a fresh id unless it carries its own thread's id", () => {
+    const chip = buildThreadContextRecord({
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+    });
+    const borrowed = [
+      { ...chip, contextId: ComposerContextId.make("import-x") },
+      { ...chip, contextId: threadContextId(ThreadId.make("thread-other")) },
+    ];
+    const text = [chip, ...borrowed].map(formatComposerContextReference).join(" ");
+    let next = 0;
+    const imported = reidentifyComposerContext(text, [chip, ...borrowed], () => `copy-${++next}`);
+    expect(imported.context.records.map((record) => record.contextId)).toEqual([
+      chip.contextId,
+      "copy-1",
+      "copy-2",
+    ]);
+    expect(collectComposerContextReferences(imported.text).map((ref) => ref.contextId)).toEqual([
+      chip.contextId,
+      "copy-1",
+      "copy-2",
+    ]);
   });
 
   it("binds uploaded files to their wire ids and preserves terminal payloads for every provider", () => {
