@@ -20,7 +20,7 @@ const dependencies = [
 ];
 
 export const READ_THREAD_TURNS_DEFAULT_LIMIT = 5;
-export const READ_THREAD_TURNS_MAX_LIMIT = 10;
+const READ_THREAD_TURNS_MAX_LIMIT = 10;
 export const FIND_THREADS_MAX_LIMIT = 20;
 
 const ACCESS_LABELS: Record<AgentThreadHistoryAccess, string> = {

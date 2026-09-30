@@ -18,7 +18,7 @@ import {
 // so fixtures read in message order.
 
 export const THREAD_ID = ThreadId.make("thread-history-1");
-export const PROJECT_ID = ProjectId.make("project-history-1");
+const PROJECT_ID = ProjectId.make("project-history-1");
 
 const pad = (value: number) => String(value).padStart(2, "0");
 

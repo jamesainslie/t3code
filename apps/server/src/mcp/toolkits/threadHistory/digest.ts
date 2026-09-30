@@ -158,7 +158,7 @@ export function toTurnDetail(turn: ReconstructedTurn): DigestTurnDetail {
 }
 
 /** The outcome is the turn's last assistant message, or its last error when it never replied. */
-export function toTurnSummary(turn: ReconstructedTurn): DigestTurnSummary {
+function toTurnSummary(turn: ReconstructedTurn): DigestTurnSummary {
   const lastError = turn.activities.findLast(isErrorActivity);
   const outcome =
     nonEmptyTexts(turn.assistantMessages).at(-1) ??
