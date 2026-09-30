@@ -1271,7 +1271,8 @@ export function setComposerDraftText(draftKey: string, value: string): void {
 /**
  * Prefills a "Continue in new thread" draft. The prompt, the chip record it
  * links to, and the source thread's model land in one write, so the link
- * never points at a missing record. Unsent content stays, after the prompt.
+ * never points at a missing record. Unsent content stays, after the prompt,
+ * and a draft that already leads with the prompt keeps its text as is.
  */
 export function seedContinuationDraft(
   draftKey: string,
@@ -1291,7 +1292,12 @@ export function seedContinuationDraft(
     );
     return withComposerDraft(current, draftKey, {
       ...existing,
-      text: existing.text.length > 0 ? `${prompt}\n\n${existing.text}` : prompt,
+      text:
+        existing.text.length === 0
+          ? prompt
+          : existing.text.startsWith(prompt)
+            ? existing.text
+            : `${prompt}\n\n${existing.text}`,
       context: { version: 1, records: [...keptRecords, record] },
       modelSelection: thread.modelSelection,
     });

@@ -999,6 +999,32 @@ describe("mobile composer drafts", () => {
     expect(draft.attachments).toEqual([image]);
   });
 
+  it("does not repeat the continue prompt when the draft already starts with it", () => {
+    const source = {
+      id: ThreadId.make("thread-earlier"),
+      projectId: ProjectId.make("project-1"),
+      title: "Earlier investigation",
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+    };
+    const draftKey = createNewTaskDraft({
+      environmentId: EnvironmentId.make("context-environment"),
+      projectId: source.projectId,
+    });
+    const prompt = buildContinuePrompt(buildThreadContextRecord(source));
+
+    seedContinuationDraft(draftKey, source);
+    seedContinuationDraft(draftKey, source);
+    expect(getComposerDraftSnapshot(draftKey).text).toBe(prompt);
+
+    const edited = `${prompt}\n\nAlso run the tests.`;
+    setComposerDraftText(draftKey, edited);
+    seedContinuationDraft(draftKey, source);
+    expect(getComposerDraftSnapshot(draftKey).text).toBe(edited);
+    expect(getComposerDraftSnapshot(draftKey).context?.records).toEqual([
+      buildThreadContextRecord(source),
+    ]);
+  });
+
   // Hydration is one-shot per module instance and the attachment sweep now
   // triggers it too, so this test must observe it before any sweep test runs.
   it("hydrates generic file attachments from their saved local paths", () => {
