@@ -68,6 +68,7 @@ import {
 } from "./settingsLayout";
 import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
 import { searchableSetting } from "./settingsSearch";
+import { ConnectionDetails } from "../connection/ConnectionDetails";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import {
   EnvironmentRow,
@@ -1511,6 +1512,7 @@ function SavedBackendListRow({
     },
     [copyTraceIdToClipboard],
   );
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const versionMismatch = resolveServerConfigVersionMismatch(environment.serverConfig);
   const serverUpdateState = useAtomValue(serverEnvironment.updateStateAtom(environmentId));
   const resumingServerUpdate =
@@ -1590,10 +1592,19 @@ function SavedBackendListRow({
         </Tooltip>
       }
       below={
-        serverUpdateState.status !== "idle" ? (
-          <div className="mt-1 max-w-md">
-            <ServerUpdateProgress state={serverUpdateState} />
-          </div>
+        serverUpdateState.status !== "idle" || detailsOpen ? (
+          <>
+            {serverUpdateState.status !== "idle" ? (
+              <div className="mt-1 max-w-md">
+                <ServerUpdateProgress state={serverUpdateState} />
+              </div>
+            ) : null}
+            {detailsOpen ? (
+              <div className="mt-2">
+                <ConnectionDetails environment={environment} />
+              </div>
+            ) : null}
+          </>
         ) : null
       }
     >
@@ -1644,6 +1655,9 @@ function SavedBackendListRow({
             environmentId={environmentId}
             serverConfig={environment.serverConfig}
           />
+          <MenuItem onClick={() => setDetailsOpen((open) => !open)}>
+            {detailsOpen ? "Hide connection details" : "Show connection details"}
+          </MenuItem>
           {errorTraceId ? (
             <MenuItem onClick={() => copyTraceId(errorTraceId)}>Copy trace ID</MenuItem>
           ) : null}
