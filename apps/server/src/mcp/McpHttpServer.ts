@@ -11,13 +11,15 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
-import { McpProtocol, McpSchema, McpServer, Tool } from "effect/unstable/ai";
+import { AiError, McpProtocol, McpSchema, McpServer, Tool } from "effect/unstable/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { PreviewAutomationError } from "@t3tools/contracts";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as DeviceService from "../device/DeviceService.ts";
+import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
@@ -34,6 +36,8 @@ import { PullRequestsToolkitHandlersLive } from "./toolkits/pullRequests/handler
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import { DocumentCommentsToolkitHandlersLive } from "./toolkits/documentComments/handlers.ts";
 import { DocumentCommentsToolkit } from "./toolkits/documentComments/tools.ts";
+import { ThreadHistoryToolkitHandlersLive } from "./toolkits/threadHistory/handlers.ts";
+import { ThreadHistoryToolkit } from "./toolkits/threadHistory/tools.ts";
 import {
   DeviceScreenshotToolkitHandlersLive,
   DeviceStandardToolkitHandlersLive,
@@ -617,6 +621,107 @@ const registerImageTool = <T extends Tool.Any, E, R>(
     });
   });
 
+const TEXT_TOOL_INTERNAL_ERROR = "Tool execution failed due to an internal server error.";
+
+/**
+ * `McpServer.toolkit` would send a string result twice, JSON-escaped as text and again as
+ * `structuredContent`. Tools whose result is text for the agent to read are registered by
+ * hand: success is one text block, and a declared failure is its message, which tells the
+ * agent what to do next.
+ */
+const registerTextTool = <T extends Tool.Any, E, R>(
+  tool: T,
+  handle: (payload: Tool.Parameters<T>) => Effect.Effect<{ readonly encodedResult: unknown }, E, R>,
+  provide: (
+    effect: Effect.Effect<{ readonly encodedResult: unknown }, E, R>,
+  ) => Effect.Effect<
+    { readonly encodedResult: unknown },
+    E,
+    McpInvocationContext.McpInvocationContext
+  >,
+) =>
+  Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const isDeclaredFailure = Schema.is(tool.failureSchema);
+    const failure = (cause: Cause.Cause<E>) => {
+      if (Cause.hasInterrupts(cause) || cause.reasons.some(Cause.isDieReason)) {
+        return Effect.failCause(cause).pipe(Effect.orDie);
+      }
+      const error = cause.reasons.find(Cause.isFailReason)?.error;
+      if (AiError.isAiError(error) && error.reason._tag === "ToolParameterValidationError") {
+        return Effect.fail(new McpSchema.InvalidParams({ message: error.reason.message }));
+      }
+      const declared = isDeclaredFailure(error) && error instanceof Error;
+      const result = new McpSchema.CallToolResult({
+        isError: true,
+        content: [{ type: "text", text: declared ? error.message : TEXT_TOOL_INTERNAL_ERROR }],
+      });
+      return Effect.logWarning(`${tool.name} failed`, { cause }).pipe(Effect.as(result));
+    };
+    yield* server.addTool({
+      tool: new McpSchema.Tool({
+        name: tool.name,
+        description: Tool.getDescription(tool),
+        inputSchema: Tool.getJsonSchema(tool),
+        annotations: {
+          ...Context.getOption(tool.annotations, Tool.Title).pipe(
+            Option.map((title) => ({ title })),
+            Option.getOrUndefined,
+          ),
+          readOnlyHint: Context.get(tool.annotations, Tool.Readonly),
+          destructiveHint: Context.get(tool.annotations, Tool.Destructive),
+          idempotentHint: Context.get(tool.annotations, Tool.Idempotent),
+          openWorldHint: Context.get(tool.annotations, Tool.OpenWorld),
+        },
+      }),
+      annotations: tool.annotations,
+      handle: (payload) =>
+        Effect.withFiber((fiber) => {
+          const invocation = Context.getUnsafe(
+            fiber.context,
+            McpInvocationContext.McpInvocationContext,
+          );
+          return provide(handle(payload as Tool.Parameters<T>)).pipe(
+            Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+            Effect.matchCauseEffect({
+              onFailure: failure,
+              onSuccess: ({ encodedResult }) =>
+                Effect.succeed(
+                  new McpSchema.CallToolResult({
+                    isError: false,
+                    content: [{ type: "text", text: String(encodedResult) }],
+                  }),
+                ),
+            }),
+          );
+        }),
+    });
+  });
+
+const registerThreadHistoryTools = Effect.fn("McpHttpServer.registerThreadHistoryTools")(
+  function* () {
+    const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+    const settings = yield* ServerSettings.ServerSettingsService;
+    const built = yield* ThreadHistoryToolkit;
+    const register = <Name extends keyof typeof ThreadHistoryToolkit.tools>(name: Name) =>
+      registerTextTool(
+        ThreadHistoryToolkit.tools[name],
+        (payload) =>
+          built
+            .handle(name, payload)
+            .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
+        (effect) =>
+          effect.pipe(
+            Effect.provideService(ProjectionSnapshotQuery.ProjectionSnapshotQuery, snapshots),
+            Effect.provideService(ServerSettings.ServerSettingsService, settings),
+          ),
+      );
+    yield* register("read_thread");
+    yield* register("read_thread_turns");
+    yield* register("find_threads");
+  },
+);
+
 const registerDeviceScreenshot = Effect.fn("McpHttpServer.registerDeviceScreenshot")(function* () {
   const devices = yield* DeviceService.DeviceService;
   const built = yield* DeviceScreenshotToolkit;
@@ -653,6 +758,10 @@ export const DocumentCommentsToolkitRegistrationLive = McpServer.toolkit(
   DocumentCommentsToolkit,
 ).pipe(Layer.provide(DocumentCommentsToolkitHandlersLive));
 
+export const ThreadHistoryToolkitRegistrationLive = Layer.effectDiscard(
+  registerThreadHistoryTools(),
+).pipe(Layer.provide(ThreadHistoryToolkitHandlersLive));
+
 const DeviceStandardToolkitRegistrationLive = McpServer.toolkit(DeviceStandardToolkit).pipe(
   Layer.provide(DeviceStandardToolkitHandlersLive),
 );
@@ -677,5 +786,6 @@ export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   PullRequestsToolkitRegistrationLive,
   DocumentCommentsToolkitRegistrationLive,
+  ThreadHistoryToolkitRegistrationLive,
   DeviceToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));
