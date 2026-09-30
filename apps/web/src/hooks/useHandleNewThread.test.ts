@@ -16,6 +16,8 @@ const testState = vi.hoisted(() => {
     readonly promotedTo: null;
     readonly threadId: string;
   } | null = null;
+  let routeDraftId: string | null = null;
+  let threadShells: Record<string, { readonly modelSelection: unknown }> = {};
   const router = {
     state: {
       location: { href: "/" },
@@ -34,6 +36,8 @@ const testState = vi.hoisted(() => {
     setDraftThreadContext: vi.fn(),
     setLogicalProjectDraftThreadId: vi.fn(),
     setModelSelection: vi.fn(),
+    addThreadReference: vi.fn(),
+    setPrompt: vi.fn(),
   };
 
   return {
@@ -45,6 +49,18 @@ const testState = vi.hoisted(() => {
     get targetSettings() {
       return targetSettings;
     },
+    get routeDraftId() {
+      return routeDraftId;
+    },
+    set routeDraftId(value: string | null) {
+      routeDraftId = value;
+    },
+    readThreadShell(ref: { readonly threadId: string }) {
+      return threadShells[ref.threadId] ?? null;
+    },
+    set threadShells(value: Record<string, { readonly modelSelection: unknown }>) {
+      threadShells = value;
+    },
     reset(
       nextStoredDraft: typeof storedDraft,
       workspaceDefaults = {
@@ -53,6 +69,8 @@ const testState = vi.hoisted(() => {
       },
     ) {
       storedDraft = nextStoredDraft;
+      routeDraftId = null;
+      threadShells = {};
       targetSettings = {
         defaultThreadEnvMode: workspaceDefaults.envMode,
         newWorktreesStartFromOrigin: workspaceDefaults.startFromOrigin,
@@ -63,6 +81,9 @@ const testState = vi.hoisted(() => {
       router.navigate.mockClear();
       draftStore.setDraftThreadContext.mockClear();
       draftStore.setLogicalProjectDraftThreadId.mockClear();
+      draftStore.setModelSelection.mockClear();
+      draftStore.addThreadReference.mockClear();
+      draftStore.setPrompt.mockClear();
       projectFileRead = new Promise<null>((resolve) => {
         completeProjectFileRead = resolve;
       });
@@ -93,7 +114,9 @@ vi.mock("@t3tools/client-runtime/environment", () => ({
   scopeProjectRef: (environmentId: string, projectId: string) => ({ environmentId, projectId }),
   scopeThreadRef: (environmentId: string, threadId: string) => ({ environmentId, threadId }),
 }));
-vi.mock("@t3tools/contracts", () => ({
+vi.mock("@t3tools/contracts", async (importOriginal) => ({
+  // The real module backs the thread chip helpers; only defaults are pinned.
+  ...(await importOriginal<typeof import("@t3tools/contracts")>()),
   DEFAULT_RUNTIME_MODE: "default",
   DEFAULT_SERVER_SETTINGS: {},
 }));
@@ -165,7 +188,7 @@ vi.mock("../state/entities", () => ({
       defaultModelSelection: null,
     },
   ],
-  readThreadShell: () => null,
+  readThreadShell: (ref: { readonly threadId: string }) => testState.readThreadShell(ref),
   useProjects: () => [],
   useThread: () => null,
 }));
@@ -173,14 +196,31 @@ vi.mock("../state/server", () => ({
   environmentServerConfigsAtom: {},
   primaryServerSettingsAtom: "primary-settings",
 }));
-vi.mock("../threadRoutes", () => ({ resolveThreadRouteTarget: () => null }));
+vi.mock("../threadRoutes", () => ({
+  resolveThreadRouteTarget: () =>
+    testState.routeDraftId === null ? null : { kind: "draft", draftId: testState.routeDraftId },
+}));
 vi.mock("../uiStateStore", () => ({
   legacyProjectCwdPreferenceKey: () => "remote-project",
   useUiStateStore: () => [],
 }));
 vi.mock("./useSettings", () => ({ useClientSettings: () => ({}) }));
 
-import { useNewThreadHandler } from "./useHandleNewThread";
+import {
+  buildContinuePrompt,
+  buildThreadContextRecord,
+} from "@t3tools/shared/threadContextReference";
+
+import { continueInNewThreadOptions, useNewThreadHandler } from "./useHandleNewThread";
+
+const sourceThread = {
+  id: "thread-source",
+  projectId: "project-remote",
+  title: "Fix login redirect",
+  branch: "feature/login",
+  worktreePath: null,
+} as never;
+const sourceModelSelection = { instanceId: "codex", model: "gpt-5.5" };
 
 describe.each([
   ["new", null],
@@ -286,4 +326,73 @@ describe.each([
       );
     },
   );
+
+  it("continuing seeds the thread record, the prompt, and the source model selection", async () => {
+    testState.reset(draft);
+    testState.threadShells = { "thread-source": { modelSelection: sourceModelSelection } };
+    const opened = await useNewThreadHandler()(
+      { environmentId: "environment-ssh", projectId: "project-remote" } as never,
+      continueInNewThreadOptions(sourceThread),
+    );
+
+    const record = buildThreadContextRecord(sourceThread);
+    expect(testState.draftStore.addThreadReference).toHaveBeenCalledWith(opened!.draftId, record);
+    expect(testState.draftStore.setPrompt).toHaveBeenCalledWith(
+      opened!.draftId,
+      buildContinuePrompt(record),
+    );
+    expect(testState.draftStore.setModelSelection).toHaveBeenLastCalledWith(
+      opened!.draftId,
+      sourceModelSelection,
+      { replaceOptions: true },
+    );
+  });
+
+  it("a continuation draft is marked manual so it is not auto-moved", async () => {
+    testState.reset(draft);
+    const projectRef = { environmentId: "environment-ssh", projectId: "project-remote" } as never;
+    const opened = await useNewThreadHandler()(
+      projectRef,
+      continueInNewThreadOptions(sourceThread),
+    );
+
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenCalledWith(
+      "remote-project",
+      projectRef,
+      opened!.draftId,
+      expect.objectContaining({
+        continuedFromThreadId: "thread-source",
+        environmentSelection: "manual",
+      }),
+    );
+  });
+});
+
+describe("useNewThreadHandler on an open reusable draft", () => {
+  it("a plain New thread on a reused draft clears continuedFromThreadId", async () => {
+    testState.reset({
+      draftId: "draft-existing",
+      environmentId: "environment-ssh",
+      promotedTo: null,
+      threadId: "thread-existing",
+    });
+    testState.routeDraftId = "draft-existing";
+    const projectRef = { environmentId: "environment-ssh", projectId: "project-remote" } as never;
+    await useNewThreadHandler()(projectRef);
+
+    const cleared = expect.objectContaining({
+      continuedFromThreadId: null,
+      unblocksThreadId: null,
+    });
+    expect(testState.draftStore.setDraftThreadContext).toHaveBeenCalledWith(
+      "draft-existing",
+      cleared,
+    );
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenCalledWith(
+      "remote-project",
+      projectRef,
+      "draft-existing",
+      cleared,
+    );
+  });
 });

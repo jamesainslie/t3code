@@ -93,6 +93,9 @@ function pickExplicitWorkspaceOptions(options: NewThreadWorkspaceOptions | undef
     // must clear a link left on a reused draft by an abandoned one.
     unblocksThreadId: options?.unblocksThreadId ?? null,
     continuedFromThreadId: options?.continuedFromThread?.id ?? null,
+    // Load balancing retargets automatic drafts, and a move to another
+    // environment drops the link, so a continuation stays where it was opened.
+    ...(options?.continuedFromThread ? { environmentSelection: "manual" as const } : {}),
   };
 }
 
@@ -326,6 +329,10 @@ export function useNewThreadHandler() {
                 newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
               }),
             };
+          } else {
+            // The open draft keeps the workspace the user may have just
+            // picked, but a plain new thread must not inherit a pending link.
+            workspaceContext = { unblocksThreadId: null, continuedFromThreadId: null };
           }
           if (workspaceContext) {
             setDraftThreadContext(emptyStoredDraftThread.draftId, {
@@ -484,7 +491,12 @@ export function useNewThreadHandler() {
               newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
             }),
           ...(options?.unblocksThreadId ? { unblocksThreadId: options.unblocksThreadId } : {}),
-          ...(continuedFromThread ? { continuedFromThreadId: continuedFromThread.id } : {}),
+          ...(continuedFromThread
+            ? {
+                continuedFromThreadId: continuedFromThread.id,
+                environmentSelection: "manual" as const,
+              }
+            : {}),
           runtimeMode: defaultRuntimeMode,
           ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
         });
