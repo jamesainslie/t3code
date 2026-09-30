@@ -3,6 +3,7 @@ import {
   MAX_SCRIPT_ID_LENGTH,
   SCRIPT_RUN_COMMAND_PATTERN,
   MessageId,
+  SNOOZE_REMINDER_ACTIVITY_KIND,
   ThreadLinkedPullRequest,
   UserInputRequestedPayload,
   isImportedAgentSessionMessageId,
@@ -14,6 +15,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationThread,
+  type SnoozeReminderActivityPayload,
   type ThreadPullRequestKey,
   type ThreadPullRequestLink,
   type OrchestrationThreadActivity,
@@ -251,6 +253,78 @@ const dependenciesClearedEvent = Effect.fn("dependenciesClearedEvent")(function*
     },
   };
   return event;
+});
+
+/**
+ * The pending snooze note as a timeline activity, or null when there is no
+ * note. It is user-facing only (turnId null, never sent to the provider) and
+ * lands whenever the snooze ends, so the user remembers why they parked it.
+ */
+const snoozeReminderActivityEvent = Effect.fn("snoozeReminderActivityEvent")(function* (input: {
+  readonly thread: OrchestrationThread;
+  readonly occurredAt: string;
+  readonly commandId: OrchestrationCommand["commandId"];
+}) {
+  const reminder = input.thread.snoozeReminder ?? null;
+  if (reminder === null) return null;
+  const payload: SnoozeReminderActivityPayload = {
+    reminder,
+    snoozedAt: input.thread.snoozedAt ?? input.occurredAt,
+    snoozedUntil: input.thread.snoozedUntil ?? input.occurredAt,
+  };
+  const event: PlannedOrchestrationEvent = {
+    ...(yield* withEventBase({
+      aggregateKind: "thread",
+      aggregateId: input.thread.id,
+      occurredAt: input.occurredAt,
+      commandId: input.commandId,
+    })),
+    type: "thread.activity-appended",
+    payload: {
+      threadId: input.thread.id,
+      activity: {
+        id: EventId.make(`snooze-reminder:${input.commandId}`),
+        tone: "info",
+        kind: SNOOZE_REMINDER_ACTIVITY_KIND,
+        summary: reminder,
+        payload,
+        turnId: null,
+        createdAt: input.occurredAt,
+      },
+    },
+  };
+  return event;
+});
+
+/**
+ * Every way a snooze ends before or without the timer (wake now, settle,
+ * pin, a dependency, a user message) goes through here, so each one also
+ * delivers the pending note. Timer wakes deliver it through
+ * thread.snooze-reminder.deliver instead.
+ */
+const unsnoozeEvents = Effect.fn("unsnoozeEvents")(function* (input: {
+  readonly thread: OrchestrationThread;
+  readonly reason: "user" | "activity";
+  readonly occurredAt: string;
+  readonly commandId: OrchestrationCommand["commandId"];
+  readonly updatedAt?: string;
+}) {
+  const reminderEvent = yield* snoozeReminderActivityEvent(input);
+  const unsnoozedEvent: PlannedOrchestrationEvent = {
+    ...(yield* withEventBase({
+      aggregateKind: "thread",
+      aggregateId: input.thread.id,
+      occurredAt: input.occurredAt,
+      commandId: input.commandId,
+    })),
+    type: "thread.unsnoozed",
+    payload: {
+      threadId: input.thread.id,
+      reason: input.reason,
+      updatedAt: input.updatedAt ?? input.occurredAt,
+    },
+  };
+  return reminderEvent === null ? [unsnoozedEvent] : [reminderEvent, unsnoozedEvent];
 });
 
 type DecideOrchestrationCommandResult =
@@ -763,20 +837,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       if (thread.snoozedUntil != null) {
-        companionEvents.push({
-          ...(yield* withEventBase({
-            aggregateKind: "thread",
-            aggregateId: command.threadId,
+        companionEvents.push(
+          ...(yield* unsnoozeEvents({
+            thread,
+            reason: "user",
             occurredAt,
             commandId: command.commandId,
           })),
-          type: "thread.unsnoozed",
-          payload: {
-            threadId: command.threadId,
-            reason: "user",
-            updatedAt: occurredAt,
-          },
-        });
+        );
       }
       const dependenciesCleared = yield* dependenciesClearedEvent({
         thread,
@@ -863,6 +931,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         thread.snoozedUntil === command.snoozedUntil && thread.snoozedAt != null
           ? thread.snoozedAt
           : null;
+      // Resolve the note in effect after this snooze: absent keeps the note
+      // of a pending snooze (preset re-snoozes must not drop it), "" clears
+      // it, and anything else replaces it.
+      const pendingReminder = thread.snoozedUntil != null ? (thread.snoozeReminder ?? null) : null;
+      const reminder = command.reminder === undefined ? pendingReminder : command.reminder || null;
+      // A note edit at the same wake time is a real change, not a duplicate.
+      const unchanged = existingSnoozedAt !== null && reminder === pendingReminder;
       const snoozedEvent: PlannedOrchestrationEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -875,7 +950,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           threadId: command.threadId,
           snoozedUntil: command.snoozedUntil,
           snoozedAt: existingSnoozedAt ?? occurredAt,
-          updatedAt: existingSnoozedAt !== null ? thread.updatedAt : occurredAt,
+          reminder,
+          updatedAt: unchanged ? thread.updatedAt : occurredAt,
         },
       };
       // A thread waits for a time or for other threads, never both.
@@ -898,20 +974,52 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       // updatedAt.
       const alreadyAwake = thread.snoozedUntil == null;
       const occurredAt = yield* nowIso;
-      return {
+      return yield* unsnoozeEvents({
+        thread,
+        reason: command.reason,
+        occurredAt,
+        commandId: command.commandId,
+        updatedAt: alreadyAwake ? thread.updatedAt : occurredAt,
+      });
+    }
+
+    case "thread.snooze-reminder.deliver": {
+      const thread = yield* requireThreadNotArchived({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      // Timer wakes emit no unsnooze, so the reactor asks for the note once
+      // the wake time passes. Anything else (no note, an earlier wake already
+      // delivered it, a re-snooze moved the wake time) is a no-op, which
+      // keeps duplicate dispatch and races harmless.
+      const due =
+        thread.snoozedUntil != null && Date.parse(thread.snoozedUntil) <= Date.parse(occurredAt);
+      const reminderEvent = due
+        ? yield* snoozeReminderActivityEvent({
+            thread,
+            occurredAt,
+            commandId: command.commandId,
+          })
+        : null;
+      if (reminderEvent === null) {
+        return [];
+      }
+      const deliveredEvent: PlannedOrchestrationEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
           occurredAt,
           commandId: command.commandId,
         })),
-        type: "thread.unsnoozed",
+        type: "thread.snooze-reminder-delivered",
         payload: {
           threadId: command.threadId,
-          reason: command.reason,
-          updatedAt: alreadyAwake ? thread.updatedAt : occurredAt,
+          updatedAt: occurredAt,
         },
       };
+      return [reminderEvent, deliveredEvent];
     }
 
     case "thread.dependency.add": {
@@ -1006,21 +1114,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       if (thread.snoozedUntil == null) {
         return addedEvent;
       }
-      const unsnoozedEvent: Omit<OrchestrationEvent, "sequence"> = {
-        ...(yield* withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
-          occurredAt,
-          commandId: command.commandId,
-        })),
-        type: "thread.unsnoozed",
-        payload: {
-          threadId: command.threadId,
-          reason: "user",
-          updatedAt: occurredAt,
-        },
-      };
-      return [unsnoozedEvent, addedEvent];
+      const wakeEvents = yield* unsnoozeEvents({
+        thread,
+        reason: "user",
+        occurredAt,
+        commandId: command.commandId,
+      });
+      return [...wakeEvents, addedEvent];
     }
 
     case "thread.dependency.remove": {
@@ -1104,20 +1204,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       if (thread.snoozedUntil != null) {
-        promotionEvents.push({
-          ...(yield* withEventBase({
-            aggregateKind: "thread",
-            aggregateId: command.threadId,
+        promotionEvents.push(
+          ...(yield* unsnoozeEvents({
+            thread,
+            reason: "user",
             occurredAt,
             commandId: command.commandId,
           })),
-          type: "thread.unsnoozed",
-          payload: {
-            threadId: command.threadId,
-            reason: "user",
-            updatedAt: occurredAt,
-          },
-        });
+        );
       }
       // Pinning is a promotion into the active list, which a wait would
       // immediately override: clear the links the way snooze is cleared.
@@ -1962,20 +2056,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       if (targetThread.snoozedUntil != null) {
-        lifecycleResetEvents.push({
-          ...(yield* withEventBase({
-            aggregateKind: "thread",
-            aggregateId: command.threadId,
+        lifecycleResetEvents.push(
+          ...(yield* unsnoozeEvents({
+            thread: targetThread,
+            reason: "activity",
             occurredAt: command.createdAt,
             commandId: command.commandId,
           })),
-          type: "thread.unsnoozed",
-          payload: {
-            threadId: command.threadId,
-            reason: "activity",
-            updatedAt: command.createdAt,
-          },
-        });
+        );
       }
       const dependenciesCleared = yield* dependenciesClearedEvent({
         thread: targetThread,

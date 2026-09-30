@@ -4,7 +4,9 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
+  SNOOZE_REMINDER_ACTIVITY_KIND,
   ThreadId,
+  type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationThread,
 } from "@t3tools/contracts";
@@ -21,46 +23,80 @@ const FUTURE_WAKE = "1970-01-02T09:00:00.000Z";
 const PAST_WAKE = "1969-12-31T09:00:00.000Z";
 const SNOOZED_AT = "1969-12-30T00:00:00.000Z";
 
-function makeReadModel(input: {
+interface ThreadInput {
   readonly snoozedUntil?: string | null;
   readonly snoozedAt?: string | null;
+  readonly snoozeReminder?: string | null;
   readonly archivedAt?: string | null;
+  readonly pinnedAt?: string | null;
   readonly activities?: OrchestrationThread["activities"];
   readonly messages?: OrchestrationThread["messages"];
-}): OrchestrationReadModel {
+}
+
+function makeThread(id: string, input: ThreadInput): OrchestrationThread {
+  return {
+    id: ThreadId.make(id),
+    projectId: ProjectId.make("project-1"),
+    title: "Thread",
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    branch: null,
+    worktreePath: null,
+    pullRequests: [],
+    latestTurn: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    archivedAt: input.archivedAt ?? null,
+    settledOverride: null,
+    settledAt: null,
+    snoozedUntil: input.snoozedUntil ?? null,
+    snoozedAt: input.snoozedAt ?? (input.snoozedUntil != null ? SNOOZED_AT : null),
+    snoozeReminder: input.snoozeReminder ?? null,
+    ...(input.pinnedAt !== undefined ? { pinnedAt: input.pinnedAt } : {}),
+    deletedAt: null,
+    messages: input.messages ?? [],
+    proposedPlans: [],
+    activities: input.activities ?? [],
+    checkpoints: [],
+    session: null,
+  };
+}
+
+function makeReadModel(
+  input: ThreadInput & { readonly otherThreads?: ReadonlyArray<OrchestrationThread> },
+): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     projects: [],
-    threads: [
-      {
-        id: ThreadId.make("thread-1"),
-        projectId: ProjectId.make("project-1"),
-        title: "Thread",
-        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-        pullRequests: [],
-        latestTurn: null,
-        createdAt: NOW,
-        updatedAt: NOW,
-        archivedAt: input.archivedAt ?? null,
-        settledOverride: null,
-        settledAt: null,
-        snoozedUntil: input.snoozedUntil ?? null,
-        snoozedAt: input.snoozedAt ?? (input.snoozedUntil != null ? SNOOZED_AT : null),
-        deletedAt: null,
-        messages: input.messages ?? [],
-        proposedPlans: [],
-        activities: input.activities ?? [],
-        checkpoints: [],
-        session: null,
-      },
-    ],
+    threads: [makeThread("thread-1", input), ...(input.otherThreads ?? [])],
     updatedAt: NOW,
   };
 }
+
+// Distributes over the event union so a `type` check narrows the payload.
+type PlannedEvent = OrchestrationEvent extends infer Event
+  ? Event extends OrchestrationEvent
+    ? Omit<Event, "sequence">
+    : never
+  : never;
+
+function asEvents(
+  result: Effect.Success<ReturnType<typeof decideOrchestrationCommand>>,
+): ReadonlyArray<PlannedEvent> {
+  return (Array.isArray(result) ? result : [result]) as ReadonlyArray<PlannedEvent>;
+}
+
+function reminderActivities(events: ReadonlyArray<PlannedEvent>) {
+  return events.flatMap((event) =>
+    event.type === "thread.activity-appended" &&
+    event.payload.activity.kind === SNOOZE_REMINDER_ACTIVITY_KIND
+      ? [event.payload.activity]
+      : [],
+  );
+}
+
+const REMINDER = "Check whether the deploy finished";
 
 it.layer(NodeServices.layer)("snoozed thread decider", (it) => {
   it.effect("snoozes a thread to a future wake time", () =>
@@ -282,6 +318,279 @@ it.layer(NodeServices.layer)("snoozed thread decider", (it) => {
       if (unsnoozed?.type === "thread.unsnoozed") {
         expect(unsnoozed.payload.reason).toBe("activity");
       }
+    }),
+  );
+});
+
+it.layer(NodeServices.layer)("snooze reminder decider", (it) => {
+  const snooze = (
+    readModel: OrchestrationReadModel,
+    extra: { readonly reminder?: string; readonly snoozedUntil?: string } = {},
+  ) =>
+    decideOrchestrationCommand({
+      command: {
+        type: "thread.snooze",
+        commandId: CommandId.make("cmd-snooze-reminder"),
+        threadId: ThreadId.make("thread-1"),
+        snoozedUntil: extra.snoozedUntil ?? FUTURE_WAKE,
+        ...(extra.reminder !== undefined ? { reminder: extra.reminder } : {}),
+      },
+      readModel,
+    }).pipe(Effect.map(asEvents));
+
+  const snoozedReminderOf = (events: ReadonlyArray<PlannedEvent>) => {
+    const snoozed = events.find((event) => event.type === "thread.snoozed");
+    return snoozed?.type === "thread.snoozed" ? snoozed.payload.reminder : "missing";
+  };
+
+  it.effect("a snooze with a reminder carries it on thread.snoozed", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(makeReadModel({}), { reminder: REMINDER });
+      expect(snoozedReminderOf(events)).toBe(REMINDER);
+    }),
+  );
+
+  it.effect("a snooze without a reminder on an awake thread resolves to null", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(makeReadModel({}));
+      expect(snoozedReminderOf(events)).toBeNull();
+    }),
+  );
+
+  it.effect("a re-snooze without a reminder keeps the pending note", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(
+        makeReadModel({ snoozedUntil: FUTURE_WAKE, snoozeReminder: REMINDER }),
+        { snoozedUntil: "1970-01-03T09:00:00.000Z" },
+      );
+      expect(snoozedReminderOf(events)).toBe(REMINDER);
+    }),
+  );
+
+  it.effect("a re-snooze with an empty reminder clears the note", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(
+        makeReadModel({ snoozedUntil: FUTURE_WAKE, snoozeReminder: REMINDER }),
+        { reminder: "" },
+      );
+      expect(snoozedReminderOf(events)).toBeNull();
+    }),
+  );
+
+  it.effect("a re-snooze with a new reminder replaces the note", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(
+        makeReadModel({ snoozedUntil: FUTURE_WAKE, snoozeReminder: REMINDER }),
+        { reminder: "Ping the reviewer" },
+      );
+      expect(snoozedReminderOf(events)).toBe("Ping the reviewer");
+    }),
+  );
+
+  it.effect("editing only the note at the same wake time is a real change", () =>
+    Effect.gen(function* () {
+      const events = yield* snooze(
+        makeReadModel({ snoozedUntil: FUTURE_WAKE, snoozeReminder: REMINDER }),
+        { reminder: "Ping the reviewer" },
+      );
+      const snoozed = events.find((event) => event.type === "thread.snoozed");
+      expect(snoozed?.type).toBe("thread.snoozed");
+      if (snoozed?.type === "thread.snoozed") {
+        expect(snoozed.payload.snoozedAt).toBe(SNOOZED_AT);
+        expect(snoozed.payload.updatedAt).not.toBe(NOW);
+      }
+    }),
+  );
+
+  const pending = { snoozedUntil: FUTURE_WAKE, snoozeReminder: REMINDER } as const;
+
+  const expectReminderBesideUnsnooze = (events: ReadonlyArray<PlannedEvent>) => {
+    expect(events.filter((event) => event.type === "thread.unsnoozed")).toHaveLength(1);
+    const activities = reminderActivities(events);
+    expect(activities).toHaveLength(1);
+    const activity = activities[0]!;
+    expect(activity.summary).toBe(REMINDER);
+    expect(activity.tone).toBe("info");
+    expect(activity.turnId).toBeNull();
+    expect(activity.payload).toEqual({
+      reminder: REMINDER,
+      snoozedAt: SNOOZED_AT,
+      snoozedUntil: FUTURE_WAKE,
+    });
+    const activityEvent = events.find(
+      (event) =>
+        event.type === "thread.activity-appended" &&
+        event.payload.activity.kind === SNOOZE_REMINDER_ACTIVITY_KIND,
+    );
+    expect(activityEvent?.aggregateId).toBe("thread-1");
+  };
+
+  it.effect("wake now delivers the pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.unsnooze",
+            commandId: CommandId.make("cmd-unsnooze-reminder"),
+            threadId: ThreadId.make("thread-1"),
+            reason: "user",
+          },
+          readModel: makeReadModel(pending),
+        }),
+      );
+      expectReminderBesideUnsnooze(events);
+    }),
+  );
+
+  it.effect("settling a snoozed thread delivers the pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.settle",
+            commandId: CommandId.make("cmd-settle-reminder"),
+            threadId: ThreadId.make("thread-1"),
+          },
+          readModel: makeReadModel(pending),
+        }),
+      );
+      expectReminderBesideUnsnooze(events);
+    }),
+  );
+
+  it.effect("adding a dependency to a snoozed thread delivers the pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.dependency.add",
+            commandId: CommandId.make("cmd-dependency-reminder"),
+            threadId: ThreadId.make("thread-1"),
+            dependsOnThreadId: ThreadId.make("thread-2"),
+          },
+          readModel: makeReadModel({ ...pending, otherThreads: [makeThread("thread-2", {})] }),
+        }),
+      );
+      expectReminderBesideUnsnooze(events);
+      // The engine records the receipt against the last event's aggregate.
+      expect(events.at(-1)?.type).toBe("thread.dependency-added");
+    }),
+  );
+
+  it.effect("pinning a snoozed thread delivers the pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.pin",
+            commandId: CommandId.make("cmd-pin-reminder"),
+            threadId: ThreadId.make("thread-1"),
+          },
+          readModel: makeReadModel(pending),
+        }),
+      );
+      expectReminderBesideUnsnooze(events);
+    }),
+  );
+
+  it.effect("a user message to a snoozed thread delivers the pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.turn.start",
+            commandId: CommandId.make("cmd-turn-start-reminder"),
+            threadId: ThreadId.make("thread-1"),
+            message: {
+              messageId: MessageId.make("message-reminder"),
+              role: "user",
+              text: "Continue",
+              attachments: [],
+            },
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            createdAt: NOW,
+          },
+          readModel: makeReadModel(pending),
+        }),
+      );
+      expectReminderBesideUnsnooze(events);
+      expect(events.at(-1)?.type).toBe("thread.turn-start-requested");
+    }),
+  );
+
+  it.effect("waking without a pending note appends no activity", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* decideOrchestrationCommand({
+          command: {
+            type: "thread.unsnooze",
+            commandId: CommandId.make("cmd-unsnooze-plain"),
+            threadId: ThreadId.make("thread-1"),
+            reason: "user",
+          },
+          readModel: makeReadModel({ snoozedUntil: FUTURE_WAKE }),
+        }),
+      );
+      expect(events.map((event) => event.type)).toEqual(["thread.unsnoozed"]);
+    }),
+  );
+
+  const deliver = (readModel: OrchestrationReadModel) =>
+    decideOrchestrationCommand({
+      command: {
+        type: "thread.snooze-reminder.deliver",
+        commandId: CommandId.make("cmd-deliver"),
+        threadId: ThreadId.make("thread-1"),
+      },
+      readModel,
+    });
+
+  it.effect("deliver does nothing without a pending note", () =>
+    Effect.gen(function* () {
+      const events = asEvents(yield* deliver(makeReadModel({ snoozedUntil: PAST_WAKE })));
+      expect(events).toEqual([]);
+    }),
+  );
+
+  it.effect("deliver does nothing before the wake time", () =>
+    Effect.gen(function* () {
+      const events = asEvents(yield* deliver(makeReadModel(pending)));
+      expect(events).toEqual([]);
+    }),
+  );
+
+  it.effect("deliver appends the note and marks it delivered once due", () =>
+    Effect.gen(function* () {
+      const events = asEvents(
+        yield* deliver(makeReadModel({ snoozedUntil: PAST_WAKE, snoozeReminder: REMINDER })),
+      );
+      expect(events.map((event) => event.type)).toEqual([
+        "thread.activity-appended",
+        "thread.snooze-reminder-delivered",
+      ]);
+      const [activity] = reminderActivities(events);
+      expect(activity?.summary).toBe(REMINDER);
+      expect(activity?.turnId).toBeNull();
+      expect(activity?.payload).toEqual({
+        reminder: REMINDER,
+        snoozedAt: SNOOZED_AT,
+        snoozedUntil: PAST_WAKE,
+      });
+      const delivered = events[1];
+      if (delivered?.type === "thread.snooze-reminder-delivered") {
+        expect(delivered.payload.threadId).toBe("thread-1");
+        expect(delivered.payload.updatedAt).toBe(activity?.createdAt);
+      }
+    }),
+  );
+
+  it.effect("deliver on an archived thread is rejected", () =>
+    Effect.gen(function* () {
+      const error = yield* deliver(
+        makeReadModel({ snoozedUntil: PAST_WAKE, snoozeReminder: REMINDER, archivedAt: NOW }),
+      ).pipe(Effect.flip);
+      expect(error._tag).toBe("OrchestrationCommandInvariantError");
     }),
   );
 });
