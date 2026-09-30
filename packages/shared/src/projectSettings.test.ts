@@ -135,6 +135,22 @@ describe("resolveProjectSettings", () => {
     expect(resolved.settings.defaultModelSelection).toBeNull();
     expect(resolved.sources.defaultModelSelection).toBe("environment");
   });
+
+  it("defaults thread history access to referenced with three recent turns", () => {
+    const { settings } = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, null);
+    expect(settings.agentThreadHistoryAccess).toBe("referenced");
+    expect(settings.agentThreadHistoryRecentTurns).toBe(3);
+  });
+
+  it("lets a project override thread history access", () => {
+    const base = {
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: { [projectId]: { agentThreadHistoryAccess: "project" as const } },
+    };
+    const resolved = resolveProjectSettings(base, projectId);
+    expect(resolved.settings.agentThreadHistoryAccess).toBe("project");
+    expect(resolved.sources.agentThreadHistoryAccess).toBe("project");
+  });
 });
 
 describe("resolveProjectSettings with a t3.json", () => {
