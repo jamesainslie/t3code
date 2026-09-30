@@ -45,6 +45,10 @@ import {
   buildCodexDeveloperInstructions,
   type T3CodeToolAvailability,
 } from "../CodexDeveloperInstructions.ts";
+import {
+  threadHistoryInstructionMode,
+  type ThreadHistoryInstructionMode,
+} from "../RuntimeInstructions.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
@@ -79,6 +83,14 @@ function configuredMcpToolAvailability(
   // Callers predating the capability set attached the browser toolkit only.
   if (mcpCapabilities === undefined) return { browser: true, device: false };
   return { browser: mcpCapabilities.has("preview"), device: mcpCapabilities.has("device") };
+}
+
+function configuredThreadHistoryMode(
+  appServerArgs: ReadonlyArray<string> | undefined,
+  mcpCapabilities: ReadonlySet<string> | undefined,
+): ThreadHistoryInstructionMode | undefined {
+  if (!hasConfiguredMcpServer(appServerArgs)) return undefined;
+  return threadHistoryInstructionMode(mcpCapabilities);
 }
 
 export const CodexResumeCursorSchema = Schema.Struct({
@@ -592,6 +604,7 @@ function buildCodexTurnInstructions(input: {
   readonly modelName?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly browserToolsAvailable?: boolean | T3CodeToolAvailability;
+  readonly threadHistory?: ThreadHistoryInstructionMode | undefined;
 }): Pick<CodexTurnStartParamsWithCollaborationMode, "collaborationMode" | "additionalContext"> {
   if (input.interactionMode === undefined) {
     return {};
@@ -608,7 +621,7 @@ function buildCodexTurnInstructions(input: {
       },
     },
     additionalContext: buildCodexAdditionalContext(
-      { model, modelName: input.modelName, reasoningEffort },
+      { model, modelName: input.modelName, reasoningEffort, threadHistory: input.threadHistory },
       input.browserToolsAvailable ?? true,
     ),
   };
@@ -634,6 +647,8 @@ export function buildTurnStartParams(input: {
   readonly interactionMode?: ProviderInteractionMode;
   /** Defaults to true so callers that predate the agent-access gate are unchanged. */
   readonly browserToolsAvailable?: boolean | T3CodeToolAvailability;
+  /** Set only when the thread history tools are attached to this session. */
+  readonly threadHistory?: ThreadHistoryInstructionMode | undefined;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -656,6 +671,7 @@ export function buildTurnStartParams(input: {
     ...(input.modelName ? { modelName: input.modelName } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     browserToolsAvailable: input.browserToolsAvailable ?? true,
+    threadHistory: input.threadHistory,
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -2578,6 +2594,10 @@ export const makeCodexSessionRuntime = (
             // setting, so the prompt describes the tools this turn actually
             // has even if the setting changed after the session started.
             browserToolsAvailable: configuredMcpToolAvailability(
+              options.appServerArgs,
+              options.mcpCapabilities,
+            ),
+            threadHistory: configuredThreadHistoryMode(
               options.appServerArgs,
               options.mcpCapabilities,
             ),

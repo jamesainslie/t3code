@@ -1,11 +1,20 @@
 import { expect, it } from "@effect/vitest";
 import { NodeHttpServer } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentId, PreviewTabId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
+  PreviewTabId,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -15,9 +24,11 @@ import { HttpBody, HttpClient, HttpRouter, HttpServerResponse } from "effect/uns
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
+import { makeThread } from "./toolkits/threadHistory/testFixtures.ts";
 
 const environmentId = EnvironmentId.make("environment-mcp-test");
 const threadId = ThreadId.make("thread-mcp-test");
@@ -503,6 +514,76 @@ it.effect(
         ),
       ),
     ),
+);
+
+it.effect("thread history tools return plain text without structured content", () =>
+  Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const readTool = server.tools.find(({ tool }) => tool.name === "read_thread");
+    expect(readTool?.tool.annotations?.readOnlyHint).toBe(true);
+    expect(server.tools.map(({ tool }) => tool.name)).toEqual(
+      expect.arrayContaining(["read_thread", "read_thread_turns", "find_threads"]),
+    );
+
+    const threadHistoryInvocation = {
+      ...invocation,
+      capabilities: new Set(["thread-history"] as const),
+    };
+    const call = (args: Record<string, unknown>) =>
+      server
+        .callTool({ name: "read_thread", arguments: args })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, threadHistoryInvocation),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+
+    const read = yield* call({ threadId });
+    expect(read.isError).toBe(false);
+    expect(read.structuredContent).toBeUndefined();
+    expect(read.content).toHaveLength(1);
+    const [block] = read.content;
+    expect(block?.type).toBe("text");
+    expect(block?.type === "text" ? block.text : "").toMatch(
+      /^<thread id="thread-mcp-test"[^]*<\/thread>$/,
+    );
+
+    const missing = yield* call({ threadId: "thread-unknown" });
+    expect(missing.isError).toBe(true);
+    expect(missing.structuredContent).toBeUndefined();
+    expect(missing.content).toEqual([
+      { type: "text", text: "Thread thread-unknown was not found in this T3 Code environment." },
+    ]);
+
+    // Bad arguments are a protocol error, not a tool result the agent reads as text.
+    const invalid = yield* call({ threadId, recentTurns: 99 }).pipe(Effect.flip);
+    expect(invalid._tag).toBe("InvalidParams");
+
+    // A defect stays a defect; it is never dressed up as an expected failure.
+    const defect = yield* call({ threadId: "thread-defect" }).pipe(Effect.exit);
+    expect(Exit.isFailure(defect) && Cause.hasDies(defect.cause)).toBe(true);
+  }).pipe(
+    Effect.provide(
+      McpHttpServer.ThreadHistoryToolkitRegistrationLive.pipe(
+        Layer.provideMerge(McpServer.McpServer.layer),
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(ProjectionSnapshotQuery)({
+              getThreadDetailById: (id) =>
+                id === "thread-defect"
+                  ? Effect.die(new Error("projection exploded"))
+                  : Effect.succeed(
+                      id === threadId ? Option.some(makeThread({ id: threadId })) : Option.none(),
+                    ),
+              getProjectShellById: () => Effect.succeedNone,
+            }),
+            Layer.mock(ServerSettings.ServerSettingsService)({
+              getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+            }),
+          ),
+        ),
+      ),
+    ),
+  ),
 );
 
 it.effect("keeps the snapshot text under the agent's output ceiling", () =>

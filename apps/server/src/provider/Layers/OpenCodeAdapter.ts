@@ -43,7 +43,7 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../Errors.ts";
-import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
+import { buildRuntimeInstructions, threadHistoryInstructionMode } from "../RuntimeInstructions.ts";
 import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import {
   buildOpenCodePermissionRules,
@@ -3284,6 +3284,12 @@ export function makeOpenCodeAdapter(
                     system: buildRuntimeInstructions({
                       harness: "OpenCode",
                       model: `${parsedModel.providerID}/${parsedModel.modelID}`,
+                      // An external server never gets the t3-code MCP server attached.
+                      threadHistory: context.server.external
+                        ? undefined
+                        : threadHistoryInstructionMode(
+                            McpProviderSession.readMcpProviderSession(input.threadId)?.capabilities,
+                          ),
                     }),
                     parts: [...(text ? [{ type: "text" as const, text }] : []), ...fileParts],
                   },

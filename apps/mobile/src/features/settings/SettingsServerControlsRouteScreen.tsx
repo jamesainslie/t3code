@@ -4,6 +4,9 @@ import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollVie
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text } from "../../components/AppText";
 import {
+  AGENT_THREAD_HISTORY_RECENT_TURNS_MAX,
+  type AgentThreadHistoryAccess,
+  DEFAULT_SERVER_SETTINGS,
   type ResponseStreamingMode,
   type ServerSettings,
   type ThreadEnvMode,
@@ -50,7 +53,12 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
 const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettingKey[]> = {
   "new-threads": ["defaultThreadEnvMode", "worktreeSubmodules", "defaultRuntimeMode"],
   "source-control": ["defaultAutoPull", "newWorktreesStartFromOrigin", "gitHubAccount"],
-  "agent-behavior": ["responseStreamingMode", "enableAgentBrowserAccess"],
+  "agent-behavior": [
+    "responseStreamingMode",
+    "enableAgentBrowserAccess",
+    "agentThreadHistoryAccess",
+    "agentThreadHistoryRecentTurns",
+  ],
   maintenance: ["continueThreadsAfterServerUpdate"],
 };
 
@@ -116,6 +124,29 @@ const STREAMING_CHOICES: ReadonlyArray<{
     mode: "token",
     label: "Token by token (legacy)",
     description: "Repaint for every token; this can be slower.",
+  },
+];
+
+const THREAD_HISTORY_CHOICES: ReadonlyArray<{
+  readonly mode: AgentThreadHistoryAccess;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { mode: "off", label: "Off", description: "Agents cannot read other threads." },
+  {
+    mode: "referenced",
+    label: "Referenced threads",
+    description: "Agents can read threads you attach to a message.",
+  },
+  {
+    mode: "project",
+    label: "This project",
+    description: "Agents can read any thread in the same project.",
+  },
+  {
+    mode: "environment",
+    label: "All projects",
+    description: "Agents can read any thread on this environment.",
   },
 ];
 
@@ -500,6 +531,38 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       onValueChange={(value) => write({ enableAgentBrowserAccess: value })}
                     />
                   </SettingsSection>
+                  <SettingsSection
+                    title="Agent thread history"
+                    trailing={
+                      pendingWrites === 0 && uniform("agentThreadHistoryAccess") === null ? (
+                        <MixedValuesLabel projectSelected={projectSelected} />
+                      ) : null
+                    }
+                  >
+                    {THREAD_HISTORY_CHOICES.map((choice, index) => (
+                      <ChoiceRow
+                        key={choice.mode}
+                        label={choice.label}
+                        description={choice.description}
+                        selected={uniform("agentThreadHistoryAccess") === choice.mode}
+                        separated={index > 0}
+                        disabled={disabledFor("agentThreadHistoryAccess")}
+                        onPress={() => write({ agentThreadHistoryAccess: choice.mode })}
+                      />
+                    ))}
+                    <Text className="px-4 pb-4 text-sm text-foreground-muted">
+                      Turning it on applies from a thread's next session.
+                    </Text>
+                  </SettingsSection>
+                  {/* The stepper shows mixed values itself, so the section has no Mixed label. */}
+                  <SettingsSection title="Recent turns in full">
+                    <RecentTurnsStepperRow
+                      projectSelected={projectSelected}
+                      value={uniform("agentThreadHistoryRecentTurns")}
+                      disabled={disabledFor("agentThreadHistoryRecentTurns")}
+                      onValueChange={(value) => write({ agentThreadHistoryRecentTurns: value })}
+                    />
+                  </SettingsSection>
                 </>
               ) : null}
 
@@ -623,6 +686,77 @@ function MixedValuesLabel(props: { readonly projectSelected: boolean }) {
     >
       Mixed
     </Text>
+  );
+}
+
+function RecentTurnsStepperRow(props: {
+  readonly projectSelected: boolean;
+  readonly value: number | null;
+  readonly disabled: boolean;
+  readonly onValueChange: (value: number) => void;
+}) {
+  const label = "Recent turns in full";
+  const subtitle = "Earlier turns are reduced to one-line outcomes.";
+  // Mixed values resolve to the default in one tap, like a mixed switch resolves to on.
+  if (props.value === null) {
+    const fallback = DEFAULT_SERVER_SETTINGS.agentThreadHistoryRecentTurns;
+    return (
+      <SettingsControlRow
+        disabled={props.disabled}
+        icon="text.bubble"
+        label={label}
+        subtitle={subtitle}
+      >
+        <Pressable
+          accessibilityLabel={`Set recent turns in full to ${fallback} for selected ${
+            props.projectSelected ? "project checkouts" : "environments"
+          }`}
+          accessibilityRole="button"
+          disabled={props.disabled}
+          className="rounded-full bg-subtle px-3 py-2 active:opacity-70"
+          onPress={() => props.onValueChange(fallback)}
+        >
+          <Text className="text-sm font-t3-medium text-foreground">{`Mixed · Set ${fallback}`}</Text>
+        </Pressable>
+      </SettingsControlRow>
+    );
+  }
+
+  const value = props.value;
+  return (
+    <SettingsControlRow
+      disabled={props.disabled}
+      icon="text.bubble"
+      label={label}
+      subtitle={subtitle}
+    >
+      <View className="flex-row items-center gap-3">
+        <Pressable
+          accessibilityLabel="Fewer recent turns"
+          accessibilityRole="button"
+          disabled={props.disabled || value <= 0}
+          className="size-9 items-center justify-center rounded-full bg-subtle active:opacity-70 disabled:opacity-40"
+          onPress={() => props.onValueChange(value - 1)}
+        >
+          <Text className="text-lg text-foreground">−</Text>
+        </Pressable>
+        <Text
+          accessibilityLabel={`${value} recent turns in full`}
+          className="min-w-6 text-center text-base text-foreground"
+        >
+          {String(value)}
+        </Text>
+        <Pressable
+          accessibilityLabel="More recent turns"
+          accessibilityRole="button"
+          disabled={props.disabled || value >= AGENT_THREAD_HISTORY_RECENT_TURNS_MAX}
+          className="size-9 items-center justify-center rounded-full bg-subtle active:opacity-70 disabled:opacity-40"
+          onPress={() => props.onValueChange(value + 1)}
+        >
+          <Text className="text-lg text-foreground">+</Text>
+        </Pressable>
+      </View>
+    </SettingsControlRow>
   );
 }
 

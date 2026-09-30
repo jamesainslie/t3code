@@ -1174,6 +1174,24 @@ export const WorktreeCleanup = Schema.NullOr(
 );
 export type WorktreeCleanup = typeof WorktreeCleanup.Type;
 
+/**
+ * Which other threads an agent may read history from: none, only threads the
+ * user referenced, any thread in the same project, or any thread on this
+ * environment.
+ */
+export const AgentThreadHistoryAccess = Schema.Literals([
+  "off",
+  "referenced",
+  "project",
+  "environment",
+]);
+export type AgentThreadHistoryAccess = typeof AgentThreadHistoryAccess.Type;
+
+export const AGENT_THREAD_HISTORY_RECENT_TURNS_MAX = 10;
+const AgentThreadHistoryRecentTurns = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: AGENT_THREAD_HISTORY_RECENT_TURNS_MAX }),
+);
+
 export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "worktreeCleanup",
   "defaultModelSelection",
@@ -1185,6 +1203,8 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "defaultProjectScripts",
   "enableAgentBrowserAccess",
   "enableAgentDeviceAccess",
+  "agentThreadHistoryAccess",
+  "agentThreadHistoryRecentTurns",
   "textGenerationModelSelection",
   "sourceControlWriterModelSelection",
   "sourceControlWritingStyle",
@@ -1213,6 +1233,8 @@ export const ProjectSettingsOverrides = Schema.Struct({
   defaultProjectScripts: Schema.optionalKey(Schema.Array(ProjectScript)),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   enableAgentDeviceAccess: Schema.optionalKey(Schema.Boolean),
+  agentThreadHistoryAccess: Schema.optionalKey(AgentThreadHistoryAccess),
+  agentThreadHistoryRecentTurns: Schema.optionalKey(AgentThreadHistoryRecentTurns),
   textGenerationModelSelection: Schema.optionalKey(ModelSelection),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   sourceControlWritingStyle: Schema.optionalKey(SourceControlWritingStyleSettings),
@@ -1329,6 +1351,16 @@ export const ServerSettings = Schema.Struct({
    * unaffected.
    */
   enableAgentDeviceAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /**
+   * Which other threads' history agents may read, and how many recent turns a
+   * thread summary includes. Resolved per project when a tool call arrives.
+   */
+  agentThreadHistoryAccess: AgentThreadHistoryAccess.pipe(
+    Schema.withDecodingDefault(Effect.succeed("referenced" as const)),
+  ),
+  agentThreadHistoryRecentTurns: AgentThreadHistoryRecentTurns.pipe(
+    Schema.withDecodingDefault(Effect.succeed(3)),
+  ),
   /**
    * Whether this server may install and run T3's device helper processes.
    * Kept separate from agent access so enabling the user's Device panel does
@@ -1678,6 +1710,8 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Record(ProjectId, Schema.NullOr(ProjectSettingsOverrides)),
   ),
   enableAgentDeviceAccess: Schema.optionalKey(Schema.Boolean),
+  agentThreadHistoryAccess: Schema.optionalKey(AgentThreadHistoryAccess),
+  agentThreadHistoryRecentTurns: Schema.optionalKey(AgentThreadHistoryRecentTurns),
   enableDeviceSupport: Schema.optionalKey(Schema.Boolean),
   deviceOnboardingCompleted: Schema.optionalKey(Schema.Boolean),
   deviceHosts: Schema.optionalKey(SshDeviceHostConfigs),

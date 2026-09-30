@@ -23,7 +23,8 @@ import {
   type TurnId,
   type WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { parseScopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { useNavigate } from "@tanstack/react-router";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import type { CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
 import {
@@ -121,6 +122,7 @@ import {
   GlobeIcon,
   HammerIcon,
   MessageCircleIcon,
+  MessageSquareIcon,
   Minimize2Icon,
   MousePointerClickIcon,
   PaintbrushIcon,
@@ -157,7 +159,7 @@ import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useAtomValue } from "@effect/atom-react";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
-import { useProject, useThread } from "../../state/entities";
+import { useProject, useThread, useThreadShell } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
@@ -3691,7 +3693,23 @@ function UserMessageContextChip(props: {
   copyMarkdown: string;
   tooltip?: string;
   kind: ContextChipKind;
+  /** Makes the chip a button. */
+  onClick?: () => void;
 }) {
+  if (props.onClick) {
+    return (
+      <ContextChip
+        kind={props.kind}
+        render={<button type="button" />}
+        aria-label={props.kindLabel ? `${props.kindLabel}, ${props.label}` : undefined}
+        data-markdown-copy={props.copyMarkdown}
+        onClick={props.onClick}
+      >
+        {props.icon}
+        <ContextChipLabel>{props.label}</ContextChipLabel>
+      </ContextChip>
+    );
+  }
   return (
     <ContextChipShell
       kind={props.kind}
@@ -3700,6 +3718,36 @@ function UserMessageContextChip(props: {
       aria-label={props.kindLabel ? `${props.kindLabel}, ${props.label}` : undefined}
       data-markdown-copy={props.copyMarkdown}
       tooltip={props.tooltip}
+    />
+  );
+}
+
+/** Opens the referenced thread when it exists in the current environment. */
+function UserMessageThreadContextChip(props: {
+  record: Extract<KnownComposerContextRecord, { kind: "thread" }>;
+  copyMarkdown: string;
+}) {
+  const { activeThreadEnvironmentId } = use(TimelineRowCtx);
+  const navigate = useNavigate();
+  const shell = useThreadShell(scopeThreadRef(activeThreadEnvironmentId, props.record.threadId));
+  const threadId = props.record.threadId;
+  return (
+    <UserMessageContextChip
+      icon={<MessageSquareIcon />}
+      label={props.record.title}
+      kindLabel="Thread"
+      copyMarkdown={props.copyMarkdown}
+      kind="neutral"
+      {...(shell === null
+        ? { tooltip: "Thread not available in this environment" }
+        : {
+            onClick: () => {
+              void navigate({
+                to: "/$environmentId/$threadId",
+                params: { environmentId: activeThreadEnvironmentId, threadId },
+              });
+            },
+          })}
     />
   );
 }
@@ -3907,6 +3955,16 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
             copyMarkdown={context.copyMarkdown}
             kind="skill"
           />
+        ) : (
+          <UnavailableUserMessageContextChip {...context} />
+        ),
+    },
+    {
+      kind: "thread",
+      canRender: (record) => record.kind === "thread",
+      render: (record, context) =>
+        record.kind === "thread" ? (
+          <UserMessageThreadContextChip record={record} copyMarkdown={context.copyMarkdown} />
         ) : (
           <UnavailableUserMessageContextChip {...context} />
         ),

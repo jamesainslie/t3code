@@ -193,6 +193,8 @@ const ActiveThreadRowsRequest = Schema.Struct({ unsettledOnly: Schema.Boolean })
 const ProjectionThreadSearchRequest = Schema.Struct({
   pattern: Schema.String,
   limit: Schema.Int,
+  includeArchived: Schema.Boolean,
+  projectId: Schema.NullOr(ProjectId),
 });
 const ProjectionThreadSearchRow = Schema.Struct({
   threadId: ThreadId,
@@ -214,6 +216,10 @@ const ProjectionImportedAgentSessionSourcesRowSchema = Schema.Struct({
 const ThreadIdLookupInput = Schema.Struct({
   threadId: ThreadId,
 });
+const ThreadRowLookupInput = Schema.Struct({
+  threadId: ThreadId,
+  includeArchived: Schema.Boolean,
+});
 const TurnStartMessageLookupInput = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
@@ -221,6 +227,11 @@ const TurnStartMessageLookupInput = Schema.Struct({
 const ThreadActivityKindsLookupInput = Schema.Struct({
   threadId: ThreadId,
   activityKinds: Schema.Array(Schema.String),
+});
+const TurnActivitiesLookupInput = Schema.Struct({
+  threadId: ThreadId,
+  kinds: Schema.Array(Schema.String),
+  turnIds: Schema.Array(TurnId),
 });
 const ThreadActivityIdsLookupInput = Schema.Struct({
   activityIds: Schema.Array(ProjectionThreadActivity.fields.activityId),
@@ -1181,10 +1192,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
-  const searchActiveThreadRows = SqlSchema.findAll({
+  const searchThreadRows = SqlSchema.findAll({
     Request: ProjectionThreadSearchRequest,
     Result: ProjectionThreadSearchRow,
-    execute: ({ pattern, limit }) =>
+    execute: ({ pattern, limit, includeArchived, projectId }) =>
       sql`
         WITH ranked AS (
           SELECT
@@ -1217,8 +1228,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           INNER JOIN projection_projects AS projects
             ON projects.project_id = threads.project_id
           WHERE threads.deleted_at IS NULL
-            AND threads.archived_at IS NULL
+            AND ${includeArchived ? sql`1 = 1` : sql`threads.archived_at IS NULL`}
             AND projects.deleted_at IS NULL
+            AND ${projectId === null ? sql`1 = 1` : sql`threads.project_id = ${projectId}`}
             AND messages.is_streaming = 0
             -- Only these two roles are searchable, and the CASE above depends
             -- on it: reasoning is deliberately excluded so a thinking trace
@@ -1366,10 +1378,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
-  const getActiveThreadRowById = SqlSchema.findOneOption({
-    Request: ThreadIdLookupInput,
+  const getThreadRowById = SqlSchema.findOneOption({
+    Request: ThreadRowLookupInput,
     Result: ProjectionThreadDbRowSchema,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, includeArchived }) =>
       sql`
         SELECT
           thread_id AS "threadId",
@@ -1409,7 +1421,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         FROM projection_threads
         WHERE thread_id = ${threadId}
           AND deleted_at IS NULL
-          AND archived_at IS NULL
+          AND ${includeArchived ? sql`1 = 1` : sql`archived_at IS NULL`}
         LIMIT 1
       `,
   });
@@ -1758,6 +1770,49 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const listTurnActivityRows = SqlSchema.findAll({
+    Request: TurnActivitiesLookupInput,
+    Result: ProjectionThreadActivityDbRowSchema,
+    execute: ({ threadId, kinds, turnIds }) =>
+      sql`
+        SELECT
+          activity_id AS "activityId",
+          thread_id AS "threadId",
+          turn_id AS "turnId",
+          tone,
+          kind,
+          summary,
+          payload_json AS "payload",
+          sequence,
+          created_at AS "createdAt"
+        FROM (
+          SELECT
+            activity_id,
+            thread_id,
+            turn_id,
+            tone,
+            kind,
+            summary,
+            payload_json,
+            sequence,
+            created_at
+          FROM projection_thread_activities
+          WHERE thread_id = ${threadId}
+            AND ${sql.in("kind", kinds)}
+            AND ${sql.in("turn_id", turnIds)}
+          ORDER BY
+            sequence DESC,
+            created_at DESC,
+            activity_id DESC
+          LIMIT ${THREAD_DETAIL_ACTIVITY_LIMIT}
+        ) AS recent_activities
+        ORDER BY
+          sequence ASC,
+          created_at ASC,
+          activity_id ASC
+      `,
+  });
+
   const getThreadSessionRowByThread = SqlSchema.findOneOption({
     Request: ThreadIdLookupInput,
     Result: ProjectionThreadSessionDbRowSchema,
@@ -1779,9 +1834,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   });
 
   const getLatestTurnRowByThread = SqlSchema.findOneOption({
-    Request: ThreadIdLookupInput,
+    Request: ThreadRowLookupInput,
     Result: ProjectionLatestTurnDbRowSchema,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, includeArchived }) =>
       sql`
         SELECT
           turns.thread_id AS "threadId",
@@ -1799,7 +1854,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           AND turns.turn_id = threads.latest_turn_id
         WHERE threads.thread_id = ${threadId}
           AND threads.deleted_at IS NULL
-          AND threads.archived_at IS NULL
+          AND ${includeArchived ? sql`1 = 1` : sql`threads.archived_at IS NULL`}
         LIMIT 1
       `,
   });
@@ -3196,11 +3251,13 @@ pending_approval_requests AS (
 
   const searchThreads: ProjectionSnapshotQueryShape["searchThreads"] = Effect.fn(
     "ProjectionSnapshotQuery.searchThreads",
-  )(function* (input) {
+  )(function* (input, options) {
     const escapedQuery = escapeLikePattern(input.query);
-    const rows = yield* searchActiveThreadRows({
+    const rows = yield* searchThreadRows({
       pattern: `%${escapedQuery}%`,
       limit: input.limit ?? 50,
+      includeArchived: options?.includeArchived === true,
+      projectId: options?.projectId ?? null,
     }).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
@@ -3404,10 +3461,14 @@ pending_approval_requests AS (
       });
     });
 
-  const getThreadShellById: ProjectionSnapshotQueryShape["getThreadShellById"] = (threadId) =>
+  const getThreadShellById: ProjectionSnapshotQueryShape["getThreadShellById"] = (
+    threadId,
+    options,
+  ) =>
     Effect.gen(function* () {
+      const includeArchived = options?.includeArchived === true;
       const [threadRow, latestTurnRow, sessionRow, pullRequestRows] = yield* Effect.all([
-        getActiveThreadRowById({ threadId }).pipe(
+        getThreadRowById({ threadId, includeArchived }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadShellById:getThread:query",
@@ -3415,7 +3476,7 @@ pending_approval_requests AS (
             ),
           ),
         ),
-        getLatestTurnRowByThread({ threadId }).pipe(
+        getLatestTurnRowByThread({ threadId, includeArchived }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadShellById:getLatestTurn:query",
@@ -3492,6 +3553,19 @@ pending_approval_requests AS (
         planProgress: threadPlanProgress.getThreadPlanProgress(threadRow.value.threadId),
       } satisfies OrchestrationThreadShell);
     });
+
+  const listTurnActivities: ProjectionSnapshotQueryShape["listTurnActivities"] = (input) =>
+    input.kinds.length === 0 || input.turnIds.length === 0
+      ? Effect.succeed([])
+      : listTurnActivityRows(input).pipe(
+          Effect.map((rows) => rows.map(mapThreadActivityRow)),
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.listTurnActivities:query",
+              "ProjectionSnapshotQuery.listTurnActivities:decodeRows",
+            ),
+          ),
+        );
 
   const listThreadDocumentComments: ProjectionSnapshotQueryShape["listThreadDocumentComments"] = (
     threadId,
@@ -3636,6 +3710,8 @@ pending_approval_requests AS (
     activityRead: ThreadDetailActivityRead = { mode: "raw" },
   ) =>
     Effect.gen(function* () {
+      const includeArchived =
+        activityRead.mode === "raw" && activityRead.query?.includeArchived === true;
       const activitiesEffect =
         activityRead.mode === "client"
           ? listProjectedThreadActivities(threadId, bounds)
@@ -3698,7 +3774,7 @@ pending_approval_requests AS (
         latestTurnRow,
         sessionRow,
       ] = yield* Effect.all([
-        getActiveThreadRowById({ threadId }).pipe(
+        getThreadRowById({ threadId, includeArchived }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:getThread:query",
@@ -3752,7 +3828,7 @@ pending_approval_requests AS (
             ),
           ),
         ),
-        getLatestTurnRowByThread({ threadId }).pipe(
+        getLatestTurnRowByThread({ threadId, includeArchived }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:getLatestTurn:query",
@@ -4032,6 +4108,7 @@ pending_approval_requests AS (
     getFullThreadDiffContext,
     getThreadShellById,
     listThreadDocumentComments,
+    listTurnActivities,
     getThreadRuntimeContext,
     getTurnStartMessage,
     getThreadDetailById,

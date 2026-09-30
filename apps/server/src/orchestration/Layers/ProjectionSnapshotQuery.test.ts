@@ -3822,6 +3822,145 @@ it.effect("reads a full sweep from unsettled threads and every project", () => {
   }).pipe(Effect.provide(layer));
 });
 
+projectionSnapshotLayer("ProjectionSnapshotQuery thread history reads", (it) => {
+  const timestamp = "2026-03-03T00:00:00.000Z";
+  const insertThreads = (
+    rows: ReadonlyArray<{
+      readonly id: string;
+      readonly projectId: string;
+      readonly archived?: boolean;
+      readonly deleted?: boolean;
+    }>,
+  ) =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const row of rows) {
+        yield* sql`
+          INSERT OR IGNORE INTO projection_projects (
+            project_id, title, workspace_root, scripts_json, created_at, updated_at
+          ) VALUES (
+            ${row.projectId}, ${`Project ${row.projectId}`}, ${`/tmp/${row.projectId}`}, '[]',
+            ${timestamp}, ${timestamp}
+          )
+        `;
+        yield* sql`
+          INSERT INTO projection_threads (
+            thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode,
+            latest_turn_id, created_at, updated_at, archived_at, deleted_at
+          ) VALUES (
+            ${row.id}, ${row.projectId}, ${`Thread ${row.id}`},
+            '{"instanceId":"codex","model":"gpt-5"}', 'full-access', 'default',
+            ${`${row.id}-turn`}, ${timestamp}, ${timestamp},
+            ${row.archived === true ? timestamp : null}, ${row.deleted === true ? timestamp : null}
+          )
+        `;
+        yield* sql`
+          INSERT INTO projection_turns (
+            thread_id, turn_id, pending_message_id, assistant_message_id, state,
+            requested_at, started_at, completed_at, checkpoint_files_json
+          ) VALUES (
+            ${row.id}, ${`${row.id}-turn`}, NULL, NULL, 'completed',
+            ${timestamp}, ${timestamp}, ${timestamp}, '[]'
+          )
+        `;
+      }
+    });
+
+  it.effect("reads archived threads only when asked, and never deleted ones", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      yield* insertThreads([
+        { id: "thread-shelved", projectId: "project-archive", archived: true },
+        { id: "thread-removed", projectId: "project-archive", archived: true, deleted: true },
+      ]);
+      const shelved = ThreadId.make("thread-shelved");
+      const removed = ThreadId.make("thread-removed");
+
+      assert.isTrue(Option.isNone(yield* query.getThreadDetailById(shelved)));
+      assert.isTrue(Option.isNone(yield* query.getThreadShellById(shelved)));
+
+      const detail = yield* query.getThreadDetailById(shelved, {
+        activityKinds: [],
+        includeArchived: true,
+      });
+      assert.equal(Option.getOrNull(detail)?.archivedAt, timestamp);
+      assert.equal(Option.getOrNull(detail)?.latestTurn?.state, "completed");
+      const shell = yield* query.getThreadShellById(shelved, { includeArchived: true });
+      assert.equal(Option.getOrNull(shell)?.latestTurn?.turnId, asTurnId("thread-shelved-turn"));
+
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadDetailById(removed, { includeArchived: true })),
+      );
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadShellById(removed, { includeArchived: true })),
+      );
+    }),
+  );
+
+  it.effect("searches archived threads only when asked", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertThreads([
+        { id: "thread-search-shelved", projectId: "project-archive", archived: true },
+      ]);
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, turn_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES (
+          'message-shelved', 'thread-search-shelved', NULL, 'user',
+          'Where did the shelved lantern go?', 0, ${timestamp}, ${timestamp}
+        )
+      `;
+
+      const ids = (result: { readonly matches: ReadonlyArray<{ readonly threadId: ThreadId }> }) =>
+        result.matches.map((match) => match.threadId);
+      assert.deepEqual(ids(yield* query.searchThreads({ query: "shelved lantern" })), []);
+      assert.deepEqual(
+        ids(yield* query.searchThreads({ query: "shelved lantern" }, { includeArchived: true })),
+        [ThreadId.make("thread-search-shelved")],
+      );
+    }),
+  );
+
+  it.effect("scopes a search to one project before applying the limit", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      const others = Array.from({ length: 55 }, (_, index) => `thread-crowd-${index}`);
+      yield* insertThreads([
+        { id: "thread-own", projectId: "project-own" },
+        ...others.map((id) => ({ id, projectId: "project-crowd" })),
+      ]);
+      // Every other-project thread is newer, so it ranks ahead of the one in the project.
+      yield* sql`UPDATE projection_threads SET updated_at = '2026-03-04T00:00:00.000Z' WHERE project_id = 'project-crowd'`;
+      for (const threadId of ["thread-own", ...others]) {
+        yield* sql`
+          INSERT INTO projection_thread_messages (
+            message_id, thread_id, turn_id, role, text, is_streaming, created_at, updated_at
+          ) VALUES (
+            ${`message-${threadId}`}, ${threadId}, NULL, 'user',
+            'Where is the crowded beacon?', 0, ${timestamp}, ${timestamp}
+          )
+        `;
+      }
+
+      const unscoped = yield* query.searchThreads({ query: "crowded beacon", limit: 50 });
+      assert.equal(unscoped.matches.length, 50);
+      assert.isFalse(unscoped.matches.some((match) => match.threadId === "thread-own"));
+
+      const scoped = yield* query.searchThreads(
+        { query: "crowded beacon", limit: 50 },
+        { projectId: asProjectId("project-own") },
+      );
+      assert.deepEqual(
+        scoped.matches.map((match) => [match.threadId, match.projectId]),
+        [[ThreadId.make("thread-own"), asProjectId("project-own")]],
+      );
+    }),
+  );
+});
+
 projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
   it.effect("lists one kind across active threads only, without hydrating the threads", () =>
     Effect.gen(function* () {
@@ -3866,6 +4005,47 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
         [["setup-live", "worktree-setup", { phase: "running" }]],
       );
       assert.deepEqual(yield* query.listActivitiesByKind("nope"), []);
+    }),
+  );
+
+  it.effect("lists one thread's activities of some kinds in some turns, oldest first", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_thread_activities (
+          activity_id, thread_id, turn_id, tone, kind, summary, payload_json, sequence, created_at
+        ) VALUES
+          ('tool-t2-late', 'thread-turns', 'turn-2', 'tool', 'tool.completed', 'Late',
+            '{"detail":"late"}', 4, '2026-03-02T00:00:04.000Z'),
+          ('tool-t2', 'thread-turns', 'turn-2', 'tool', 'tool.completed', 'Tool',
+            '{"detail":"early"}', 3, '2026-03-02T00:00:03.000Z'),
+          ('tool-t1', 'thread-turns', 'turn-1', 'tool', 'tool.completed', 'Older turn',
+            '{}', 1, '2026-03-02T00:00:01.000Z'),
+          ('started-t2', 'thread-turns', 'turn-2', 'tool', 'tool.started', 'Other kind',
+            '{}', 2, '2026-03-02T00:00:02.000Z'),
+          ('tool-other-thread', 'thread-elsewhere', 'turn-2', 'tool', 'tool.completed', 'Other',
+            '{}', 5, '2026-03-02T00:00:05.000Z')
+      `;
+
+      const read = (turnIds: ReadonlyArray<string>) =>
+        query.listTurnActivities({
+          threadId: ThreadId.make("thread-turns"),
+          kinds: ["tool.completed"],
+          turnIds: turnIds.map(asTurnId),
+        });
+      assert.deepEqual(
+        (yield* read(["turn-2"])).map((activity) => [activity.id, activity.payload]),
+        [
+          ["tool-t2", { detail: "early" }],
+          ["tool-t2-late", { detail: "late" }],
+        ],
+      );
+      assert.deepEqual(
+        (yield* read(["turn-1", "turn-2"])).map((activity) => activity.id),
+        ["tool-t1", "tool-t2", "tool-t2-late"],
+      );
+      assert.deepEqual(yield* read([]), []);
     }),
   );
 });

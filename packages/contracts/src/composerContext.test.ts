@@ -107,6 +107,14 @@ const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<strin
   },
   mention: { ...base, kind: "mention", label: "@src/index.ts", path: "src/index.ts" },
   skill: { ...base, kind: "skill", label: "$pinchtab", name: "pinchtab" },
+  thread: {
+    ...base,
+    kind: "thread",
+    label: "Fix login",
+    threadId: "thread-abc",
+    projectId: "project-1",
+    title: "Fix login",
+  },
 };
 
 describe("ComposerContextRecord", () => {
@@ -134,6 +142,22 @@ describe("ComposerContextRecord", () => {
 
   it("does not let a malformed known kind slide through as unknown", () => {
     expect(Option.isNone(decodeRecord({ ...base, kind: "image", label: "x" }))).toBe(true);
+  });
+
+  it("decodes a thread record", () => {
+    const decoded = decodeRecord(knownRecords.thread);
+    expect(Option.getOrThrow(decoded)).toMatchObject({
+      kind: "thread",
+      threadId: "thread-abc",
+      projectId: "project-1",
+      title: "Fix login",
+    });
+  });
+
+  it("does not accept a malformed thread record as unknown", () => {
+    const { threadId: _threadId, ...withoutThreadId } = knownRecords.thread;
+    // A payload would let it pass as an unknown kind if "thread" were not a known kind.
+    expect(Option.isNone(decodeRecord({ ...withoutThreadId, payload: {} }))).toBe(true);
   });
 
   it("bounds the serialized payload of future context kinds", () => {
