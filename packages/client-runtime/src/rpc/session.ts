@@ -28,6 +28,7 @@ import { makeWsRpcProtocolClient, type WsRpcProtocolClient } from "./protocol.ts
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import type {
   ConnectionAttemptError,
+  ConnectionSocketClose,
   ConnectionTransientError,
   PreparedConnection,
 } from "../connection/model.ts";
@@ -170,6 +171,25 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
 
     const connected = yield* Deferred.make<void>();
     const disconnected = yield* Deferred.make<never, ConnectionTransientError>();
+    // The disconnect hook carries no event, so the close is read off the socket itself.
+    let socketClose: ConnectionSocketClose | undefined;
+    const trackingConstructor: typeof webSocketConstructor = (url, protocols) => {
+      const socket = webSocketConstructor(url, protocols);
+      socket.addEventListener("close", (event) => {
+        // A browser CloseEvent; the socket's own event type only promises `type`.
+        const { code, reason, wasClean } = event as {
+          readonly code?: unknown;
+          readonly reason?: unknown;
+          readonly wasClean?: unknown;
+        };
+        socketClose = {
+          ...(typeof code === "number" ? { code } : {}),
+          ...(typeof reason === "string" && reason.length > 0 ? { reason } : {}),
+          ...(typeof wasClean === "boolean" ? { wasClean } : {}),
+        };
+      });
+      return socket;
+    };
     const hooks = RpcClient.ConnectionHooks.of({
       onConnect: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
       onDisconnect: Deferred.isDone(connected).pipe(
@@ -183,6 +203,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
                   ? `${connection.label} disconnected.`
                   : `${connection.label} could not establish a WebSocket connection.`
               }${networkHint}`,
+              ...(socketClose === undefined ? {} : { socketClose }),
             }),
           ),
         ),
@@ -191,7 +212,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
     });
     const socketLayer = Socket.layerWebSocket(connection.socketUrl, {
       openTimeout: SOCKET_OPEN_TIMEOUT,
-    }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor)));
+    }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, trackingConstructor)));
     const protocolLayer = Layer.effect(
       RpcClient.Protocol,
       RpcClient.makeProtocolSocket({

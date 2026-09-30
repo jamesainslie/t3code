@@ -7,6 +7,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
@@ -87,6 +88,7 @@ describe("source control environment atoms", () => {
           target: TARGET,
           state: yield* SubscriptionRef.make(connectionState),
           session: yield* SubscriptionRef.make(Option.some(session(client))),
+          attemptLog: Stream.make([]),
           prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
           connect: Effect.void,
           disconnect: Effect.void,

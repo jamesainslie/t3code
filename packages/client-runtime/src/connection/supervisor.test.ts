@@ -1418,3 +1418,88 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 });
+
+describe("EnvironmentSupervisor attempt log", () => {
+  const currentLog = (supervisor: EnvironmentSupervisor.EnvironmentSupervisor["Service"]) =>
+    Stream.runHead(supervisor.attemptLog).pipe(Effect.map(Option.getOrThrow));
+  const steps = (log: ReadonlyArray<EnvironmentSupervisor.ConnectionAttemptLogEntry>) =>
+    log.map((entry) => ({
+      attempt: entry.attempt,
+      kind: entry.kind,
+      ...(entry.kind === "stage" ? { stage: entry.stage } : {}),
+      ...(entry.kind === "failed" ? { detail: entry.error.detail } : {}),
+    }));
+
+  it.effect("records each attempt's stages, its failure, and when it retries", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        prepare: (attempt) =>
+          attempt === 1
+            ? Effect.fail(transient("Relay connection timed out."))
+            : Effect.succeed(PREPARED_CONNECTION),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
+      const failed = yield* currentLog(supervisor);
+      expect(steps(failed)).toEqual([
+        { attempt: 1, kind: "started" },
+        { attempt: 1, kind: "stage", stage: "preparing" },
+        { attempt: 1, kind: "failed", detail: "Relay connection timed out." },
+        { attempt: 1, kind: "retrying" },
+      ]);
+      const retrying = failed.at(-1)!;
+      expect(retrying.kind === "retrying" && retrying.retryAt - retrying.at).toBe(3_000);
+
+      yield* TestClock.adjust(3_000);
+      yield* eventuallyState(supervisor.state, (state) => state.phase === "connected");
+      expect(steps(yield* currentLog(supervisor)).slice(4)).toEqual([
+        { attempt: 2, kind: "started" },
+        { attempt: 2, kind: "stage", stage: "preparing" },
+        { attempt: 2, kind: "stage", stage: "opening" },
+        { attempt: 2, kind: "stage", stage: "synchronizing" },
+        { attempt: 2, kind: "connected" },
+      ]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("records a blocked attempt without a retry", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ prepare: () => Effect.fail(blocked()) });
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "blocked");
+      const log = yield* currentLog(supervisor);
+      expect(steps(log).map((entry) => entry.kind)).toEqual(["started", "stage", "failed"]);
+      const failure = log.at(-1)!;
+      expect(failure.kind === "failed" && failure.error._tag).toBe("ConnectionBlockedError");
+    }),
+  );
+
+  it.effect("keeps only the newest entries", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ prepare: () => Effect.fail(transient()) });
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
+      // Four entries an attempt, so twenty failed attempts overflow the log.
+      for (let step = 0; step < 20; step += 1) {
+        yield* TestClock.adjust(16_000);
+        yield* eventuallyState(supervisor.state, (state) => state.phase === "backoff");
+      }
+      yield* eventuallyState(
+        supervisor.state,
+        (state) => state.phase === "backoff" && state.attempt >= 20,
+      );
+      const log = yield* currentLog(supervisor);
+      expect(log).toHaveLength(EnvironmentSupervisor.ATTEMPT_LOG_LIMIT);
+      expect(steps(log).at(-1)?.kind).toBe("retrying");
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+});

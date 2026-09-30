@@ -103,6 +103,7 @@ function registryLayer(options?: {
         target,
         state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
         session: yield* SubscriptionRef.make(Option.some(session)),
+        attemptLog: Stream.make([]),
         prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
         connect: Effect.void,
         disconnect: Effect.void,

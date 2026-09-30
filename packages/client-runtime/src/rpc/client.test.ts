@@ -77,6 +77,7 @@ const makeHarness = Effect.fn("TestEnvironmentRpc.makeHarness")(function* () {
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
     target: TARGET,
     state,
+    attemptLog: Stream.make([]),
     session: activeSession,
     prepared,
     connect: Effect.void,

@@ -75,12 +75,21 @@ export const ConnectionBlockedReason = Schema.Literals([
 ]);
 export type ConnectionBlockedReason = typeof ConnectionBlockedReason.Type;
 
+/** How the WebSocket closed, as the platform reported it; React Native can omit fields. */
+export const ConnectionSocketClose = Schema.Struct({
+  code: Schema.optionalKey(Schema.Number),
+  reason: Schema.optionalKey(Schema.String),
+  wasClean: Schema.optionalKey(Schema.Boolean),
+});
+export type ConnectionSocketClose = typeof ConnectionSocketClose.Type;
+
 export class ConnectionTransientError extends Schema.TaggedError<ConnectionTransientError>()(
   "ConnectionTransientError",
   {
     reason: ConnectionTransientReason,
     detail: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
+    socketClose: Schema.optionalKey(ConnectionSocketClose),
   },
 ) {
   override get message(): string {
