@@ -19,6 +19,8 @@ export const DIGEST_LIMITS = {
   goalBytes: 4_096,
   steeringBytes: 500,
   earlierTurnBytes: 150,
+  /** Ceiling for one user or assistant message in a detailed turn; the render budget does the rest. */
+  detailMessageBytes: 8_192,
   toolDetailBytes: 300,
   excerptBytes: 300,
   contextFullRatio: 0.95,
@@ -108,10 +110,10 @@ export function toTurnDetail(turn: ReconstructedTurn): DigestTurnDetail {
     state: turn.state,
     user: cutToBytes(
       turn.userMessages.map((message) => message.text).join("\n\n"),
-      DIGEST_LIMITS.steeringBytes,
+      DIGEST_LIMITS.detailMessageBytes,
     ),
     assistant: nonEmptyTexts(turn.assistantMessages).map((text) =>
-      cutToBytes(text, DIGEST_LIMITS.excerptBytes),
+      cutToBytes(text, DIGEST_LIMITS.detailMessageBytes),
     ),
     tools: turn.activities.filter((activity) => activity.kind === "tool.completed").map(toolLine),
     files: turn.checkpoint?.files ?? [],

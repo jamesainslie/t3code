@@ -2,6 +2,7 @@ import { ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
 import {
+  buildThreadDigest,
   DIGEST_LIMITS,
   type DigestTurnDetail,
   type DigestTurnSummary,
@@ -13,10 +14,23 @@ import {
   renderThreadMatches,
   renderTurnDetails,
 } from "./render.ts";
-import { THREAD_ID } from "./testFixtures.ts";
+import {
+  assistantMessage,
+  latestTurn,
+  makeThread,
+  THREAD_ID,
+  turn,
+  userMessage,
+} from "./testFixtures.ts";
 import { cutToBytes } from "./text.ts";
 
 const byteLength = (text: string) => Buffer.byteLength(text, "utf8");
+
+/** Deterministic ASCII prose of exactly `size` bytes, as long as real replies run. */
+const prose = (label: string, size: number) => {
+  const sentence = `${label}: checked the scheduler queue, rewired the reactor, and reran the focused tests. `;
+  return sentence.repeat(Math.ceil(size / sentence.length)).slice(0, size);
+};
 
 const file = (path: string, additions = 3, deletions = 1) => ({
   path,
@@ -384,6 +398,19 @@ describe("renderThreadDigest", () => {
         recentTurns: [largeDetail(248), largeDetail(249), hugeNewest],
       }),
       makeDigest({ earlierTurns: longTurns(250), recentTurns: [] }),
+      // Detailed messages at their per-message ceiling.
+      makeDigest({
+        steering: longSteering.slice(0, 44),
+        earlierTurns: longTurns(247),
+        recentTurns: [248, 249, 250].map((n) =>
+          largeDetail(n, {
+            user: "u".repeat(DIGEST_LIMITS.detailMessageBytes),
+            assistant: Array.from({ length: 6 }, () =>
+              "a".repeat(DIGEST_LIMITS.detailMessageBytes),
+            ),
+          }),
+        ),
+      }),
     ];
 
     for (const budgetBytes of [DIGEST_LIMITS.budgetBytes, 8_000, 2_000]) {
@@ -447,6 +474,44 @@ describe("renderThreadDigest", () => {
       ],
     });
     expect(renderThreadDigest(fixture)).toMatchSnapshot();
+  });
+
+  it("renders a golden digest with real-length replies in full", () => {
+    const turnIds = [1, 2, 3].map((n) => turn(`t${n}`));
+    const finalReply = prose("Final", 2_048);
+    const lastRequest = prose("Request 3", 700);
+    const thread = makeThread({
+      title: "Harden the scheduler",
+      messages: turnIds.flatMap((turnId, index) => {
+        const n = index + 1;
+        const t = n * 100;
+        return [
+          userMessage(`u${n}`, t, n === 3 ? lastRequest : prose(`Request ${n}`, 600)),
+          assistantMessage(`a${n}-1`, t + 1, turnId, prose(`Turn ${n} progress`, 1_100)),
+          assistantMessage(`a${n}-2`, t + 2, turnId, prose(`Turn ${n} findings`, 2_900)),
+          assistantMessage(
+            `a${n}-3`,
+            t + 3,
+            turnId,
+            n === 3 ? finalReply : prose(`Turn ${n} summary`, 1_600),
+          ),
+        ];
+      }),
+      latestTurn: latestTurn(turnIds[2]!, "completed"),
+    });
+    const text = renderThreadDigest(
+      buildThreadDigest({
+        thread,
+        projectTitle: "t3code",
+        callerWorktreePath: null,
+        recentTurns: 3,
+      }),
+    );
+
+    expect(byteLength(text)).toBeLessThanOrEqual(DIGEST_LIMITS.budgetBytes);
+    expect(text).toContain(`<user>${lastRequest}</user>`);
+    expect(text).toContain(`<assistant>${finalReply}</assistant>`);
+    expect(text).toMatchSnapshot();
   });
 
   it("renders the golden digest under a tight budget", () => {
