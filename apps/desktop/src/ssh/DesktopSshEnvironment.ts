@@ -16,6 +16,7 @@ import {
   SshPasswordPromptError,
   SshReadinessError,
 } from "@t3tools/ssh/errors";
+import * as SshOutput from "@t3tools/ssh/output";
 import * as SshTunnel from "@t3tools/ssh/tunnel";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -25,6 +26,7 @@ import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
+import * as DesktopSshOutputLog from "./DesktopSshOutputLog.ts";
 import * as DesktopSshPasswordPrompts from "./DesktopSshPasswordPrompts.ts";
 
 export type DesktopSshEnvironmentRuntimeServices =
@@ -127,6 +129,7 @@ const makePasswordPrompt = (
 export const make = Effect.gen(function* () {
   const manager = yield* SshTunnel.SshEnvironmentManager;
   const prompts = yield* DesktopSshPasswordPrompts.DesktopSshPasswordPrompts;
+  const outputLog = yield* DesktopSshOutputLog.DesktopSshOutputLog;
   const runtimeContext = yield* Effect.context<DesktopSshEnvironmentRuntimeServices>();
   const passwordPrompt = SshAuth.SshPasswordPrompt.of(makePasswordPrompt(prompts));
 
@@ -142,13 +145,20 @@ export const make = Effect.gen(function* () {
         Effect.withSpan("desktop.ssh.resolveHost"),
       ),
     ensureEnvironment: (target, ensureOptions) =>
-      manager
-        .ensureEnvironment(target, ensureOptions)
-        .pipe(
-          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
-          Effect.provide(runtimeContext),
-          Effect.withSpan("desktop.ssh.ensureEnvironment"),
+      outputLog.mark(target, `Connecting to ${target.alias}`).pipe(
+        Effect.andThen(
+          manager
+            .ensureEnvironment(target, ensureOptions)
+            .pipe(
+              Effect.provideService(SshOutput.SshOutputObserver, outputLog.observerFor(target)),
+              Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+              Effect.provide(runtimeContext),
+            ),
         ),
+        Effect.tap(() => outputLog.mark(target, "Connected")),
+        Effect.tapError((error) => outputLog.mark(target, `Failed: ${error.message}`)),
+        Effect.withSpan("desktop.ssh.ensureEnvironment"),
+      ),
     disconnectEnvironment: (target) =>
       manager
         .disconnectEnvironment(target)
@@ -162,6 +172,8 @@ export const make = Effect.gen(function* () {
 
 export const layer = (options: DesktopSshEnvironmentLayerOptions = {}) =>
   Layer.effect(DesktopSshEnvironment, make).pipe(
+    // Exposed as well: the IPC layer serves the log to renderers that subscribe.
+    Layer.provideMerge(DesktopSshOutputLog.layer),
     Layer.provide(
       SshTunnel.SshEnvironmentManager.layer(
         options.resolveCliRunner === undefined

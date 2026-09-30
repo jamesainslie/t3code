@@ -15,6 +15,7 @@ import {
   DesktopSshEnvironmentEnsureResultSchema,
   DesktopSshEnvironmentTargetSchema,
   DesktopSshHttpBaseUrlInputSchema,
+  DesktopSshOutputBatchSchema,
   DesktopSshPasswordPromptCancelledType,
   DesktopSshPasswordPromptResolutionInputSchema,
   ExecutionEnvironmentDescriptor,
@@ -35,6 +36,7 @@ import * as Schema from "effect/Schema";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 import * as DesktopSshEnvironment from "../../ssh/DesktopSshEnvironment.ts";
+import * as DesktopSshOutputLog from "../../ssh/DesktopSshOutputLog.ts";
 import * as DesktopSshPasswordPrompts from "../../ssh/DesktopSshPasswordPrompts.ts";
 
 type DesktopSshEnvironmentRequestOperation =
@@ -154,6 +156,26 @@ export const disconnectSshEnvironment = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.sshEnvironment.disconnectEnvironment")(function* (target) {
     const sshEnvironment = yield* DesktopSshEnvironment.DesktopSshEnvironment;
     yield* sshEnvironment.disconnectEnvironment(target);
+  }),
+});
+
+export const subscribeSshEnvironmentOutput = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.SUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL,
+  payload: DesktopSshEnvironmentTargetSchema,
+  result: DesktopSshOutputBatchSchema,
+  handler: Effect.fn("desktop.ipc.sshEnvironment.subscribeOutput")(function* (target) {
+    const outputLog = yield* DesktopSshOutputLog.DesktopSshOutputLog;
+    return yield* outputLog.subscribe(target);
+  }),
+});
+
+export const unsubscribeSshEnvironmentOutput = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.UNSUBSCRIBE_SSH_ENVIRONMENT_OUTPUT_CHANNEL,
+  payload: DesktopSshEnvironmentTargetSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.sshEnvironment.unsubscribeOutput")(function* (target) {
+    const outputLog = yield* DesktopSshOutputLog.DesktopSshOutputLog;
+    yield* outputLog.unsubscribe(target);
   }),
 });
 
