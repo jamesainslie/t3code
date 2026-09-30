@@ -11,7 +11,6 @@ import {
 import * as Effect from "effect/Effect";
 
 import { decideOrchestrationCommand } from "./decider.ts";
-import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { createEmptyReadModel, projectEvent } from "./projector.ts";
 
 const createdAt = "2026-08-24T10:00:00.000Z";
@@ -114,41 +113,35 @@ it.layer(NodeServices.layer)("thread continuation", (it) => {
     }),
   );
 
-  it.effect("rejects continuing from a thread that does not exist", () =>
+  it.effect("creates the thread without a link when the source does not exist", () =>
     Effect.gen(function* () {
       const readModel = yield* readModelFrom([projectCreated]);
-      const error = yield* decideOrchestrationCommand({
+      const event = yield* decideOrchestrationCommand({
         command: {
           ...makeCreateCommand(ThreadId.make("thread-next")),
           continuedFromThreadId: ThreadId.make("thread-missing"),
         },
         readModel,
-      }).pipe(Effect.flip);
-
-      expect(error).toBeInstanceOf(OrchestrationCommandInvariantError);
-      expect(error).toMatchObject({
-        commandType: "thread.create",
-        detail: expect.stringContaining("thread-missing"),
       });
+
+      expect(event).toMatchObject({ type: "thread.created", payload: { threadId: "thread-next" } });
+      expect(event).not.toHaveProperty("payload.continuedFromThreadId");
     }),
   );
 
-  it.effect("rejects continuing from a deleted thread", () =>
+  it.effect("creates the thread without a link when the source was deleted", () =>
     Effect.gen(function* () {
       const readModel = yield* readModelFrom([projectCreated, sourceCreated, sourceDeleted]);
-      const error = yield* decideOrchestrationCommand({
+      const event = yield* decideOrchestrationCommand({
         command: {
           ...makeCreateCommand(ThreadId.make("thread-next")),
           continuedFromThreadId: sourceThreadId,
         },
         readModel,
-      }).pipe(Effect.flip);
-
-      expect(error).toBeInstanceOf(OrchestrationCommandInvariantError);
-      expect(error).toMatchObject({
-        commandType: "thread.create",
-        detail: expect.stringContaining(sourceThreadId),
       });
+
+      expect(event).toMatchObject({ type: "thread.created", payload: { threadId: "thread-next" } });
+      expect(event).not.toHaveProperty("payload.continuedFromThreadId");
     }),
   );
 });

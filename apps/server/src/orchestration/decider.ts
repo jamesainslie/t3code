@@ -621,19 +621,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      if (command.continuedFromThreadId !== undefined) {
-        const source = yield* requireThread({
-          readModel,
-          command,
-          threadId: command.continuedFromThreadId,
-        });
-        if (source.deletedAt !== null) {
-          return yield* new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: `thread ${command.threadId} cannot continue deleted thread ${command.continuedFromThreadId}`,
-          });
-        }
-      }
+      // A missing or deleted source drops the link rather than blocking the create.
+      const continuedFromThreadId = readModel.threads.some(
+        (thread) => thread.id === command.continuedFromThreadId && thread.deletedAt === null,
+      )
+        ? command.continuedFromThreadId
+        : undefined;
       return {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -654,9 +647,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           worktreePath: command.worktreePath,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
-          ...(command.continuedFromThreadId !== undefined
-            ? { continuedFromThreadId: command.continuedFromThreadId }
-            : {}),
+          ...(continuedFromThreadId !== undefined ? { continuedFromThreadId } : {}),
         },
       };
     }
