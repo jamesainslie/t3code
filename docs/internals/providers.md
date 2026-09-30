@@ -22,6 +22,19 @@ OpenCode also stores persistent approval grants per directory. Automatic full-ac
 `once` so they cannot widen a supervised thread's permissions on a shared external server.
 See the [adapter](../../apps/server/src/provider/Layers/OpenCodeAdapter.ts).
 
+MCP credentials stay scoped to one thread, but the `thread-history` capability lets that thread
+read other threads under the project's `agentThreadHistoryAccess` level. The capability is granted
+when [ProviderService](../../apps/server/src/provider/Layers/ProviderService.ts) opens the session,
+while the [handlers](../../apps/server/src/mcp/toolkits/threadHistory/handlers.ts) re-resolve the
+level on every call, so lowering it applies to the next call and a running session never reads
+more than the current setting allows. Raising it from `off` takes effect only in a new session,
+since that is the only point where the capability is added. Threads the user referenced in the
+caller's own messages are readable at every level except `off`; see the
+[scope rules](../../apps/server/src/mcp/toolkits/threadHistory/scope.ts). The
+[digest](../../apps/server/src/mcp/toolkits/threadHistory/digest.ts) is built deterministically
+from the projection with no model in the loop, so it is identical across providers and can be
+pinned by tests.
+
 Antigravity separates account profiles per instance while sharing installed executables across the
 environment. It forces file-based credential storage because the native macOS keychain entry would
 otherwise be shared across instances. The launch environment removes ambient Google credentials,
