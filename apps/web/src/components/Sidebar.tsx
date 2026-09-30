@@ -768,7 +768,8 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
     composer.files.length +
     composer.terminalContexts.length +
     composer.previewAnnotations.length +
-    composer.reviewComments.length;
+    composer.reviewComments.length +
+    composer.threadReferences.length;
   const preview =
     promptPreview.length > 0
       ? promptPreview

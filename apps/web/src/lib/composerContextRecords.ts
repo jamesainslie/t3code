@@ -296,15 +296,22 @@ export function threadContextReference(record: ThreadContextRecord): ComposerCon
   return { kind: "thread", contextId: record.contextId, label: record.label };
 }
 
-export function buildMessageContext(input: {
-  terminalContexts: ReadonlyArray<TerminalContextDraft>;
-  reviewComments: ReadonlyArray<ReviewCommentContext>;
-  previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
-  attachments?: ReadonlyArray<BoundComposerAttachment>;
-  threadReferences?: ReadonlyArray<ThreadContextRecord>;
-  /** The text being sent. A thread reference travels only while its link is still in it. */
-  text?: string;
-}): OrchestrationMessageContext | undefined {
+/**
+ * Thread references come with the text being sent: a reference travels only while its link is
+ * still in that text, so passing one without the other is a type error.
+ */
+type ThreadReferencesInput =
+  | { threadReferences?: never; text?: never }
+  | { threadReferences: ReadonlyArray<ThreadContextRecord>; text: string };
+
+export function buildMessageContext(
+  input: {
+    terminalContexts: ReadonlyArray<TerminalContextDraft>;
+    reviewComments: ReadonlyArray<ReviewCommentContext>;
+    previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
+    attachments?: ReadonlyArray<BoundComposerAttachment>;
+  } & ThreadReferencesInput,
+): OrchestrationMessageContext | undefined {
   // An annotation's screenshot travels as the image attachment that reuses its id.
   const screenshotAttachmentIds = new Set(
     (input.attachments ?? []).flatMap(({ attachment }) =>
@@ -323,7 +330,7 @@ export function buildMessageContext(input: {
   ];
   if (input.threadReferences && input.threadReferences.length > 0) {
     const linkedIds = new Set<string>(
-      collectComposerContextReferences(input.text ?? "").map((occurrence) => occurrence.contextId),
+      collectComposerContextReferences(input.text).map((occurrence) => occurrence.contextId),
     );
     records.push(...input.threadReferences.filter((record) => linkedIds.has(record.contextId)));
   }

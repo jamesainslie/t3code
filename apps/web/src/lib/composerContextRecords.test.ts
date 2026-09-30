@@ -731,6 +731,19 @@ describe("thread context records", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("requires the sent text alongside thread references", () => {
+    const input = {
+      terminalContexts: [],
+      reviewComments: [],
+      previewAnnotations: [],
+      threadReferences: [kept],
+    };
+    // Checked by typecheck: without the text there is no way to tell which chips are linked.
+    // @ts-expect-error threadReferences without text
+    const build = () => buildMessageContext(input);
+    expect(build).toBeTypeOf("function");
+  });
 });
 
 describe("producer ids that do not fit the grammar", () => {

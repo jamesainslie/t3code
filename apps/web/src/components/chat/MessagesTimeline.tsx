@@ -1832,7 +1832,8 @@ function QueuedMessageTimelineRow({
   const contextCount =
     queuedMessage.terminalContexts.length +
     queuedMessage.previewAnnotations.length +
-    queuedMessage.reviewComments.length;
+    queuedMessage.reviewComments.length +
+    (queuedMessage.threadReferences?.length ?? 0);
   const text = queuedMessage.prompt.trim();
   const sending = queuedMessage.sending !== undefined;
   const statusLabel = sending

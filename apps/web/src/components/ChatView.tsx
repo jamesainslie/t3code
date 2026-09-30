@@ -7788,6 +7788,7 @@ export default function ChatView(props: ChatViewProps) {
             terminalContexts: followUpTerminalContexts,
             reviewComments: followUpReviewComments,
             previewAnnotations: followUpPreviewAnnotations,
+            threadReferences: followUpThreadReferences,
           },
           writePrompt: (prompt) => setComposerDraftPrompt(composerDraftTarget, prompt),
           writeTerminalContexts: (contexts) =>
@@ -7796,11 +7797,13 @@ export default function ChatView(props: ChatViewProps) {
             setComposerDraftReviewComments(composerDraftTarget, [...comments]),
           writePreviewAnnotations: (annotations) =>
             setComposerDraftPreviewAnnotations(composerDraftTarget, [...annotations]),
+          writeThreadReferences: (records) => {
+            for (const record of records) {
+              addComposerDraftThreadReference(composerDraftTarget, record);
+            }
+          },
           resetCursor: (options) => composerRef.current?.resetCursorState(options),
         });
-        for (const record of followUpThreadReferences) {
-          addComposerDraftThreadReference(composerDraftTarget, record);
-        }
       }
       return;
     }
