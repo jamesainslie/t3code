@@ -143,6 +143,14 @@ If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
+To see why an environment keeps reconnecting, choose **Show details** on the
+reconnecting notice above the composer, or **Show connection details** in the
+environment's menu under **Settings → Connections**. It lists each connection
+attempt and why it failed. For an SSH environment in the desktop app, it also
+shows what starting the remote server printed, including the remote server
+log when the server does not come up. **Copy details** copies both for a bug
+report. On mobile, **Show details** on a connection notice lists the attempts.
+
 Sign-ins started on a remote host finish from your device. See
 [remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device) for
 provider setup and [terminal sign-in](./terminal.md#sign-in-from-a-terminal) for

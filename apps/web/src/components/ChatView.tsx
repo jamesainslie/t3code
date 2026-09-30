@@ -361,7 +361,12 @@ import { vcsEnvironment } from "../state/vcs";
 import { sourceControlEnvironment } from "../state/sourceControl";
 import { useProjectClone } from "../state/projectClones";
 import { projectCloneDisplayName, projectCloneProgressSummary } from "@t3tools/contracts";
-import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
+import {
+  type EnvironmentPresentation,
+  useEnvironments,
+  usePrimaryEnvironment,
+} from "../state/environments";
+import { ConnectionDetails } from "./connection/ConnectionDetails";
 import {
   readThreadShell,
   useProject,
@@ -671,6 +676,7 @@ type EnvironmentUnavailableState = {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly connection: EnvironmentConnectionPresentation;
+  readonly environment: EnvironmentPresentation;
 };
 
 function eventPathContainsSelector(event: Event, selector: string): boolean {
@@ -2443,6 +2449,7 @@ export default function ChatView(props: ChatViewProps) {
       environmentId: activeEnvironment.environmentId,
       label: activeEnvironmentUnavailableLabel,
       connection: activeEnvironment.connection,
+      environment: activeEnvironment,
     };
   }, [activeEnvironment, activeEnvironmentUnavailable, activeEnvironmentUnavailableLabel]);
   const handleReconnectActiveEnvironment = useCallback(
@@ -2728,6 +2735,9 @@ export default function ChatView(props: ChatViewProps) {
   const serverUpdateFailureDismissed =
     serverUpdateState === dismissedServerUpdateState ||
     isServerUpdateFailureDismissed(serverUpdateState);
+  // Which environment's connection details the unavailable banner shows, if any.
+  const [connectionDetailsEnvironmentId, setConnectionDetailsEnvironmentId] =
+    useState<EnvironmentId | null>(null);
   const systemComposerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
     const updateRunning = serverUpdateState.status === "running";
@@ -2756,13 +2766,35 @@ export default function ChatView(props: ChatViewProps) {
     const suppressUnavailableBanner =
       environmentReconnecting && (updateRunning || !reconnectWarningGraceElapsed);
     if (activeEnvironmentUnavailableState && unavailableConnection && !suppressUnavailableBanner) {
+      const detailsOpen =
+        connectionDetailsEnvironmentId === activeEnvironmentUnavailableState.environmentId;
       items.push({
         id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
         variant: unavailableConnection.phase === "error" ? "error" : "warning",
         icon: <WifiOffIcon />,
         title: `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
+        // Mounted only while open: the details follow the attempt log and SSH output live.
+        ...(detailsOpen
+          ? {
+              children: (
+                <ConnectionDetails environment={activeEnvironmentUnavailableState.environment} />
+              ),
+            }
+          : {}),
         actions: (
           <>
+            <Button
+              size="xs"
+              variant="ghost"
+              aria-expanded={detailsOpen}
+              onClick={() =>
+                setConnectionDetailsEnvironmentId(
+                  detailsOpen ? null : activeEnvironmentUnavailableState.environmentId,
+                )
+              }
+            >
+              {detailsOpen ? "Hide details" : "Show details"}
+            </Button>
             {!environmentReconnecting ? (
               <Button
                 size="xs"
@@ -2866,6 +2898,7 @@ export default function ChatView(props: ChatViewProps) {
     automaticEnvironment,
     autoBalanceUpdateBanner,
     activeEnvironmentUnavailableState,
+    connectionDetailsEnvironmentId,
     reconnectWarningGraceElapsed,
     handleReconnectActiveEnvironment,
     canDisconnectActiveEnvironment,
