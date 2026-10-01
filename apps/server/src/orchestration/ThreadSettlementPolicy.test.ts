@@ -180,6 +180,14 @@ describe("resolveAutoSettlementAt", () => {
     expect(decide(makeThread({ settledOverride: "active" }))).toBe(false);
   });
 
+  it("never settles a pinned thread, by inactivity or merge", () => {
+    const pinned = makeThread({ pinnedAt: "2026-08-21T00:00:00.000Z" });
+    expect(decide(pinned)).toBe(false);
+    expect(decide(pinned, { state: "merged", mergedAt: "2026-08-26T00:00:00.000Z" })).toBe(false);
+    expect(isAutoSettlementCandidate(pinned, NOW)).toBe(false);
+    expect(decide(makeThread({ pinnedAt: null }))).toBe(true);
+  });
+
   it("never settles a thread whose auto-settle is turned off, by inactivity or merge", () => {
     const held = makeThread({ autoSettleDisabledAt: "2026-08-21T00:00:00.000Z" });
     expect(decide(held)).toBe(false);

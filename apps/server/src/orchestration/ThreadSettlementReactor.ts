@@ -339,6 +339,10 @@ export const make = Effect.gen(function* () {
         // Merge notifications can arrive before the linked snapshot is projected.
         // Recheck the persisted state so terminal links settle without the timer.
         return worker.enqueue(event.payload.threadId);
+      case "thread.unpinned":
+        // Pinned threads are never candidates. Settle one that became
+        // eligible while pinned without waiting for the timer.
+        return worker.enqueue(event.payload.threadId);
       case "thread.session-set":
         if (
           event.payload.session.status !== "running" &&
