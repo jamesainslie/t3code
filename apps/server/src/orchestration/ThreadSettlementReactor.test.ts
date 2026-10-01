@@ -812,6 +812,46 @@ describe("ThreadSettlementReactor", () => {
     ),
   );
 
+  it.effect("keeps a pinned thread active and settles it as soon as it is unpinned", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([makeThread("pinned", { pinnedAt: NOW })]),
+        });
+        yield* Effect.gen(function* () {
+          const reactor = yield* ThreadSettlementReactor.ThreadSettlementReactor;
+          yield* startHarness(reactor, fixture.activation, fixture.snapshotReads);
+          assert.deepStrictEqual(yield* Ref.get(fixture.commands), []);
+
+          yield* Ref.update(fixture.snapshots, (snapshot) => ({
+            ...snapshot,
+            threads: snapshot.threads.map((thread) => ({ ...thread, pinnedAt: null })),
+          }));
+          yield* fixture.publishEvent({
+            sequence: 2,
+            eventId: EventId.make("thread-unpinned"),
+            aggregateKind: "thread",
+            aggregateId: ThreadId.make("pinned"),
+            occurredAt: NOW,
+            commandId: null,
+            causationEventId: null,
+            correlationId: null,
+            metadata: {},
+            type: "thread.unpinned",
+            payload: { threadId: ThreadId.make("pinned"), updatedAt: NOW },
+          });
+          assert.strictEqual(yield* Queue.take(fixture.snapshotReads), ThreadId.make("pinned"));
+          yield* reactor.drain;
+          assert.deepStrictEqual(
+            (yield* Ref.get(fixture.commands)).map(({ threadId }) => threadId),
+            [ThreadId.make("pinned")],
+          );
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+
   it.effect("reevaluates inactivity and pull request state once per minute", () =>
     Effect.scoped(
       Effect.gen(function* () {
