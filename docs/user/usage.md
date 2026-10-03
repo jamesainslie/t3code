@@ -134,7 +134,9 @@ and weekly windows against the gateway's rotation threshold, and how long the wh
 forecast to last. The pill needs the gateway on one environment only; it finds it from every
 thread, whichever environment the thread runs on. Hover it for every pooled account, what each is doing (serving, ready, cooling,
 spent, needing a login), and the metered fallback the gateway spills to when the pool is spent.
-The same accounts appear under **Usage → Limits**.
+The same accounts appear under **Usage → Limits**. A single missed read, such as a laptop waking
+before its network does, keeps the last reading; the pill shows the gateway offline only when it
+has not answered for two refresh intervals, and it reads again as soon as you come back to T3.
 
 ### Pick models the gateway routes
 

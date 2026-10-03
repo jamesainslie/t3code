@@ -164,6 +164,20 @@ describe("modelproxyAuth", () => {
     }),
   );
 
+  it.effect("refreshes a session on demand even when its token has time left", () =>
+    Effect.gen(function* () {
+      const { auth, forms } = fixture([granted("access-1", 3600), granted("access-2", 3600)]);
+      const { service, scope } = yield* auth;
+      yield* service.start(sourceId, config);
+      yield* TestClock.adjust("5 seconds");
+      expect(yield* service.accessToken(sourceId, config)).toBe("access-1");
+      expect(yield* service.accessToken(sourceId, config, { forceRefresh: true })).toBe("access-2");
+      expect(forms.at(-1)?.get("grant_type")).toBe("refresh_token");
+      expect(yield* service.accessToken(sourceId, config)).toBe("access-2");
+      yield* Scope.close(scope, Exit.void);
+    }),
+  );
+
   it.effect("restores a stored session on a fresh service", () =>
     Effect.gen(function* () {
       const { auth, store } = fixture([granted("access-1", 3600)]);

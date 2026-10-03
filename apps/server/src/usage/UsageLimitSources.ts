@@ -89,6 +89,39 @@ function keepGatewayRoutes(
   return routes ? { ...snapshot, proxy: { ...snapshot.proxy, routes } } : snapshot;
 }
 
+/** One source's read, flagged when its failure may clear on its own. */
+interface SourceRead {
+  readonly snapshot: UsageLimitSourceSnapshot;
+  readonly transient?: true;
+}
+
+/** How long a transient failure waits before its one retry. */
+const RETRY_AFTER = Duration.seconds(3);
+
+/**
+ * A transient failure within two polling intervals of a good read keeps
+ * that read: one missed poll, such as a laptop waking before its network
+ * does, is not an outage. The kept snapshot keeps its own `checkedAt`, so it
+ * never claims to be newer than it is. Past that, the failure shows.
+ */
+function settleRead(
+  read: SourceRead,
+  previous: ReadonlyArray<UsageLimitSourceSnapshot>,
+  input: { readonly nowMs: number; readonly intervalMs: number },
+): UsageLimitSourceSnapshot {
+  const last = previous.find((source) => source.id === read.snapshot.id);
+  if (
+    read.transient &&
+    last !== undefined &&
+    last.kind === read.snapshot.kind &&
+    last.error === undefined &&
+    input.nowMs - Date.parse(last.checkedAt) < 2 * input.intervalMs
+  ) {
+    return last;
+  }
+  return keepGatewayRoutes(read.snapshot, previous);
+}
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
@@ -106,54 +139,98 @@ export const make = Effect.gen(function* () {
     id: UsageLimitSourceId,
     config: ModelproxyUsageLimitSourceConfig,
     base: Pick<UsageLimitSourceSnapshot, "id" | "kind" | "label" | "checkedAt">,
-  ): Effect.fn.Return<UsageLimitSourceSnapshot> {
+  ): Effect.fn.Return<SourceRead> {
     const auth = yield* modelproxyAuth.authState(id);
     if (auth.state !== "signedIn") {
       return {
-        ...base,
-        accounts: [],
-        error: auth.state === "pending" ? "Sign-in pending." : "Not signed in.",
-        proxy: { auth },
+        snapshot: {
+          ...base,
+          accounts: [],
+          error: auth.state === "pending" ? "Sign-in pending." : "Not signed in.",
+          proxy: { auth },
+        },
       };
     }
-    const token = yield* modelproxyAuth.accessToken(id, config).pipe(Effect.result);
-    if (token._tag === "Failure") {
-      return {
-        ...base,
-        accounts: [],
-        error: token.failure.detail,
-        proxy: { auth: yield* modelproxyAuth.authState(id) },
-      };
+    const readWith = (forceRefresh: boolean) =>
+      modelproxyAuth
+        .accessToken(id, config, { forceRefresh })
+        .pipe(Effect.flatMap((token) => modelproxy.readStatus(config.url, token)));
+    let status = yield* readWith(false).pipe(Effect.result);
+    // The gateway can reject a token its expiry still vouches for (a revoked
+    // session, a rotated signing key); a freshly issued one settles it.
+    if (
+      status._tag === "Failure" &&
+      status.failure._tag === "ModelproxyReadError" &&
+      status.failure.unauthorized
+    ) {
+      status = yield* readWith(true).pipe(Effect.result);
     }
-    const status = yield* modelproxy.readStatus(config.url, token.success).pipe(Effect.result);
     if (status._tag === "Failure") {
-      yield* Effect.logDebug("usage limit source read failed", { id, cause: status.failure });
-      return { ...base, accounts: [], error: status.failure.detail, proxy: { auth } };
+      const failure = status.failure;
+      if (failure._tag === "ModelproxySessionError") {
+        return {
+          snapshot: {
+            ...base,
+            accounts: [],
+            error: failure.detail,
+            proxy: { auth: yield* modelproxyAuth.authState(id) },
+          },
+          ...(failure.reason === "refreshFailed" ? { transient: true as const } : {}),
+        };
+      }
+      yield* Effect.logDebug("usage limit source read failed", { id, cause: failure });
+      return {
+        snapshot: { ...base, accounts: [], error: failure.detail, proxy: { auth } },
+        ...(failure.transient ? { transient: true as const } : {}),
+      };
     }
     const mapped = mapModelproxyStatus(status.success, {
       checkedAt: base.checkedAt,
       nowMs: DateTime.toEpochMillis(yield* DateTime.now),
     });
-    return { ...base, accounts: mapped.accounts, proxy: { auth, ...mapped.proxy } };
+    return { snapshot: { ...base, accounts: mapped.accounts, proxy: { auth, ...mapped.proxy } } };
   });
 
-  const readSource = Effect.fn("UsageLimitSources.readSource")(function* (
+  const readSourceOnce = Effect.fn("UsageLimitSources.readSourceOnce")(function* (
     id: UsageLimitSourceId,
     config: UsageLimitSourceConfig,
-  ): Effect.fn.Return<UsageLimitSourceSnapshot> {
+  ): Effect.fn.Return<SourceRead> {
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
     const base = { id, kind: config.kind, label: sourceLabel(id, config), checkedAt } as const;
     if (config.kind === "modelproxy") return yield* readModelproxy(id, config, base);
     if (config.managementKey.length === 0) {
-      return { ...base, accounts: [], error: "No management key configured." };
+      return { snapshot: { ...base, accounts: [], error: "No management key configured." } };
     }
     const accounts = yield* api.readAccounts(config).pipe(Effect.result);
     if (accounts._tag === "Failure") {
       yield* Effect.logDebug("usage limit source read failed", { id, cause: accounts.failure });
-      return { ...base, accounts: [], error: accounts.failure.detail };
+      return { snapshot: { ...base, accounts: [], error: accounts.failure.detail } };
     }
-    return { ...base, accounts: accounts.success };
+    return { snapshot: { ...base, accounts: accounts.success } };
   });
+
+  /** A read whose failure may clear on its own gets one more try after a short pause. */
+  const readSource = Effect.fn("UsageLimitSources.readSource")(function* (
+    id: UsageLimitSourceId,
+    config: UsageLimitSourceConfig,
+  ): Effect.fn.Return<SourceRead> {
+    const first = yield* readSourceOnce(id, config);
+    if (!first.transient) return first;
+    yield* Effect.sleep(RETRY_AFTER);
+    return yield* readSourceOnce(id, config);
+  });
+
+  const intervalMs = settingsService.getSettings.pipe(
+    Effect.map((settings) =>
+      Duration.toMillis(
+        Duration.fromInputUnsafe(
+          resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
+        ),
+      ),
+    ),
+    Effect.orElseSucceed(() => Duration.toMillis(DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL)),
+    Effect.map((ms) => (ms <= 0 ? 60_000 : ms)),
+  );
 
   const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) =>
     Effect.gen(function* () {
@@ -182,12 +259,16 @@ export const make = Effect.gen(function* () {
       previous.filter((source) => source.kind === "modelproxy" && !listed.has(source.id)),
       (source) => modelproxyAuth.forget(source.id),
     );
-    const snapshots = yield* Effect.forEach(
+    const reads = yield* Effect.forEach(
       entries,
       ([id, config]) => readSource(id as UsageLimitSourceId, config),
       { concurrency: 4 },
     );
-    yield* publish(snapshots.map((snapshot) => keepGatewayRoutes(snapshot, previous)));
+    const settle = {
+      nowMs: DateTime.toEpochMillis(yield* DateTime.now),
+      intervalMs: yield* intervalMs,
+    };
+    yield* publish(reads.map((read) => settleRead(read, previous, settle)));
   }).pipe(refreshLock.withPermits(1), Effect.ignoreCause({ log: true }));
 
   const auth = (input: UsageLimitSourceAuthInput) =>
@@ -235,7 +316,7 @@ export const make = Effect.gen(function* () {
         });
       }
       const result = yield* api.consume(config, input.accountId, input.creditId);
-      const snapshot = yield* readSource(input.sourceId, config);
+      const { snapshot } = yield* readSource(input.sourceId, config);
       const previous = yield* Ref.get(stateRef);
       yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
       return result;
@@ -250,22 +331,34 @@ export const make = Effect.gen(function* () {
     Effect.forkScoped,
   );
 
-  const interval = settingsService.getSettings.pipe(
-    Effect.map(
-      (settings) => resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
-    ),
-    Effect.orElseSucceed(() => DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL),
-  );
   yield* Effect.forever(
-    interval.pipe(
-      Effect.flatMap((wait) =>
-        Effect.sleep(Duration.toMillis(Duration.fromInputUnsafe(wait)) <= 0 ? "60 seconds" : wait),
-      ),
+    intervalMs.pipe(
+      Effect.flatMap((ms) => Effect.sleep(Duration.millis(ms))),
       Effect.andThen(backgroundPolicy.shouldRunScopeWork({ type: "provider-status" })),
       Effect.flatMap((shouldRun) => (shouldRun ? refresh : Effect.void)),
       Effect.ignoreCause({ log: true }),
     ),
   ).pipe(Effect.forkScoped);
+
+  // The interval skips reads while no client is looking, so a client coming
+  // back (a laptop waking, a window refocused) re-reads a source that failed
+  // or went unread for a whole interval rather than waiting for the next one.
+  const refreshIfStale = Effect.gen(function* () {
+    const current = yield* Ref.get(stateRef);
+    const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
+    const ms = yield* intervalMs;
+    const stale = current.some(
+      (source) => source.error !== undefined || nowMs - Date.parse(source.checkedAt) >= ms,
+    );
+    if (stale) yield* refresh;
+  });
+  yield* backgroundPolicy.streamChanges.pipe(
+    Stream.mapEffect(() => backgroundPolicy.shouldRunScopeWork({ type: "provider-status" })),
+    Stream.changes,
+    Stream.filter((shouldRun) => shouldRun),
+    Stream.runForEach(() => refreshIfStale),
+    Effect.forkScoped,
+  );
 
   yield* refresh.pipe(Effect.forkScoped);
 
