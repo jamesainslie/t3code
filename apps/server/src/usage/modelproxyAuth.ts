@@ -152,10 +152,15 @@ export const makeModelproxyAuth = Effect.gen(function* () {
       return { state: Option.isSome(session) ? "signedIn" : "signedOut" };
     });
 
-  /** A token good for at least the next minute, refreshed through the issuer when needed. */
+  /**
+   * A token good for at least the next minute, refreshed through the issuer
+   * when needed. `forceRefresh` refreshes regardless of the token's own
+   * expiry, for a gateway that has already rejected it.
+   */
   const accessToken = Effect.fn("ModelproxyAuth.accessToken")(function* (
     sourceId: UsageLimitSourceId,
     config: ModelproxyUsageLimitSourceConfig,
+    options: { readonly forceRefresh?: boolean } = {},
   ): Effect.fn.Return<string, ModelproxySessionError> {
     const session = yield* loadSession(sourceId);
     if (Option.isNone(session)) {
@@ -164,8 +169,9 @@ export const makeModelproxyAuth = Effect.gen(function* () {
     const now = yield* DateTime.now;
     const expiresAt = DateTime.makeUnsafe(session.value.expiresAt);
     if (
+      options.forceRefresh !== true &&
       DateTime.toEpochMillis(expiresAt) - DateTime.toEpochMillis(now) >
-      Duration.toMillis(REFRESH_AHEAD)
+        Duration.toMillis(REFRESH_AHEAD)
     ) {
       return session.value.accessToken;
     }

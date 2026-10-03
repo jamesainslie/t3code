@@ -83,6 +83,12 @@ export class ModelproxyReadError extends Schema.TaggedError<ModelproxyReadError>
     detail: Schema.String,
     /** The gateway rejected the token, so a fresh sign-in is needed rather than a retry. */
     unauthorized: Schema.optional(Schema.Boolean),
+    /**
+     * The read may succeed on its own a moment later: no answer, a 5xx, or a
+     * body that was not JSON (an interrupted response or a network proxy's
+     * own page). A wrong URL or a payload this build cannot read is not.
+     */
+    transient: Schema.optional(Schema.Boolean),
   },
 ) {
   override get message(): string {
@@ -261,7 +267,9 @@ export const makeModelproxyApi = Effect.gen(function* () {
       )
       .pipe(
         Effect.timeout("15 seconds"),
-        Effect.mapError(() => new ModelproxyReadError({ detail: "The gateway did not answer." })),
+        Effect.mapError(
+          () => new ModelproxyReadError({ detail: "The gateway did not answer.", transient: true }),
+        ),
       );
     if (response.status === 401 || response.status === 403) {
       return yield* new ModelproxyReadError({
@@ -272,11 +280,13 @@ export const makeModelproxyApi = Effect.gen(function* () {
     if (response.status < 200 || response.status >= 300) {
       return yield* new ModelproxyReadError({
         detail: `The gateway status request failed (HTTP ${response.status}).`,
+        ...(response.status >= 500 ? { transient: true } : {}),
       });
     }
     const body = yield* response.json.pipe(
       Effect.mapError(
-        () => new ModelproxyReadError({ detail: "The gateway status was not JSON." }),
+        () =>
+          new ModelproxyReadError({ detail: "The gateway status was not JSON.", transient: true }),
       ),
     );
     return yield* decodeStatus(body).pipe(
