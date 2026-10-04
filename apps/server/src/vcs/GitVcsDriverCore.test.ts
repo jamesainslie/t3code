@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - realpathSync.native resolves Windows 8.3 short names, which the Effect realPath does not.
 import * as NodeFS from "node:fs";
+import * as NodeHttp from "node:http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { assert, it, describe } from "@effect/vitest";
@@ -12,6 +13,7 @@ import * as Logger from "effect/Logger";
 import * as Metric from "effect/Metric";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
@@ -932,6 +934,69 @@ for (const scenario of [
     }).pipe(Effect.provide(ServerConfigLayer.pipe(Layer.provideMerge(NodeServices.layer)))),
   );
 }
+
+it.effect(
+  "authenticates fetches with the checkout's remote credential over git's own helpers",
+  () =>
+    Effect.gen(function* () {
+      // A smart-HTTP remote that demands basic auth and records what each fetch presents.
+      const authorizations: Array<string> = [];
+      const server = NodeHttp.createServer((request, response) => {
+        const authorization = request.headers.authorization;
+        if (authorization === undefined) {
+          response.writeHead(401, { "WWW-Authenticate": 'Basic realm="test"' });
+        } else {
+          authorizations.push(authorization);
+          response.writeHead(403);
+        }
+        response.end();
+      });
+      const port = yield* Effect.acquireRelease(
+        Effect.callback<number>((resume) => {
+          server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            resume(Effect.succeed(typeof address === "object" && address ? address.port : 0));
+          });
+        }),
+        () => Effect.callback<void>((resume) => void server.close(() => resume(Effect.void))),
+      );
+      const baseUrl = `http://127.0.0.1:${port}`;
+
+      const cwd = yield* makeTmpDir();
+      const setup = yield* makeGitVcsDriverCore();
+      const run = (args: ReadonlyArray<string>) =>
+        setup.execute({ operation: "GitVcsDriver.test.git", cwd, args, timeoutMs: 10_000 });
+      yield* run(["init"]);
+      yield* run(["remote", "add", "origin", `${baseUrl}/owner/repo.git`]);
+      // Stands in for a helper that answers with whichever account happens to be active.
+      yield* run([
+        "config",
+        "credential.helper",
+        '!f() { test "$1" = get || exit 0; echo username=active; echo password=active-token; }; f',
+      ]);
+
+      const fetchWith = (credential: GitVcsDriver.GitRemoteCredential | null) =>
+        makeGitVcsDriverCore().pipe(
+          Effect.provideService(GitVcsDriver.GitRemoteCredentials, () =>
+            Effect.succeed(credential),
+          ),
+          Effect.flatMap((driver) => driver.fetchRemote({ cwd, remoteName: "origin" })),
+          Effect.ignore,
+        );
+      yield* fetchWith(null);
+      yield* fetchWith({ baseUrl, token: Redacted.make("selected-token") });
+
+      const basic = (username: string, password: string) =>
+        `Basic ${btoa(`${username}:${password}`)}`;
+      assert.deepEqual(authorizations, [
+        basic("active", "active-token"),
+        basic("x-access-token", "selected-token"),
+      ]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(ServerConfigLayer.pipe(Layer.provideMerge(NodeServices.layer))),
+    ),
+);
 
 it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   describe("process environment", () => {

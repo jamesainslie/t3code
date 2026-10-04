@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as Redacted from "effect/Redacted";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -58,6 +59,21 @@ export interface ExecuteGitInput {
   readonly keepLineCallbacksAfterTruncation?: boolean;
   readonly progress?: ExecuteGitProgress;
 }
+
+/** A token git presents to remotes under `baseUrl` (for example `https://github.com`). */
+export interface GitRemoteCredential {
+  readonly baseUrl: string;
+  readonly token: Redacted.Redacted<string>;
+}
+
+/**
+ * The credential a checkout's git network commands (fetch, pull, push) use in place of git's
+ * own credential helpers, or null to leave those helpers alone. Read once when the driver is
+ * built; the server binds it to the GitHub account rules so git follows the same account as gh.
+ */
+export const GitRemoteCredentials = Context.Reference<
+  (cwd: string) => Effect.Effect<GitRemoteCredential | null>
+>("t3/vcs/GitRemoteCredentials", { defaultValue: () => () => Effect.succeed(null) });
 
 export interface ExecuteGitResult {
   readonly exitCode: ChildProcessSpawner.ExitCode;

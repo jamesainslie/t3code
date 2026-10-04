@@ -31,8 +31,10 @@ project and set **GitHub account** under its Source Control settings, or leave i
 follow the rules. Without a match, T3 Code uses the account `gh` has active, which is what happens
 with a single account.
 
-The choice covers the `gh` commands T3 Code runs for that repository, such as reading and creating
-pull requests. Pushes and pulls still use Git's own credential helper.
+The choice covers what T3 Code itself does with that repository: reading and creating pull
+requests, and fetching, pulling, and pushing over HTTPS, including the fetch that starts a new
+worktree. Remotes reached over SSH use your SSH keys, and Git commands an agent runs in its terminal
+still use Git's own credential helper.
 
 ### Forgejo and Gitea
 
