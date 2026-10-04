@@ -18,7 +18,6 @@ import {
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAssetUrlRefresh } from "~/assets/assetUrls";
-import ChatMarkdown from "~/components/ChatMarkdown";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { toastManager } from "~/components/ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
@@ -28,6 +27,7 @@ import { cn } from "~/lib/utils";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
+import { MarkdownDocument } from "./FileMarkdownPreview";
 import {
   FILE_SURFACE_SUBHEADER_CLASS,
   FileSurfaceAction,
@@ -245,12 +245,7 @@ export function AttachmentFilePreview(props: {
       <DelimitedTablePreview name={props.name} text={content.text} delimiter={delimiter} />
     ) : kind === "markdown" && rendered ? (
       <ScrollArea className="min-h-0 flex-1">
-        <ChatMarkdown
-          text={content.text}
-          cwd={undefined}
-          asDocument
-          className="chat-markdown-document mx-auto max-w-4xl px-8 py-7"
-        />
+        <MarkdownDocument text={content.text} cwd={undefined} />
       </ScrollArea>
     ) : (
       <ReadOnlySourcePreview name={props.name} text={content.text} />

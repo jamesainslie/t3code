@@ -1742,11 +1742,15 @@ code {
 
 /* Chat markdown rendering */
 
-.chat-markdown > :first-child {
+/* A long markdown file renders as sibling sections; only its outer edges drop
+   their margins, so blocks keep their spacing across the seams. */
+.chat-markdown:not(.chat-markdown-section) > :first-child,
+.chat-markdown-section:first-child > :first-child {
   margin-top: 0;
 }
 
-.chat-markdown > :last-child {
+.chat-markdown:not(.chat-markdown-section) > :last-child,
+.chat-markdown-section:last-child > :last-child {
   margin-bottom: 0;
 }
 

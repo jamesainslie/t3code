@@ -93,7 +93,12 @@ import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
 import { remarkPandocMath } from "../remarkPandocMath";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
-import { parseInlineCodeLanguage, rehypeSourceLines, remarkHeadingIds } from "../markdown-document";
+import {
+  parseInlineCodeLanguage,
+  rehypeSourceLines,
+  remarkHeadingIds,
+  type MarkdownDocumentSection,
+} from "../markdown-document";
 import { MarkdownMath } from "./chat/MarkdownMath";
 import { normalizeChatMath } from "../chatMath";
 import {
@@ -241,6 +246,9 @@ interface ChatMarkdownProps {
   /** Render a standalone markdown file rather than a message: TeX math,
       GitHub heading anchors, and `code{:lang}` inline highlighting. */
   asDocument?: boolean | undefined;
+  /** Where `text` sits in a long file rendered in sections, so source lines,
+      heading anchors and task offsets read as the whole file's. */
+  documentSection?: Omit<MarkdownDocumentSection, "text"> | undefined;
 }
 
 export interface ChatMarkdownContextReference {
@@ -286,6 +294,7 @@ export function shouldUseMarkdownFileBrowserPrimaryAction(input: {
 
 const EMPTY_MARKDOWN_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 const EMPTY_REMARK_PLUGINS: NonNullable<ReactMarkdownOptions["remarkPlugins"]> = [];
+type MarkdownPluggable = NonNullable<ReactMarkdownOptions["remarkPlugins"]>[number];
 
 const ARTIFACT_TEMPLATE_ICON_BY_KIND = {
   document: FileTextIcon,
@@ -3450,6 +3459,8 @@ function ChatMarkdown({
   lineBreaks = false,
   parseRawHtml = true,
   extraRemarkPlugins = EMPTY_REMARK_PLUGINS,
+  documentSection,
+  onTaskListChange,
   ...props
 }: ChatMarkdownProps) {
   // Documents keep GitHub's math rules; chat math is a setting (fork).
@@ -3458,6 +3469,16 @@ function ChatMarkdown({
     () => (chatMath ? normalizeChatMath(sourceText) : sourceText),
     [chatMath, sourceText],
   );
+  // Task markers are found in this section's text; the caller edits the whole file.
+  const sectionOffset = documentSection?.offset ?? 0;
+  const onSectionTaskListChange = useMemo(
+    () =>
+      onTaskListChange && sectionOffset > 0
+        ? (input: { markerOffset: number; checked: boolean }) =>
+            onTaskListChange({ ...input, markerOffset: input.markerOffset + sectionOffset })
+        : onTaskListChange,
+    [onTaskListChange, sectionOffset],
+  );
   const {
     componentState,
     handleCopy,
@@ -3465,20 +3486,51 @@ function ChatMarkdown({
     markdownUrlTransform,
     localMediaPreview,
     setLocalMediaPreview,
-  } = useChatMarkdownState({ text, ...props, renderMath: chatMath || props.asDocument === true });
+  } = useChatMarkdownState({
+    text,
+    ...props,
+    onTaskListChange: onSectionTaskListChange,
+    renderMath: chatMath || props.asDocument === true,
+  });
   const incrementalParsing =
     props.isStreaming === true &&
     extraRemarkPlugins.length === 0 &&
     /(?:^|\n) {0,3}(?:`{3}|~{3})/.test(text);
+  const precedingHeadings = documentSection?.precedingHeadings;
   const remarkPlugins = useMemo(
-    () => [
+    (): NonNullable<ReactMarkdownOptions["remarkPlugins"]> => [
       ...(lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS),
-      ...(props.asDocument ? DOCUMENT_REMARK_PLUGINS : chatMath ? CHAT_MATH_REMARK_PLUGINS : []),
+      ...(!props.asDocument
+        ? chatMath
+          ? CHAT_MATH_REMARK_PLUGINS
+          : []
+        : precedingHeadings
+          ? [
+              remarkPandocMath,
+              [remarkHeadingIds, { precedingHeadings }] satisfies MarkdownPluggable,
+            ]
+          : DOCUMENT_REMARK_PLUGINS),
       ...extraRemarkPlugins,
       ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
     ],
-    [chatMath, extraRemarkPlugins, incrementalParsing, lineBreaks, props.asDocument],
+    [
+      chatMath,
+      extraRemarkPlugins,
+      incrementalParsing,
+      lineBreaks,
+      precedingHeadings,
+      props.asDocument,
+    ],
   );
+  const firstLine = documentSection?.startLine;
+  const rehypePlugins = useMemo((): ReactMarkdownOptions["rehypePlugins"] => {
+    if (!props.asDocument) return parseRawHtml ? CHAT_MARKDOWN_REHYPE_PLUGINS : undefined;
+    if (firstLine === undefined) {
+      return parseRawHtml ? DOCUMENT_REHYPE_PLUGINS : DOCUMENT_LITERAL_REHYPE_PLUGINS;
+    }
+    const sourceLines: MarkdownPluggable = [rehypeSourceLines, { firstLine }];
+    return parseRawHtml ? [...CHAT_MARKDOWN_REHYPE_PLUGINS, sourceLines] : [sourceLines];
+  }, [firstLine, parseRawHtml, props.asDocument]);
 
   // react-markdown converts unparsed HTML nodes to text when skipHtml is false.
   // Keep that behavior explicit because literal mode depends on escaping the
@@ -3497,15 +3549,7 @@ function ChatMarkdown({
       <ChatMarkdownRendererContext value={componentState}>
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
-          rehypePlugins={
-            props.asDocument
-              ? parseRawHtml
-                ? DOCUMENT_REHYPE_PLUGINS
-                : DOCUMENT_LITERAL_REHYPE_PLUGINS
-              : parseRawHtml
-                ? CHAT_MARKDOWN_REHYPE_PLUGINS
-                : undefined
-          }
+          rehypePlugins={rehypePlugins}
           skipHtml={false}
           components={CHAT_MARKDOWN_COMPONENTS}
           urlTransform={markdownUrlTransform}
