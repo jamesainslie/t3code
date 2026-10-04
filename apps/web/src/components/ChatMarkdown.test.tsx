@@ -9,6 +9,7 @@ import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
+import { splitMarkdownDocument } from "../markdown-document";
 import { loadKatex } from "./chat/MarkdownMath";
 
 vi.mock("@t3tools/client-runtime/mermaid-renderer", () => ({
@@ -518,6 +519,50 @@ describe("ChatMarkdown streaming", () => {
       expect(input).toBe(originalInput);
       expect(editedText).toBe("- [ ] A longer first task\n- [x] Second");
       expect(mounted.root.findAllByType("input")[1]!.props.checked).toBe(true);
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("edits a task in a later section of a long file at its place in the file", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const file = "# Plan\n\n- [ ] Earlier task\n\n## Later\n\n- [ ] Later task\n";
+    const section = splitMarkdownDocument(file, { wholeMaxLength: 0, sectionLength: 1 }).at(-1)!;
+    let editedFile: string | undefined;
+    let renderer: ReactTestRenderer | undefined;
+
+    try {
+      await act(async () => {
+        renderer = create(
+          <ChatMarkdown
+            cwd="/tmp/project"
+            text={section.text}
+            documentSection={section}
+            asDocument
+            onTaskListChange={({ markerOffset, checked }) => {
+              editedFile = setMarkdownTaskChecked(file, markerOffset, checked);
+            }}
+          />,
+        );
+      });
+      const input = renderer!.root.findByType("input");
+      const listItem = renderer!.root.findByType("li");
+      const { onChange } = input.props as ComponentProps<"input">;
+      if (!onChange) throw new Error("Task checkbox has no edit handler");
+      await act(async () => {
+        onChange({
+          currentTarget: {
+            checked: true,
+            closest: () => ({
+              dataset: { taskMarkerOffset: String(listItem.props["data-task-marker-offset"]) },
+            }),
+          },
+        } as unknown as Parameters<typeof onChange>[0]);
+      });
+
+      expect(section.offset).toBeGreaterThan(0);
+      expect(editedFile).toBe("# Plan\n\n- [ ] Earlier task\n\n## Later\n\n- [x] Later task\n");
     } finally {
       await act(async () => renderer?.unmount());
       vi.unstubAllGlobals();
