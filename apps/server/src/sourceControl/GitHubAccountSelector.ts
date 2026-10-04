@@ -15,6 +15,7 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import type { PinnedGitHubCredentialValue } from "./GitHubCli.ts";
 
@@ -205,6 +206,25 @@ export const layerLive = layer.pipe(
   Layer.provide(RepositoryIdentityResolver.layer),
   Layer.provide(VcsProcess.layer),
 );
+
+/**
+ * The git driver's remote credential bound to the selected account, so the server's own fetches,
+ * pulls, and pushes follow the same rules as its gh calls instead of gh's active account.
+ */
+export const gitRemoteCredentialsLayer = Layer.effect(
+  GitVcsDriver.GitRemoteCredentials,
+  Effect.gen(function* () {
+    const accounts = yield* GitHubAccountSelector;
+    return (cwd: string) =>
+      accounts
+        .pinFor({ cwd })
+        .pipe(
+          Effect.map((pinned) =>
+            pinned === null ? null : { baseUrl: `https://${pinned.host}`, token: pinned.token },
+          ),
+        );
+  }),
+).pipe(Layer.provide(layerLive));
 
 /** No account selection at all: every call keeps gh's active account. For contexts without settings. */
 export const layerUnselected = Layer.succeed(

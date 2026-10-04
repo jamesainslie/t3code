@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -85,6 +86,44 @@ const STATUS_UPSTREAM_REFRESH_ENV = Object.freeze({
   SSH_ASKPASS: "",
   SSH_ASKPASS_REQUIRE: "never",
 } satisfies NodeJS.ProcessEnv);
+// Clone is left out: its cwd is the destination's parent, which says nothing about the remote.
+const REMOTE_CREDENTIAL_SUBCOMMANDS = new Set(["fetch", "pull", "push", "ls-remote"]);
+const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree"]);
+const REMOTE_CREDENTIAL_TOKEN_ENV = "T3_GIT_REMOTE_TOKEN";
+// The token travels in the environment, like GH_TOKEN for gh, so it never lands in argv.
+const REMOTE_CREDENTIAL_HELPER = `!f() { test "$1" = get || exit 0; echo username=x-access-token; echo "password=$${REMOTE_CREDENTIAL_TOKEN_ENV}"; }; f`;
+
+function usesRemoteCredential(args: ReadonlyArray<string>): boolean {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (GIT_GLOBAL_OPTIONS_WITH_VALUE.has(arg)) index++;
+    else if (!arg.startsWith("-")) return REMOTE_CREDENTIAL_SUBCOMMANDS.has(arg);
+  }
+  return false;
+}
+
+/**
+ * Appends command-scope config that empties the credential helper list for the remote's base
+ * URL and installs one that answers with the given token. Command-scope config is read after
+ * every config file, so this replaces the user's helpers for that URL and leaves others alone.
+ */
+function withRemoteCredential(
+  env: NodeJS.ProcessEnv,
+  credential: GitVcsDriver.GitRemoteCredential,
+): NodeJS.ProcessEnv {
+  const count = Number(env.GIT_CONFIG_COUNT ?? "0") || 0;
+  const key = `credential.${credential.baseUrl}.helper`;
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(count + 2),
+    [`GIT_CONFIG_KEY_${count}`]: key,
+    [`GIT_CONFIG_VALUE_${count}`]: "",
+    [`GIT_CONFIG_KEY_${count + 1}`]: key,
+    [`GIT_CONFIG_VALUE_${count + 1}`]: REMOTE_CREDENTIAL_HELPER,
+    [REMOTE_CREDENTIAL_TOKEN_ENV]: Redacted.value(credential.token),
+  };
+}
+
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 const GIT_LIST_BRANCHES_DEFAULT_LIMIT = 100;
 const NON_REPOSITORY_STATUS_DETAILS = Object.freeze<GitVcsDriver.GitStatusDetails>({
@@ -830,6 +869,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const { worktreesDir } = yield* ServerConfig;
   const crypto = yield* Crypto.Crypto;
+  const remoteCredentialFor = yield* GitVcsDriver.GitRemoteCredentials;
 
   const executeRaw: GitVcsDriver.GitVcsDriver["Service"]["execute"] = Effect.fnUntraced(
     function* (input) {
@@ -837,6 +877,12 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ...input,
         args: [...input.args],
       } as const;
+      const remoteCredential = usesRemoteCredential(input.args)
+        ? yield* remoteCredentialFor(input.cwd)
+        : null;
+      const baseEnv = { ...process.env, ...input.env };
+      const env =
+        remoteCredential === null ? baseEnv : withRemoteCredential(baseEnv, remoteCredential);
       const timeoutMs = input.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : input.timeoutMs;
       const maxOutputBytes = input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
       const appendTruncationMarker = input.appendTruncationMarker ?? false;
@@ -858,11 +904,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           .spawn(
             ChildProcess.make("git", commandInput.args, {
               cwd: commandInput.cwd,
-              env: {
-                ...process.env,
-                ...input.env,
-                ...trace2Monitor.env,
-              },
+              env: { ...env, ...trace2Monitor.env },
             }),
           )
           .pipe(
