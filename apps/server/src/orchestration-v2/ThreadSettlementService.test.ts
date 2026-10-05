@@ -1121,4 +1121,35 @@ describe("ThreadSettlementServiceV2 single-thread sweeps", () => {
       }),
     ),
   );
+
+  // Fork: unpinning makes a thread a candidate again without waiting for the sweep.
+  it.effect("rechecks an unpinned thread right away", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const unpinned = makeThread("unpinned-thread");
+        const other = makeThread("other-thread");
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([unpinned, other]),
+          settings: { ...DEFAULT_SERVER_SETTINGS, sidebarAutoSettleAfterDays: 3 },
+        });
+
+        yield* Effect.gen(function* () {
+          const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+          yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+          yield* Ref.set(fixture.candidateReads, []);
+          yield* fixture.publishEvent({
+            type: "thread.unpinned",
+            id: EventId.make("event:unpinned"),
+            threadId: unpinned.id,
+            occurredAt: DateTime.makeUnsafe(NOW),
+            payload: unpinned,
+          } as never);
+          yield* Queue.take(fixture.snapshotReads);
+          yield* service.drain;
+          assert.deepStrictEqual(yield* Ref.get(fixture.candidateReads), [unpinned.id]);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
 });

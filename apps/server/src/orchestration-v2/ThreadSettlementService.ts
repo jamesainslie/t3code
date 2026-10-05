@@ -541,6 +541,8 @@ export const make = Effect.gen(function* () {
         return closeIdleTerminals(event.threadId);
       case "thread.pull-request-synced":
       case "provider-session.detached":
+      // Fork: an unpinned thread is a settlement candidate again; recheck it now.
+      case "thread.unpinned":
         return worker.enqueue(event.threadId);
       case "provider-session.updated":
         return event.payload.status !== "starting" && event.payload.status !== "running"
