@@ -235,6 +235,16 @@ export function forkSnoozeFields(
 }
 
 /**
+ * Fork fields for `thread.settle` and `thread.pin`. Both put the thread back in the user's
+ * hands, which a wait would immediately override, so its links go the way a snooze does.
+ */
+export function forkClearedDependencies(
+  thread: Pick<OrchestrationV2AppThread, "dependencies">,
+): Partial<Pick<OrchestrationV2AppThread, "dependencies">> {
+  return (thread.dependencies ?? []).length === 0 ? {} : { dependencies: [] };
+}
+
+/**
  * Fork fields for `thread.create`. The continuation link is dropped when its source is
  * missing or deleted, so a new thread never points at nothing.
  */

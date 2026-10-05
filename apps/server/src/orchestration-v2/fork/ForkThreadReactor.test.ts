@@ -216,4 +216,35 @@ describe("ForkThreadReactor", () => {
       }),
     ),
   );
+
+  it.effect(
+    "ends a wait when the user sends the waiting thread a message, not on imported history",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { events, dispatched, done } = yield* harness({
+            shells: [thread("waiter", { dependencies: [openLink("worker")] })],
+            expectedDispatches: 1,
+          });
+          const message = (id: string, runId: string | null) =>
+            ({
+              type: "message.updated",
+              threadId: ThreadId.make("waiter"),
+              payload: { id, role: "user", createdBy: "user", runId },
+            }) as unknown as OrchestrationV2DomainEvent;
+          yield* Queue.offer(events, message("imported", null));
+          yield* Queue.offer(events, message("sent", "run-1"));
+          yield* Deferred.await(done);
+          const commands = yield* Ref.get(dispatched);
+          assert.deepStrictEqual(
+            commands.map((command) =>
+              command.type === "thread.fork.update" && command.update.kind === "dependency.remove"
+                ? [command.commandId, command.update.dependsOnThreadIds]
+                : null,
+            ),
+            [["fork:dependency-clear:waiter:sent", [ThreadId.make("worker")]]],
+          );
+        }),
+      ),
+  );
 });

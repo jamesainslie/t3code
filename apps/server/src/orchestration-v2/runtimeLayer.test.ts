@@ -4833,6 +4833,15 @@ it.layer(SharedApplicationDataPlaneTestLayer)("fork thread fields", (it) => {
         [worker],
       );
 
+      // Settling puts the thread back in the user's hands; the wait goes with it.
+      yield* orchestrator.dispatch({
+        type: "thread.settle",
+        commandId: CommandId.make("runtime-layer-fork-settle"),
+        threadId: waiter,
+      });
+      const settled = yield* orchestrator.getThreadProjection(waiter);
+      assert.deepStrictEqual(settled.thread.dependencies, []);
+
       const continued = ThreadId.make("runtime-layer-fork-continued");
       yield* orchestrator.dispatch({
         type: "thread.create",

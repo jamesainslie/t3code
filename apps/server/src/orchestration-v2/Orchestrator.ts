@@ -2757,6 +2757,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             thread.settledOverride === "settled" && thread.settledAt !== null && !wasPinned;
           return {
             ...thread,
+            ...ForkThreadMutations.forkClearedDependencies(thread),
             settledOverride: "settled",
             settledAt: alreadySettled ? thread.settledAt : (command.settledAt ?? now),
             unsettledAt: null,
@@ -2816,6 +2817,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           const promotes = thread.settledOverride === "settled" || thread.snoozedUntil != null;
           return {
             ...thread,
+            ...ForkThreadMutations.forkClearedDependencies(thread),
             pinnedAt: alreadyPinned ? thread.pinnedAt : now,
             // A fresh pin takes the client's slot in the arranged order; on a
             // re-pin the existing key wins so raced duplicates cannot move a

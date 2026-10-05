@@ -8,9 +8,10 @@
  * - a dependency's finished run, pending request, archive, or delete satisfies
  *   the links waiting on it;
  * - a reminder whose snooze has ended, by its timer or any other way, is
- *   delivered into the chat.
- * Both go through `thread.fork.internal-update` with deterministic command ids,
- * so replays, restarts, and races are no-ops.
+ *   delivered into the chat;
+ * - a message the user sends to a waiting thread ends its wait.
+ * All go through fork commands with deterministic ids, so replays, restarts,
+ * and races are no-ops.
  */
 import {
   CommandId,
@@ -209,6 +210,26 @@ export const make = Effect.gen(function* () {
           (entry.reminder.snoozedUntilMs === null || entry.reminder.snoozedUntilMs <= nowMs)
         ) {
           yield* deliverReminder(thread.id, entry.reminder);
+        }
+      }
+      if (
+        event.type === "message.updated" &&
+        event.payload.role === "user" &&
+        event.payload.createdBy === "user" &&
+        // Imported history has no run; only a message sent now ends a wait.
+        event.payload.runId !== null
+      ) {
+        const open = [...((yield* Ref.get(index)).get(event.threadId)?.dependencies.keys() ?? [])];
+        const [first, ...rest] = open;
+        if (first !== undefined) {
+          yield* dispatch({
+            type: "thread.fork.update",
+            commandId: CommandId.make(
+              `fork:dependency-clear:${event.threadId}:${event.payload.id}`,
+            ),
+            threadId: event.threadId,
+            update: { kind: "dependency.remove", dependsOnThreadIds: [first, ...rest] },
+          });
         }
       }
       const reason = dependencySatisfiedReason(event);
