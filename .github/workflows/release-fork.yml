@@ -194,7 +194,7 @@ jobs:
     needs: [preflight]
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -224,8 +224,16 @@ jobs:
       - name: Install browser secret helper build libraries
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
+      # Same split as ci-fork.yml, run one after another on this runner: with
+      # every suite at once, the web suite's imports starved on 4 vCPU.
       - name: Test
-        run: vp run test
+        run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+
+      - name: Test web
+        run: vp run --filter @t3tools/web test
+
+      - name: Test server
+        run: vp run --filter t3 test
 
   # One JS bundle, consumed by every desktop and CLI archive build so all
   # targets ship the same server and web client bytes.
