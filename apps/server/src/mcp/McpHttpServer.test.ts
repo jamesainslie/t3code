@@ -24,6 +24,9 @@ import { McpProtocol, McpSchema, McpServer } from "effect/unstable/ai";
 import { HttpBody, HttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
 import * as ProjectService from "../project/ProjectService.ts";
+import * as DocumentComments from "../fork/DocumentComments.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../orchestration-v2/ThreadSearch.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
@@ -506,8 +509,8 @@ it.effect(
           Layer.provideMerge(McpServer.McpServer.layer),
           Layer.provide(
             Layer.mergeAll(
-              Layer.mock(ProjectionSnapshotQuery)({}),
-              Layer.mock(OrchestrationEngineService)({}),
+              Layer.mock(Orchestrator.OrchestratorV2)({}),
+              Layer.mock(DocumentComments.DocumentComments)({}),
               NodeServices.layer,
             ),
           ),
@@ -567,15 +570,26 @@ it.effect("thread history tools return plain text without structured content", (
         Layer.provideMerge(McpServer.McpServer.layer),
         Layer.provide(
           Layer.mergeAll(
-            Layer.mock(ProjectionSnapshotQuery)({
-              getThreadDetailById: (id) =>
+            Layer.mock(ThreadManagementService.ThreadManagementService)({
+              getThreadShell: (id) =>
                 id === "thread-defect"
                   ? Effect.die(new Error("projection exploded"))
                   : Effect.succeed(
-                      id === threadId ? Option.some(makeThread({ id: threadId })) : Option.none(),
+                      id === threadId
+                        ? ({
+                            ...makeThread({ thread: { id: threadId } }).thread,
+                            status: "idle",
+                          } as never)
+                        : null,
                     ),
-              getProjectShellById: () => Effect.succeedNone,
+              getThreadProjection: () =>
+                Effect.succeed(makeThread({ thread: { id: threadId } }) as never),
+              getThreadRecords: () => Effect.succeed({ messages: [] } as never),
+              ensureLegacyTranscript: () => Effect.void,
             }),
+            Layer.mock(ThreadSearch.ThreadSearch)({}),
+            Layer.mock(ProjectService.ProjectService)({ getShell: () => Effect.succeedNone }),
+            Layer.mock(DocumentComments.DocumentComments)({ list: () => Effect.succeed([]) }),
             Layer.mock(ServerSettings.ServerSettingsService)({
               getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
             }),

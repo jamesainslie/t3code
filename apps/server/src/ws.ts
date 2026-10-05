@@ -248,6 +248,7 @@ import {
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import * as DocumentComments from "./fork/DocumentComments.ts";
 import { gatewayRoutedInstanceIds, sameInstanceIds } from "./usage/gatewayRoutedInstances.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
@@ -1241,6 +1242,7 @@ const makeWsRpcLayer = (
             );
       const usage = yield* UsageService.UsageService;
       const usageLimitSources = yield* UsageLimitSources.UsageLimitSources;
+      const documentComments = yield* DocumentComments.DocumentComments;
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const worktreeSetupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
       const projectCloneTracker = yield* ProjectCloneTracker.ProjectCloneTracker;
@@ -3810,6 +3812,19 @@ const makeWsRpcLayer = (
               ),
             ),
             { "rpc.aggregate": "server" },
+          ),
+        // Fork: document comments.
+        [WS_METHODS.threadDocumentCommentsMutate]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.threadDocumentCommentsMutate,
+            documentComments.mutate(input),
+            { "rpc.aggregate": "orchestration" },
+          ),
+        [WS_METHODS.subscribeThreadDocumentComments]: (input) =>
+          observeRpcStream(
+            WS_METHODS.subscribeThreadDocumentComments,
+            documentComments.stream(input.threadId),
+            { "rpc.aggregate": "orchestration" },
           ),
       });
       return handlers;

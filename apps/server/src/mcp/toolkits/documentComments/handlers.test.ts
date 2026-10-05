@@ -1,38 +1,26 @@
 import {
   EnvironmentId,
-  ProjectId,
   ProviderInstanceId,
+  ThreadDocumentCommentsError,
   ThreadId,
-  type OrchestrationCommand,
-  type OrchestrationThreadShell,
+  type OrchestrationV2ThreadShell,
   type ThreadDocumentComment,
+  type ThreadDocumentCommentMutateInput,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import type { Tool } from "effect/unstable/ai";
 
-import { OrchestrationCommandInvariantError } from "../../../orchestration/Errors.ts";
-import {
-  OrchestrationEngineService,
-  type OrchestrationEngineShape,
-} from "../../../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { DocumentCommentsToolkitHandlersLive } from "./handlers.ts";
 import { DocumentCommentsToolkit } from "./tools.ts";
 
-const PROJECT_ID = ProjectId.make("project-1");
 const THREAD_ID = ThreadId.make("thread-1");
-
-const testCrypto = Crypto.make({
-  randomBytes: (size) => new Uint8Array(size).fill(7),
-  digest: (_algorithm, data) => Effect.succeed(data),
-});
 
 const invocation = (
   capabilities: ReadonlyArray<McpInvocationContext.McpCapability>,
@@ -45,28 +33,7 @@ const invocation = (
   issuedAt: 1,
 });
 
-const thread: OrchestrationThreadShell = {
-  id: THREAD_ID,
-  projectId: PROJECT_ID,
-  title: "Thread",
-  modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
-  runtimeMode: "full-access",
-  interactionMode: "default",
-  branch: null,
-  worktreePath: null,
-  pullRequests: [],
-  latestTurn: null,
-  createdAt: "2026-08-01T00:00:00.000Z",
-  updatedAt: "2026-08-20T00:00:00.000Z",
-  archivedAt: null,
-  settledOverride: null,
-  settledAt: null,
-  session: null,
-  latestUserMessageAt: "2026-08-20T00:00:00.000Z",
-  hasPendingApprovals: false,
-  hasPendingUserInput: false,
-  hasActionableProposedPlan: false,
-};
+const thread = { id: THREAD_ID, deletedAt: null } as unknown as OrchestrationV2ThreadShell;
 
 function makeComment(overrides: Partial<ThreadDocumentComment> = {}): ThreadDocumentComment {
   return {
@@ -92,38 +59,31 @@ function makeComment(overrides: Partial<ThreadDocumentComment> = {}): ThreadDocu
 }
 
 interface HarnessOptions {
-  readonly thread?: OrchestrationThreadShell | null;
+  readonly thread?: OrchestrationV2ThreadShell | null;
   readonly comments?: ReadonlyArray<ThreadDocumentComment>;
-  readonly reject?: (command: OrchestrationCommand) => OrchestrationCommandInvariantError | null;
+  /** Reject a mutation the way the service does for an id that no longer exists. */
+  readonly reject?: (input: ThreadDocumentCommentMutateInput) => boolean;
 }
 
 const makeHarness = Effect.fn("makeDocumentCommentsToolkitHarness")(function* (
   options: HarnessOptions = {},
 ) {
-  const commands = yield* Ref.make<ReadonlyArray<OrchestrationCommand>>([]);
+  const commands = yield* Ref.make<ReadonlyArray<ThreadDocumentCommentMutateInput["mutation"]>>([]);
   const shell = options.thread === undefined ? thread : options.thread;
   const comments = options.comments ?? [];
-  const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
-    Effect.gen(function* () {
-      const rejection = options.reject?.(command) ?? null;
-      if (rejection !== null) return yield* rejection;
-      yield* Ref.update(commands, (recorded) => [...recorded, command]);
-      return { sequence: 1 };
-    });
   const dependencies = Layer.mergeAll(
-    Layer.mock(ProjectionSnapshotQuery)({
-      getThreadShellById: (threadId) =>
-        Effect.succeed(threadId === THREAD_ID ? Option.fromNullishOr(shell) : Option.none()),
-      listThreadDocumentComments: (threadId) =>
-        Effect.succeed(threadId === THREAD_ID ? comments : []),
+    Layer.mock(Orchestrator.OrchestratorV2)({
+      getThreadShell: (threadId) => Effect.succeed(threadId === THREAD_ID ? shell : null),
     }),
-    Layer.mock(OrchestrationEngineService)({
-      readEvents: () => Stream.empty,
-      dispatch,
-      streamDomainEvents: Stream.empty,
-      latestSequence: Effect.succeed(0),
+    Layer.mock(DocumentComments.DocumentComments)({
+      list: (threadId) => Effect.succeed(threadId === THREAD_ID ? comments : []),
+      mutate: (input) =>
+        options.reject?.(input) === true
+          ? Effect.fail(new ThreadDocumentCommentsError({ message: "Comment no longer exists." }))
+          : Ref.update(commands, (recorded) => [...recorded, input.mutation]).pipe(
+              Effect.as({ threadId: input.threadId, comments }),
+            ),
     }),
-    Layer.succeed(Crypto.Crypto, testCrypto),
   );
   const toolkit = yield* DocumentCommentsToolkit.pipe(
     Effect.provide(DocumentCommentsToolkitHandlersLive.pipe(Layer.provide(dependencies))),
@@ -214,18 +174,9 @@ describe("document comment toolkit handlers", () => {
         resolution: "Split the section in two.",
       });
       expect(result).toEqual({ commentId: "comment-1", resolved: true, alreadyResolved: false });
-      const commands = yield* Ref.get(harness.commands);
-      expect(commands).toMatchObject([
-        {
-          type: "thread.document-comment.resolve",
-          threadId: THREAD_ID,
-          commentId: "comment-1",
-          resolution: "Split the section in two.",
-        },
+      expect(yield* Ref.get(harness.commands)).toEqual([
+        { type: "resolve", commentId: "comment-1", resolution: "Split the section in two." },
       ]);
-      expect(commands[0]?.commandId).toMatch(
-        new RegExp(`^server:mcp-document-comment-resolve:${THREAD_ID}:`),
-      );
     }),
   );
 
@@ -258,11 +209,7 @@ describe("document comment toolkit handlers", () => {
     Effect.gen(function* () {
       const harness = yield* makeHarness({
         comments: [makeComment()],
-        reject: (command) =>
-          new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: "does not exist",
-          }),
+        reject: () => true,
       });
       const error = yield* harness
         .call("resolve_document_comment", { commentId: "comment-1" })

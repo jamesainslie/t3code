@@ -5,41 +5,40 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-  type OrchestrationMessage,
   type OrchestrationProjectShell,
   type OrchestrationSearchThreadsInput,
-  type OrchestrationThread,
   type OrchestrationThreadSearchMatch,
-  type OrchestrationThreadShell,
+  type OrchestrationV2AppThread,
+  type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ThreadShell,
   type ServerSettings,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
-import {
-  ProjectionSnapshotQuery,
-  type ProjectionSnapshotQueryShape,
-  type ProjectionThreadDetailQuery,
-  type ProjectionThreadReadOptions,
-  type ProjectionThreadSearchOptions,
-} from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { ThreadHistoryToolkitHandlersLive } from "./handlers.ts";
 import {
-  activity,
   assistantMessage,
   at,
-  latestTurn,
+  atIso,
   makeThread,
-  turn,
+  run,
+  runId,
   userMessage,
 } from "./testFixtures.ts";
 import { ThreadHistoryToolkit } from "./tools.ts";
+import type { HistoryThread } from "./turns.ts";
 
 const PROJECT_A = ProjectId.make("project-a");
 const PROJECT_B = ProjectId.make("project-b");
@@ -49,58 +48,65 @@ const SAME_PROJECT_ID = ThreadId.make("thread-same-project");
 const OTHER_PROJECT_ID = ThreadId.make("thread-other-project");
 const DELETED_ID = ThreadId.make("thread-deleted");
 
-const threadRecord = (threadId: ThreadId, projectId: ProjectId) => ({
+const threadRecord = (threadId: ThreadId) => ({
   version: 1 as const,
   contextId: ComposerContextId.make(`context-${threadId}`),
   label: `Thread ${threadId}`,
   kind: "thread" as const,
+  environmentId: EnvironmentId.make("environment-1"),
   threadId,
-  projectId,
   title: `Thread ${threadId}`,
 });
 
-const referencing = (id: string, t: number, threadId: ThreadId, projectId: ProjectId) =>
+const referencing = (id: string, t: number, threadId: ThreadId) =>
   ({
     ...userMessage(id, t),
-    context: { version: 1, records: [threadRecord(threadId, projectId)] },
-  }) satisfies OrchestrationMessage;
+    context: { version: 1, records: [threadRecord(threadId)] },
+  }) satisfies OrchestrationV2ConversationMessage;
 
 /** A thread with `count` completed turns, each a user message and its reply. */
 const withTurns = (
   id: ThreadId,
   projectId: ProjectId,
   count: number,
-  overrides: Partial<OrchestrationThread> = {},
-) =>
-  makeThread({
-    id,
-    projectId,
-    title: `Thread ${id}`,
-    messages: Array.from({ length: count }, (_, index) => [
+  overrides: Partial<OrchestrationV2AppThread> = {},
+): HistoryThread => {
+  const runIds = Array.from({ length: count }, (_, index) => runId(`${id}-t${index + 1}`));
+  return makeThread({
+    thread: { id, projectId, title: `Thread ${id}`, ...overrides },
+    runs: runIds.map((runIdValue, index) =>
+      run({
+        id: runIdValue,
+        ordinal: index + 1,
+        userMessageId: `${id}-u${index + 1}`,
+        t: 10 * (index + 1),
+      }),
+    ),
+    messages: runIds.flatMap((runIdValue, index) => [
       userMessage(`${id}-u${index + 1}`, 10 * (index + 1)),
-      assistantMessage(`${id}-a${index + 1}`, 10 * (index + 1) + 1, turn(`${id}-t${index + 1}`)),
-    ]).flat(),
-    latestTurn: count > 0 ? latestTurn(turn(`${id}-t${count}`), "completed") : null,
-    ...overrides,
+      assistantMessage(`${id}-a${index + 1}`, 10 * (index + 1) + 1, runIdValue),
+    ]),
   });
+};
 
 const caller = makeThread({
-  id: CALLER_ID,
-  projectId: PROJECT_A,
-  worktreePath: "/work/a",
-  messages: [referencing("caller-u1", 1, REFERENCED_ID, PROJECT_B)],
+  thread: { id: CALLER_ID, projectId: PROJECT_A, worktreePath: "/work/a" },
+  messages: [referencing("caller-u1", 1, REFERENCED_ID)],
 });
 
-const baseThreads: ReadonlyArray<OrchestrationThread> = [
+const sameProject = withTurns(SAME_PROJECT_ID, PROJECT_A, 12);
+
+const baseThreads: ReadonlyArray<HistoryThread> = [
   caller,
   withTurns(REFERENCED_ID, PROJECT_B, 6),
   // The target naming itself (or anything else) must never widen what the caller may read.
-  withTurns(SAME_PROJECT_ID, PROJECT_A, 12, {
+  {
+    ...sameProject,
     messages: [
-      referencing("same-u0", 1, SAME_PROJECT_ID, PROJECT_A),
-      ...withTurns(SAME_PROJECT_ID, PROJECT_A, 12).messages,
+      { ...referencing("same-u0", 1, SAME_PROJECT_ID), runId: runId(`${SAME_PROJECT_ID}-t1`) },
+      ...sameProject.messages,
     ],
-  }),
+  },
   withTurns(OTHER_PROJECT_ID, PROJECT_B, 1),
   withTurns(DELETED_ID, PROJECT_A, 1, { deletedAt: at(500) }),
 ];
@@ -111,8 +117,8 @@ const projectShell = (id: ProjectId, title: string): OrchestrationProjectShell =
   workspaceRoot: `/workspace/${id}`,
   defaultModelSelection: null,
   scripts: [],
-  createdAt: at(0),
-  updatedAt: at(0),
+  createdAt: atIso(0),
+  updatedAt: atIso(0),
 });
 
 const projects = new Map([
@@ -120,28 +126,12 @@ const projects = new Map([
   [PROJECT_B, projectShell(PROJECT_B, "Beta")],
 ]);
 
-const shellOf = (thread: OrchestrationThread): OrchestrationThreadShell => ({
-  id: thread.id,
-  projectId: thread.projectId,
-  title: thread.title,
-  modelSelection: thread.modelSelection,
-  runtimeMode: thread.runtimeMode,
-  interactionMode: thread.interactionMode,
-  branch: thread.branch,
-  worktreePath: thread.worktreePath,
-  pullRequests: thread.pullRequests,
-  latestTurn: thread.latestTurn,
-  createdAt: thread.createdAt,
-  updatedAt: thread.updatedAt,
-  archivedAt: thread.archivedAt,
-  settledOverride: thread.settledOverride,
-  settledAt: thread.settledAt,
-  session: thread.session,
-  latestUserMessageAt: null,
-  hasPendingApprovals: false,
-  hasPendingUserInput: false,
-  hasActionableProposedPlan: false,
-});
+const shellOf = (thread: HistoryThread): OrchestrationV2ThreadShell =>
+  ({
+    ...thread.thread,
+    status: thread.runs.at(-1)?.status ?? "idle",
+    updatedAt: DateTime.makeUnsafe(atIso(0)),
+  }) as unknown as OrchestrationV2ThreadShell;
 
 const settingsWith = (overrides: Partial<ServerSettings>): ServerSettings => ({
   ...DEFAULT_SERVER_SETTINGS,
@@ -161,7 +151,7 @@ const invocation = (
 
 interface HarnessOptions {
   readonly settings?: ServerSettings;
-  readonly threads?: ReadonlyArray<OrchestrationThread>;
+  readonly threads?: ReadonlyArray<HistoryThread>;
   readonly matches?: ReadonlyArray<OrchestrationThreadSearchMatch>;
 }
 
@@ -169,68 +159,35 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
   options: HarnessOptions = {},
 ) {
   const settings = yield* Ref.make(options.settings ?? DEFAULT_SERVER_SETTINGS);
-  const searches = yield* Ref.make<
-    ReadonlyArray<{
-      readonly input: OrchestrationSearchThreadsInput;
-      readonly options: ProjectionThreadSearchOptions | undefined;
-    }>
-  >([]);
-  const detailReads = yield* Ref.make<
-    ReadonlyArray<{ readonly threadId: ThreadId; readonly query: ProjectionThreadDetailQuery }>
-  >([]);
-  const turnActivityReads = yield* Ref.make<
-    ReadonlyArray<Parameters<ProjectionSnapshotQueryShape["listTurnActivities"]>[0]>
-  >([]);
-  const threads = new Map((options.threads ?? baseThreads).map((thread) => [thread.id, thread]));
-  // Like the real queries, archived threads are found only when asked for.
-  const lookup = (threadId: ThreadId, read: ProjectionThreadReadOptions = {}) =>
-    Option.fromNullishOr(threads.get(threadId)).pipe(
-      Option.filter((thread) => thread.archivedAt === null || read.includeArchived === true),
-    );
+  const searches = yield* Ref.make<ReadonlyArray<OrchestrationSearchThreadsInput>>([]);
+  const detailReads = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+  const threads = new Map(
+    (options.threads ?? baseThreads).map((thread) => [thread.thread.id, thread]),
+  );
   const dependencies = Layer.mergeAll(
-    Layer.mock(ProjectionSnapshotQuery)({
-      // Kind filters apply as SQLite applies them, so tests see only the rows the handler asked for.
-      getThreadDetailById: (threadId, query = {}) =>
-        Ref.update(detailReads, (recorded) => [...recorded, { threadId, query }]).pipe(
-          Effect.as(
-            lookup(threadId, query).pipe(
-              Option.map((thread) => {
-                const kinds = query.activityKinds;
-                return kinds === undefined
-                  ? thread
-                  : {
-                      ...thread,
-                      activities: thread.activities.filter((row) => kinds.includes(row.kind)),
-                    };
-              }),
-            ),
-          ),
+    Layer.mock(ThreadManagementService.ThreadManagementService)({
+      getThreadShell: (threadId) => {
+        const thread = threads.get(threadId);
+        return Effect.succeed(thread === undefined ? null : shellOf(thread));
+      },
+      getThreadProjection: (threadId) =>
+        Ref.update(detailReads, (recorded) => [...recorded, threadId]).pipe(
+          Effect.as(threads.get(threadId) as never),
         ),
-      listTurnActivities: (input) =>
-        Ref.update(turnActivityReads, (recorded) => [...recorded, input]).pipe(
-          Effect.as(
-            (threads.get(input.threadId)?.activities ?? []).filter(
-              (row) =>
-                input.kinds.includes(row.kind) &&
-                row.turnId !== null &&
-                input.turnIds.includes(row.turnId),
-            ),
-          ),
-        ),
-      getThreadShellById: (threadId, read) =>
-        Effect.succeed(
-          lookup(threadId, read).pipe(
-            Option.filter((thread) => thread.deletedAt === null),
-            Option.map(shellOf),
-          ),
-        ),
-      getProjectShellById: (projectId) =>
-        Effect.succeed(Option.fromNullishOr(projects.get(projectId))),
-      searchThreads: (input, searchOptions) =>
-        Ref.update(searches, (recorded) => [...recorded, { input, options: searchOptions }]).pipe(
+      getThreadRecords: (threadId) =>
+        Effect.succeed({ messages: threads.get(threadId)?.messages ?? [] } as never),
+      ensureLegacyTranscript: () => Effect.void,
+    }),
+    Layer.mock(ThreadSearch.ThreadSearch)({
+      search: (input) =>
+        Ref.update(searches, (recorded) => [...recorded, input]).pipe(
           Effect.as({ matches: options.matches ?? [] }),
         ),
     }),
+    Layer.mock(ProjectService.ProjectService)({
+      getShell: (projectId) => Effect.succeed(Option.fromNullishOr(projects.get(projectId))),
+    }),
+    Layer.mock(DocumentComments.DocumentComments)({ list: () => Effect.succeed([]) }),
     Layer.mock(ServerSettingsService)({ getSettings: Ref.get(settings) }),
   );
   const toolkit = yield* ThreadHistoryToolkit.pipe(
@@ -249,7 +206,7 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
       Effect.provideService(McpInvocationContext.McpInvocationContext, invocation(capabilities)),
       Effect.provide(dependencies),
     );
-  return { settings, searches, detailReads, turnActivityReads, call };
+  return { settings, searches, detailReads, call };
 });
 
 /** Turn numbers rendered in detail, in order. */
@@ -264,7 +221,7 @@ const match = (threadId: ThreadId, projectId: ProjectId): OrchestrationThreadSea
   projectId,
   source: "user",
   snippet: "ssh log",
-  messageCreatedAt: at(10),
+  messageCreatedAt: atIso(10),
 });
 
 describe("thread history toolkit handlers", () => {
@@ -300,9 +257,11 @@ describe("thread history toolkit handlers", () => {
       const harness = yield* makeHarness({
         threads: [
           makeThread({
-            id: CALLER_ID,
-            projectId: PROJECT_A,
-            continuedFromThreadId: OTHER_PROJECT_ID,
+            thread: {
+              id: CALLER_ID,
+              projectId: PROJECT_A,
+              continuedFromThreadId: OTHER_PROJECT_ID,
+            },
           }),
           withTurns(OTHER_PROJECT_ID, PROJECT_B, 1),
         ],
@@ -428,60 +387,6 @@ describe("thread history toolkit handlers", () => {
     }),
   );
 
-  it.effect("loads tool payloads only for the turns rendered in detail", () =>
-    Effect.gen(function* () {
-      const toolCall = (id: string, t: number, turnNumber: number, command: string) =>
-        activity({
-          id,
-          t,
-          kind: "tool.completed",
-          tone: "tool",
-          turnId: turn(`${REFERENCED_ID}-t${turnNumber}`),
-          payload: { status: "completed", detail: command, data: { toolName: "Bash" } },
-        });
-      const target = withTurns(REFERENCED_ID, PROJECT_B, 6, {
-        activities: [toolCall("tool-1", 12, 1, "vp i"), toolCall("tool-6", 62, 6, "vp test")],
-      });
-      const harness = yield* makeHarness({
-        settings: settingsWith({ agentThreadHistoryRecentTurns: 2 }),
-        threads: [caller, target, ...baseThreads.slice(2)],
-      });
-
-      const digest = yield* harness.call("read_thread", { threadId: REFERENCED_ID });
-      expect(recentSection(digest)).toContain("Bash completed: vp test");
-      const [callerRead, targetRead] = yield* Ref.get(harness.detailReads);
-      // The caller contributes only its id, project, worktree, and messages.
-      expect(callerRead).toEqual({
-        threadId: CALLER_ID,
-        query: { activityKinds: [], includeArchived: true },
-      });
-      expect(targetRead?.threadId).toBe(REFERENCED_ID);
-      const targetKinds = targetRead?.query.activityKinds ?? [];
-      expect(targetKinds).toContain("runtime.error");
-      for (const kind of ["tool.completed", "tool.updated", "tool.started", "task.progress"]) {
-        expect(targetKinds).not.toContain(kind);
-      }
-      expect(yield* Ref.get(harness.turnActivityReads)).toEqual([
-        {
-          threadId: REFERENCED_ID,
-          kinds: ["tool.completed"],
-          turnIds: [turn(`${REFERENCED_ID}-t5`), turn(`${REFERENCED_ID}-t6`)],
-        },
-      ]);
-
-      const page = yield* harness.call("read_thread_turns", {
-        threadId: REFERENCED_ID,
-        beforeTurn: 3,
-        limit: 2,
-      });
-      expect(page).toContain("Bash completed: vp i");
-      expect((yield* Ref.get(harness.turnActivityReads)).at(-1)?.turnIds).toEqual([
-        turn(`${REFERENCED_ID}-t1`),
-        turn(`${REFERENCED_ID}-t2`),
-      ]);
-    }),
-  );
-
   it.effect("find_threads reads the caller's shell, not its detail", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({
@@ -502,9 +407,7 @@ describe("thread history toolkit handlers", () => {
       });
       const text = yield* harness.call("find_threads", { query: "ssh log" });
       expect(text).toContain(`id="${OTHER_PROJECT_ID}"`);
-      expect(yield* Ref.get(harness.searches)).toEqual([
-        { input: { query: "ssh log", limit: 50 }, options: { includeArchived: true } },
-      ]);
+      expect(yield* Ref.get(harness.searches)).toEqual([{ query: "ssh log", limit: 50 }]);
     }),
   );
 
@@ -613,16 +516,12 @@ describe("thread history toolkit handlers", () => {
           match(REFERENCED_ID, PROJECT_B),
           match(SAME_PROJECT_ID, PROJECT_A),
           match(DELETED_ID, PROJECT_A),
-          ...extra.map((thread) => match(thread.id, PROJECT_A)),
+          ...extra.map((thread) => match(thread.thread.id, PROJECT_A)),
         ],
       });
       const text = yield* harness.call("find_threads", { query: "ssh log" });
-      expect(yield* Ref.get(harness.searches)).toEqual([
-        {
-          input: { query: "ssh log", limit: 50 },
-          options: { includeArchived: true, projectId: PROJECT_A },
-        },
-      ]);
+      // Search spans the environment; scoping to the caller's project happens on the results.
+      expect(yield* Ref.get(harness.searches)).toEqual([{ query: "ssh log", limit: 50 }]);
 
       const lines = text.split("\n");
       const ids = lines.map((line) => /id="([^"]+)"/.exec(line)?.[1]);

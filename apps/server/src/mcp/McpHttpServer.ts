@@ -18,7 +18,10 @@ import { PreviewAutomationError } from "@t3tools/contracts";
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as DeviceService from "../device/DeviceService.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../fork/DocumentComments.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../orchestration-v2/ThreadSearch.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
@@ -723,7 +726,10 @@ const registerTextTool = <T extends Tool.Any, E, R>(
 
 const registerThreadHistoryTools = Effect.fn("McpHttpServer.registerThreadHistoryTools")(
   function* () {
-    const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+    const threadManagement = yield* ThreadManagementService.ThreadManagementService;
+    const threadSearch = yield* ThreadSearch.ThreadSearch;
+    const projects = yield* ProjectService.ProjectService;
+    const documentComments = yield* DocumentComments.DocumentComments;
     const settings = yield* ServerSettings.ServerSettingsService;
     const built = yield* ThreadHistoryToolkit;
     const register = <Name extends keyof typeof ThreadHistoryToolkit.tools>(name: Name) =>
@@ -735,7 +741,13 @@ const registerThreadHistoryTools = Effect.fn("McpHttpServer.registerThreadHistor
             .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
         (effect) =>
           effect.pipe(
-            Effect.provideService(ProjectionSnapshotQuery.ProjectionSnapshotQuery, snapshots),
+            Effect.provideService(
+              ThreadManagementService.ThreadManagementService,
+              threadManagement,
+            ),
+            Effect.provideService(ThreadSearch.ThreadSearch, threadSearch),
+            Effect.provideService(ProjectService.ProjectService, projects),
+            Effect.provideService(DocumentComments.DocumentComments, documentComments),
             Effect.provideService(ServerSettings.ServerSettingsService, settings),
           ),
         Schema.is(ThreadHistoryReadFailedError),

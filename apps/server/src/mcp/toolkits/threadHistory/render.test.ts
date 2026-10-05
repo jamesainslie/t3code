@@ -16,10 +16,10 @@ import {
 } from "./render.ts";
 import {
   assistantMessage,
-  latestTurn,
   makeThread,
+  run,
+  runId,
   THREAD_ID,
-  turn,
   userMessage,
 } from "./testFixtures.ts";
 import { cutToBytes } from "./text.ts";
@@ -498,11 +498,14 @@ describe("renderThreadDigest", () => {
   });
 
   it("renders a golden digest with real-length replies in full", () => {
-    const turnIds = [1, 2, 3].map((n) => turn(`t${n}`));
+    const turnIds = [1, 2, 3].map((n) => runId(`t${n}`));
     const finalReply = prose("Final", 2_048);
     const lastRequest = prose("Request 3", 700);
     const thread = makeThread({
-      title: "Harden the scheduler",
+      thread: { title: "Harden the scheduler" },
+      runs: turnIds.map((id, index) =>
+        run({ id, ordinal: index + 1, userMessageId: `u${index + 1}` }),
+      ),
       messages: turnIds.flatMap((turnId, index) => {
         const n = index + 1;
         const t = n * 100;
@@ -518,11 +521,11 @@ describe("renderThreadDigest", () => {
           ),
         ];
       }),
-      latestTurn: latestTurn(turnIds[2]!, "completed"),
     });
     const text = renderThreadDigest(
       buildThreadDigest({
         thread,
+        comments: [],
         projectTitle: "t3code",
         continuedFromTitle: null,
         callerWorktreePath: null,

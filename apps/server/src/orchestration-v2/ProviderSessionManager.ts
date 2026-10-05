@@ -1,4 +1,5 @@
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import * as ForkAgentAccess from "./fork/ForkAgentAccess.ts";
 import {
   ModelSelection,
   OrchestrationV2DomainEvent,
@@ -459,6 +460,18 @@ export const layerWithOptions = (
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
                 if (deviceToolsAvailable) capabilities.add("device");
+                // Fork: thread history tools follow the project's access setting.
+                const forkCapabilities = Option.isNone(serverSettings)
+                  ? []
+                  : yield* ForkAgentAccess.forkAgentCapabilities({
+                      threadId,
+                      getSettings: serverSettings.value.getSettings,
+                      getProjectId: (id) =>
+                        projectionStore
+                          .getThread(id)
+                          .pipe(Effect.map((thread) => thread.projectId)),
+                    });
+                for (const capability of forkCapabilities) capabilities.add(capability);
                 const existing = McpProviderSession.readMcpProviderSession(threadId);
                 if (existing !== undefined) {
                   // Reserve before the async resolve so a release cannot
@@ -473,7 +486,8 @@ export const layerWithOptions = (
                     // A flipped browser-access setting must not survive through
                     // credential reuse: rotate so the new scope reflects it.
                     resolved.capabilities.has("preview") === browserToolsAvailable &&
-                    resolved.capabilities.has("device") === deviceToolsAvailable
+                    resolved.capabilities.has("device") === deviceToolsAvailable &&
+                    ForkAgentAccess.sameForkCapabilities(resolved.capabilities, forkCapabilities)
                   ) {
                     return { mcpCredentialId: existing.providerSessionId, issued: false };
                   }

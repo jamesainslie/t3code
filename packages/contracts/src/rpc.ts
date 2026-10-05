@@ -1,3 +1,9 @@
+import {
+  ThreadDocumentCommentMutateInput,
+  ThreadDocumentComments,
+  ThreadDocumentCommentsError,
+  ThreadDocumentCommentsInput,
+} from "./forkOrchestration.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
 import {
   ChatGptReconnectProfileInput,
@@ -541,6 +547,10 @@ export const WS_METHODS = {
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeBackgroundPolicy: "subscribeBackgroundPolicy",
   subscribeResourceTelemetry: "subscribeResourceTelemetry",
+
+  // Fork: document comments (forkOrchestration.ts).
+  threadDocumentCommentsMutate: "threadDocumentComments.mutate",
+  subscribeThreadDocumentComments: "subscribeThreadDocumentComments",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -1713,6 +1723,19 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
   stream: true,
 });
 
+const WsThreadDocumentCommentsMutateRpc = Rpc.make(WS_METHODS.threadDocumentCommentsMutate, {
+  payload: ThreadDocumentCommentMutateInput,
+  success: ThreadDocumentComments,
+  error: Schema.Union([ThreadDocumentCommentsError, EnvironmentAuthorizationError]),
+});
+
+const WsSubscribeThreadDocumentCommentsRpc = Rpc.make(WS_METHODS.subscribeThreadDocumentComments, {
+  payload: ThreadDocumentCommentsInput,
+  success: ThreadDocumentComments,
+  error: Schema.Union([ThreadDocumentCommentsError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
 /**
  * Checks the connection's scopes against the scope each RPC declares, before
  * the handler runs. Every RPC in `WsRpcGroup` carries it, so a handler cannot
@@ -1724,6 +1747,8 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsThreadDocumentCommentsMutateRpc,
+  WsSubscribeThreadDocumentCommentsRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

@@ -273,6 +273,11 @@ export type ThreadDocumentCommentMutateInput = typeof ThreadDocumentCommentMutat
 export const ThreadDocumentCommentsInput = Schema.Struct({ threadId: ThreadId });
 export type ThreadDocumentCommentsInput = typeof ThreadDocumentCommentsInput.Type;
 
+export class ThreadDocumentCommentsError extends Schema.TaggedError<ThreadDocumentCommentsError>()(
+  "ThreadDocumentCommentsError",
+  { message: TrimmedNonEmptyString },
+) {}
+
 /** A thread's comments in creation order; each change streams the whole list. */
 export const ThreadDocumentComments = Schema.Struct({
   threadId: ThreadId,

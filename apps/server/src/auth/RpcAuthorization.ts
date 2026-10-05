@@ -46,6 +46,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.providerAuthStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.providerConsumeResetCredit]: AuthOrchestrationOperateScope,
   [WS_METHODS.usageLimitSourceAuth]: AuthOrchestrationOperateScope,
+  [WS_METHODS.threadDocumentCommentsMutate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.subscribeThreadDocumentComments]: AuthOrchestrationReadScope,
   [WS_METHODS.providerAuthComplete]: AuthOrchestrationOperateScope,
   [WS_METHODS.chatGptReconnectProfile]: AuthOrchestrationOperateScope,
   [WS_METHODS.chatGptImportProfile]: AuthOrchestrationOperateScope,

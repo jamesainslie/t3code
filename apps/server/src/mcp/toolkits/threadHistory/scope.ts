@@ -1,6 +1,6 @@
 import type {
   AgentThreadHistoryAccess,
-  OrchestrationThread,
+  OrchestrationMessageContext,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -35,9 +35,10 @@ export function canSearchThreads(level: AgentThreadHistoryAccess): boolean {
  * Thread ids the user pointed the caller at: thread context records on any of its messages,
  * and the thread it was started to continue.
  */
-export function collectReferencedThreadIds(
-  caller: Pick<OrchestrationThread, "messages" | "continuedFromThreadId">,
-): ReadonlySet<ThreadId> {
+export function collectReferencedThreadIds(caller: {
+  readonly continuedFromThreadId?: ThreadId | null | undefined;
+  readonly messages: ReadonlyArray<{ readonly context?: OrchestrationMessageContext | undefined }>;
+}): ReadonlySet<ThreadId> {
   const ids = new Set<ThreadId>();
   if (caller.continuedFromThreadId) ids.add(caller.continuedFromThreadId);
   for (const message of caller.messages) {

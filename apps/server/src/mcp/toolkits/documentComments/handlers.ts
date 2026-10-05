@@ -1,11 +1,8 @@
-import { CommandId, type ThreadDocumentComment, type ThreadId } from "@t3tools/contracts";
-import * as Cause from "effect/Cause";
-import * as Crypto from "effect/Crypto";
+import type { ThreadDocumentComment } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 
-import * as OrchestrationEngine from "../../../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import {
   type DocumentCommentEntry,
@@ -30,28 +27,21 @@ function entryOf(comment: ThreadDocumentComment): DocumentCommentEntry {
 }
 
 const make = Effect.gen(function* () {
-  const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-  const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const crypto = yield* Crypto.Crypto;
-
-  const commandId = (tag: string, threadId: ThreadId) =>
-    crypto.randomUUIDv4.pipe(
-      Effect.orDie,
-      Effect.map((uuid) => CommandId.make(`server:${tag}:${threadId}:${uuid}`)),
-    );
+  const orchestrator = yield* Orchestrator.OrchestratorV2;
+  const documentComments = yield* DocumentComments.DocumentComments;
 
   const threadComments = Effect.fn("DocumentCommentsToolkit.threadComments")(function* (
     Failure: typeof DocumentCommentListFailedError | typeof DocumentCommentResolveFailedError,
   ) {
     const scope = yield* McpInvocationContext.requireMcpCapability("document-comments");
-    const thread = yield* snapshots
-      .getThreadShellById(scope.threadId)
+    const thread = yield* orchestrator
+      .getThreadShell(scope.threadId)
       .pipe(Effect.mapError((cause) => new Failure({ cause })));
-    if (Option.isNone(thread)) {
+    if (thread === null || thread.deletedAt !== null) {
       return yield* new DocumentCommentThreadNotFoundError({ threadId: scope.threadId });
     }
-    const comments = yield* snapshots
-      .listThreadDocumentComments(scope.threadId)
+    const comments = yield* documentComments
+      .list(scope.threadId)
       .pipe(Effect.mapError((cause) => new Failure({ cause })));
     return { threadId: scope.threadId, comments };
   });
@@ -76,27 +66,22 @@ const make = Effect.gen(function* () {
         if (comment === undefined) {
           return yield* new DocumentCommentNotFoundError({ commentId: input.commentId });
         }
-        // Re-resolving still dispatches: the decider re-emits and the projection
-        // keeps the first note, so the tool stays idempotent.
-        const deletedMeanwhile = yield* engine
-          .dispatch({
-            type: "thread.document-comment.resolve",
-            commandId: yield* commandId("mcp-document-comment-resolve", threadId),
+        // Re-resolving keeps the first note, so the tool stays idempotent.
+        const resolved = yield* documentComments
+          .mutate({
             threadId,
-            commentId: comment.id,
-            resolution: input.resolution ?? null,
+            mutation: {
+              type: "resolve",
+              commentId: comment.id,
+              resolution: input.resolution ?? null,
+            },
           })
           .pipe(
-            Effect.as(false),
-            // The decider only rejects an unknown id: the user deleted it meanwhile.
-            Effect.catchTags({ OrchestrationCommandInvariantError: () => Effect.succeed(true) }),
-            Effect.catchCause((cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? Effect.failCause(cause as Cause.Cause<never>)
-                : Effect.fail(new DocumentCommentResolveFailedError({ cause })),
-            ),
+            Effect.map(() => true),
+            // The only rejection here is an unknown id: the user deleted it meanwhile.
+            Effect.catchTag("ThreadDocumentCommentsError", () => Effect.succeed(false)),
           );
-        if (deletedMeanwhile) {
+        if (!resolved) {
           return yield* new DocumentCommentNotFoundError({ commentId: comment.id });
         }
         return {
