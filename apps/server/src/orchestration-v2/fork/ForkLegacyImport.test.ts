@@ -122,13 +122,11 @@ it.layer(TestLayer)("ForkLegacyImport", (it) => {
         thread.dependencies?.map((link) => link.threadId),
         [ThreadId.make("thread:source")],
       );
-      const [message] = yield* sql<{ readonly context_json: string }>`
-        SELECT context_json FROM projection_thread_messages WHERE message_id = 'message:fork:1'
+      const [message] = yield* sql<{ readonly environment_id: string }>`
+        SELECT json_extract(context_json, '$.records[0].environmentId') AS environment_id
+        FROM projection_thread_messages WHERE message_id = 'message:fork:1'
       `;
-      assert.strictEqual(
-        JSON.parse(message!.context_json).records[0].environmentId,
-        ENVIRONMENT_ID,
-      );
+      assert.strictEqual(message!.environment_id, ENVIRONMENT_ID);
       // The transcript import decodes the rewritten record without failing.
       yield* importer.ensureTranscript(threadId);
 

@@ -50,6 +50,7 @@ import {
   ThreadLinkedPullRequest,
   ThreadId,
   type TurnItemId,
+  isSyncedThreadId,
 } from "@t3tools/contracts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import {
@@ -9620,6 +9621,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return yield* new OrchestratorSubagentThreadReadOnlyError({
             commandId: command.commandId,
             threadId: command.threadId,
+          });
+        }
+        // Fork: an imported conversation is history only; it continues in a new thread.
+        if (isSyncedThreadId(command.threadId)) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: `Thread ${command.threadId} is an imported conversation. Continue it in a new thread.`,
           });
         }
         yield* dispatchMessage(command, events, effects);

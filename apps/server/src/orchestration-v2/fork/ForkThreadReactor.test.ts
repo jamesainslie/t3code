@@ -112,7 +112,13 @@ const harness = (input: {
       streamDomainEvents: Stream.fromQueue(events),
     });
     const scheduler = Layer.succeed(Scheduler, {
-      register: (_name, run) => Ref.update(sweeps, (all) => [...all, run as Effect.Effect<void>]),
+      register: <E, R>(_name: string, run: Effect.Effect<void, E, R>) =>
+        Effect.flatMap(Effect.context<R>(), (context) =>
+          Ref.update(sweeps, (all) => [
+            ...all,
+            run.pipe(Effect.provideContext(context), Effect.ignore),
+          ]),
+        ),
     });
     const reactor = yield* make.pipe(Effect.provide(orchestrator));
     yield* reactor.start().pipe(Effect.provide(scheduler));
@@ -204,7 +210,7 @@ describe("ForkThreadReactor", () => {
         yield* sweep!;
         const commands = yield* Ref.get(dispatched);
         assert.deepStrictEqual(
-          commands.map((command) => command.threadId),
+          commands.map((command) => ("threadId" in command ? command.threadId : null)),
           [ThreadId.make("due")],
         );
       }),

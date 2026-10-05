@@ -4853,4 +4853,50 @@ it.layer(SharedApplicationDataPlaneTestLayer)("fork thread fields", (it) => {
       assert.strictEqual(continuation.thread.continuedFromThreadId, waiter);
     }),
   );
+
+  it.effect("refuses to start an agent run on an imported conversation", () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectService.ProjectService;
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projectId = ProjectId.make("runtime-layer-fork-sync-project");
+      const threadId = ThreadId.make("t3sync-source-conversation-version");
+      yield* projects.create({
+        commandId: CommandId.make("runtime-layer-fork-sync-project-create"),
+        projectId,
+        title: "Imported",
+        workspaceRoot: "/tmp/runtime-layer-fork-sync-project",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("runtime-layer-fork-sync-create"),
+        threadId,
+        projectId,
+        title: "Imported conversation",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const error = yield* orchestrator
+        .dispatch({
+          type: "message.dispatch",
+          createdBy: "user",
+          creationSource: "web",
+          commandId: CommandId.make("runtime-layer-fork-sync-message"),
+          threadId,
+          messageId: MessageId.make("runtime-layer-fork-sync-message"),
+          text: "Keep going",
+          attachments: [],
+          dispatchMode: { type: "start_immediately" },
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(error, Orchestrator.OrchestratorDispatchError);
+      const projection = yield* orchestrator.getThreadProjection(threadId);
+      assert.deepStrictEqual(projection.runs, []);
+      assert.deepStrictEqual(projection.messages, []);
+    }),
+  );
 });

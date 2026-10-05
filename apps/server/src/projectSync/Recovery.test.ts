@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -17,7 +18,7 @@ it("restores database, files, and settings while preserving the pre-restore stat
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(NodePath.join(state, "attachments"), { recursive: true });
   try {
-    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "state.sqlite"));
+    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "statev2.sqlite"));
     db.exec("CREATE TABLE example (value TEXT); INSERT INTO example VALUES ('before')");
     await NodeFSP.writeFile(NodePath.join(state, "attachments/a.txt"), "before");
     await NodeFSP.writeFile(
@@ -43,7 +44,7 @@ it("restores database, files, and settings while preserving the pre-restore stat
     expect(
       JSON.parse(await NodeFSP.readFile(NodePath.join(state, "project-sync.json"), "utf8")).enabled,
     ).toBe(false);
-    const restored = new NodeSqlite.DatabaseSync(NodePath.join(state, "state.sqlite"), {
+    const restored = new NodeSqlite.DatabaseSync(NodePath.join(state, "statev2.sqlite"), {
       readOnly: true,
     });
     try {
@@ -80,12 +81,12 @@ it("refuses a corrupted backup before scheduling restoration", async () => {
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(state);
   try {
-    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "state.sqlite"));
+    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "statev2.sqlite"));
     db.exec("CREATE TABLE example (value TEXT)");
     db.close();
     const id = await createRecoveryBackup(state, "2026-09-07T00:00:00Z");
     await NodeFSP.appendFile(
-      NodePath.join(root, "sync-recovery", id, "state.sqlite"),
+      NodePath.join(root, "sync-recovery", id, "statev2.sqlite"),
       "corruption",
     );
     await expect(prepareRecoveryRestore(state, id)).rejects.toThrow("checksum");
@@ -100,7 +101,7 @@ it("finishes an interrupted directory swap and preserves provider files", async 
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(NodePath.join(state, "providers"), { recursive: true });
   try {
-    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "state.sqlite"));
+    const db = new NodeSqlite.DatabaseSync(NodePath.join(state, "statev2.sqlite"));
     db.exec("CREATE TABLE example (value TEXT)");
     db.close();
     await NodeFSP.writeFile(NodePath.join(state, "providers/session"), "keep me");
@@ -118,6 +119,47 @@ it("finishes an interrupted directory swap and preserves provider files", async 
       "keep me",
     );
     expect(await recoveryPending(state)).toBe(false);
+  } finally {
+    await NodeFSP.rm(root, { recursive: true, force: true });
+  }
+});
+
+it("restores a backup taken before orchestration v2 without a stale v2 database", async () => {
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-legacy-"));
+  const state = NodePath.join(root, "userdata");
+  await NodeFSP.mkdir(state, { recursive: true });
+  try {
+    const current = new NodeSqlite.DatabaseSync(NodePath.join(state, "statev2.sqlite"));
+    current.exec("CREATE TABLE example (value TEXT)");
+    current.close();
+    // A v1 backup holds state.sqlite only.
+    const id = NodeCrypto.randomUUID();
+    const backup = NodePath.join(root, "sync-recovery", id);
+    await NodeFSP.mkdir(backup, { recursive: true });
+    const legacy = new NodeSqlite.DatabaseSync(NodePath.join(backup, "state.sqlite"));
+    legacy.exec("CREATE TABLE example (value TEXT); INSERT INTO example VALUES ('v1')");
+    legacy.close();
+    const bytes = await NodeFSP.readFile(NodePath.join(backup, "state.sqlite"));
+    await NodeFSP.writeFile(
+      NodePath.join(backup, "manifest.json"),
+      JSON.stringify({
+        version: 1,
+        id,
+        createdAt: "2026-09-01T00:00:00Z",
+        files: [
+          {
+            path: "state.sqlite",
+            sha256: NodeCrypto.createHash("sha256").update(bytes).digest("hex"),
+          },
+        ],
+      }),
+    );
+    await prepareRecoveryRestore(state, id);
+    await restorePendingRecovery(state);
+    const entries = await NodeFSP.readdir(state);
+    expect(entries).toContain("state.sqlite");
+    // Startup sees no v2 database and cuts the restored v1 one over again.
+    expect(entries).not.toContain("statev2.sqlite");
   } finally {
     await NodeFSP.rm(root, { recursive: true, force: true });
   }

@@ -1,17 +1,11 @@
 import {
-  CommandId,
-  MessageId,
-  ThreadId,
   ProjectId,
-  type OrchestrationProject,
-  type OrchestrationReadModel,
-  type OrchestrationThread,
-  type ProjectSyncApplyCommand,
+  ThreadId,
   type ProjectSyncMapping,
+  type ProjectSyncProjectSnapshot,
   type ProjectSyncRecord,
 } from "@t3tools/contracts";
-import { contentHash, type SyncSource } from "./Source.ts";
-import { EventId } from "@t3tools/contracts";
+import { contentHash, type SyncSource, type SyncThread } from "./Source.ts";
 
 /** Identifies the source conversation across its content-addressed imported versions. */
 export function syncedThreadKey(threadId: string): string {
@@ -24,35 +18,89 @@ export interface SyncedThreadManagement {
   settledOverride?: "settled" | "active";
 }
 
+/** What the planner needs to know about an imported thread version already in this install. */
+export interface SyncedThreadState {
+  readonly id: ThreadId;
+  readonly projectId: ProjectId;
+  readonly deletedAt: string | null;
+  readonly archivedAt: string | null;
+  readonly settledOverride: "settled" | "active" | null;
+}
+
+const settingsKeys = [
+  "title",
+  "defaultModelSelection",
+  "defaultThreadEnvMode",
+  "autoPull",
+  "projectIcon",
+  "scripts",
+] as const;
+export type ProjectSettings = ReturnType<typeof projectSettings>;
+
+export function projectSettings(project: ProjectSyncProjectSnapshot) {
+  return {
+    title: project.title,
+    defaultModelSelection: project.defaultModelSelection,
+    defaultThreadEnvMode: project.defaultThreadEnvMode ?? null,
+    autoPull: project.autoPull ?? false,
+    projectIcon: project.projectIcon ?? null,
+    scripts: project.scripts,
+  };
+}
+
+/** One change a sync batch makes. `Apply.ts` turns these into project commands and v2 events. */
+export type SyncStep =
+  | {
+      readonly type: "project.create";
+      readonly projectId: ProjectId;
+      readonly project: ProjectSyncProjectSnapshot;
+    }
+  | {
+      readonly type: "project.update";
+      readonly projectId: ProjectId;
+      readonly settings: Partial<ProjectSettings>;
+    }
+  | { readonly type: "project.delete"; readonly projectId: ProjectId }
+  | {
+      readonly type: "thread.import";
+      readonly threadId: ThreadId;
+      readonly projectId: ProjectId;
+      readonly thread: SyncThread;
+    }
+  | { readonly type: "thread.visibility"; readonly threadId: ThreadId; readonly visible: boolean }
+  | {
+      readonly type: "thread.archive" | "thread.unarchive" | "thread.settle" | "thread.unsettle";
+      readonly threadId: ThreadId;
+    };
+
+export interface SyncPlan {
+  readonly steps: ReadonlyArray<SyncStep>;
+  readonly record: ProjectSyncRecord;
+}
+
 /** Reapplies local organization when replacing or restoring an imported version. */
 export function planThreadManagement(
-  commandId: CommandId,
   threadId: ThreadId,
-  existing: Pick<OrchestrationThread, "archivedAt" | "settledOverride"> | undefined,
+  existing: Pick<SyncedThreadState, "archivedAt" | "settledOverride"> | undefined,
   local: SyncedThreadManagement | undefined,
-): ProjectSyncApplyCommand["commands"] {
-  const commands: ProjectSyncApplyCommand["commands"][number][] = [];
+): SyncStep[] {
+  const steps: SyncStep[] = [];
   let archived = existing?.archivedAt != null;
   const desiredArchive = local?.archived ?? (existing ? archived : true);
   if (local?.settledOverride !== undefined && local.settledOverride !== existing?.settledOverride) {
     if (archived) {
-      commands.push({ type: "thread.unarchive", commandId, threadId });
+      steps.push({ type: "thread.unarchive", threadId });
       archived = false;
     }
-    commands.push(
-      local.settledOverride === "settled"
-        ? { type: "thread.settle", commandId, threadId }
-        : { type: "thread.unsettle", commandId, threadId, reason: "user" },
-    );
-  }
-  if (desiredArchive !== archived) {
-    commands.push({
-      type: desiredArchive ? "thread.archive" : "thread.unarchive",
-      commandId,
+    steps.push({
+      type: local.settledOverride === "settled" ? "thread.settle" : "thread.unsettle",
       threadId,
     });
   }
-  return commands;
+  if (desiredArchive !== archived) {
+    steps.push({ type: desiredArchive ? "thread.archive" : "thread.unarchive", threadId });
+  }
+  return steps;
 }
 
 export function activeSyncRecord(
@@ -75,56 +123,29 @@ function activeHistory(history: ReadonlyArray<ProjectSyncRecord>): ProjectSyncRe
   return records;
 }
 
-const settingsKeys = [
-  "title",
-  "defaultModelSelection",
-  "defaultThreadEnvMode",
-  "autoPull",
-  "projectIcon",
-  "scripts",
-] as const;
-export function projectSettings(project: OrchestrationProject) {
+/** The content-addressed id of one imported version of a source conversation. */
+export function syncedThreadId(sourceId: string, thread: SyncThread, projectId: ProjectId) {
+  const prefix = `t3sync-${sourceId.slice(0, 12)}-${contentHash(thread.id).slice(0, 12)}-`;
   return {
-    title: project.title,
-    defaultModelSelection: project.defaultModelSelection,
-    defaultThreadEnvMode: project.defaultThreadEnvMode ?? null,
-    autoPull: project.autoPull ?? false,
-    projectIcon: project.projectIcon ?? null,
-    scripts: project.scripts,
+    prefix,
+    threadId: ThreadId.make(`${prefix}${contentHash({ thread, projectId }).slice(0, 20)}`),
   };
 }
 
 export function planImport(input: {
   source: SyncSource;
-  snapshot: OrchestrationReadModel;
+  /** Every project in this install, deleted ones included. */
+  projects: ReadonlyArray<ProjectSyncProjectSnapshot>;
+  /** Every imported thread version in this install, hidden ones included. */
+  threads: ReadonlyArray<SyncedThreadState>;
   history: ReadonlyArray<ProjectSyncRecord>;
   mappings: ReadonlyArray<ProjectSyncMapping>;
   batchId: string;
   now: string;
   localSettingOverrides?: ReadonlyMap<ProjectId, ReadonlySet<string>>;
   localThreadManagement?: ReadonlyMap<string, SyncedThreadManagement>;
-}): ProjectSyncApplyCommand {
-  const plan: ProjectSyncApplyCommand = {
-    type: "project.sync.apply",
-    commandId: CommandId.make(input.batchId),
-    projectId: ProjectId.make(`sync-${input.source.sourceId}`),
-    expectedSequence: input.snapshot.snapshotSequence,
-    commands: [],
-    record: {
-      id: input.batchId,
-      sourceId: input.source.sourceId,
-      sourceHome: input.source.sourceHome,
-      createdAt: input.now,
-      contentHash: input.source.contentHash,
-      parentId: activeSyncRecord(input.history)?.id ?? null,
-      undoBatchId: null,
-      mappings: input.mappings,
-      visibleThreadIds: [],
-      hiddenThreadIds: [],
-      projectChanges: [],
-    },
-  };
-  const commands: ProjectSyncApplyCommand["commands"][number][] = [];
+}): SyncPlan {
+  const steps: SyncStep[] = [];
   const changes: ProjectSyncRecord["projectChanges"][number][] = [];
   const visible: ThreadId[] = [];
   const hidden: ThreadId[] = [];
@@ -137,27 +158,14 @@ export function planImport(input: {
       throw new Error(
         `Cannot import remote project ${entry.project.title}. Skip it in the preview.`,
       );
-    const existing = input.snapshot.projects.find((project) => project.id === projectId);
+    const existing = input.projects.find((project) => project.id === projectId);
     if (existing?.deletedAt)
       throw new Error(
         `The mapped project ${existing.title} has been deleted. Choose a new destination.`,
       );
     if (!existing) {
       const after = { ...entry.project, id: projectId };
-      commands.push({
-        type: "project.create",
-        commandId: plan.commandId,
-        projectId,
-        title: after.title,
-        workspaceRoot: after.workspaceRoot,
-        createdAt: after.createdAt,
-      });
-      commands.push({
-        type: "project.meta.update",
-        commandId: plan.commandId,
-        projectId,
-        ...projectSettings(after),
-      });
+      steps.push({ type: "project.create", projectId, project: after });
       changes.push({ before: null, after, ownedSettings: [...settingsKeys] });
     } else {
       const previous = activeHistory(input.history)
@@ -181,12 +189,7 @@ export function planImport(input: {
           if (ownedSettings.includes(key)) Object.assign(merged, { [key]: incoming[key] });
         }
         if (contentHash(current) !== contentHash(merged)) {
-          commands.push({
-            type: "project.meta.update",
-            commandId: plan.commandId,
-            projectId,
-            ...merged,
-          });
+          steps.push({ type: "project.update", projectId, settings: merged });
           changes.push({
             before: existing,
             after: { ...existing, ...merged, updatedAt: input.now },
@@ -196,92 +199,130 @@ export function planImport(input: {
       }
     }
     for (const thread of entry.threads) {
-      const prefix = `t3sync-${input.source.sourceId.slice(0, 12)}-${contentHash(thread.id).slice(0, 12)}-`;
-      const threadId = ThreadId.make(`${prefix}${contentHash({ thread, projectId }).slice(0, 20)}`);
+      const { prefix, threadId } = syncedThreadId(input.source.sourceId, thread, projectId);
       const localManagement = input.localThreadManagement?.get(syncedThreadKey(threadId));
       if (localManagement?.deleted) continue;
-      const existingVersion = input.snapshot.threads.find((candidate) => candidate.id === threadId);
-      for (const previous of input.snapshot.threads) {
+      const existingVersion = input.threads.find((candidate) => candidate.id === threadId);
+      for (const previous of input.threads) {
         if (
           previous.id.startsWith(prefix) &&
           previous.id !== threadId &&
           previous.deletedAt === null
         ) {
-          commands.push({
-            type: "thread.sync.visibility",
-            commandId: plan.commandId,
-            threadId: previous.id,
-            deletedAt: input.now,
-            updatedAt: input.now,
-          });
+          steps.push({ type: "thread.visibility", threadId: previous.id, visible: false });
           hidden.push(previous.id);
         }
       }
       if (existingVersion?.deletedAt === null) continue;
-      if (existingVersion) {
-        commands.push({
-          type: "thread.sync.visibility",
-          commandId: plan.commandId,
-          threadId,
-          deletedAt: null,
-          updatedAt: input.now,
-        });
-      } else {
-        commands.push({
-          type: "thread.create",
-          commandId: plan.commandId,
-          threadId,
-          projectId,
-          title: thread.title,
-          modelSelection: thread.modelSelection,
-          runtimeMode: thread.runtimeMode,
-          interactionMode: thread.interactionMode,
-          branch: thread.branch,
-          worktreePath: null,
-          createdAt: thread.createdAt,
-          historyImport: true,
-        });
-        if (thread.messages.length > 0)
-          commands.push({
-            type: "thread.history.import",
-            commandId: plan.commandId,
-            threadId,
-            messages: thread.messages.map((message) => ({
-              messageId: MessageId.make(`${threadId}-${contentHash(message.id).slice(0, 16)}`),
-              role: message.role,
-              text: message.text,
-              createdAt: message.createdAt,
-              ...(message.attachments ? { attachments: message.attachments } : {}),
-            })),
-          });
-      }
-      if (!existingVersion) {
-        for (const activity of thread.activities)
-          commands.push({
-            type: "thread.activity.append",
-            commandId: plan.commandId,
-            threadId,
-            createdAt: activity.createdAt,
-            activity: {
-              ...activity,
-              id: EventId.make(`${threadId}-${contentHash(activity.id).slice(0, 16)}`),
-            },
-          });
-      }
-      commands.push(
-        ...planThreadManagement(plan.commandId, threadId, existingVersion, localManagement),
+      steps.push(
+        existingVersion
+          ? { type: "thread.visibility", threadId, visible: true }
+          : { type: "thread.import", threadId, projectId, thread },
       );
+      steps.push(...planThreadManagement(threadId, existingVersion, localManagement));
       visible.push(threadId);
     }
   }
   return {
-    ...plan,
-    commands,
+    steps,
     record: {
-      ...plan.record,
-      projectChanges: changes,
+      id: input.batchId,
+      sourceId: input.source.sourceId,
+      sourceHome: input.source.sourceHome,
+      createdAt: input.now,
+      contentHash: input.source.contentHash,
+      parentId: activeSyncRecord(input.history)?.id ?? null,
+      undoBatchId: null,
+      mappings: input.mappings,
       visibleThreadIds: visible,
       hiddenThreadIds: hidden,
+      projectChanges: changes,
+    },
+  };
+}
+
+/**
+ * Reverts the active batch: hides what it showed, restores what it hid, and puts back
+ * project settings nobody has changed since. A project it created goes only when
+ * nothing else lives in it and its settings are untouched.
+ */
+export function planUndo(input: {
+  active: ProjectSyncRecord;
+  projects: ReadonlyArray<ProjectSyncProjectSnapshot>;
+  threads: ReadonlyArray<SyncedThreadState>;
+  /** Live threads that are not imported versions, by project. */
+  localThreadProjects: ReadonlySet<ProjectId>;
+  localSettingOverrides: ReadonlyMap<ProjectId, ReadonlySet<string>>;
+  localThreadManagement: ReadonlyMap<string, SyncedThreadManagement>;
+  batchId: string;
+  now: string;
+  schedule: NonNullable<ProjectSyncRecord["schedule"]>;
+}): SyncPlan {
+  const { active } = input;
+  const restoredThreadIds = active.hiddenThreadIds.filter(
+    (threadId) => !input.localThreadManagement.get(syncedThreadKey(threadId))?.deleted,
+  );
+  const steps: SyncStep[] = [
+    ...active.visibleThreadIds.map((threadId): SyncStep => ({
+      type: "thread.visibility",
+      threadId,
+      visible: false,
+    })),
+    ...restoredThreadIds.map((threadId): SyncStep => ({
+      type: "thread.visibility",
+      threadId,
+      visible: true,
+    })),
+  ];
+  for (const threadId of restoredThreadIds) {
+    steps.push(
+      ...planThreadManagement(
+        threadId,
+        input.threads.find((thread) => thread.id === threadId),
+        input.localThreadManagement.get(syncedThreadKey(threadId)),
+      ),
+    );
+  }
+  for (const change of active.projectChanges) {
+    const current = input.projects.find(
+      (project) => project.id === change.after.id && !project.deletedAt,
+    );
+    if (!current) continue;
+    const overrides = input.localSettingOverrides.get(current.id);
+    const canRestore = (key: keyof ProjectSettings) =>
+      !overrides?.has(key) &&
+      contentHash(projectSettings(current)[key]) ===
+        contentHash(projectSettings(change.after)[key]);
+    if (change.before === null) {
+      if (
+        !input.localThreadProjects.has(current.id) &&
+        overrides === undefined &&
+        contentHash(projectSettings(current)) === contentHash(projectSettings(change.after))
+      ) {
+        steps.push({ type: "project.delete", projectId: current.id });
+      }
+      continue;
+    }
+    const before = projectSettings(change.before);
+    const settings: Partial<ProjectSettings> = {};
+    for (const key of settingsKeys) {
+      if (canRestore(key)) Object.assign(settings, { [key]: before[key] });
+    }
+    if (Object.keys(settings).length > 0)
+      steps.push({ type: "project.update", projectId: current.id, settings });
+  }
+  return {
+    steps,
+    record: {
+      ...active,
+      id: input.batchId,
+      createdAt: input.now,
+      parentId: active.parentId,
+      undoBatchId: active.id,
+      schedule: input.schedule,
+      visibleThreadIds: restoredThreadIds,
+      hiddenThreadIds: active.visibleThreadIds,
+      projectChanges: [],
     },
   };
 }

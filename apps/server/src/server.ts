@@ -154,6 +154,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import {
   OrchestrationEventInfrastructureLayerLive,
+  OrchestrationV2EventSinkLayerLive,
   OrchestrationV2ProductionLayerLive,
   ProjectServiceLayerLive,
   ProjectSetupScriptRunnerLayerLive,
@@ -172,6 +173,9 @@ import {
 } from "./serverRuntimeState.ts";
 import { orchestrationHttpApiLayer } from "./orchestration-v2/http.ts";
 import { projectHttpApiLayer } from "./project/http.ts";
+import { projectSyncHttpApiLayer } from "./projectSync/http.ts";
+import { projectSyncSchedulerLayer } from "./projectSync/Scheduler.ts";
+import { ProjectSyncService } from "./projectSync/Service.ts";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
@@ -465,8 +469,28 @@ const OrchestrationV2RuntimeLayerLive = OrchestrationV2ProductionLayerLive.pipe(
   ),
 );
 
+// Fork: document comments and imports from another T3 install. Socket handlers
+// resolve them per request, so they live in the runtime, not only in the routes.
+// The event sink is the runtime's own instance (layers memoize by reference);
+// startup's fork cutover import writes through it.
+const ForkServicesLayerLive = Layer.mergeAll(
+  OrchestrationV2EventSinkLayerLive,
+  DocumentComments.layer,
+  ProjectSyncService.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        ProjectServiceLayerLive,
+        OrchestrationV2EventSinkLayerLive,
+        ProjectStore.layer,
+        ProjectionStoreV2.layer,
+      ),
+    ),
+  ),
+);
+
 const OrchestrationApplicationLayerLive = CheckpointDiffQuery.layer.pipe(
   Layer.provideMerge(CheckpointStoreLayerLive),
+  Layer.provideMerge(ForkServicesLayerLive),
   Layer.provideMerge(OrchestrationV2RuntimeLayerLive),
 );
 
@@ -655,6 +679,7 @@ const makeRoutesLayer = Layer.mergeAll(
       Layer.provide(orchestrationHttpApiLayer),
       Layer.provide(pullRequestHttpApiLayer),
       Layer.provide(projectHttpApiLayer),
+      Layer.provide(projectSyncHttpApiLayer),
       Layer.provide(serverEnvironmentHttpApiLayer),
       Layer.provide(environmentAuthenticatedAuthLayer),
     ),
@@ -673,14 +698,13 @@ const makeRoutesLayer = Layer.mergeAll(
   McpHttpServer.layer.pipe(
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
   ),
+  projectSyncSchedulerLayer,
   // Last, so no route layer can replace the server's one TracerDisabledWhen.
   untracedRequestsLayer,
 ).pipe(
   // Both transports consume the same service instance, so caches single-flight across clients
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
-  // Fork: document comments, read by the socket and the MCP tools.
-  Layer.provide(DocumentComments.layer),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(DesktopAppUpdateLayerLive))),
   Layer.provide(commandReadinessLayer),

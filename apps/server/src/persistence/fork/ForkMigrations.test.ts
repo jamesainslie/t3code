@@ -60,6 +60,22 @@ const seedLegacyForkDatabase = Effect.gen(function* () {
       thread_id, comment_id, file_path, anchor_json, body, status, created_at, updated_at
     ) VALUES ('thread-1', 'comment-1', 'README.md', '{}', 'Tighten this', 'open', ${now}, ${now})
   `;
+  for (const [version, id, sourceId] of [
+    [0, "batch-1", "source-1"],
+    [1, "continue-1", "continuation"],
+  ] as const) {
+    yield* sql`
+      INSERT INTO orchestration_events (
+        event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at,
+        command_id, causation_event_id, correlation_id, actor_kind, payload_json, metadata_json
+      ) VALUES (
+        ${`event-${id}`}, 'project', 'sync-source-1', ${version}, 'project.sync-recorded', ${now},
+        ${id}, NULL, ${id}, 'server',
+        json_object('id', ${id}, 'sourceId', ${sourceId}, 'sourceHome', '/source', 'createdAt', ${now}),
+        '{}'
+      )
+    `;
+  }
 });
 
 const readLedgers = Effect.gen(function* () {
@@ -101,7 +117,8 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           first.upstream.map(([id]) => id),
           [55, 56],
         );
-        assert.deepStrictEqual(first.fork, []);
+        // Only fork migrations newer than the v1 fork build run.
+        assert.deepStrictEqual(first.fork, [[6, "ProjectSyncRecords"]]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
         assert.deepStrictEqual(ledgers.fork, forkMigrationManifest);
@@ -122,6 +139,11 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         ]);
         const comments = yield* sql`SELECT comment_id FROM projection_thread_document_comments`;
         assert.strictEqual(comments.length, 1);
+        // Sync history moves to its own table; continuation bookkeeping does not.
+        const records = yield* sql<{ readonly id: string }>`
+          SELECT record_id AS id FROM fork_project_sync_records ORDER BY position
+        `;
+        assert.deepStrictEqual(records, [{ id: "batch-1" }]);
 
         const second = yield* migrateLikeTheServer;
         assert.deepStrictEqual(second, { moved: [], upstream: [], fork: [] });
