@@ -20,8 +20,8 @@ import { resolveProjectSettings } from "./projectSettings.ts";
 const THREAD_TITLE_MAX_CHARS = 2_048;
 
 interface ThreadChipSource {
+  readonly environmentId: EnvironmentId;
   readonly id: ThreadId;
-  readonly projectId: ProjectId;
   readonly title: string;
 }
 
@@ -49,8 +49,8 @@ export function buildThreadContextRecord(thread: ThreadChipSource): ThreadContex
     contextId: threadContextId(thread.id),
     kind: "thread",
     label: sanitizeComposerContextLabel(title, "thread"),
+    environmentId: thread.environmentId,
     threadId: thread.id,
-    projectId: thread.projectId,
     title,
   };
 }
@@ -64,16 +64,16 @@ export function threadContextMarkdown(record: ThreadContextRecord): string {
  * What "Copy as thread chip" writes: the link as plain text, which paste requires before it
  * keeps a record, and the record itself as the structured fragment.
  */
-export function buildThreadChipClipboard(input: {
-  readonly environmentId: EnvironmentId;
-  readonly thread: ThreadChipSource;
-}): { readonly text: string; readonly fragment: ComposerContextClipboardFragment } {
+export function buildThreadChipClipboard(input: { readonly thread: ThreadChipSource }): {
+  readonly text: string;
+  readonly fragment: ComposerContextClipboardFragment;
+} {
   const record = buildThreadContextRecord(input.thread);
   return {
     text: threadContextMarkdown(record),
     fragment: {
       version: 1,
-      source: { environmentId: input.environmentId },
+      source: { environmentId: input.thread.environmentId },
       records: [record],
     },
   };

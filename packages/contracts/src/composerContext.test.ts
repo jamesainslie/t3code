@@ -151,9 +151,9 @@ describe("ComposerContextRecord", () => {
     const decoded = decodeRecord(knownRecords.thread);
     expect(Option.getOrThrow(decoded)).toMatchObject({
       kind: "thread",
-      threadId: "thread-abc",
-      projectId: "project-1",
-      title: "Fix login",
+      environmentId: "environment-1",
+      threadId: "thread-1",
+      title: "Fix login flow",
     });
   });
 

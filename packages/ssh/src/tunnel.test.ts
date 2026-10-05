@@ -761,7 +761,7 @@ describe("ssh environment output", () => {
       ),
       Layer.succeed(HttpClient.HttpClient, input.http ?? testHttpClient),
       Layer.succeed(NetService.NetService, testNetService),
-      SshPasswordPrompt.disabledLayer,
+      SshAuth.SshPasswordPrompt.disabledLayer,
       SshTunnel.SshEnvironmentManager.layer({
         resolveCliRunner: Effect.succeed(input.runner ?? ARCHIVE),
       }),

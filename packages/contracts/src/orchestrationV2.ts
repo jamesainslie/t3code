@@ -61,6 +61,13 @@ import {
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { OrchestrationProjectShell } from "./orchestrationProject.ts";
 import {
+  ForkSnoozeCommandFields,
+  ForkThreadCreateCommandFields,
+  ForkThreadFields,
+  ForkThreadInternalUpdateCommand,
+  ForkThreadUpdateCommand,
+} from "./forkOrchestration.ts";
+import {
   TurnTokenUsage,
   ToolActivitySurface,
   ToolActivityIcon,
@@ -356,6 +363,7 @@ export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitReco
 
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
+  ...ForkThreadFields,
   id: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
@@ -1713,6 +1721,7 @@ export type OrchestrationV2LatestVisibleMessageSummary =
 
 export const OrchestrationV2ThreadShell = Schema.Struct({
   ...OrchestrationV2CreationFields,
+  ...ForkThreadFields,
   id: ThreadId,
   projectId: ProjectId,
   title: Schema.String,
@@ -2478,6 +2487,7 @@ export const OrchestrationV2Command = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("thread.create"),
     ...OrchestrationV2CreationFields,
+    ...ForkThreadCreateCommandFields,
     commandId: CommandId,
     threadId: ThreadId,
     projectId: ProjectId,
@@ -2543,6 +2553,7 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     snoozedUntil: IsoDateTime,
+    ...ForkSnoozeCommandFields,
   }),
   Schema.Struct({
     type: Schema.Literal("thread.unsnooze"),
@@ -2912,6 +2923,7 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     modelSelection: ModelSelection,
   }),
+  ForkThreadUpdateCommand,
 ]);
 export type OrchestrationV2Command = typeof OrchestrationV2Command.Type;
 
@@ -2963,6 +2975,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     providerThreadId: ProviderThreadId,
     providerTurnId: ProviderTurnId,
   }),
+  ForkThreadInternalUpdateCommand,
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;
 
