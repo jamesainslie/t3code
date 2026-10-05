@@ -11479,7 +11479,13 @@ export default function ChatView(props: ChatViewProps) {
                               }
                             />
                           ) : null}
-                          {!composerMounted ? null : (
+                          {/* Fork: an imported conversation is read-only; it continues in a new thread. */}
+                          {!composerMounted ? null : activeThread.id.startsWith("t3sync-") ? (
+                            <SyncedConversation
+                              environmentId={activeThread.environmentId}
+                              threadId={activeThread.id}
+                            />
+                          ) : (
                             <ChatComposer
                               reportedModelSelection={reportedModelSelection}
                               multipleModelSelections={multipleModelSelections}
@@ -11680,7 +11686,7 @@ export default function ChatView(props: ChatViewProps) {
                               />
                             </ComposerSurface.ContextStrip>
                           ) : null}
-                          {mountComposerContextStrip && (
+                          {mountComposerContextStrip && !activeThread.id.startsWith("t3sync-") && (
                             <div className="pointer-events-auto">
                               <BranchToolbar
                                 forceNewWorktree={multipleModelSelections !== null}

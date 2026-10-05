@@ -2370,7 +2370,15 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           </span>
         </div>
       ) : null}
-      <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
+      <div
+        className={cn(
+          "flex w-full max-w-[80%] items-center justify-end text-xs tabular-nums",
+          // With event timestamps on, only the actions wait for hover, and the time follows them
+          // on the timestamp edge (see TimelineRowTimestamp).
+          ctx.eventTimestamps ? "pe-1.5" : "pe-1",
+          !ctx.eventTimestamps && USER_MESSAGE_META_HOVER_CLASS_NAME,
+        )}
+      >
         <div className="flex shrink-0 items-center gap-2">
           {ctx.eventTimestamps ? null : (
             <Tooltip>
@@ -3557,6 +3565,7 @@ function toolIconAcceptsTint(
 }
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
+  const { eventTimestamps, timestampFormat } = use(TimelineRowCtx);
   const { isCompacting, isPreparingWorktree, backgroundWorktreeSetup } =
     use(TimelineRowActivityCtx);
   // One span for every label so the setup-to-working handoff swaps text in
@@ -3585,6 +3594,14 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
         </span>
         {backgroundWorktreeSetup ? (
           <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
+        ) : null}
+        {eventTimestamps && row.createdAt ? (
+          <ChatEventTimestamp
+            iso={row.createdAt}
+            timestampFormat={timestampFormat}
+            options={eventTimestamps}
+            className="ms-auto pe-0.5"
+          />
         ) : null}
       </div>
     </div>
@@ -5516,6 +5533,12 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
               )}
             />
           </span>
+          {ctx.eventTimestamps ? (
+            <TimelineRowTimestamp
+              createdAt={workEntry.createdAt}
+              timestampFormat={timestampFormat}
+            />
+          ) : null}
         </>
       }
     >
