@@ -948,7 +948,7 @@ describe("GitHubCli pin scopes", () => {
       Effect.provideService(VcsProcess.VcsProcess, {
         run: (input) =>
           Effect.sync(() => {
-            if (input.args[1] === "rate_limit") return quotaOutput();
+            if (isBudgetReading(input)) return quotaOutput();
             seen.push(input.env?.GH_TOKEN);
             return processOutput("[]");
           }),

@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
 import {
   HostProcessArguments,
@@ -89,16 +90,19 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const baseDir = yield* fs.makeTempDirectoryScoped();
+      // Fork: the fork's package and bin names.
+      const { npmPackageName, cliBin } = FORK_IDENTITY;
       const prefix = `${baseDir}/node`;
-      const entry = `${prefix}/lib/node_modules/t3/dist/bin.mjs`;
-      yield* fs.makeDirectory(`${prefix}/lib/node_modules/t3/dist`, { recursive: true });
+      const packageRoot = `${prefix}/lib/node_modules/${npmPackageName}`;
+      const entry = `${packageRoot}/dist/bin.mjs`;
+      yield* fs.makeDirectory(`${packageRoot}/dist`, { recursive: true });
       yield* fs.makeDirectory(`${prefix}/bin`, { recursive: true });
       yield* fs.writeFileString(entry, "");
       yield* fs.writeFileString(
-        `${prefix}/lib/node_modules/t3/package.json`,
-        '{"name":"t3","version":"0.0.45","bin":{"t3":"./dist/bin.mjs"}}',
+        `${packageRoot}/package.json`,
+        `{"name":"${npmPackageName}","version":"0.0.45","bin":{"${cliBin}":"./dist/bin.mjs"}}`,
       );
-      yield* fs.symlink(entry, `${prefix}/bin/t3`);
+      yield* fs.symlink(entry, `${prefix}/bin/${cliBin}`);
       const config = yield* makeServerConfig(baseDir);
       yield* fs.makeDirectory(config.stateDir, { recursive: true });
       for (const mode of ["web", "desktop"] as const) {
