@@ -134,7 +134,7 @@ const withIdentity = <A, E, R>(
               input.legacyPathProbeError
                 ? Effect.fail(input.legacyPathProbeError)
                 : Effect.succeed(
-                    input.legacyPathExists === true && /T3 Code \((Alpha|Dev)\)/.test(path),
+                    input.legacyPathExists === true && /T3 Code Fork \((Alpha|Dev)\)/.test(path),
                   ),
             readFileString: () =>
               Effect.succeed(input.packageJson ?? '{"t3codeCommitHash":"abcdef1234567890"}'),
@@ -149,13 +149,17 @@ const withIdentity = <A, E, R>(
 };
 
 describe("DesktopAppIdentity", () => {
-  it.effect("isolates the V2 profile even when the legacy V1 profile exists", () =>
+  // Fork: one profile serves every release, so an existing legacy profile stays in use.
+  it.effect("keeps using the legacy userData path when it already exists", () =>
     withIdentity(
       Effect.gen(function* () {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         const userDataPath = yield* identity.resolveUserDataPath;
 
-        assert.equal(userDataPath, "/Users/alice/Library/Application Support/t3code-v2");
+        assert.equal(
+          userDataPath,
+          `/Users/alice/Library/Application Support/${FORK_IDENTITY.desktop.production.legacyUserDataDirName}`,
+        );
       }),
       { legacyPathExists: true },
     ),
@@ -167,7 +171,7 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         assert.equal(
           yield* identity.resolveUserDataPath,
-          "/Users/alice/Library/Application Support/T3 Code (Dev)",
+          `/Users/alice/Library/Application Support/${FORK_IDENTITY.desktop.development.legacyUserDataDirName}`,
         );
       }),
       {
@@ -178,7 +182,7 @@ describe("DesktopAppIdentity", () => {
   );
 
   it.effect("preserves failures while inspecting the legacy userData path", () => {
-    const legacyPath = "/Users/alice/Library/Application Support/T3 Code (Dev)";
+    const legacyPath = `/Users/alice/Library/Application Support/${FORK_IDENTITY.desktop.development.legacyUserDataDirName}`;
     const cause = PlatformError.systemError({
       _tag: "PermissionDenied",
       module: "FileSystem",

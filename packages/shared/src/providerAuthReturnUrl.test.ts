@@ -2,7 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { providerAuthReturnUrl } from "./providerAuthReturnUrl.ts";
 
 describe("provider auth return destinations", () => {
-  it.each(["t3code", "t3code-dev"])(
+  // Fork: the desktop registers the fork schemes, so returns go there.
+  it.each(["t3code-fork", "t3code-fork-dev"])(
     "returns to %s Welcome and the selected settings instance",
     (scheme) => {
       expect(providerAuthReturnUrl(`${scheme}://app/welcome?code=secret#agents:machine-id`)).toBe(
@@ -14,11 +15,13 @@ describe("provider auth return destinations", () => {
     },
   );
   it.each([
-    "t3code://attacker/welcome",
-    "t3code://app:123/welcome",
-    "t3code://app/auth/callback",
-    "t3code://user@ app/welcome",
-    "t3code://app/welcome/../evil",
+    // Upstream's app, installed beside the fork, must not receive the fork's returns.
+    "t3code://app/welcome",
+    "t3code-fork://attacker/welcome",
+    "t3code-fork://app:123/welcome",
+    "t3code-fork://app/auth/callback",
+    "t3code-fork://user@ app/welcome",
+    "t3code-fork://app/welcome/../evil",
     "https://attacker.example/welcome",
     "file:///welcome",
     "javascript:alert(1)",

@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -17,17 +18,19 @@ const resolveWindowsUserData = (appDataDirectory: string) =>
   }).pipe(Effect.provide(DesktopPreReadyFileSystem.layer));
 
 it.layer(NodeServices.layer)("DesktopPreReadyFileSystem", (it) => {
-  it.effect("migrates the legacy Windows profile state", () =>
+  // Fork: the existing legacy profile stays in use, so its keys need no copy.
+  it.effect("keeps the legacy Windows profile and its state", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-pre-ready-fs-" });
-      yield* fileSystem.makeDirectory(path.join(root, "T3 Code (Alpha)"));
-      yield* fileSystem.writeFileString(path.join(root, "T3 Code (Alpha)", "Local State"), "keys");
+      const legacy = FORK_IDENTITY.desktop.production.legacyUserDataDirName;
+      yield* fileSystem.makeDirectory(path.join(root, legacy));
+      yield* fileSystem.writeFileString(path.join(root, legacy, "Local State"), "keys");
 
       const userData = yield* resolveWindowsUserData(root);
 
-      assert.equal(userData, path.join(root, "t3code-v2"));
+      assert.equal(userData, path.join(root, legacy));
       assert.equal(yield* fileSystem.readFileString(path.join(userData, "Local State")), "keys");
     }),
   );

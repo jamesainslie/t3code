@@ -3,6 +3,7 @@ import * as NodeHttp from "node:http";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { codexAuthHandoffUrl, readCodexAuthDelivery } from "@t3tools/shared/codexAuthHandoff";
 import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { HostProcessArguments } from "@t3tools/shared/hostProcess";
 import { assert, describe, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
@@ -123,13 +124,13 @@ describe("DesktopClerk", () => {
       name: "packaged Windows",
       isDevelopment: false,
       platform: "win32" as const,
-      userData: "/tmp/app-data/t3code-v2",
+      userData: `/tmp/app-data/${FORK_IDENTITY.desktop.production.userDataDirName}`,
     },
     {
       name: "development",
       isDevelopment: true,
       platform: "win32" as const,
-      userData: "/tmp/app-data/t3code-dev",
+      userData: `/tmp/app-data/${FORK_IDENTITY.desktop.development.userDataDirName}`,
     },
   ])(
     "creates the bridge before startup can yield to the event loop ($name)",
@@ -283,19 +284,26 @@ it.effect(
       const clerk = yield* DesktopClerk.DesktopClerk;
       yield* clerk.configure;
       const event = { preventDefault: vi.fn() };
-      listeners.get("open-url")!(event, "t3code-dev://app/auth/callback?code=clerk-code");
+      listeners.get("open-url")!(
+        event,
+        `${FORK_IDENTITY.desktop.development.scheme}://app/auth/callback?code=clerk-code`,
+      );
+      // Fork: upstream's scheme belongs to upstream's app, so it is not handled here.
       listeners.get("open-url")!(event, "t3code://app/welcome");
       assert.equal(loadURL.mock.calls.length, 0);
       assert.equal(event.preventDefault.mock.calls.length, 0);
       listeners.get("second-instance")!({}, [
         "t3",
-        "t3code-dev://app/settings/providers?instanceId=work&code=never-forward",
+        `${FORK_IDENTITY.desktop.development.scheme}://app/settings/providers?instanceId=work&code=never-forward`,
       ]);
       yield* Effect.promise(() => revealed.promise);
       assert.deepEqual(loadURL.mock.calls, [
-        ["t3code-dev://app/settings/providers?instanceId=work"],
+        [`${FORK_IDENTITY.desktop.development.scheme}://app/settings/providers?instanceId=work`],
       ]);
-      listeners.get("open-url")!(event, "t3code-dev://app/welcome#agents:machine-id");
+      listeners.get("open-url")!(
+        event,
+        `${FORK_IDENTITY.desktop.development.scheme}://app/welcome#agents:machine-id`,
+      );
       assert.equal(event.preventDefault.mock.calls.length, 1);
     }).pipe(
       Effect.scoped,

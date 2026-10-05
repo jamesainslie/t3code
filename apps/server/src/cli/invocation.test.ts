@@ -10,7 +10,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
+import {
+  FORK_IDENTITY,
+  forkPackageSpec,
+  forkPlatformPackageName,
+} from "@t3tools/shared/forkIdentity";
 
 import { formatCliCommand, resolveServerInstallation } from "./invocation.ts";
 
@@ -142,16 +146,17 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
-      const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
+      // Fork: the fork's package and bin names; the prefix avoids runner-like names.
+      const prefix = path.join(root, "tools");
+      const packageRoot = path.join(prefix, "lib/node_modules", FORK_IDENTITY.npmPackageName);
       const entry = path.join(packageRoot, "dist/bin.mjs");
-      const globalBin = path.join(prefix, "bin/t3");
+      const globalBin = path.join(prefix, "bin", FORK_IDENTITY.cliBin);
       yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
       yield* fs.makeDirectory(path.dirname(globalBin), { recursive: true });
       yield* fs.writeFileString(entry, "");
       yield* fs.writeFileString(
         path.join(packageRoot, "package.json"),
-        '{"name":"t3","version":"0.0.45","bin":{"t3":"./dist/bin.mjs"}}',
+        `{"name":"${FORK_IDENTITY.npmPackageName}","version":"0.0.45","bin":{"${FORK_IDENTITY.cliBin}":"./dist/bin.mjs"}}`,
       );
       const resolve = resolveServerInstallation.pipe(
         Effect.provideService(HostProcessArguments, ["node", entry]),
@@ -173,10 +178,12 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
-      const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
+      // Fork: the fork's launcher, platform package, and bin names.
+      const prefix = path.join(root, "tools");
+      const packageRoot = path.join(prefix, "lib/node_modules", FORK_IDENTITY.npmPackageName);
       const launcher = path.join(packageRoot, "bin/t3.js");
-      const entry = path.join(packageRoot, "node_modules/@t3code/t3-linux-x64/t3");
+      const platformPackage = forkPlatformPackageName("linux-x64");
+      const entry = path.join(packageRoot, "node_modules", platformPackage, "t3");
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
       yield* fs.makeDirectory(path.join(prefix, "bin"));
@@ -184,9 +191,9 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.writeFileString(entry, "");
       yield* fs.writeFileString(
         path.join(packageRoot, "package.json"),
-        '{"name":"t3","version":"0.0.45","bin":{"t3":"./bin/t3.js"},"optionalDependencies":{"@t3code/t3-linux-x64":"0.0.45"}}',
+        `{"name":"${FORK_IDENTITY.npmPackageName}","version":"0.0.45","bin":{"${FORK_IDENTITY.cliBin}":"./bin/t3.js"},"optionalDependencies":{"${platformPackage}":"0.0.45"}}`,
       );
-      yield* fs.symlink(launcher, path.join(prefix, "bin/t3"));
+      yield* fs.symlink(launcher, path.join(prefix, "bin", FORK_IDENTITY.cliBin));
       const resolve = resolveServerInstallation.pipe(
         Effect.provideService(HostProcessExecutablePath, entry),
         Effect.provideService(HostProcessIsExecutable, true),
@@ -198,7 +205,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       ]) {
         yield* fs.writeFileString(
           path.join(path.dirname(entry), "package.json"),
-          `{"name":"@t3code/t3-linux-x64","version":"${version}"}`,
+          `{"name":"${platformPackage}","version":"${version}"}`,
         );
         expect(yield* resolve).toEqual(expected);
       }

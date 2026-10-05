@@ -27,6 +27,10 @@ const ANDROID_BETA_GROUP_URL = "https://groups.google.com/g/t3-code-v2-beta";
 const ANDROID_PLAY_TESTING_URL = "https://play.google.com/apps/testing/com.t3tools.t3code";
 
 const ROW_ID = "nightly-mobile-beta";
+
+// Fork: these links install upstream's beta app, which cannot pair with the fork,
+// so the fork shows neither the notice nor the settings row.
+const FORK_SHOWS_UPSTREAM_MOBILE_BETA = false;
 const NOTICE_DISMISSED_STORAGE_KEY = "t3code:nightly-mobile-beta-notice-dismissed:v1";
 
 // Guards against a second toast from a remount or a Strict Mode effect replay.
@@ -56,6 +60,7 @@ export function NightlyMobileBetaNotice() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!FORK_SHOWS_UPSTREAM_MOBILE_BETA) return;
     if (!IS_NIGHTLY_BUILD || noticeShown || isNoticeDismissed()) return;
     noticeShown = true;
     const toastId = toastManager.add({
@@ -103,6 +108,7 @@ function BetaLinkQr({ url, label }: { url: string; label: string }) {
 
 /** Settings → General → About row with the beta app links. Render it only for Nightly. */
 export function NightlyMobileBetaRow() {
+  if (!FORK_SHOWS_UPSTREAM_MOBILE_BETA) return null;
   return (
     <SettingsRow
       id={ROW_ID}

@@ -3,6 +3,7 @@ import type {
   ServerInstallation,
   ServerSelfUpdateCapability,
 } from "@t3tools/contracts";
+import { forkPackageSpec } from "@t3tools/shared/forkIdentity";
 import type { ServerUpdateStage, ServerUpdateState } from "@t3tools/client-runtime/state/server";
 import {
   isAtomCommandInterrupted,
@@ -82,7 +83,7 @@ function useServerUpdate() {
         description:
           selfUpdate === "desktop-managed"
             ? `Desktop app relaunched on ${result.value.targetVersion}.`
-            : `Reconnected on t3@${result.value.targetVersion}.`,
+            : `Reconnected on ${forkPackageSpec(result.value.targetVersion)}.`,
       });
     } catch (error) {
       toastManager.add({
@@ -341,7 +342,7 @@ export function OutdatedServerUpdateAction({
       toastManager.add({
         type: "success",
         title: `${serverLabel} updated`,
-        description: `Reconnected on t3@${result.value.targetVersion}.`,
+        description: `Reconnected on ${forkPackageSpec(result.value.targetVersion)}.`,
       });
     } catch (error) {
       toastManager.add({
