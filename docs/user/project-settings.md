@@ -172,12 +172,18 @@ In **Sync history**, **Undo this sync** restores the previous imported versions 
 sync. Undo the latest active batch first; repeat to undo earlier batches. Later local project edits
 remain in place.
 
+The first sync after updating to a release with the new orchestrator refreshes every imported
+conversation once, bringing back the tool activity that the update's own migration leaves out.
+Your reopen, settle, archive, and delete choices carry over to the refreshed copies. Sync can read a
+main install from either before or after that update.
+
 Use **Recovery backups** for a full rewind of this environment's database, attachments, and settings.
 The seven most recent automatic backups are retained. Preparing a restore pauses sync; quit and
 restart the destination environment to apply it, or choose **Cancel restore** before restarting.
 Recovery rewinds work recorded since the backup and retains the current state under the T3 home's
 `sync-recovery/before-restore-*` directory. It does not rewind files in your Git working directories.
-The main install remains unchanged.
+A backup taken before the orchestrator update restores the older database, which is upgraded again
+when the environment starts. The main install remains unchanged.
 
 ## Project icons
 
