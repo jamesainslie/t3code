@@ -42,6 +42,10 @@ concurrency:
   queue: max
 
 permissions:
+  # release-desktop.yml asks for actions: read (its Windows jobs poll this run's
+  # artifacts). A called workflow cannot exceed its caller, so without this
+  # every run fails at startup even though the fork builds no Windows target.
+  actions: read
   contents: read
   id-token: none
 
