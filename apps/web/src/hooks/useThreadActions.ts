@@ -11,6 +11,7 @@ import {
   effectiveSnoozed,
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
+import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
 import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
@@ -24,6 +25,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { terminalEnvironment } from "../state/terminal";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentServerConfigsAtom } from "../state/server";
+import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
@@ -40,13 +42,14 @@ import {
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsSnoozeReminder,
+  readEnvironmentSupportsVisitedTracking,
   readEnvironmentThreadRefs,
   readProject,
   readThreadShell,
   readThreadShells,
 } from "../state/entities";
-import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useUiStateStore } from "../uiStateStore";
+import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -70,7 +73,7 @@ export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveB
   },
 ) {
   override get message(): string {
-    return "Cannot archive a running thread.";
+    return "Cannot archive while the provider is active.";
   }
 }
 
@@ -241,6 +244,56 @@ export async function navigateAfterThreadDeletion(navigate: () => Promise<void>)
   }
 }
 
+/**
+ * Marks a thread unread. Servers with visited tracking own the unread marker
+ * (thread.mark-unread rewinds the server-side visited watermark, syncing the
+ * marker to every device); older servers keep the browser-local marker.
+ */
+function useMarkThreadUnread() {
+  const markThreadUnreadMutation = useAtomCommand(threadEnvironment.markUnread, {
+    reportFailure: false,
+  });
+  const markThreadUnreadLocal = useUiStateStore((state) => state.markThreadUnread);
+  return useCallback(
+    (target: ScopedThreadRef) => {
+      if (readEnvironmentSupportsVisitedTracking(target.environmentId)) {
+        void markThreadUnreadMutation({
+          environmentId: target.environmentId,
+          input: { threadId: target.threadId },
+        });
+        return;
+      }
+      const thread = readThreadShell(target);
+      markThreadUnreadLocal(scopedThreadKey(target), thread?.latestRun?.completedAt);
+    },
+    [markThreadUnreadLocal, markThreadUnreadMutation],
+  );
+}
+
+/**
+ * Clears a thread's Woke marker by recording a visit at the wake time.
+ * Servers with visited tracking own the watermark (thread.visit keeps the
+ * later of the stored and supplied values, so this syncs to every device);
+ * older servers keep the browser-local watermark.
+ */
+export function useAcknowledgeThreadWoke() {
+  const visitThreadMutation = useAtomCommand(threadEnvironment.visit, { reportFailure: false });
+  const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
+  return useCallback(
+    (target: ScopedThreadRef, wokeAt: string) => {
+      if (readEnvironmentSupportsVisitedTracking(target.environmentId)) {
+        void visitThreadMutation({
+          environmentId: target.environmentId,
+          input: { threadId: target.threadId, visitedAt: wokeAt },
+        });
+        return;
+      }
+      markThreadVisited(scopedThreadKey(target), wokeAt);
+    },
+    [markThreadVisited, visitThreadMutation],
+  );
+}
+
 export function useThreadActions() {
   const closeTerminal = useAtomCommand(terminalEnvironment.close);
   const archiveThreadMutation = useAtomCommand(threadEnvironment.archive, {
@@ -288,6 +341,7 @@ export function useThreadActions() {
   const unsnoozeThreadMutation = useAtomCommand(threadEnvironment.unsnooze, {
     reportFailure: false,
   });
+  const markThreadUnread = useMarkThreadUnread();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession);
   const removeWorktree = useAtomCommand(vcsEnvironment.removeWorktree, {
     reportFailure: false,
@@ -357,7 +411,7 @@ export function useThreadActions() {
       const resolved = resolveThreadTarget(target);
       if (!resolved) return AsyncResult.success(undefined);
       const { thread, threadRef } = resolved;
-      if (thread.session?.status === "running" && thread.session.activeTurnId != null) {
+      if (!threadRuntimeCanArchive(thread.runtime)) {
         return AsyncResult.failure(
           Cause.fail(
             new ThreadArchiveBlockedError({
@@ -459,12 +513,18 @@ export function useThreadActions() {
       const displayWorktreePath = orphanedWorktreePath
         ? formatWorktreePathForDisplay(orphanedWorktreePath)
         : null;
-      const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== null;
+      const environmentConfig = appAtomRegistry
+        .get(environmentServerConfigsAtom)
+        .get(threadRef.environmentId);
+      // A Scratch thread's folder is not a git worktree, and deleting the
+      // thread keeps its files.
+      const canDeleteWorktree =
+        orphanedWorktreePath !== null &&
+        threadProject !== null &&
+        !isScratchProject(threadProject, environmentConfig?.scratchWorkspaceRoot);
       const localApi = readLocalApi();
       let shouldDeleteWorktree = false;
-      const environmentSettings = appAtomRegistry
-        .get(environmentServerConfigsAtom)
-        .get(threadRef.environmentId)?.settings;
+      const environmentSettings = environmentConfig?.settings;
       const automaticWorktreeCleanup = environmentSettings
         ? resolveWorktreeCleanup(environmentSettings, thread.projectId).worktreeOnDelete
         : false;
@@ -486,7 +546,7 @@ export function useThreadActions() {
         shouldDeleteWorktree = confirmationResult.value;
       }
 
-      if (thread.session && thread.session.status !== "stopped") {
+      if (thread.runtime !== null) {
         await stopThreadSession({
           environmentId: threadRef.environmentId,
           input: { threadId: threadRef.threadId },
@@ -1098,6 +1158,7 @@ export function useThreadActions() {
       reorderPinnedThread,
       reorderActiveThread,
       setThreadHighlight,
+      markThreadUnread,
       setThreadAutoSettle,
     }),
     [
@@ -1106,6 +1167,7 @@ export function useThreadActions() {
       confirmAndDeleteThread,
       confirmAndUnpinThread,
       deleteThread,
+      markThreadUnread,
       pinThread,
       releaseThreadDependencies,
       removeThreadDependency,

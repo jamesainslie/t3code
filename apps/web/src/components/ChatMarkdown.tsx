@@ -7,9 +7,7 @@ import {
   encodeComposerContextClipboardHtml,
 } from "@t3tools/shared/composerContextClipboard";
 import {
-  CheckIcon,
   ChevronRightIcon,
-  CopyIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
   GlobeIcon,
@@ -17,10 +15,8 @@ import {
   InfoIcon,
   LightbulbIcon,
   MailIcon,
-  Maximize2Icon,
   MessageSquareIcon,
   MessageSquareWarningIcon,
-  Minimize2Icon,
   OctagonAlertIcon,
   PlayIcon,
   PresentationIcon,
@@ -29,6 +25,7 @@ import {
   WrapTextIcon,
   type LucideIcon,
 } from "lucide-react";
+import { Check, Copy, Maximize2, Minimize2 } from "lucide";
 import type {
   AssetResource,
   EnvironmentId,
@@ -92,6 +89,8 @@ import { parseComposerContextHref } from "@t3tools/shared/composerContextReferen
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
 import { remarkPandocMath } from "../remarkPandocMath";
+import type { Processor } from "unified";
+import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
 import {
   parseInlineCodeLanguage,
@@ -130,6 +129,7 @@ import {
 import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
+import { MorphIcon } from "~/components/MorphIcon";
 import { ContextChip } from "./ContextChip";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
 import { ScrollArea } from "./ui/scroll-area";
@@ -169,6 +169,7 @@ import {
   shouldOpenMarkdownFileLinkInEditor,
   type MarkdownFileLinkMeta,
 } from "../markdown-links";
+import { isMarkdownFileLinkLabel } from "@t3tools/client-runtime/markdown-links";
 import { readLocalApi } from "../localApi";
 import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";
 import { cn } from "../lib/utils";
@@ -509,6 +510,7 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
 
 const CHAT_MARKDOWN_REMARK_PLUGINS = [
   remarkGfm,
+  remarkKeepWindowsPathDestinations,
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
@@ -518,6 +520,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS = [
 
 const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkGfm,
+  remarkKeepWindowsPathDestinations,
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
@@ -669,6 +672,36 @@ function remarkPreserveCodeMeta() {
 
     visit(tree);
   };
+}
+
+interface DestinationCompileContext {
+  readonly stack: ReadonlyArray<{ readonly type: string; url?: string }>;
+  resume(): string;
+  sliceSerialize(token: unknown): string;
+}
+
+function keepWindowsPathDestination(this: DestinationCompileContext, token: unknown) {
+  const decoded = this.resume();
+  const authored = this.sliceSerialize(token);
+  const node = this.stack.at(-1);
+  // Character references still need decoding, so those destinations keep the parsed URL.
+  if (node)
+    node.url = isWindowsAbsolutePath(authored) && !authored.includes("&") ? authored : decoded;
+}
+
+/**
+ * CommonMark reads the `\.` in `C:\me\.t3\shot.png` as an escape, even in a link
+ * destination. Every backslash in a Windows path is a separator, so link, image, and
+ * definition destinations that are Windows paths keep the text as written.
+ */
+function remarkKeepWindowsPathDestinations(this: Processor) {
+  const data = this.data();
+  (data.fromMarkdownExtensions ??= []).push({
+    exit: {
+      resourceDestinationString: keepWindowsPathDestination,
+      definitionDestinationString: keepWindowsPathDestination,
+    },
+  });
 }
 
 /**
@@ -850,7 +883,7 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
               />
             }
           >
-            {expanded ? <Minimize2Icon className="size-3" /> : <Maximize2Icon className="size-3" />}
+            <MorphIcon className="size-3" icon={expanded ? Minimize2 : Maximize2} />
           </TooltipTrigger>
           <TooltipPopup side="top">{expandLabel}</TooltipPopup>
         </Tooltip>
@@ -870,7 +903,7 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
                 />
               }
             >
-              {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+              <MorphIcon className="size-3" icon={copied ? Check : Copy} />
             </TooltipTrigger>
             <TooltipPopup side="top">{copyLabel}</TooltipPopup>
           </Tooltip>
@@ -979,6 +1012,9 @@ function MarkdownCodeBlock({
   theme,
   onRunShellCommand,
   isStreaming,
+  leadingActions,
+  canWrap = true,
+  diagram = false,
   children,
 }: {
   code: string;
@@ -987,6 +1023,10 @@ function MarkdownCodeBlock({
   theme: "light" | "dark";
   onRunShellCommand?: ((command: string) => void) | undefined;
   isStreaming: boolean;
+  leadingActions?: ReactNode;
+  canWrap?: boolean;
+  /** Renders content instead of code, with actions below it like tables. */
+  diagram?: boolean;
   children: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
@@ -1044,6 +1084,37 @@ function MarkdownCodeBlock({
     [],
   );
 
+  const copyButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost-muted"
+            size="icon-xs"
+            onClick={handleCopy}
+            aria-label={copyLabel}
+          />
+        }
+      >
+        <MorphIcon className="size-3" icon={copied ? Check : Copy} />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{copyLabel}</TooltipPopup>
+    </Tooltip>
+  );
+
+  if (diagram) {
+    return (
+      <div className="my-[0.65rem]" data-language={language}>
+        {children}
+        <div className="mt-0.5 flex items-center justify-between select-none">
+          {leadingActions}
+          {copyButton}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="chat-markdown-codeblock my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary leading-snug dark:border-transparent dark:bg-input/32"
@@ -1059,23 +1130,26 @@ function MarkdownCodeBlock({
           />
         </span>
         <span className="flex items-center gap-0.5" role="toolbar" aria-label="Code block actions">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant={wrapped ? "secondary" : "ghost-muted"}
-                  size="icon-xs"
-                  aria-pressed={wrapped}
-                  onClick={() => setWrapped((value) => !value)}
-                  aria-label={wrapLabel}
-                />
-              }
-            >
-              <WrapTextIcon className="size-3" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
-          </Tooltip>
+          {leadingActions}
+          {canWrap ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant={wrapped ? "secondary" : "ghost-muted"}
+                    size="icon-xs"
+                    aria-pressed={wrapped}
+                    onClick={() => setWrapped((value) => !value)}
+                    aria-label={wrapLabel}
+                  />
+                }
+              >
+                <WrapTextIcon className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
+            </Tooltip>
+          ) : null}
           {canRun ? (
             <Tooltip>
               <TooltipTrigger
@@ -1094,22 +1168,7 @@ function MarkdownCodeBlock({
               <TooltipPopup side="top">Run in terminal</TooltipPopup>
             </Tooltip>
           ) : null}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost-muted"
-                  size="icon-xs"
-                  onClick={handleCopy}
-                  aria-label={copyLabel}
-                />
-              }
-            >
-              {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-            </TooltipTrigger>
-            <TooltipPopup side="top">{copyLabel}</TooltipPopup>
-          </Tooltip>
+          {copyButton}
         </span>
       </div>
       {children}
@@ -2961,6 +3020,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       updateThreadPullRequestLink,
       fileLinkChip,
       renderContextReference,
+      text,
     } = use(ChatMarkdownRendererContext);
     const citation = href ? parseCitationHref(href) : null;
     if (citation) return <AssistantCitationChip citation={citation} />;
@@ -3172,10 +3232,21 @@ const CHAT_MARKDOWN_COMPONENTS = {
       );
     }
 
-    return fileLinkChip(
-      fileLinkMeta,
-      `[${fileLinkMeta.basename}](${normalizedHref})`,
-      normalizedHref,
+    const label = nodeToPlainText(children);
+    const start = node?.position?.start.offset;
+    const end = node?.position?.end.offset;
+    const source = start !== undefined && end !== undefined ? text.slice(start, end) : "";
+    const copyMarkdown =
+      source.startsWith("[") && source.includes("](")
+        ? source
+        : `[${(label || fileLinkMeta.basename).replace(/[\\[\]]/g, "\\$&")}](${normalizedHref})`;
+    const chip = fileLinkChip(fileLinkMeta, copyMarkdown, normalizedHref);
+    return isMarkdownFileLinkLabel(label, normalizedHref) ? (
+      chip
+    ) : (
+      <span data-markdown-copy={copyMarkdown}>
+        {children} {chip}
+      </span>
     );
   },
   code: function MarkdownCode({ node, children, className, ...props }) {

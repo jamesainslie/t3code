@@ -1,10 +1,10 @@
 import * as Schema from "effect/Schema";
 
 import {
+  EnvironmentId,
   ForwardCompatibleArray,
   NonNegativeInt,
   PositiveInt,
-  ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
@@ -218,13 +218,16 @@ export const SkillContextRecord = Schema.Struct({
 });
 export type SkillContextRecord = typeof SkillContextRecord.Type;
 
-/** Points the agent at another thread in the same environment. */
+/**
+ * Another thread on the same server, attached so the agent can read its history through
+ * `t3_thread_read`. Only identity travels; the title is a display snapshot.
+ */
 export const ThreadContextRecord = Schema.Struct({
   ...recordBase,
   kind: Schema.Literal("thread"),
+  environmentId: EnvironmentId,
   threadId: ThreadId,
-  projectId: ProjectId,
-  title: ShortString,
+  title: ContextLabel,
 });
 export type ThreadContextRecord = typeof ThreadContextRecord.Type;
 

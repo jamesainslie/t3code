@@ -21,6 +21,7 @@ import {
   ServerCliDevelopmentIconTargetMissingError,
   ServerCliExecutableImportError,
 } from "./cliErrors.ts";
+import { publishPlatformsThenLauncher } from "./publishOrder.ts";
 
 const decodePackageIdentity = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String })),
@@ -254,14 +255,14 @@ const publishCmd = Command.make(
         return { ...manifest, published: exitCode === 0 };
       });
 
-      for (const tarball of [...platformTarballs, launcherTarball]) {
+      const publish = Effect.fn("publish")(function* (tarball: string) {
         if (!config.dryRun) {
           const existing = yield* alreadyPublished(tarball);
           if (existing.published) {
             yield* Effect.log(
               `[cli] ${existing.name}@${existing.version} is already on npm, skipping`,
             );
-            continue;
+            return;
           }
         }
         const spawnCommand = yield* resolveSpawnCommand("npm", [...args, tarball]);
@@ -274,7 +275,10 @@ const publishCmd = Command.make(
             shell: spawnCommand.shell,
           }),
         );
-      }
+      });
+
+      // Each publish takes about 17s, so the platform packages go at once.
+      yield* publishPlatformsThenLauncher({ platformTarballs, launcherTarball, publish });
     }),
 ).pipe(
   Command.withDescription(

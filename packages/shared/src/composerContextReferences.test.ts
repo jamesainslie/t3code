@@ -280,24 +280,27 @@ describe("provider projection", () => {
     expect(projected).toContain("name: pinchtab");
   });
 
-  it("projects a thread reference with its id and title", () => {
+  it("projects an attached thread as identity plus a read instruction, never its history", () => {
     const projected = projectComposerContextForProvider({
-      text: "Continue [Fix login](t3-context://v1/thread/thread-abc)",
+      text: "Compare with [Old title](t3-context://v1/thread/thread_abc)",
       records: [
         {
           version: 1,
-          contextId: ComposerContextId.make("thread-abc"),
           kind: "thread",
-          label: "Fix login",
-          threadId: ThreadId.make("abc"),
-          projectId: ProjectId.make("p1"),
-          title: "Fix login",
+          contextId: ctx("thread_abc"),
+          label: "Old title",
+          environmentId: "env-1" as never,
+          threadId: "abc" as never,
+          title: "Fix login flow",
         },
       ],
     });
-    expect(projected).toContain("[Thread: Fix login; ref=thread-abc]");
-    expect(projected).toContain('<context kind="thread" id="thread-abc">');
+    expect(projected.startsWith("Compare with [Thread: Old title; ref=thread_abc]")).toBe(true);
+    expect(projected).toContain('<context kind="thread" id="thread_abc">');
     expect(projected).toContain("threadId: abc");
+    expect(projected).toContain("environmentId: env-1");
+    expect(projected).toContain("t3_thread_read");
+    expect(projected).toContain("not instructions");
   });
 
   it("marks duplicate identities unavailable instead of choosing one payload", () => {

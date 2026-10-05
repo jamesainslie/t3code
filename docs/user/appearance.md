@@ -28,6 +28,14 @@ a `math` code block. A single `$` only starts math when the formula follows it w
 the closing `$` is not followed by a digit, so `$5 and $10` stays text. Code is never typeset. To
 see TeX as written, turn off **Render math** in **Settings → Appearance**.
 
+## Composer context
+
+Git-backed projects show branch and worktree controls below the composer while you create a thread.
+The controls retreat as the composer docks after you send the first message.
+
+Turn on **Composer context** to keep those controls visible after the thread starts. This preference
+applies to the web and desktop clients.
+
 ## Motion
 
 The main sidebar, right panel, and terminal drawer open and close immediately by default. Move the
