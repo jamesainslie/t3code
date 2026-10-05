@@ -1,4 +1,13 @@
 // @effect-diagnostics globalDate:off -- UI snooze presets use local calendar boundaries and Intl labels.
+import {
+  type ExecutionEnvironmentCapabilities,
+  isSyncedThreadId,
+  type ThreadDependency,
+  type ThreadDependencyHolder,
+  type ThreadId,
+  threadDependencyWouldCycle,
+  unsatisfiedThreadDependencies,
+} from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 interface SettlementRunLike {
@@ -111,32 +120,22 @@ export function threadRaisedHandWhileSnoozed(shell: ThreadSnoozeShell): boolean 
  * already failed stays parked, since parking it was the user saying "I saw
  * it, not now". session.updatedAt stamps the status edge.
  */
-function threadRaisedHandSince(
-  shell: Pick<
-    OrchestrationThreadShell,
-    "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
-  >,
-  referenceAt: string | null,
-): boolean {
+function threadRaisedHandSince(shell: ThreadRaisedHandShell, referenceAt: string | null): boolean {
   if (shell.hasPendingApprovals || shell.hasPendingUserInput) return true;
   const runtime = shell.runtime ?? shell.session ?? null;
   const latestRun = shell.latestRun ?? shell.latestTurn ?? null;
-  // Only a FRESH failure raises the hand: a thread snoozed while already
-  // failed stays snoozed — that snooze was the user saying "I saw it, not
-  // now". session.updatedAt stamps the status edge, so an error newer than
-  // the snooze is new information.
   if (
     (runtime?.status === "error" || runtime?.status === "failed") &&
-    (shell.snoozedAt == null ||
-      (runtime.updatedAt != null && Date.parse(runtime.updatedAt) > Date.parse(shell.snoozedAt)))
+    (referenceAt == null ||
+      (runtime.updatedAt != null && Date.parse(runtime.updatedAt) > Date.parse(referenceAt)))
   ) {
     return true;
   }
   if (
-    shell.snoozedAt != null &&
+    referenceAt != null &&
     (latestRun?.state === "completed" || latestRun?.status === "completed") &&
     latestRun.completedAt != null &&
-    Date.parse(latestRun.completedAt) > Date.parse(shell.snoozedAt)
+    Date.parse(latestRun.completedAt) > Date.parse(referenceAt)
   ) {
     return true;
   }
@@ -152,10 +151,12 @@ function threadRaisedHandSince(
 // flips back when the dependency starts its next turn.
 // ---------------------------------------------------------------------------
 
-export type ThreadDependencyShell = Pick<
-  OrchestrationThreadShell,
-  "dependencies" | "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
+type ThreadRaisedHandShell = Pick<
+  ThreadSnoozeShell,
+  "hasPendingApprovals" | "hasPendingUserInput" | "latestTurn" | "latestRun" | "session" | "runtime"
 >;
+
+export type ThreadDependencyShell = ThreadRaisedHandShell & ThreadDependencyHolder;
 
 function latestLinkedAt(links: ReadonlyArray<ThreadDependency>): string | null {
   let latest: string | null = null;
@@ -189,15 +190,16 @@ export function threadUnblockedAt(shell: ThreadDependencyShell): string | null {
   if (open.length > 0) {
     const referenceAt = latestLinkedAt(open);
     if (!threadRaisedHandSince(shell, referenceAt)) return null;
+    const latestRun = shell.latestRun ?? shell.latestTurn ?? null;
     if (
       referenceAt != null &&
-      shell.latestTurn?.state === "completed" &&
-      shell.latestTurn.completedAt != null &&
-      Date.parse(shell.latestTurn.completedAt) > Date.parse(referenceAt)
+      (latestRun?.state === "completed" || latestRun?.status === "completed") &&
+      latestRun.completedAt != null &&
+      Date.parse(latestRun.completedAt) > Date.parse(referenceAt)
     ) {
-      return shell.latestTurn.completedAt;
+      return latestRun.completedAt;
     }
-    return shell.session?.updatedAt ?? referenceAt;
+    return (shell.runtime ?? shell.session)?.updatedAt ?? referenceAt;
   }
   let latest: string | null = null;
   for (const link of links) {
@@ -216,15 +218,7 @@ export function threadUnblockedAt(shell: ThreadDependencyShell): string | null {
  * apply, or it is a synced conversation owned by another environment.
  */
 export function canAddDependency(
-  shell: Pick<
-    OrchestrationThreadShell,
-    | "id"
-    | "hasPendingApprovals"
-    | "hasPendingUserInput"
-    | "latestUserMessageAt"
-    | "latestTurn"
-    | "session"
-  >,
+  shell: Parameters<typeof canSnooze>[0] & { readonly id: ThreadId },
   options: { readonly now: string },
 ): boolean {
   if (isSyncedThreadId(shell.id)) return false;
@@ -237,9 +231,9 @@ export function canAddDependency(
  * Shared by the web and mobile pickers.
  */
 export function isDependencyCandidate(
-  threads: ReadonlyArray<ThreadDependencyHolder & { readonly id: OrchestrationThreadShell["id"] }>,
-  blocked: ThreadDependencyHolder & { readonly id: OrchestrationThreadShell["id"] },
-  candidate: Pick<OrchestrationThreadShell, "id" | "archivedAt">,
+  threads: ReadonlyArray<ThreadDependencyHolder & { readonly id: ThreadId }>,
+  blocked: ThreadDependencyHolder & { readonly id: ThreadId },
+  candidate: { readonly id: ThreadId; readonly archivedAt: string | null },
 ): boolean {
   if (candidate.id === blocked.id) return false;
   if (candidate.archivedAt !== null) return false;
@@ -474,7 +468,10 @@ export function snoozeWakeLabel(snoozedUntil: string, options: { readonly now: s
  * clears it, and anything else replaces it.
  */
 export function resolveSnoozeReminder(
-  thread: Pick<OrchestrationThreadShell, "snoozedUntil" | "snoozeReminder">,
+  thread: {
+    readonly snoozedUntil?: string | null | undefined;
+    readonly snoozeReminder?: string | null | undefined;
+  },
   reminder: string | undefined,
 ): string | null {
   if (reminder === undefined) {

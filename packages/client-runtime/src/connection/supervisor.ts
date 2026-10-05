@@ -237,8 +237,9 @@ export class EnvironmentSupervisor extends Context.Service<
     /**
      * The newest steps of connecting, oldest first: the current log, then each change. Kept
      * apart from `state` so appending never wakes the many listeners that follow the state.
+     * Fork-only, so optional: stand-in supervisors may leave it out.
      */
-    readonly attemptLog: Stream.Stream<ReadonlyArray<ConnectionAttemptLogEntry>>;
+    readonly attemptLog?: Stream.Stream<ReadonlyArray<ConnectionAttemptLogEntry>>;
     readonly session: SubscriptionRef.SubscriptionRef<Option.Option<RpcSession.RpcSession>>;
     readonly prepared: SubscriptionRef.SubscriptionRef<Option.Option<PreparedConnection>>;
     readonly connect: Effect.Effect<void>;

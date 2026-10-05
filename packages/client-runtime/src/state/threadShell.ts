@@ -7,6 +7,7 @@ import type {
   ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/unstable/reactivity";
 
 import type { EnvironmentThreadShell } from "./models.ts";
@@ -167,7 +168,7 @@ export function createEnvironmentThreadShellAtoms(input: {
   // reads its own entry instead of scanning every shell on each render.
   const environmentContinuationIndexAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((get): ReadonlyMap<ThreadId, ReadonlyArray<ThreadContinuation>> => {
-      const grouped = new Map<ThreadId, OrchestrationThreadShell[]>();
+      const grouped = new Map<ThreadId, OrchestrationV2ThreadShell[]>();
       for (const thread of get(environmentThreadsAtom(environmentId))) {
         const sourceId = thread.continuedFromThreadId;
         if (sourceId === undefined || sourceId === null) continue;
@@ -185,7 +186,8 @@ export function createEnvironmentThreadShellAtoms(input: {
       for (const [sourceId, continuations] of grouped) {
         continuations.sort(
           (left, right) =>
-            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+            DateTime.toEpochMillis(left.createdAt) - DateTime.toEpochMillis(right.createdAt) ||
+            left.id.localeCompare(right.id),
         );
         index.set(
           sourceId,

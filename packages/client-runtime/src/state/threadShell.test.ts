@@ -4,6 +4,7 @@ import {
   ThreadId,
   type OrchestrationV2ShellSnapshot,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 import { describe, expect, it } from "vite-plus/test";
@@ -195,6 +196,84 @@ describe("v2 thread shell lists", () => {
       expect(harness.registry.get(listAtom)).toEqual([]);
     } finally {
       disposeList();
+      harness.registry.dispose();
+    }
+  });
+});
+
+// Fork: threads that continue another one, for the source thread's breadcrumbs.
+describe("thread continuations", () => {
+  const sourceId = v2ThreadShell.id;
+  const sourceRef = { environmentId, threadId: sourceId };
+  const continuation = (id: string, title: string, createdAt: string, from = sourceId) => ({
+    ...v2ThreadShell,
+    id: ThreadId.make(id),
+    title,
+    createdAt: DateTime.makeUnsafe(createdAt),
+    continuedFromThreadId: from,
+  });
+  const setThreads = (
+    harness: ReturnType<typeof makeHarness>,
+    threads: OrchestrationV2ShellSnapshot["threads"],
+  ) => harness.registry.set(harness.snapshotAtom(environmentId), { ...v2ShellSnapshot, threads });
+
+  it("lists the threads that continue a thread, oldest first", () => {
+    const harness = makeHarness();
+    setThreads(harness, [
+      v2ThreadShell,
+      continuation("later", "Later", "2026-06-03T00:00:00.000Z"),
+      continuation("earlier", "Earlier", "2026-06-02T00:00:00.000Z"),
+      continuation("elsewhere", "Elsewhere", "2026-06-02T00:00:00.000Z", ThreadId.make("other")),
+    ]);
+
+    expect(harness.registry.get(harness.threads.continuedInAtom(sourceRef))).toEqual([
+      { threadId: ThreadId.make("earlier"), title: "Earlier" },
+      { threadId: ThreadId.make("later"), title: "Later" },
+    ]);
+    expect(
+      harness.registry.get(
+        harness.threads.continuedInAtom({ environmentId, threadId: ThreadId.make("earlier") }),
+      ),
+    ).toEqual([]);
+    harness.registry.dispose();
+  });
+
+  it("keeps the list identity until a continuation changes, and drops deleted ones", () => {
+    const harness = makeHarness();
+    const unrelated = { ...v2ThreadShell, id: ThreadId.make("unrelated") };
+    const threads = [
+      v2ThreadShell,
+      unrelated,
+      continuation("next", "Next", "2026-06-02T00:00:00.000Z"),
+    ];
+    setThreads(harness, threads);
+    const atom = harness.threads.continuedInAtom(sourceRef);
+    const dispose = harness.registry.mount(atom);
+    try {
+      const before = harness.registry.get(atom);
+      setThreads(
+        harness,
+        threads.map((thread) =>
+          thread.id === unrelated.id ? { ...thread, title: "Unrelated rename" } : thread,
+        ),
+      );
+      expect(harness.registry.get(atom)).toBe(before);
+
+      setThreads(
+        harness,
+        threads.map((thread) =>
+          thread.id === ThreadId.make("next") ? { ...thread, title: "Renamed next" } : thread,
+        ),
+      );
+      expect(harness.registry.get(atom)).toEqual([
+        { threadId: ThreadId.make("next"), title: "Renamed next" },
+      ]);
+
+      // A deleted thread leaves the shell snapshot.
+      setThreads(harness, [v2ThreadShell, unrelated]);
+      expect(harness.registry.get(atom)).toEqual([]);
+    } finally {
+      dispose();
       harness.registry.dispose();
     }
   });

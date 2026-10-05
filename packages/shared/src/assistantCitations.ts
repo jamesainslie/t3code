@@ -323,3 +323,10 @@ export function renderCitationsAsText(prompt: string): string {
   }
   return text + prompt.slice(cursor);
 }
+
+// Upstream's names for the assistant-only versions. The fork's functions handle
+// document citations too, so upstream call sites keep working unchanged.
+export const collectAssistantCitations = collectCitations;
+export const assistantCitationsToPlainText = citationsToPlainText;
+export const expandAssistantCitationsForProvider = expandCitationsForProvider;
+export const renderAssistantCitationsAsText = renderCitationsAsText;

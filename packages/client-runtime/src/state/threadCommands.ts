@@ -1,4 +1,8 @@
-import type { ThreadId } from "@t3tools/contracts";
+import {
+  applyThreadDependenciesRemoved,
+  applyThreadDependencyAdded,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -10,6 +14,7 @@ import {
 } from "@t3tools/contracts";
 
 import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
+import { resolveSnoozeReminder } from "./threadSettled.ts";
 import * as DateTime from "effect/DateTime";
 
 import {
@@ -474,6 +479,15 @@ export function createThreadEnvironmentAtoms<R, E>(
               DateTime.formatIso(thread.snoozedUntil) === input.snoozedUntil
                 ? (thread.snoozedAt ?? now)
                 : now,
+            // Fork: mirrors the server's forkSnoozeFields.
+            snoozeReminder: resolveSnoozeReminder(
+              {
+                snoozedUntil: thread.snoozedUntil == null ? null : "pending",
+                snoozeReminder: thread.snoozeReminder ?? null,
+              },
+              input.reminder,
+            ),
+            dependencies: (thread.dependencies ?? []).filter((link) => link.satisfiedAt !== null),
           },
     ),
     unsnooze: optimistic.wrap(commands.unsnooze, (thread) => ({
@@ -483,18 +497,18 @@ export function createThreadEnvironmentAtoms<R, E>(
       snoozeReminder: null,
     })),
     addDependency: optimistic.wrap(commands.addDependency, (thread, input, now, accepted) =>
-      !accepted && !canAddDependency(thread, { now })
+      !accepted &&
+      (thread.pendingRuntimeRequest !== null ||
+        ["preparing", "queued", "starting"].includes(thread.status))
         ? thread
         : {
             ...thread,
-            hasPendingApprovals: false,
-            hasPendingUserInput: false,
             snoozedUntil: null,
             snoozedAt: null,
             snoozeReminder: null,
             dependencies: applyThreadDependencyAdded(thread.dependencies, {
               dependsOnThreadId: input.dependsOnThreadId,
-              linkedAt: now,
+              linkedAt: DateTime.formatIso(now),
             }),
           },
     ),

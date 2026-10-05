@@ -398,6 +398,13 @@ export function summarizeT3ToolCalls(
     case "capabilities":
       label = phrase("Checked", "check", `orchestration capabilities ${times}`);
       break;
+    // Fork: document comment tools.
+    case "comment-list":
+      label = phrase("Listed", "list", `document comments ${times}`);
+      break;
+    case "comment-resolve":
+      label = phrase("Resolved", "resolve", quantity(selected.length, "document comment"));
+      break;
   }
   return { label, failedCount };
 }

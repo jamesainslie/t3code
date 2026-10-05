@@ -1636,7 +1636,7 @@ describe("EnvironmentSupervisor", () => {
 
 describe("EnvironmentSupervisor attempt log", () => {
   const currentLog = (supervisor: EnvironmentSupervisor.EnvironmentSupervisor["Service"]) =>
-    Stream.runHead(supervisor.attemptLog).pipe(Effect.map(Option.getOrThrow));
+    Stream.runHead(supervisor.attemptLog!).pipe(Effect.map(Option.getOrThrow));
   const steps = (log: ReadonlyArray<EnvironmentSupervisor.ConnectionAttemptLogEntry>) =>
     log.map((entry) => ({
       attempt: entry.attempt,
@@ -1666,9 +1666,12 @@ describe("EnvironmentSupervisor attempt log", () => {
         { attempt: 1, kind: "retrying" },
       ]);
       const retrying = failed.at(-1)!;
-      expect(retrying.kind === "retrying" && retrying.retryAt - retrying.at).toBe(3_000);
+      const delay = retrying.kind === "retrying" ? retrying.retryAt - retrying.at : 0;
+      // The first rung waits between one and two seconds.
+      expect(delay).toBeGreaterThanOrEqual(1_000);
+      expect(delay).toBeLessThanOrEqual(2_000);
 
-      yield* TestClock.adjust(3_000);
+      yield* TestClock.adjust(delay);
       yield* eventuallyState(supervisor.state, (state) => state.phase === "connected");
       expect(steps(yield* currentLog(supervisor)).slice(4)).toEqual([
         { attempt: 2, kind: "started" },
@@ -1705,7 +1708,8 @@ describe("EnvironmentSupervisor attempt log", () => {
       yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
       // Four entries an attempt, so twenty failed attempts overflow the log.
       for (let step = 0; step < 20; step += 1) {
-        yield* TestClock.adjust(16_000);
+        // The longest backoff rung, so every attempt has retried.
+        yield* TestClock.adjust(300_000);
         yield* eventuallyState(supervisor.state, (state) => state.phase === "backoff");
       }
       yield* eventuallyState(

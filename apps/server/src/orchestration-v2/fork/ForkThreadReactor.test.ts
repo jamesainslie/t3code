@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  CommandId,
   type OrchestrationV2AppThread,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ServerCommand,
@@ -242,7 +243,7 @@ describe("ForkThreadReactor", () => {
                 ? [command.commandId, command.update.dependsOnThreadIds]
                 : null,
             ),
-            [["fork:dependency-clear:waiter:sent", [ThreadId.make("worker")]]],
+            [[CommandId.make("fork:dependency-clear:waiter:sent"), [ThreadId.make("worker")]]],
           );
         }),
       ),

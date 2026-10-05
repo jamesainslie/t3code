@@ -58,7 +58,10 @@ export type T3McpToolSummaryAction =
   | "watch-pr"
   | "unwatch-pr"
   | "browser"
-  | "device";
+  | "device"
+  // Fork: document comment tools.
+  | "comment-list"
+  | "comment-resolve";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -132,6 +135,15 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_start: tool(["Start", "Starting", "Started", "a T3 thread"], "thread-create"),
   t3_thread_list: tool(["List", "Listing", "Listed", "T3 threads"], "thread-list"),
   t3_thread_read: tool(["Read", "Reading", "Read", "a T3 thread"], "thread-read"),
+  // Fork: thread history and document comments.
+  read_thread: tool(["Read", "Reading", "Read", "a thread's history"], "thread-read"),
+  read_thread_turns: tool(["Read", "Reading", "Read", "earlier turns of a thread"], "thread-read"),
+  find_threads: tool(["Search", "Searching", "Searched", "other threads"], "thread-search"),
+  list_document_comments: tool(["List", "Listing", "Listed", "document comments"], "comment-list"),
+  resolve_document_comment: tool(
+    ["Resolve", "Resolving", "Resolved", "a document comment"],
+    "comment-resolve",
+  ),
   t3_thread_send: tool(["Send", "Sending", "Sent", "to a T3 thread"], "thread-send"),
   t3_thread_wait: tool(["Wait", "Waiting", "Waited", "for a T3 thread"], "thread-wait"),
   t3_thread_interrupt: tool(

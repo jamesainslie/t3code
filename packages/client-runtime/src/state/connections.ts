@@ -130,7 +130,11 @@ export function createEnvironmentCatalogAtoms<R, E>(
         environmentId,
         Stream.unwrap(
           EnvironmentSupervisor.EnvironmentSupervisor.pipe(
-            Effect.map((supervisor) => supervisor.attemptLog),
+            Effect.map(
+              (supervisor) =>
+                supervisor.attemptLog ??
+                Stream.succeed<ReadonlyArray<EnvironmentSupervisor.ConnectionAttemptLogEntry>>([]),
+            ),
           ),
         ),
       ),

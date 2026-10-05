@@ -24,6 +24,8 @@ import {
   type RuntimeRequestId,
   type ThreadId,
   type ThreadEnvMode,
+  type ForkThreadUpdate,
+  type ThreadHighlightColor,
   type UploadChatAttachment,
 } from "@t3tools/contracts";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
@@ -74,6 +76,8 @@ export interface CreateThreadInput extends CommandMetadata {
   readonly interactionMode: ProviderInteractionMode;
   readonly branch: string | null;
   readonly worktreePath: string | null;
+  /** Fork: the thread this one continues, for breadcrumbs and read access. */
+  readonly continuedFromThreadId?: ThreadId;
 }
 
 export interface ThreadCommandInput extends CommandMetadata {
@@ -107,6 +111,8 @@ export interface ReorderActiveThreadInput extends ThreadCommandInput {
 
 export interface SnoozeThreadInput extends ThreadCommandInput {
   readonly snoozedUntil: string;
+  /** Fork: a note shown when the thread wakes. Blank clears it; omitted keeps it. */
+  readonly reminder?: string;
 }
 
 export interface UnsnoozeThreadInput extends ThreadCommandInput {
@@ -405,6 +411,9 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
     interactionMode: input.interactionMode,
     branch: input.branch,
     worktreePath: input.worktreePath,
+    ...(input.continuedFromThreadId === undefined
+      ? {}
+      : { continuedFromThreadId: input.continuedFromThreadId }),
   });
 });
 
@@ -521,6 +530,7 @@ export const snoozeThread = Effect.fn("EnvironmentCommands.snoozeThread")(functi
     commandId: yield* allocateCommandId(input),
     threadId: input.threadId,
     snoozedUntil: input.snoozedUntil,
+    ...(input.reminder === undefined ? {} : { reminder: input.reminder }),
   });
 });
 
@@ -1065,3 +1075,45 @@ export const unlinkThreadPullRequest = Effect.fn("EnvironmentCommands.unlinkThre
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// Fork: highlights and "depends on" links, sent as one fork command
+// (packages/contracts/src/forkOrchestration.ts).
+// ---------------------------------------------------------------------------
+
+export interface SetThreadHighlightInput extends ThreadCommandInput {
+  /** null clears the highlight. */
+  readonly color: ThreadHighlightColor | null;
+}
+
+export interface AddThreadDependencyInput extends ThreadCommandInput {
+  readonly dependsOnThreadId: ThreadId;
+}
+
+export interface RemoveThreadDependenciesInput extends ThreadCommandInput {
+  readonly dependsOnThreadIds: readonly [ThreadId, ...ThreadId[]];
+}
+
+const dispatchForkUpdate = Effect.fn("EnvironmentCommands.dispatchForkUpdate")(function* (
+  input: ThreadCommandInput,
+  update: ForkThreadUpdate,
+) {
+  return yield* dispatch({
+    type: "thread.fork.update",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    update,
+  });
+});
+
+export const setThreadHighlight = (input: SetThreadHighlightInput) =>
+  dispatchForkUpdate(input, { kind: "highlight.set", color: input.color });
+
+export const addThreadDependency = (input: AddThreadDependencyInput) =>
+  dispatchForkUpdate(input, { kind: "dependency.add", dependsOnThreadId: input.dependsOnThreadId });
+
+export const removeThreadDependencies = (input: RemoveThreadDependenciesInput) =>
+  dispatchForkUpdate(input, {
+    kind: "dependency.remove",
+    dependsOnThreadIds: input.dependsOnThreadIds,
+  });

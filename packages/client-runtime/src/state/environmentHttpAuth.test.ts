@@ -38,6 +38,7 @@ import {
   fetchEnvironmentBoundedThreadSnapshot,
 } from "./boundedThreadSnapshotHttp.ts";
 import { fetchEnvironmentThreadHistoryPage } from "./threadHistoryHttp.ts";
+import { executeProjectSync } from "./projectSync.ts";
 import { v2Projection } from "./orchestrationV2TestFixtures.ts";
 
 const encodeThreadSnapshot = Schema.encodeSync(OrchestrationV2ThreadDetailSnapshot);
@@ -266,8 +267,14 @@ describe("authenticated environment HTTP requests", () => {
       );
       const response = yield* executeProjectSync(PREPARED, { operation: "status" }).pipe(
         Effect.provide(harness.httpLayer),
-        Effect.provideService(RemoteEnvironmentAuthorization, harness.remoteAuthorization),
-        Effect.provideService(ManagedRelayDpopSigner, Option.getOrThrow(harness.input.signer)),
+        Effect.provideService(
+          RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+          harness.remoteAuthorization,
+        ),
+        Effect.provideService(
+          ManagedRelay.ManagedRelayDpopSigner,
+          Option.getOrThrow(harness.input.signer),
+        ),
       );
       expect(response.configuration.enabled).toBe(false);
       expect(harness.calls[0]?.url).toBe(`${CURRENT_ORIGIN}/api/project-sync`);
