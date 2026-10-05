@@ -55,7 +55,7 @@ export function WorkLogLabel({
   tone = "default",
 }: {
   children: ReactNode;
-  tone?: "default" | "danger" | "warning";
+  tone?: "default" | "danger" | "warning" | "thought";
 }) {
   return (
     <Text
@@ -66,6 +66,8 @@ export function WorkLogLabel({
         "min-w-0 flex-1 text-sm text-foreground-muted",
         tone === "danger" && "font-t3-medium text-adaptive-rose-600-400",
         tone === "warning" && "font-t3-medium text-warning-foreground",
+        // Fork: thoughts stand apart from tool calls, so they read differently too.
+        tone === "thought" && "italic text-foreground-subtle",
       )}
     >
       {children}

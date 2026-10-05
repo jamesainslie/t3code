@@ -27,6 +27,7 @@ import {
   type WorkLogPresentationEntry,
   type WorkLogToolLifecycleStatus,
 } from "@t3tools/client-runtime/work-log/presentation";
+import { thinkingSplitsWorkGroup } from "@t3tools/client-runtime/work-log/thinking";
 import {
   resolveT3McpToolDefinition,
   resolveT3McpToolPresentation,
@@ -921,7 +922,12 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
         firstActivityEntry?.activity.projectedItem.item.providerTurnId !==
           entry.activity.projectedItem.item.providerTurnId) ||
       (entry.activity.projectedItem.item.type !== "subagent" &&
-        firstActivityEntry?.activity.attemptId !== entry.activity.attemptId)
+        firstActivityEntry?.activity.attemptId !== entry.activity.attemptId) ||
+      (openGroupActivities.length > 0 &&
+        thinkingSplitsWorkGroup(
+          openGroupActivities.at(-1)!.projectedItem.item.type,
+          entry.activity.projectedItem.item.type,
+        ))
     ) {
       flushGroup();
     }

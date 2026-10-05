@@ -3,6 +3,7 @@ export { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setu
 import * as Equal from "effect/Equal";
 import { shallow } from "zustand/vanilla/shallow";
 import { renderCodexDirectivesForCopy } from "@t3tools/client-runtime/codex-markdown-directives";
+import { thinkingSplitsWorkGroup } from "@t3tools/client-runtime/work-log/thinking";
 import {
   commandDisplayText,
   commandProgramName,
@@ -1335,7 +1336,9 @@ export function deriveMessagesTimelineRows(input: {
         collapsedEntryIds.has(entry.id) ||
         collapsedSupersededEntryIds.has(entry.id) ||
         foldsByAnchorEntryId.has(entry.id) ||
-        supersededFoldsByAnchorEntryId.has(entry.id)
+        supersededFoldsByAnchorEntryId.has(entry.id) ||
+        (activeToolEntries[0] !== undefined &&
+          thinkingSplitsWorkGroup(entry.entry.itemType, activeToolEntries[0].entry.itemType))
       ) {
         break;
       }
@@ -1537,7 +1540,8 @@ export function deriveMessagesTimelineRows(input: {
           foldsByAnchorEntryId.has(nextEntry.id) ||
           supersededFoldsByAnchorEntryId.has(nextEntry.id) ||
           (nextEntry.entry.runId ?? null) !== (timelineEntry.entry.runId ?? null) ||
-          nextEntry.attempt?.id !== timelineEntry.attempt?.id
+          nextEntry.attempt?.id !== timelineEntry.attempt?.id ||
+          thinkingSplitsWorkGroup(timelineEntry.entry.itemType, nextEntry.entry.itemType)
         ) {
           break;
         }

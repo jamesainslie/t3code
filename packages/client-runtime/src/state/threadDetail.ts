@@ -16,6 +16,7 @@ import {
   type PendingThreadRequests,
 } from "./threadRequests.ts";
 import { arrayElementsEqual, parseThreadKey, threadKey } from "./entities.ts";
+import { withQuestionLeadInItems } from "../work-log/thinking.ts";
 
 const EMPTY_VISIBLE_TURN_ITEMS: OrchestrationV2ThreadProjection["visibleTurnItems"] = Object.freeze(
   [],
@@ -144,7 +145,7 @@ export function createEnvironmentThreadDetailAtoms<E>(
         (request) => request.status === "pending",
       );
       const ids = new Set(runtimeRequests.map((request) => request.id));
-      const turnItems =
+      const requestItems =
         ids.size === 0
           ? []
           : projection.turnItems.filter(
@@ -152,6 +153,8 @@ export function createEnvironmentThreadDetailAtoms<E>(
                 (item.type === "approval_request" || item.type === "user_input_request") &&
                 ids.has(item.requestId),
             );
+      // Fork: a question's lead-in comes from the rest of its provider turn.
+      const turnItems = withQuestionLeadInItems(projection.turnItems, requestItems);
       if (
         previous === null ||
         !arrayElementsEqual(previous.runtimeRequests, runtimeRequests) ||
