@@ -22,17 +22,15 @@ import {
 const isComposerContextId = Schema.is(ComposerContextId);
 
 const thread = {
+  environmentId: EnvironmentId.make("env-1"),
   id: ThreadId.make("0B7E6F7A-3C1D-4E5F-9A8B-1C2D3E4F5A6B"),
-  projectId: ProjectId.make("project-1"),
   title: "Fix [login]\r\nredirect",
 };
+const projectId = ProjectId.make("project-1");
 
 describe("threadContextReference", () => {
   it("builds a thread chip whose text references its record", () => {
-    const result = buildThreadChipClipboard({
-      environmentId: EnvironmentId.make("env-1"),
-      thread,
-    });
+    const result = buildThreadChipClipboard({ thread });
 
     expect(result.fragment.source.environmentId).toBe("env-1");
     expect(result.fragment.records).toHaveLength(1);
@@ -47,8 +45,8 @@ describe("threadContextReference", () => {
     expect(record).toMatchObject({
       kind: "thread",
       label: "Fix login redirect",
+      environmentId: thread.environmentId,
       threadId: thread.id,
-      projectId: thread.projectId,
       title: "Fix [login] redirect",
     });
   });
@@ -102,19 +100,19 @@ describe("threadContextReference", () => {
     const offByDefault = continuationServer(
       applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
         agentThreadHistoryAccess: "off",
-        projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "project" } },
+        projectSettingsOverrides: { [projectId]: { agentThreadHistoryAccess: "project" } },
       }),
     );
-    expect(canContinueThread(offByDefault, thread.projectId)).toBe(true);
+    expect(canContinueThread(offByDefault, projectId)).toBe(true);
     expect(canContinueThread(offByDefault, otherProjectId)).toBe(false);
 
     const onByDefault = continuationServer(
       applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
         agentThreadHistoryAccess: "referenced",
-        projectSettingsOverrides: { [thread.projectId]: { agentThreadHistoryAccess: "off" } },
+        projectSettingsOverrides: { [projectId]: { agentThreadHistoryAccess: "off" } },
       }),
     );
-    expect(canContinueThread(onByDefault, thread.projectId)).toBe(false);
+    expect(canContinueThread(onByDefault, projectId)).toBe(false);
     expect(canContinueThread(onByDefault, otherProjectId)).toBe(true);
   });
 
@@ -122,16 +120,16 @@ describe("threadContextReference", () => {
     const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       agentThreadHistoryAccess: "project",
     });
-    expect(
-      canContinueThread({ settings, environment: { capabilities: {} } }, thread.projectId),
-    ).toBe(false);
+    expect(canContinueThread({ settings, environment: { capabilities: {} } }, projectId)).toBe(
+      false,
+    );
     expect(
       canContinueThread(
         { settings, environment: { capabilities: { threadContinuation: false } } },
-        thread.projectId,
+        projectId,
       ),
     ).toBe(false);
-    expect(canContinueThread(undefined, thread.projectId)).toBe(false);
+    expect(canContinueThread(undefined, projectId)).toBe(false);
   });
 
   it("buildContinuePrompt references the source thread", () => {

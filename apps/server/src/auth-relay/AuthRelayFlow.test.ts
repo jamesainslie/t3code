@@ -128,6 +128,15 @@ it.layer(NodeServices.layer)("AuthRelayFlow", (it) => {
       assert.equal(state.phase, "starting");
       const waiting = yield* phase(harness.flow, "waiting");
       assert.equal(waiting.authorizationUrl, authorizationUrl);
+      // Upstream clients render the step from the interaction.
+      assert.deepEqual(waiting.interaction, {
+        type: "browser",
+        id: state.flowId!,
+        url: authorizationUrl,
+        requiresConsent: false,
+        acceptsCallback: true,
+      });
+      assert.equal(waiting.credentialOwner, "provider");
 
       const verifying = yield* harness.flow.controller.complete(owner, {
         flowId: state.flowId!,
@@ -135,6 +144,7 @@ it.layer(NodeServices.layer)("AuthRelayFlow", (it) => {
       });
       assert.equal(verifying.phase, "verifying");
       assert.isNull(verifying.authorizationUrl);
+      assert.isNull(verifying.interaction);
       assert.equal(harness.forwarded(), 1);
       assert.notInclude(harness.events, "authenticated");
 
@@ -153,11 +163,18 @@ it.layer(NodeServices.layer)("AuthRelayFlow", (it) => {
       const waiting = yield* phase(harness.flow, "waiting");
       assert.equal(waiting.userCode, "ABCD-EFGH");
       assert.equal(waiting.authorizationUrl, "https://auth.example.com/device");
+      assert.deepEqual(waiting.interaction, {
+        type: "deviceCode",
+        id: state.flowId!,
+        url: "https://auth.example.com/device",
+        userCode: "ABCD-EFGH",
+      });
 
       const other = yield* phase(harness.flow, "waiting", otherOwner);
       assert.isNull(other.flowId);
       assert.isNull(other.authorizationUrl);
       assert.isUndefined(other.userCode);
+      assert.isNull(other.interaction);
       assert.equal(other.message, "Sign-in is in progress in another client.");
 
       const competing = yield* harness.flow.controller.start(otherOwner).pipe(Effect.exit);

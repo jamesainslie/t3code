@@ -4,18 +4,13 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import {
-  CommandId,
-  MessageId,
-  EventId,
   ProjectId,
   ThreadId,
   ProjectSyncConfiguration,
   ProjectSyncError,
-  ProjectSyncRecord,
-  isSyncedThreadId,
+  type ProjectSyncProjectSnapshot,
   type ProjectSyncRequest,
   type ProjectSyncResponse,
-  type ProjectSyncApplyCommand,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -23,25 +18,28 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as EffectPath from "effect/Path";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { ServerConfig } from "../config.ts";
 import { writeFileStringAtomically } from "../atomicWrite.ts";
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { readSyncSource, contentHash } from "./Source.ts";
+import * as EventSink from "../orchestration-v2/EventSink.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import { ProjectService } from "../project/ProjectService.ts";
+import { readSyncSource, sourceDatabasePath } from "./Source.ts";
 import { inspectSyncAssets, stageSyncSource } from "./Assets.ts";
 import { isSyncDue } from "./scheduleDue.ts";
+import { applySyncPlan, continueSyncedThread, SYNC_COMMAND_PREFIX } from "./Apply.ts";
 import {
   activeSyncRecord,
   planImport,
-  projectSettings,
+  planUndo,
   syncedThreadKey,
-  planThreadManagement,
   type SyncedThreadManagement,
+  type SyncedThreadState,
 } from "./Planner.ts";
+import { readSyncHistory, syncRecordHighWater } from "./Records.ts";
 import {
   cancelRecoveryRestore,
   createRecoveryBackup,
@@ -56,10 +54,13 @@ const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catc
 const decodeConfiguration = Schema.decodeUnknownSync(
   Schema.fromJsonString(ProjectSyncConfiguration),
 );
-const decodeRecord = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSyncRecord));
 const decodePayload = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
 );
+
+/** Local edits: not written by a v1 history import, and not by a sync batch. */
+const LOCAL_EVENT_FILTER = `COALESCE(json_extract(metadata_json, '$.historyImport'), 0) = 0
+  AND COALESCE(command_id, '') NOT LIKE '${SYNC_COMMAND_PREFIX}%'`;
 
 export class ProjectSyncService extends Context.Service<
   ProjectSyncService,
@@ -74,11 +75,19 @@ export class ProjectSyncService extends Context.Service<
     Effect.gen(function* () {
       const config = yield* ServerConfig;
       const sql = yield* SqlClient.SqlClient;
-      const engine = yield* OrchestrationEngineService;
-      const snapshots = yield* ProjectionSnapshotQuery;
+      const projectService = yield* ProjectService;
+      const projectStore = yield* ProjectStore.ProjectStoreV2;
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const eventSink = yield* EventSink.EventSinkV2;
       const mutex = yield* Semaphore.make(1);
       const fileSystem = yield* FileSystem.FileSystem;
       const effectPath = yield* EffectPath.Path;
+      const provideWriters = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.provideService(ProjectService, projectService),
+          Effect.provideService(ProjectionStore.ProjectionStoreV2, projectionStore),
+          Effect.provideService(EventSink.EventSinkV2, eventSink),
+        );
       const configurationPath = NodePath.join(config.stateDir, "project-sync.json");
       const defaultSourceHome = NodePath.join(NodeOS.homedir(), ".t3");
       const defaults: ProjectSyncConfiguration = {
@@ -108,14 +117,7 @@ export class ProjectSyncService extends Context.Service<
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(EffectPath.Path, effectPath),
         );
-      const readHistory = Effect.gen(function* () {
-        const rows = yield* sql<{
-          payload_json: string;
-        }>`SELECT payload_json FROM orchestration_events WHERE event_type = 'project.sync-recorded' ORDER BY sequence DESC`;
-        return rows
-          .map((row) => decodeRecord(row.payload_json))
-          .filter((record) => record.sourceId !== "continuation");
-      });
+      const readHistory = readSyncHistory.pipe(Effect.provideService(SqlClient.SqlClient, sql));
       const readConfiguration = Effect.gen(function* () {
         const configuration = yield* readConfigurationFile;
         const history = yield* readHistory;
@@ -148,13 +150,68 @@ export class ProjectSyncService extends Context.Service<
           restorePending: yield* attempt(() => recoveryPending(config.stateDir)),
         } satisfies ProjectSyncResponse;
       });
+      const listProjects = projectStore.list({ includeDeleted: true }).pipe(
+        Effect.map((rows) =>
+          rows.map((row): ProjectSyncProjectSnapshot => ({
+            id: row.projectId,
+            title: row.title,
+            workspaceRoot: row.workspaceRoot,
+            repositoryIdentity: null,
+            defaultModelSelection: row.defaultModelSelection,
+            defaultThreadEnvMode: row.defaultThreadEnvMode,
+            autoPull: row.autoPull,
+            faviconPath: row.faviconPath,
+            projectIcon: row.projectIcon,
+            scripts: row.scripts,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            deletedAt: row.deletedAt,
+          })),
+        ),
+      );
+      const listSyncedThreads = sql<{
+        thread_id: string;
+        project_id: string;
+        deleted_at: string | null;
+        archived_at: string | null;
+        settled_override: string | null;
+      }>`
+        SELECT
+          thread_id,
+          project_id,
+          deleted_at,
+          archived_at,
+          json_extract(payload_json, '$.settledOverride') AS settled_override
+        FROM orchestration_v2_projection_threads
+        WHERE thread_id LIKE 't3sync-%'
+      `.pipe(
+        Effect.map((rows) =>
+          rows.map((row): SyncedThreadState => ({
+            id: ThreadId.make(row.thread_id),
+            projectId: ProjectId.make(row.project_id),
+            deletedAt: row.deleted_at,
+            archivedAt: row.archived_at,
+            settledOverride:
+              row.settled_override === "settled" || row.settled_override === "active"
+                ? row.settled_override
+                : null,
+          })),
+        ),
+      );
       const localOverrides = Effect.fn("ProjectSync.localOverrides")(function* (
         afterBatchId: string | null = null,
       ) {
+        const after =
+          afterBatchId === null
+            ? 0
+            : yield* syncRecordHighWater(afterBatchId).pipe(
+                Effect.provideService(SqlClient.SqlClient, sql),
+              );
         const rows = yield* sql<{ stream_id: string; payload_json: string }>`
-        SELECT stream_id, payload_json FROM orchestration_events
-        WHERE event_type = 'project.meta-updated' AND COALESCE(json_extract(metadata_json, '$.historyImport'), 0) = 0
-        AND sequence > COALESCE((SELECT sequence FROM orchestration_events WHERE event_type = 'project.sync-recorded' AND json_extract(payload_json, '$.id') = ${afterBatchId}), 0)`;
+          SELECT stream_id, payload_json FROM orchestration_events
+          WHERE event_type = 'project.meta-updated'
+          AND ${sql.unsafe(LOCAL_EVENT_FILTER)}
+          AND sequence > ${after}`;
         const overrides = new Map<ProjectId, Set<string>>();
         for (const row of rows) {
           const projectId = ProjectId.make(row.stream_id);
@@ -170,7 +227,7 @@ export class ProjectSyncService extends Context.Service<
           SELECT stream_id, event_type FROM orchestration_events
           WHERE event_type IN ('thread.deleted', 'thread.archived', 'thread.unarchived', 'thread.settled', 'thread.unsettled')
           AND stream_id LIKE 't3sync-%'
-          AND COALESCE(json_extract(metadata_json, '$.historyImport'), 0) = 0
+          AND ${sql.unsafe(LOCAL_EVENT_FILTER)}
           ORDER BY sequence ASC`;
         const overrides = new Map<string, SyncedThreadManagement>();
         for (const row of rows) {
@@ -204,10 +261,10 @@ export class ProjectSyncService extends Context.Service<
           return yield* new ProjectSyncError({
             message: "The source must be a different T3 install.",
           });
-        const [from, to] = yield* attempt(() =>
+        const [from, to] = yield* attempt(async () =>
           Promise.all([
-            NodeFSP.stat(NodePath.join(source.sourceHome, "userdata/state.sqlite")),
-            NodeFSP.stat(NodePath.join(config.stateDir, "state.sqlite")),
+            NodeFSP.stat(await sourceDatabasePath(source.sourceHome)),
+            NodeFSP.stat(config.dbPath),
           ]),
         );
         if (from.dev === to.dev && from.ino === to.ino)
@@ -260,7 +317,7 @@ export class ProjectSyncService extends Context.Service<
             request.sourceHome ?? configuration.sourceHome ?? defaultSourceHome,
           );
           const assetWarnings = yield* attempt(() => inspectSyncAssets(source));
-          const snapshot = yield* snapshots.getSnapshot();
+          const projects = yield* listProjects;
           return {
             ...(yield* status),
             preview: {
@@ -274,9 +331,9 @@ export class ProjectSyncService extends Context.Service<
                         (mapping) => mapping.sourceProjectId === entry.project.id,
                       )
                     : undefined;
-                const existing = snapshot.projects.find(
+                const existing = projects.find(
                   (project) =>
-                    project.deletedAt === null &&
+                    !project.deletedAt &&
                     (known?.projectId
                       ? project.id === known.projectId
                       : project.workspaceRoot === entry.project.workspaceRoot),
@@ -301,82 +358,12 @@ export class ProjectSyncService extends Context.Service<
           } satisfies ProjectSyncResponse;
         }
         if (request.operation === "continue") {
-          if (!isSyncedThreadId(request.threadId))
-            return yield* new ProjectSyncError({
-              message: "Choose an imported conversation to continue.",
-            });
-          const snapshot = yield* snapshots.getSnapshot();
-          const thread = Option.fromNullishOr(
-            snapshot.threads.find(
-              (candidate) => candidate.id === request.threadId && candidate.deletedAt === null,
+          const threadId = yield* provideWriters(
+            continueSyncedThread(
+              request.threadId,
+              ThreadId.make(`t3continue-${NodeCrypto.randomUUID()}`),
             ),
           );
-          if (Option.isNone(thread))
-            return yield* new ProjectSyncError({
-              message: "This imported conversation is no longer visible. Open its current version.",
-            });
-          const threadId = ThreadId.make(`t3continue-${NodeCrypto.randomUUID()}`);
-          const commandId = CommandId.make(NodeCrypto.randomUUID());
-          const commands: ProjectSyncApplyCommand["commands"][number][] = [
-            {
-              type: "thread.create",
-              commandId,
-              threadId,
-              projectId: thread.value.projectId,
-              title: thread.value.title,
-              modelSelection: thread.value.modelSelection,
-              runtimeMode: thread.value.runtimeMode,
-              interactionMode: thread.value.interactionMode,
-              branch: thread.value.branch,
-              worktreePath: null,
-              createdAt: now,
-              historyImport: true,
-            },
-          ];
-          if (thread.value.messages.length)
-            commands.push({
-              type: "thread.history.import",
-              commandId,
-              threadId,
-              messages: thread.value.messages.map((message, index) => ({
-                messageId: MessageId.make(`${threadId}-${index}`),
-                role: message.role,
-                text: message.text,
-                createdAt: message.createdAt,
-                ...(message.attachments ? { attachments: message.attachments } : {}),
-              })),
-            });
-          for (const activity of thread.value.activities)
-            commands.push({
-              type: "thread.activity.append",
-              commandId,
-              threadId,
-              createdAt: activity.createdAt,
-              activity: {
-                ...activity,
-                id: EventId.make(`${threadId}-${contentHash(activity.id).slice(0, 16)}`),
-              },
-            });
-          yield* engine.dispatch({
-            type: "project.sync.apply",
-            commandId,
-            projectId: thread.value.projectId,
-            expectedSequence: snapshot.snapshotSequence,
-            commands,
-            record: {
-              id: commandId,
-              sourceId: "continuation",
-              sourceHome: request.threadId,
-              createdAt: now,
-              parentId: activeSyncRecord(history)?.id ?? null,
-              undoBatchId: null,
-              contentHash: contentHash(threadId),
-              mappings: [],
-              projectChanges: [],
-              visibleThreadIds: [],
-              hiddenThreadIds: [],
-            },
-          });
           return { ...(yield* status), threadId };
         }
         if (request.operation === "undo") {
@@ -386,108 +373,36 @@ export class ProjectSyncService extends Context.Service<
               message: "Only the latest active sync can be undone. Refresh sync history.",
             });
           yield* saveConfiguration({ ...configuration, enabled: false });
-          const snapshot = yield* snapshots.getSnapshot();
-          const overrides = yield* localOverrides(active.id);
-          const threadManagement = yield* localThreadManagement;
-          const restoredThreadIds = active.hiddenThreadIds.filter(
-            (threadId) => !threadManagement.get(syncedThreadKey(threadId))?.deleted,
-          );
-          const commandId = CommandId.make(NodeCrypto.randomUUID());
-          const commands: ProjectSyncApplyCommand["commands"][number][] = [
-            ...active.visibleThreadIds.map((threadId) => ({
-              type: "thread.sync.visibility" as const,
-              commandId,
-              threadId,
-              deletedAt: now,
-              updatedAt: now,
-            })),
-            ...restoredThreadIds.map((threadId) => ({
-              type: "thread.sync.visibility" as const,
-              commandId,
-              threadId,
-              deletedAt: null,
-              updatedAt: now,
-            })),
-          ];
-          for (const threadId of restoredThreadIds) {
-            commands.push(
-              ...planThreadManagement(
-                commandId,
-                threadId,
-                snapshot.threads.find((thread) => thread.id === threadId),
-                threadManagement.get(syncedThreadKey(threadId)),
-              ),
-            );
-          }
-          for (const change of active.projectChanges) {
-            const current = snapshot.projects.find(
-              (project) => project.id === change.after.id && project.deletedAt === null,
-            );
-            if (!current) continue;
-            const canRestore = (key: keyof ReturnType<typeof projectSettings>) =>
-              !overrides.get(current.id)?.has(key) &&
-              contentHash(projectSettings(current)[key]) ===
-                contentHash(projectSettings(change.after)[key]);
-            if (change.before === null) {
-              const localThreads = snapshot.threads.some(
-                (thread) =>
-                  thread.projectId === current.id &&
-                  thread.deletedAt === null &&
-                  !active.visibleThreadIds.includes(thread.id),
-              );
-              if (
-                !localThreads &&
-                !overrides.has(current.id) &&
-                contentHash(projectSettings(current)) === contentHash(projectSettings(change.after))
-              ) {
-                commands.push({ type: "project.delete", commandId, projectId: current.id });
-              }
-            } else {
-              const before = change.before;
-              commands.push({
-                type: "project.meta.update",
-                commandId,
-                projectId: current.id,
-                ...(canRestore("title") ? { title: before.title } : {}),
-                ...(canRestore("scripts") ? { scripts: before.scripts } : {}),
-                ...(canRestore("defaultModelSelection")
-                  ? { defaultModelSelection: before.defaultModelSelection }
-                  : {}),
-                ...(canRestore("defaultThreadEnvMode")
-                  ? { defaultThreadEnvMode: before.defaultThreadEnvMode ?? null }
-                  : {}),
-                ...(canRestore("autoPull") ? { autoPull: before.autoPull ?? false } : {}),
-                ...(canRestore("projectIcon") ? { projectIcon: before.projectIcon ?? null } : {}),
-              });
-            }
-          }
-          yield* engine.dispatch({
-            type: "project.sync.apply",
-            commandId,
-            projectId: ProjectId.make(`sync-${active.sourceId}`),
-            expectedSequence: snapshot.snapshotSequence,
-            commands,
-            record: {
-              ...active,
-              id: commandId,
-              createdAt: now,
-              undoBatchId: active.id,
-              schedule: {
-                enabled: false,
-                hour: configuration.hour,
-                timezone: configuration.timezone,
-              },
-              visibleThreadIds: restoredThreadIds,
-              hiddenThreadIds: active.visibleThreadIds,
-              projectChanges: [],
+          const hidden = new Set<string>(active.visibleThreadIds);
+          const liveThreads = yield* sql<{ thread_id: string; project_id: string }>`
+            SELECT thread_id, project_id FROM orchestration_v2_projection_threads
+            WHERE deleted_at IS NULL`;
+          const plan = planUndo({
+            active,
+            projects: yield* listProjects,
+            threads: yield* listSyncedThreads,
+            localThreadProjects: new Set(
+              liveThreads
+                .filter((thread) => !hidden.has(thread.thread_id))
+                .map((thread) => ProjectId.make(thread.project_id)),
+            ),
+            localSettingOverrides: yield* localOverrides(active.id),
+            localThreadManagement: yield* localThreadManagement,
+            batchId: NodeCrypto.randomUUID(),
+            now,
+            schedule: {
+              enabled: false,
+              hour: configuration.hour,
+              timezone: configuration.timezone,
             },
           });
+          yield* provideWriters(applySyncPlan(plan));
           const parent = history.find((record) => record.id === active.parentId);
           yield* saveConfiguration({
             ...configuration,
             enabled: false,
             mappings: parent?.mappings ?? [],
-            lastJournalId: commandId,
+            lastJournalId: plan.record.id,
           });
           return yield* status;
         }
@@ -511,7 +426,7 @@ export class ProjectSyncService extends Context.Service<
             message:
               "This is a different source install. Keep the current source or undo its imports before changing sources.",
           });
-        const snapshot = yield* snapshots.getSnapshot();
+        const currentProjects = yield* listProjects;
         const mappings =
           request.operation === "import"
             ? request.mappings
@@ -523,9 +438,9 @@ export class ProjectSyncService extends Context.Service<
                     sourceProjectId: entry.project.id,
                     projectId: entry.warnings.some((warning) => warning.includes("remote host"))
                       ? null
-                      : (snapshot.projects.find(
+                      : (currentProjects.find(
                           (project) =>
-                            project.deletedAt === null &&
+                            !project.deletedAt &&
                             project.workspaceRoot === entry.project.workspaceRoot,
                         )?.id ?? ProjectId.make(NodeCrypto.randomUUID())),
                   },
@@ -540,25 +455,33 @@ export class ProjectSyncService extends Context.Service<
           timezone: configuration.timezone,
         };
         const preparePlan = Effect.gen(function* () {
-          const snapshot = yield* snapshots.getSnapshot();
-          const planned = planImport({
-            source: staged,
-            snapshot,
-            history,
-            mappings,
-            batchId,
-            now,
-            localSettingOverrides: yield* localOverrides(),
-            localThreadManagement: yield* localThreadManagement,
+          const projects = yield* listProjects;
+          const threads = yield* listSyncedThreads;
+          const localSettingOverrides = yield* localOverrides();
+          const management = yield* localThreadManagement;
+          const planned = yield* Effect.try({
+            try: () =>
+              planImport({
+                source: staged,
+                projects,
+                threads,
+                history,
+                mappings,
+                batchId,
+                now,
+                localSettingOverrides,
+                localThreadManagement: management,
+              }),
+            catch: error,
           });
           return { ...planned, record: { ...planned.record, schedule } };
         });
         let plan = yield* preparePlan;
-        const publish = plan.commands.length > 0 || request.operation === "import";
+        const publish = plan.steps.length > 0 || request.operation === "import";
         if (publish) {
           yield* attempt(() => createRecoveryBackup(config.stateDir, now));
           plan = yield* preparePlan;
-          yield* engine.dispatch(plan);
+          yield* provideWriters(applySyncPlan(plan));
         }
         yield* saveConfiguration({
           ...configuration,
@@ -576,6 +499,7 @@ export class ProjectSyncService extends Context.Service<
         execute: (request) =>
           mutex.withPermits(1)(
             executeUnlocked(request).pipe(
+              Effect.provideService(SqlClient.SqlClient, sql),
               Effect.mapError(error),
               Effect.tapError((failure) =>
                 Effect.gen(function* () {

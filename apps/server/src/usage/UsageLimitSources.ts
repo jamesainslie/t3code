@@ -40,7 +40,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
+import * as Settings from "../serverSettings.ts";
 import { makeCliproxyApi } from "./cliproxyApi.ts";
 import { makeModelproxyApi, mapModelproxyStatus } from "./modelproxyApi.ts";
 import { makeModelproxyAuth } from "./modelproxyAuth.ts";
@@ -127,7 +127,7 @@ export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
   const modelproxy = yield* makeModelproxyApi;
   const modelproxyAuth = yield* makeModelproxyAuth;
-  const settingsService = yield* ServerSettingsService;
+  const settingsService = yield* Settings.ServerSettingsService;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const stateRef = yield* Ref.make<ReadonlyArray<UsageLimitSourceSnapshot>>([]);
   const changes = yield* Effect.acquireRelease(

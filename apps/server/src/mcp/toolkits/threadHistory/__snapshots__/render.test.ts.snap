@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`renderThreadDigest > renders a golden digest with real-length replies in full 1`] = `
-"<thread id="thread-history-1" title="Harden the scheduler" project="t3code" model="gpt-5" created="2026-09-01T00:00:00.000Z" last_activity="2026-09-01T00:05:03.000Z" status="completed">
+"<thread id="thread-history-1" title="Harden the scheduler" project="t3code" provider="codex" model="gpt-5" created="2026-09-01T00:00:00.000Z" last_activity="2026-09-01T00:05:03.000Z" status="completed">
 <goal>Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 1: checked the scheduler queue, rewired the reactor,</goal>
 <steering>
 <user turn="2">Request 2: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 2: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 2: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 2: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 2: checked the scheduler queue, rewired the reactor, and reran the focused tests. Request 2: checked the scheduler queue, rewired…</user>

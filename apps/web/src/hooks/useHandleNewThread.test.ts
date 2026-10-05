@@ -36,7 +36,7 @@ const testState = vi.hoisted(() => {
     setDraftThreadContext: vi.fn(),
     setLogicalProjectDraftThreadId: vi.fn(),
     setModelSelection: vi.fn(),
-    addThreadReference: vi.fn(),
+    addThreadContexts: vi.fn(),
     setPrompt: vi.fn(),
   };
 
@@ -82,7 +82,7 @@ const testState = vi.hoisted(() => {
       draftStore.setDraftThreadContext.mockClear();
       draftStore.setLogicalProjectDraftThreadId.mockClear();
       draftStore.setModelSelection.mockClear();
-      draftStore.addThreadReference.mockClear();
+      draftStore.addThreadContexts.mockClear();
       draftStore.setPrompt.mockClear();
       projectFileRead = new Promise<null>((resolve) => {
         completeProjectFileRead = resolve;
@@ -335,8 +335,13 @@ describe.each([
       continueInNewThreadOptions(sourceThread),
     );
 
-    const record = buildThreadContextRecord(sourceThread);
-    expect(testState.draftStore.addThreadReference).toHaveBeenCalledWith(opened!.draftId, record);
+    const record = buildThreadContextRecord({
+      ...(sourceThread as { id: never; title: string }),
+      environmentId: "environment-ssh" as never,
+    });
+    expect(testState.draftStore.addThreadContexts).toHaveBeenCalledWith(opened!.draftId, [record], {
+      appendReference: false,
+    });
     expect(testState.draftStore.setPrompt).toHaveBeenCalledWith(
       opened!.draftId,
       buildContinuePrompt(record),

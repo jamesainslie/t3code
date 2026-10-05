@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { IsoDateTime, ProjectId, ThreadId } from "./baseSchemas.ts";
-import { ProjectSyncMapping, ProjectSyncRecord } from "./orchestration.ts";
+import { ProjectSyncMapping, ProjectSyncRecord } from "./forkOrchestration.ts";
 
 export const ProjectSyncConfiguration = Schema.Struct({
   sourceHome: Schema.NullOr(Schema.String),

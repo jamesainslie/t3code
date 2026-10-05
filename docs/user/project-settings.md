@@ -38,6 +38,31 @@ Settings that are environment-wide stay read-only while a project is selected. W
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Worktree branch names
+
+In **Settings → Source Control → Worktree branch naming**, choose a static prefix,
+a model-selected semantic prefix such as `feat/` or `fix/`, or custom instructions
+for the complete name. The static prefix defaults to `t3code/`; a trailing slash is
+optional, and an empty prefix adds nothing. Invalid characters in a static prefix
+are replaced with hyphens. Custom instructions are appended to
+the naming prompt and can specify issue IDs, namespaces, and casing.
+
+These settings apply to automatically named new worktree branches. Select a project
+to override its environment defaults. Worktree directories keep their original names.
+If generation fails, or a custom name is invalid or already taken, the temporary
+branch name remains.
+
+## Scheduled tasks on mobile
+
+Open **Settings → Scheduled tasks** to create recurring tasks or manage existing
+ones across your connected environments. Use the settings filter to narrow the
+list by environment or project. Each task runs on the environment you choose,
+using its project, model, and workspace settings. Fixed-time schedules use that
+environment's time zone, which may differ from your phone's.
+
+You can edit, pause, resume, run immediately, or delete a task from the list.
+Leaving an edited form asks before discarding unsaved changes.
+
 ## Defaults and inheritance
 
 General contains the model and workspace for new threads. Integrations controls agent browser
@@ -147,12 +172,18 @@ In **Sync history**, **Undo this sync** restores the previous imported versions 
 sync. Undo the latest active batch first; repeat to undo earlier batches. Later local project edits
 remain in place.
 
+The first sync after updating to a release with the new orchestrator refreshes every imported
+conversation once, bringing back the tool activity that the update's own migration leaves out.
+Your reopen, settle, archive, and delete choices carry over to the refreshed copies. Sync can read a
+main install from either before or after that update.
+
 Use **Recovery backups** for a full rewind of this environment's database, attachments, and settings.
 The seven most recent automatic backups are retained. Preparing a restore pauses sync; quit and
 restart the destination environment to apply it, or choose **Cancel restore** before restarting.
 Recovery rewinds work recorded since the backup and retains the current state under the T3 home's
 `sync-recovery/before-restore-*` directory. It does not rewind files in your Git working directories.
-The main install remains unchanged.
+A backup taken before the orchestrator update restores the older database, which is upgraded again
+when the environment starts. The main install remains unchanged.
 
 ## Project icons
 

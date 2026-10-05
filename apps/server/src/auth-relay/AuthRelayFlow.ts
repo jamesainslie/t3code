@@ -150,6 +150,37 @@ interface OwnedProcess {
   startup: Fiber.Fiber<unknown, unknown> | undefined;
 }
 
+/**
+ * Upstream clients render sign-in from `interaction`. The relay's own fields carry the same
+ * facts, so the interaction is derived from them: a code to enter on a page is a device
+ * code; anything else waiting on a page is a browser step whose return URL, or the code the
+ * provider's page shows, can be pasted back. The provider keeps the credentials.
+ */
+function withAuthInteraction(state: ProviderAuthState): ProviderAuthState {
+  const waitingOnPage =
+    state.phase === "waiting" && state.flowId !== null && state.authorizationUrl !== null;
+  return {
+    ...state,
+    credentialOwner: "provider",
+    interaction: !waitingOnPage
+      ? null
+      : state.userCode !== undefined
+        ? {
+            type: "deviceCode",
+            id: state.flowId!,
+            url: state.authorizationUrl!,
+            userCode: state.userCode,
+          }
+        : {
+            type: "browser",
+            id: state.flowId!,
+            url: state.authorizationUrl!,
+            requiresConsent: false,
+            acceptsCallback: true,
+          },
+  };
+}
+
 /** What a client other than the owner may see: progress, never the URL, code, or flow id. */
 export function visibleAuthState(
   snapshot: AuthSnapshot,
@@ -164,6 +195,7 @@ export function visibleAuthState(
     ...state,
     flowId: null,
     authorizationUrl: null,
+    interaction: null,
     expiresAt: null,
     ...(busy ? { message: "Sign-in is in progress in another client." } : {}),
   };
@@ -184,6 +216,8 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
     authorizationUrl: null,
     expiresAt: null,
     message: null,
+    interaction: null,
+    credentialOwner: "provider",
   };
   const snapshot = yield* SubscriptionRef.make<AuthSnapshot>({
     ownerSessionId: null,
@@ -201,7 +235,8 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
     SubscriptionRef.get(snapshot).pipe(
       Effect.map((value) => visibleAuthState(value, ownerSessionId)),
     );
-  const publishFlow = (flow: ActiveFlow, state: ProviderAuthState) => {
+  const publishFlow = (flow: ActiveFlow, published: ProviderAuthState) => {
+    const state = withAuthInteraction(published);
     flow.state = state;
     return SubscriptionRef.set(snapshot, { ownerSessionId: flow.ownerSessionId, state });
   };

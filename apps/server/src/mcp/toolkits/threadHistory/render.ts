@@ -1,4 +1,4 @@
-import type { OrchestrationCheckpointFile, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationV2CheckpointFileSummary, ThreadId } from "@t3tools/contracts";
 
 import {
   DIGEST_LIMITS,
@@ -109,10 +109,10 @@ function fitSection(
   return bytes(text) <= room ? text : "";
 }
 
-const fileText = (file: OrchestrationCheckpointFile) =>
+const fileText = (file: OrchestrationV2CheckpointFileSummary) =>
   `${file.path} +${file.additions} -${file.deletions}`;
 
-function filesText(files: ReadonlyArray<OrchestrationCheckpointFile>): string {
+function filesText(files: ReadonlyArray<OrchestrationV2CheckpointFileSummary>): string {
   const parts = files.map(fileText);
   const joined = parts.join(", ");
   if (bytes(joined) <= FILES_BYTES) return joined;

@@ -1,118 +1,131 @@
+import * as DateTime from "effect/DateTime";
 import type {
-  OrchestrationCheckpointSummary,
-  OrchestrationMessage,
-  OrchestrationThread,
-  OrchestrationThreadActivity,
-  TurnId,
+  OrchestrationV2CheckpointFileSummary,
+  OrchestrationV2ConversationMessage,
+  OrchestrationV2Run,
+  OrchestrationV2ThreadProjection,
+  OrchestrationV2TurnItem,
+  RunId,
 } from "@t3tools/contracts";
 
 export type DigestTurnState = "running" | "completed" | "interrupted" | "error" | "queued";
 
+/** The parts of a v2 thread projection a digest reads. */
+export type HistoryThread = Pick<
+  OrchestrationV2ThreadProjection,
+  "thread" | "runs" | "messages" | "turnItems" | "plans" | "checkpoints" | "providerThreads"
+>;
+
 export interface ReconstructedTurn {
   readonly n: number;
-  /** Null only for a trailing queued turn the provider has not started. */
-  readonly turnId: TurnId | null;
+  /** Null for a turn imported from a v1 thread, which kept its messages but not its runs. */
+  readonly runId: RunId | null;
   readonly state: DigestTurnState;
-  readonly userMessages: ReadonlyArray<OrchestrationMessage>;
-  readonly assistantMessages: ReadonlyArray<OrchestrationMessage>;
-  readonly activities: ReadonlyArray<OrchestrationThreadActivity>;
-  readonly checkpoint: OrchestrationCheckpointSummary | null;
+  readonly userMessages: ReadonlyArray<OrchestrationV2ConversationMessage>;
+  readonly assistantMessages: ReadonlyArray<OrchestrationV2ConversationMessage>;
+  readonly items: ReadonlyArray<OrchestrationV2TurnItem>;
+  readonly files: ReadonlyArray<OrchestrationV2CheckpointFileSummary>;
 }
 
-interface TurnDraft {
-  readonly turnId: TurnId | null;
-  readonly userMessages: OrchestrationMessage[];
-  readonly assistantMessages: OrchestrationMessage[];
+/** How a digest reads a run's status. */
+export function runState(run: Pick<OrchestrationV2Run, "status">): DigestTurnState {
+  switch (run.status) {
+    case "queued":
+      return "queued";
+    case "completed":
+      return "completed";
+    case "interrupted":
+    case "cancelled":
+      return "interrupted";
+    case "failed":
+      return "error";
+    case "preparing":
+    case "starting":
+    case "running":
+    case "waiting":
+      return "running";
+    case "rolled_back":
+      return "interrupted";
+  }
 }
 
-/** Activities that fail the turn they belong to. */
-export const isTurnFailure = (activity: OrchestrationThreadActivity) =>
-  activity.kind === "runtime.error" || activity.kind === "provider.turn.start.failed";
+/** Items a digest lists as a turn's errors: the provider failures recorded in it. */
+export const isErrorItem = (
+  item: OrchestrationV2TurnItem,
+): item is Extract<OrchestrationV2TurnItem, { readonly type: "error" }> => item.type === "error";
 
 /**
- * Activities a digest lists as a turn's errors. Tool denials and task failures are reported
- * without failing the turn; checkpoint bookkeeping failures are not the agent's work at all.
+ * Messages imported from a v1 thread carry no run. Like v1, each user message opens a turn
+ * and the assistant replies after it join that turn; they come before any v2 run.
  */
-export const isErrorActivity = (activity: OrchestrationThreadActivity) =>
-  !activity.kind.startsWith("checkpoint.") &&
-  (isTurnFailure(activity) || activity.tone === "error");
-
-/**
- * Rebuilds turns from message order. User messages carry no turn id, so each one joins the
- * next turn an assistant message opens; turns without a user message (background wake-ups)
- * stand alone. Reasoning and system messages never open or join a turn.
- */
-export function reconstructTurns(thread: OrchestrationThread): ReadonlyArray<ReconstructedTurn> {
-  const drafts: TurnDraft[] = [];
-  const draftsByTurnId = new Map<TurnId, TurnDraft>();
-  let pendingUsers: OrchestrationMessage[] = [];
-
-  const openTurn = (turnId: TurnId | null) => {
-    const draft: TurnDraft = { turnId, userMessages: pendingUsers, assistantMessages: [] };
-    pendingUsers = [];
-    drafts.push(draft);
-    if (turnId !== null) draftsByTurnId.set(turnId, draft);
-    return draft;
-  };
-
-  const messages = thread.messages.toSorted((left, right) =>
-    left.createdAt < right.createdAt ? -1 : left.createdAt > right.createdAt ? 1 : 0,
-  );
+function importedTurns(
+  messages: ReadonlyArray<OrchestrationV2ConversationMessage>,
+): ReadonlyArray<Omit<ReconstructedTurn, "n">> {
+  const turns: Array<{
+    userMessages: OrchestrationV2ConversationMessage[];
+    assistantMessages: OrchestrationV2ConversationMessage[];
+  }> = [];
   for (const message of messages) {
+    const current = turns.at(-1);
     if (message.role === "user") {
-      pendingUsers.push(message);
-      continue;
+      if (current === undefined || current.assistantMessages.length > 0) {
+        turns.push({ userMessages: [message], assistantMessages: [] });
+      } else {
+        current.userMessages.push(message);
+      }
+    } else if (message.role === "assistant") {
+      if (current === undefined) turns.push({ userMessages: [], assistantMessages: [message] });
+      else current.assistantMessages.push(message);
     }
-    if (message.role !== "assistant" || message.turnId === null) continue;
-    const draft = draftsByTurnId.get(message.turnId) ?? openTurn(message.turnId);
-    draft.assistantMessages.push(message);
   }
+  return turns.map((turn) => ({
+    runId: null,
+    state: "completed",
+    ...turn,
+    items: [],
+    files: [],
+  }));
+}
 
-  const latest = thread.latestTurn;
-  let queuedTurn: TurnDraft | null = null;
-  if (pendingUsers.length > 0) {
-    const startedUnseen = latest !== null && !draftsByTurnId.has(latest.turnId);
-    const trailing = openTurn(startedUnseen ? latest.turnId : null);
-    if (!startedUnseen) queuedTurn = trailing;
-  }
-  // A turn that failed or was stopped before replying has no messages; keep it for its errors.
-  if (
-    latest !== null &&
-    !draftsByTurnId.has(latest.turnId) &&
-    (latest.state === "error" || latest.state === "interrupted")
-  ) {
-    openTurn(latest.turnId);
-  }
-
-  const activitiesByTurnId = new Map<TurnId, OrchestrationThreadActivity[]>();
-  for (const activity of thread.activities) {
-    if (activity.turnId === null || !draftsByTurnId.has(activity.turnId)) continue;
-    const list = activitiesByTurnId.get(activity.turnId) ?? [];
-    list.push(activity);
-    activitiesByTurnId.set(activity.turnId, list);
-  }
-  const checkpointsByTurnId = new Map(
-    thread.checkpoints.map((checkpoint) => [checkpoint.turnId, checkpoint] as const),
+/**
+ * A run is one turn. Rolled-back runs were undone, and a queued run cancelled before it
+ * started never happened, so neither appears. Steering messages join the run they steered.
+ */
+export function reconstructTurns(thread: HistoryThread): ReadonlyArray<ReconstructedTurn> {
+  const runs = thread.runs
+    .filter(
+      (run) =>
+        run.status !== "rolled_back" && !(run.status === "cancelled" && run.startedAt === null),
+    )
+    .toSorted((left, right) => left.ordinal - right.ordinal);
+  const byCreatedAt = (
+    left: OrchestrationV2ConversationMessage,
+    right: OrchestrationV2ConversationMessage,
+  ) => DateTime.toEpochMillis(left.createdAt) - DateTime.toEpochMillis(right.createdAt);
+  const messages = thread.messages.toSorted(byCreatedAt);
+  const runUserMessageIds = new Set(thread.runs.map((run) => run.userMessageId));
+  const imported = importedTurns(
+    messages.filter((message) => message.runId === null && !runUserMessageIds.has(message.id)),
   );
-
-  return drafts.map((draft, index) => {
-    const activities = draft.turnId === null ? [] : (activitiesByTurnId.get(draft.turnId) ?? []);
-    const state: DigestTurnState =
-      draft === queuedTurn
-        ? "queued"
-        : latest !== null && draft.turnId === latest.turnId
-          ? latest.state
-          : activities.some(isTurnFailure)
-            ? "error"
-            : "completed";
+  const fromRuns = runs.map((run) => {
+    const userMessages = messages.filter(
+      (message) =>
+        message.role === "user" && (message.id === run.userMessageId || message.runId === run.id),
+    );
+    const assistantMessages = messages.filter(
+      (message) => message.role === "assistant" && message.runId === run.id,
+    );
+    const files = thread.checkpoints
+      .filter((checkpoint) => checkpoint.runId === run.id)
+      .flatMap((checkpoint) => checkpoint.files);
     return {
-      n: index + 1,
-      turnId: draft.turnId,
-      state,
-      userMessages: draft.userMessages,
-      assistantMessages: draft.assistantMessages,
-      activities,
-      checkpoint: draft.turnId === null ? null : (checkpointsByTurnId.get(draft.turnId) ?? null),
+      runId: run.id,
+      state: runState(run),
+      userMessages,
+      assistantMessages,
+      items: thread.turnItems.filter((item) => item.runId === run.id),
+      files,
     };
   });
+  return [...imported, ...fromRuns].map((turn, index) => ({ n: index + 1, ...turn }));
 }

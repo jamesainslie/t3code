@@ -1,23 +1,22 @@
 import {
   ThreadId,
   type OrchestrationProjectShell,
-  type OrchestrationThread,
+  type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ThreadShell,
   type ProjectId,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
-import * as ProjectionSnapshotQuery from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import {
-  buildThreadDigest,
-  DIGEST_ACTIVITY_KINDS,
-  DIGEST_TOOL_ACTIVITY_KIND,
-  recentStart,
-  toTurnDetail,
-} from "./digest.ts";
+import { buildThreadDigest, recentStart, toTurnDetail } from "./digest.ts";
 import { renderThreadDigest, renderThreadMatches, renderTurnDetails } from "./render.ts";
 import { canReadThread, canSearchThreads, collectReferencedThreadIds } from "./scope.ts";
 import {
@@ -31,39 +30,53 @@ import {
   ThreadOutOfScopeError,
   ThreadSearchOutOfScopeError,
 } from "./tools.ts";
-import { reconstructTurns, type ReconstructedTurn } from "./turns.ts";
+import { reconstructTurns, type HistoryThread } from "./turns.ts";
 
-/** `searchThreads` returns messages, so ask for its maximum to fill a page of distinct threads. */
+/** Search returns one match per thread; ask for its maximum to fill a page after scoping. */
 const SEARCH_MATCH_LIMIT = 50;
 
 const readFailed = (cause: unknown) => new ThreadHistoryReadFailedError({ cause });
 
+/** The calling thread. History is read relative to it, so a caller outside a thread has none. */
 const requireThreadHistory = McpInvocationContext.requireMcpCapability("thread-history").pipe(
   Effect.mapError(() => new ThreadHistoryOffError()),
+  Effect.flatMap((scope) =>
+    scope.thread === undefined
+      ? Effect.fail(new ThreadHistoryOffError())
+      : Effect.succeed({ threadId: scope.thread.threadId }),
+  ),
 );
 
 const make = Effect.gen(function* () {
-  const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+  const threadManagement = yield* ThreadManagementService.ThreadManagementService;
+  const threadSearch = yield* ThreadSearch.ThreadSearch;
+  const projects = yield* ProjectService.ProjectService;
+  const documentComments = yield* DocumentComments.DocumentComments;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
-  // Archived threads hold finished work an agent may pick up, so they read like active ones.
-  const threadDetail = (threadId: ThreadId, activityKinds: ReadonlyArray<string>) =>
-    snapshots
-      .getThreadDetailById(threadId, { activityKinds, includeArchived: true })
-      .pipe(
-        Effect.mapError(readFailed),
-        Effect.map(Option.filter((thread) => thread.deletedAt === null)),
-      );
+  /**
+   * A whole thread, with its v1 transcript imported first when it predates v2. Archived
+   * threads hold finished work an agent may pick up, so they read like active ones.
+   */
+  const threadDetail = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* threadShell(threadId);
+      if (shell === null) return Option.none<HistoryThread>();
+      yield* threadManagement.ensureLegacyTranscript(threadId).pipe(Effect.ignore);
+      const projection = yield* threadManagement
+        .getThreadProjection(threadId)
+        .pipe(Effect.mapError(readFailed));
+      return Option.some<HistoryThread>(projection);
+    });
 
   const threadShell = (threadId: ThreadId) =>
-    snapshots
-      .getThreadShellById(threadId, { includeArchived: true })
-      .pipe(Effect.map(Option.getOrNull), Effect.mapError(readFailed));
+    threadManagement.getThreadShell(threadId).pipe(
+      Effect.map((shell) => (shell === null || shell.deletedAt !== null ? null : shell)),
+      Effect.mapError(readFailed),
+    );
 
   const projectShell = (projectId: ProjectId) =>
-    snapshots
-      .getProjectShellById(projectId)
-      .pipe(Effect.map(Option.getOrNull), Effect.mapError(readFailed));
+    projects.getShell(projectId).pipe(Effect.map(Option.getOrNull), Effect.mapError(readFailed));
 
   /** The caller's live settings, re-read on every call so lowering them applies at once. */
   const accessFor = Effect.fn("ThreadHistoryToolkit.accessFor")(function* (projectId: ProjectId) {
@@ -75,17 +88,24 @@ const make = Effect.gen(function* () {
     };
   });
 
-  /**
-   * The calling thread and its live settings. References come only from the caller's own
-   * messages and the thread it continues, so it is loaded without activities.
-   */
+  /** The calling thread, its user messages (which carry its references), and its settings. */
   const loadCaller = Effect.fn("ThreadHistoryToolkit.loadCaller")(function* () {
     const scope = yield* requireThreadHistory;
-    const caller = yield* threadDetail(scope.threadId, []);
-    if (Option.isNone(caller)) {
-      return yield* new ThreadNotFoundError({ threadId: scope.threadId });
-    }
-    return { thread: caller.value, ...(yield* accessFor(caller.value.projectId)) };
+    const shell = yield* threadShell(scope.threadId);
+    if (shell === null) return yield* new ThreadNotFoundError({ threadId: scope.threadId });
+    const records = yield* threadManagement
+      .getThreadRecords(scope.threadId, ["messages"], { messageRoles: ["user"] })
+      .pipe(Effect.mapError(readFailed));
+    return {
+      thread: {
+        id: shell.id,
+        projectId: shell.projectId,
+        worktreePath: shell.worktreePath,
+        continuedFromThreadId: shell.continuedFromThreadId ?? null,
+        messages: records.messages as ReadonlyArray<OrchestrationV2ConversationMessage>,
+      },
+      ...(yield* accessFor(shell.projectId)),
+    };
   });
 
   type Caller = Effect.Success<ReturnType<typeof loadCaller>>;
@@ -103,40 +123,26 @@ const make = Effect.gen(function* () {
       referencedThreadIds: collectReferencedThreadIds(caller.thread),
     });
 
-  /** The target thread without tool calls, once the caller's level allows reading it. */
+  /** The target thread, once the caller's level allows reading it. */
   const loadTarget = Effect.fn("ThreadHistoryToolkit.loadTarget")(function* (
     caller: Caller,
     rawThreadId: string,
   ) {
     const threadId = ThreadId.make(rawThreadId);
-    const target = yield* threadDetail(threadId, DIGEST_ACTIVITY_KINDS);
-    if (Option.isNone(target)) return yield* new ThreadNotFoundError({ threadId });
-    if (!callerMayRead(caller, target.value)) {
+    const shell = yield* threadShell(threadId);
+    if (shell === null) return yield* new ThreadNotFoundError({ threadId });
+    if (!callerMayRead(caller, shell)) {
       return yield* new ThreadOutOfScopeError({ threadId, level: caller.level });
     }
+    const target = yield* threadDetail(threadId);
+    if (Option.isNone(target)) return yield* new ThreadNotFoundError({ threadId });
     return target.value;
   });
 
-  /** Adds the tool calls of `turns`, which a digest reads only for the turns it shows in detail. */
-  const withToolCalls = Effect.fn("ThreadHistoryToolkit.withToolCalls")(function* (
-    thread: OrchestrationThread,
-    turns: ReadonlyArray<ReconstructedTurn>,
-  ) {
-    const turnIds = turns.flatMap((entry) => (entry.turnId === null ? [] : [entry.turnId]));
-    if (turnIds.length === 0) return thread;
-    const toolCalls = yield* snapshots
-      .listTurnActivities({ threadId: thread.id, kinds: [DIGEST_TOOL_ACTIVITY_KIND], turnIds })
-      .pipe(Effect.mapError(readFailed));
-    // Turns group activities by turn id, and no digest read depends on order across kinds.
-    return { ...thread, activities: [...thread.activities, ...toolCalls] };
-  });
-
   const matchOf = Effect.fn("ThreadHistoryToolkit.matchOf")(function* (
-    threadId: ThreadId,
+    shell: OrchestrationV2ThreadShell,
     projectTitles: Map<ProjectId, OrchestrationProjectShell | null>,
   ) {
-    const shell = yield* threadShell(threadId);
-    if (shell === null) return null;
     if (!projectTitles.has(shell.projectId)) {
       projectTitles.set(shell.projectId, yield* projectShell(shell.projectId));
     }
@@ -145,8 +151,8 @@ const make = Effect.gen(function* () {
       title: shell.title,
       projectTitle: projectTitles.get(shell.projectId)?.title ?? null,
       branch: shell.branch,
-      lastActivityAt: shell.updatedAt,
-      status: shell.latestTurn?.state ?? "empty",
+      lastActivityAt: DateTime.formatIso(shell.updatedAt),
+      status: shell.status,
     };
   });
 
@@ -155,21 +161,19 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const caller = yield* loadCaller();
         const target = yield* loadTarget(caller, input.threadId);
-        const project = yield* projectShell(target.projectId);
+        const project = yield* projectShell(target.thread.projectId);
         // The source keeps its id in the digest; its title shows only when the caller could
         // read it, so a deleted or out-of-scope source stays untitled.
-        const source = target.continuedFromThreadId
-          ? yield* threadShell(target.continuedFromThreadId)
-          : null;
+        const sourceId = target.thread.continuedFromThreadId ?? null;
+        const source = sourceId === null ? null : yield* threadShell(sourceId);
         const sourceTitle = source && callerMayRead(caller, source) ? source.title : null;
         const recentTurns = Math.min(input.recentTurns ?? caller.recentTurns, caller.recentTurns);
-        const turns = reconstructTurns(target);
-        const thread = yield* withToolCalls(
-          target,
-          turns.slice(recentStart(turns.length, recentTurns)),
-        );
+        const comments = yield* documentComments
+          .list(target.thread.id)
+          .pipe(Effect.orElseSucceed(() => []));
         const digest = buildThreadDigest({
-          thread,
+          thread: target,
+          comments,
           projectTitle: project?.title ?? null,
           continuedFromTitle: sourceTitle,
           callerWorktreePath: caller.thread.worktreePath,
@@ -189,9 +193,11 @@ const make = Effect.gen(function* () {
         // Turn n sits at index n - 1, so the turns before `beforeTurn` end at its index.
         const end = (beforeTurn ?? turns.length + 1) - 1;
         const start = Math.max(0, end - (input.limit ?? READ_THREAD_TURNS_DEFAULT_LIMIT));
-        const thread = yield* withToolCalls(target, turns.slice(start, end));
-        const page = reconstructTurns(thread).slice(start, end);
-        return renderTurnDetails(target.id, page.map(toTurnDetail), start);
+        return renderTurnDetails(
+          target.thread.id,
+          turns.slice(start, end).map(toTurnDetail),
+          start,
+        );
       }),
     find_threads: (input) =>
       Effect.gen(function* () {
@@ -203,14 +209,8 @@ const make = Effect.gen(function* () {
         if (!canSearchThreads(level)) {
           return yield* new ThreadSearchOutOfScopeError({ level });
         }
-        // Scoping in SQL keeps other projects' matches from filling the limit.
-        const { matches } = yield* snapshots
-          .searchThreads(
-            { query: input.query, limit: SEARCH_MATCH_LIMIT },
-            level === "project"
-              ? { includeArchived: true, projectId: caller.projectId }
-              : { includeArchived: true },
-          )
+        const { matches } = yield* threadSearch
+          .search({ query: input.query, limit: SEARCH_MATCH_LIMIT })
           .pipe(Effect.mapError(readFailed));
         const limit = Math.min(input.limit ?? FIND_THREADS_MAX_LIMIT, FIND_THREADS_MAX_LIMIT);
         const seen = new Set<ThreadId>();
@@ -231,8 +231,8 @@ const make = Effect.gen(function* () {
             referencedThreadIds: new Set(),
           });
           if (!inScope) continue;
-          const result = yield* matchOf(found.threadId, projectTitles);
-          if (result !== null) results.push(result);
+          const shell = yield* threadShell(found.threadId);
+          if (shell !== null) results.push(yield* matchOf(shell, projectTitles));
         }
         return renderThreadMatches(results);
       }),

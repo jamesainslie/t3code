@@ -1,7 +1,8 @@
 # Fork-local CI for jamesainslie/t3code on GitHub-hosted runners.
 # Upstream .github/workflows/ci.yml is left untouched and disabled in repo settings.
-# Kept lean on purpose: no Rust, mobile, or sharded server jobs. The apps/server
-# test shards from upstream ci.yml can be added later if runtime becomes a problem.
+# Kept lean on purpose: no Rust or mobile jobs. Tests follow upstream's split
+# (shared Test, Test Web, sharded Test Server) because one job running every
+# suite on a 4 vCPU runner starved the web suite's module imports.
 name: CI (fork)
 
 on:
@@ -68,8 +69,7 @@ jobs:
       - name: Verify preload bundle output
         run: node apps/desktop/scripts/verify-preload-bundle.mjs
 
-  # Runs every package's tests, including t3 (apps/server), because this fork
-  # does not run the sharded server job.
+  # Every package except t3 (apps/server) and the web app, which get their own jobs.
   test:
     name: Test
     runs-on: ubuntu-24.04
@@ -100,7 +100,60 @@ jobs:
         run: node --test .github/scripts/check-nightly-release.test.cjs
 
       - name: Test
-        run: vp run test
+        run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+
+  test_web:
+    name: Test Web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Test
+        run: vp run --filter @t3tools/web test
+
+  # apps/server runs its files one at a time (fileParallelism: false), so shards
+  # spread them over runners. Files split by recorded duration
+  # (apps/server/src/testUtils/weightedShardSequencer.ts).
+  test_server:
+    name: Test Server ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Test
+        run: vp run --filter t3 test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
   release_smoke:
     name: Release Smoke

@@ -14,6 +14,7 @@ import type {
   PreviewAnnotationContextRecord,
   PreviewAnnotationPayload,
   ReviewCommentContextRecord,
+  ScopedThreadRef,
   TerminalContextRecord,
   ThreadContextRecord,
   ThreadId,
@@ -24,7 +25,6 @@ import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
 } from "@t3tools/shared/composerContextReferences";
-import { threadContextId } from "@t3tools/shared/threadContextReference";
 
 import {
   type ComposerContextReference,
@@ -154,6 +154,28 @@ export function previewAnnotationContextReference(
     kind: "preview-annotation",
     contextId: previewAnnotationContextId(annotation.id),
     label: previewAnnotationContextLabel(annotation),
+  };
+}
+
+/** One record per thread: attaching the same thread twice reuses the chip. */
+function threadContextId(threadId: ThreadId): ComposerContextId {
+  return toKindScopedComposerContextId("thread", threadId);
+}
+
+export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
+  return { kind: "thread", contextId: record.contextId, label: record.label };
+}
+
+export function threadContextRecord(ref: ScopedThreadRef, title: string): ThreadContextRecord {
+  const label = sanitizeComposerContextLabel(title, "thread");
+  return {
+    version: 1,
+    kind: "thread",
+    contextId: threadContextId(ref.threadId),
+    label,
+    environmentId: ref.environmentId,
+    threadId: ref.threadId,
+    title: label,
   };
 }
 
@@ -293,34 +315,13 @@ export function attachmentContextRecord(
   return attachment.type === "image" ? { ...base, kind: "image" } : { ...base, kind: "file" };
 }
 
-export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
-  return { kind: "thread", contextId: record.contextId, label: record.label };
-}
-
-/**
- * A pasted thread record takes its id from its thread, never from the clipboard, so a crafted
- * id cannot land on another chip and one thread stays one record whoever copied it.
- */
-export function importedThreadContextRecord(record: ThreadContextRecord): ThreadContextRecord {
-  return { ...record, contextId: threadContextId(record.threadId) };
-}
-
-/**
- * Thread references come with the text being sent: a reference travels only while its link is
- * still in that text, so passing one without the other is a type error.
- */
-type ThreadReferencesInput =
-  | { threadReferences?: never; text?: never }
-  | { threadReferences: ReadonlyArray<ThreadContextRecord>; text: string };
-
-export function buildMessageContext(
-  input: {
-    terminalContexts: ReadonlyArray<TerminalContextDraft>;
-    reviewComments: ReadonlyArray<ReviewCommentContext>;
-    previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
-    attachments?: ReadonlyArray<BoundComposerAttachment>;
-  } & ThreadReferencesInput,
-): OrchestrationMessageContext | undefined {
+export function buildMessageContext(input: {
+  terminalContexts: ReadonlyArray<TerminalContextDraft>;
+  reviewComments: ReadonlyArray<ReviewCommentContext>;
+  previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
+  threadContexts?: ReadonlyArray<ThreadContextRecord>;
+  attachments?: ReadonlyArray<BoundComposerAttachment>;
+}): OrchestrationMessageContext | undefined {
   // An annotation's screenshot travels as the image attachment that reuses its id.
   const screenshotAttachmentIds = new Set(
     (input.attachments ?? []).flatMap(({ attachment }) =>
@@ -330,6 +331,7 @@ export function buildMessageContext(
   const records: ComposerContextRecord[] = [
     ...input.terminalContexts.map(terminalContextRecord),
     ...input.reviewComments.map(reviewCommentContextRecord),
+    ...(input.threadContexts ?? []),
     ...input.previewAnnotations.map((annotation) =>
       previewAnnotationContextRecord(annotation, {
         screenshotContextId: screenshotAttachmentIds.has(annotation.id) ? annotation.id : undefined,
@@ -337,12 +339,6 @@ export function buildMessageContext(
     ),
     ...(input.attachments ?? []).map(attachmentContextRecord),
   ];
-  if (input.threadReferences && input.threadReferences.length > 0) {
-    const linkedIds = new Set<string>(
-      collectComposerContextReferences(input.text).map((occurrence) => occurrence.contextId),
-    );
-    records.push(...input.threadReferences.filter((record) => linkedIds.has(record.contextId)));
-  }
   return records.length === 0 ? undefined : { version: 1, records };
 }
 

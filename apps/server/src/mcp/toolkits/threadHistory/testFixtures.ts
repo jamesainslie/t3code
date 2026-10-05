@@ -1,133 +1,251 @@
 import {
+  CheckpointId,
   CheckpointRef,
-  EventId,
+  CheckpointScopeId,
   MessageId,
+  NodeId,
+  PlanId,
   ProjectId,
   ProviderInstanceId,
+  RunId,
   ThreadId,
-  TurnId,
-  type OrchestrationCheckpointFile,
-  type OrchestrationCheckpointSummary,
-  type OrchestrationLatestTurn,
-  type OrchestrationMessage,
-  type OrchestrationThread,
-  type OrchestrationThreadActivity,
+  TurnItemId,
+  type OrchestrationV2AppThread,
+  type OrchestrationV2Checkpoint,
+  type OrchestrationV2CheckpointFileSummary,
+  type OrchestrationV2ConversationMessage,
+  type OrchestrationV2PlanArtifact,
+  type OrchestrationV2Run,
+  type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 
-// Read-model builders shared by the thread history tests. `t` is seconds after a fixed epoch,
-// so fixtures read in message order.
+import type { HistoryThread } from "./turns.ts";
+
+// V2 projection builders shared by the thread history tests. `t` is seconds after a fixed
+// epoch, so fixtures read in message order.
 
 export const THREAD_ID = ThreadId.make("thread-history-1");
 const PROJECT_ID = ProjectId.make("project-history-1");
+const INSTANCE_ID = ProviderInstanceId.make("codex");
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-// Valid for whole seconds 0 <= t < 86_400 (one day); larger values produce an invalid hour.
-export const at = (t: number) =>
+/** ISO time `t` seconds into the fixture day; valid for whole seconds 0 <= t < 86_400. */
+export const atIso = (t: number) =>
   `2026-09-01T${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}:${pad(t % 60)}.000Z`;
 
-export const turn = (id: string) => TurnId.make(id);
+export const at = (t: number) => DateTime.makeUnsafe(atIso(t));
+
+export const runId = (id: string) => RunId.make(id);
 
 function message(
   id: string,
-  role: OrchestrationMessage["role"],
+  role: OrchestrationV2ConversationMessage["role"],
   t: number,
   text: string,
-  turnId: TurnId | null,
-): OrchestrationMessage {
+  run: RunId | null,
+): OrchestrationV2ConversationMessage {
   return {
+    createdBy: role === "user" ? "user" : "agent",
+    creationSource: "web",
     id: MessageId.make(id),
+    threadId: THREAD_ID,
+    runId: run,
+    nodeId: null,
     role,
     text,
-    turnId,
+    attachments: [],
     streaming: false,
     createdAt: at(t),
     updatedAt: at(t),
   };
 }
 
-export const userMessage = (id: string, t: number, text = `user ${id}`) =>
-  message(id, "user", t, text, null);
+/** A user message; `run` is set for messages that steered a run, null for a run's prompt. */
+export const userMessage = (id: string, t: number, text = `user ${id}`, run: RunId | null = null) =>
+  message(id, "user", t, text, run);
 
-export const assistantMessage = (id: string, t: number, turnId: TurnId, text = `reply ${id}`) =>
-  message(id, "assistant", t, text, turnId);
+export const assistantMessage = (id: string, t: number, run: RunId, text = `reply ${id}`) =>
+  message(id, "assistant", t, text, run);
 
-export const reasoningMessage = (id: string, t: number, turnId: TurnId, text = `thinking ${id}`) =>
-  message(id, "reasoning", t, text, turnId);
-
-export function activity(input: {
-  readonly id: string;
-  readonly t: number;
-  readonly kind: string;
-  readonly turnId: TurnId | null;
-  readonly tone?: OrchestrationThreadActivity["tone"];
-  readonly summary?: string;
-  readonly payload?: unknown;
-}): OrchestrationThreadActivity {
+export function run(input: {
+  readonly id: RunId;
+  readonly ordinal: number;
+  readonly userMessageId: string;
+  readonly status?: OrchestrationV2Run["status"];
+  readonly t?: number;
+}): OrchestrationV2Run {
+  const t = input.t ?? input.ordinal * 100;
+  const status = input.status ?? "completed";
   return {
-    id: EventId.make(input.id),
-    tone: input.tone ?? "info",
-    kind: input.kind,
-    summary: input.summary ?? input.kind,
-    payload: input.payload ?? {},
-    turnId: input.turnId,
-    createdAt: at(input.t),
+    id: input.id,
+    threadId: THREAD_ID,
+    ordinal: input.ordinal,
+    providerInstanceId: INSTANCE_ID,
+    modelSelection: { instanceId: INSTANCE_ID, model: "gpt-5" },
+    providerThreadId: null,
+    userMessageId: MessageId.make(input.userMessageId),
+    rootNodeId: null,
+    activeAttemptId: null,
+    status,
+    requestedAt: at(t),
+    startedAt: status === "queued" ? null : at(t),
+    completedAt: ["completed", "failed", "interrupted", "cancelled"].includes(status)
+      ? at(t + 50)
+      : null,
+    checkpointId: null,
+    contextHandoffId: null,
   };
 }
 
-export function checkpoint(
-  turnId: TurnId,
-  turnCount: number,
-  files: ReadonlyArray<OrchestrationCheckpointFile> = [],
-): OrchestrationCheckpointSummary {
-  return {
-    turnId,
-    checkpointTurnCount: turnCount,
-    checkpointRef: CheckpointRef.make(`refs/t3/checkpoints/${turnCount}`),
-    status: "ready",
-    files,
-    assistantMessageId: null,
-    completedAt: at(1_000 + turnCount),
-  };
-}
+const itemBase = (
+  id: string,
+  t: number,
+  run: RunId,
+  status: OrchestrationV2TurnItem["status"],
+) => ({
+  id: TurnItemId.make(id),
+  threadId: THREAD_ID,
+  runId: run,
+  nodeId: null,
+  providerThreadId: null,
+  providerTurnId: null,
+  nativeItemRef: null,
+  parentItemId: null,
+  ordinal: t,
+  status,
+  title: null,
+  startedAt: at(t),
+  completedAt: at(t),
+  updatedAt: at(t),
+});
 
-export function latestTurn(
-  turnId: TurnId,
-  state: OrchestrationLatestTurn["state"],
-): OrchestrationLatestTurn {
-  return {
-    turnId,
-    state,
-    requestedAt: at(0),
-    startedAt: at(0),
-    completedAt: state === "running" ? null : at(2_000),
-    assistantMessageId: null,
-  };
-}
+export const commandItem = (
+  id: string,
+  t: number,
+  run: RunId,
+  input: string,
+  options: { readonly status?: OrchestrationV2TurnItem["status"]; readonly title?: string } = {},
+): OrchestrationV2TurnItem => ({
+  ...itemBase(id, t, run, options.status ?? "completed"),
+  title: options.title ?? "Bash",
+  type: "command_execution",
+  input,
+});
 
-export function makeThread(overrides: Partial<OrchestrationThread> = {}): OrchestrationThread {
+export const errorItem = (
+  id: string,
+  t: number,
+  run: RunId,
+  messageText: string,
+): OrchestrationV2TurnItem => ({
+  ...itemBase(id, t, run, "failed"),
+  type: "error",
+  failure: { class: "provider_error", message: messageText, code: null, retryable: null },
+});
+
+export const file = (
+  path: string,
+  additions = 3,
+  deletions = 1,
+): OrchestrationV2CheckpointFileSummary => ({ path, kind: "modified", additions, deletions });
+
+export const checkpoint = (
+  run: RunId,
+  ordinal: number,
+  files: ReadonlyArray<OrchestrationV2CheckpointFileSummary>,
+): OrchestrationV2Checkpoint => ({
+  id: CheckpointId.make(`checkpoint-${run}`),
+  threadId: THREAD_ID,
+  scopeId: CheckpointScopeId.make(`scope-${run}`),
+  runId: run,
+  nodeId: NodeId.make(`node-${run}`),
+  parentCheckpointId: null,
+  ordinalWithinScope: 0,
+  appRunOrdinal: ordinal,
+  ref: CheckpointRef.make(`refs/t3/checkpoints/${ordinal}`),
+  status: "ready",
+  files,
+  capturedAt: at(1_000 + ordinal),
+});
+
+export const todoList = (
+  id: string,
+  run: RunId,
+  steps: ReadonlyArray<{
+    readonly text: string;
+    readonly status: "pending" | "running" | "completed";
+  }>,
+  status: OrchestrationV2PlanArtifact["status"] = "active",
+): OrchestrationV2PlanArtifact => ({
+  id: PlanId.make(id),
+  threadId: THREAD_ID,
+  runId: run,
+  nodeId: NodeId.make(`node-${id}`),
+  status,
+  kind: "todo_list",
+  steps: steps.map((step, index) => ({ id: `step-${index}`, ...step })),
+});
+
+export const proposedPlan = (
+  id: string,
+  run: RunId,
+  markdown: string,
+  status: OrchestrationV2PlanArtifact["status"] = "active",
+): OrchestrationV2PlanArtifact => ({
+  id: PlanId.make(id),
+  threadId: THREAD_ID,
+  runId: run,
+  nodeId: NodeId.make(`node-${id}`),
+  status,
+  kind: "proposed_plan",
+  markdown,
+});
+
+function makeAppThread(
+  overrides: Partial<OrchestrationV2AppThread> = {},
+): OrchestrationV2AppThread {
   return {
+    createdBy: "user",
+    creationSource: "web",
     id: THREAD_ID,
     projectId: PROJECT_ID,
     title: "Thread history fixture",
-    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+    providerInstanceId: INSTANCE_ID,
+    modelSelection: { instanceId: INSTANCE_ID, model: "gpt-5" },
     runtimeMode: "full-access",
     interactionMode: "default",
     branch: null,
     worktreePath: null,
-    pullRequests: [],
-    latestTurn: null,
+    activeProviderThreadId: null,
+    lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: THREAD_ID },
+    forkedFrom: null,
     createdAt: at(0),
     updatedAt: at(0),
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    lastVisitedAt: null,
     deletedAt: null,
-    messages: [],
-    proposedPlans: [],
-    activities: [],
-    checkpoints: [],
-    session: null,
     ...overrides,
+  };
+}
+
+export function makeThread(
+  overrides: Partial<Omit<HistoryThread, "thread">> & {
+    readonly thread?: Partial<OrchestrationV2AppThread>;
+  } = {},
+): HistoryThread {
+  const { thread, ...records } = overrides;
+  return {
+    thread: makeAppThread(thread),
+    runs: [],
+    messages: [],
+    turnItems: [],
+    plans: [],
+    checkpoints: [],
+    providerThreads: [],
+    ...records,
   };
 }

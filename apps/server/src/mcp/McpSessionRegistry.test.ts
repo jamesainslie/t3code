@@ -47,7 +47,10 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
     expect(token.length).toBeGreaterThan(20);
 
     const resolved = yield* registry.resolve(token);
-    expect(resolved?.threadId).toBe(threadId);
+    expect(resolved?.thread.threadId).toBe(threadId);
+    expect(resolved?.capabilities).toEqual(
+      new Set(["preview", "orchestration", "worktree", "pull-requests", "document-comments"]),
+    );
 
     yield* registry.revokeThread(threadId);
     expect(yield* registry.resolve(token)).toBeUndefined();
@@ -81,14 +84,23 @@ it.effect("always grants pull-requests and gates browser and device access indep
 
     expect(yield* capabilitiesOf(withPreview)).toEqual([
       "document-comments",
+      "orchestration",
       "preview",
       "pull-requests",
+      "worktree",
     ]);
-    expect(yield* capabilitiesOf(withoutPreview)).toEqual(["document-comments", "pull-requests"]);
+    expect(yield* capabilitiesOf(withoutPreview)).toEqual([
+      "document-comments",
+      "orchestration",
+      "pull-requests",
+      "worktree",
+    ]);
     expect(yield* capabilitiesOf(withDevice)).toEqual([
       "device",
       "document-comments",
+      "orchestration",
       "pull-requests",
+      "worktree",
     ]);
   }),
 );
@@ -149,7 +161,7 @@ it.effect("keeps a credential alive across turns that never touch an MCP tool", 
       yield* registry.touch(threadId);
     }
 
-    expect((yield* registry.resolve(token))?.threadId).toBe(threadId);
+    expect((yield* registry.resolve(token))?.thread.threadId).toBe(threadId);
   }),
 );
 

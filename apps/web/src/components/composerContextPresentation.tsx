@@ -1,17 +1,15 @@
 import ChatMarkdown from "./ChatMarkdown";
 import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
 import type { PreviewAnnotationPayload, ThreadContextRecord } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { videoMimeType } from "@t3tools/shared/video";
-import { MessageCircleIcon, MessageSquareIcon, MousePointerClickIcon } from "lucide-react";
+import { MessageCircleIcon, MousePointerClickIcon } from "lucide-react";
 import { createContext, type MouseEvent, type ReactElement, type ReactNode, use } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
 import { useTheme } from "~/hooks/useTheme";
-import { useThreadShell } from "~/state/entities";
 import {
   formatAttachmentUploadProgress,
   type AttachmentUploadState,
@@ -33,6 +31,7 @@ import {
 import type { TerminalContextDraft } from "~/lib/terminalContext";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
 import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
+import { ThreadContextChip } from "./ThreadContextChip";
 import {
   createContextPresentationRegistry,
   type ContextPresentationCapability,
@@ -57,9 +56,9 @@ export type ComposerDraftContextRecord =
   | { kind: "terminal"; record: TerminalContextDraft }
   | { kind: "review-comment"; record: ReviewCommentContext }
   | { kind: "preview-annotation"; record: PreviewAnnotationPayload }
-  | { kind: "thread"; record: ThreadContextRecord }
   | { kind: "image"; record: ComposerImageAttachment; upload?: AttachmentUploadState | undefined }
-  | { kind: "file"; record: ComposerFileAttachment; upload?: AttachmentUploadState | undefined };
+  | { kind: "file"; record: ComposerFileAttachment; upload?: AttachmentUploadState | undefined }
+  | { kind: "thread"; record: ThreadContextRecord };
 
 /** What a chip can do beyond showing itself; the composer supplies the handlers. */
 export interface ComposerContextActions {
@@ -97,9 +96,9 @@ export function composerContextRecordsFromDraft(input: {
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
   reviewComments?: ReadonlyArray<ReviewCommentContext>;
   previewAnnotations?: ReadonlyArray<PreviewAnnotationPayload>;
+  threadContexts?: ReadonlyArray<ThreadContextRecord>;
   images?: ReadonlyArray<ComposerImageAttachment>;
   files?: ReadonlyArray<ComposerFileAttachment>;
-  threadReferences?: ReadonlyArray<ThreadContextRecord>;
   uploadsByImageId?: Readonly<Record<string, AttachmentUploadState>>;
 }): ComposerDraftContextRecords {
   const records = new Map<string, ComposerDraftContextRecord>();
@@ -126,7 +125,7 @@ export function composerContextRecordsFromDraft(input: {
   for (const record of input.previewAnnotations ?? []) {
     records.set(previewAnnotationContextId(record.id), { kind: "preview-annotation", record });
   }
-  for (const record of input.threadReferences ?? []) {
+  for (const record of input.threadContexts ?? []) {
     records.set(record.contextId, { kind: "thread", record });
   }
   return records;
@@ -316,40 +315,6 @@ function ComposerPreviewAnnotationDetails({
   );
 }
 
-/** Shows the thread's current title, or the unavailable state when this environment lacks it. */
-function ThreadContextChip(props: {
-  record: ThreadContextRecord;
-  detailsMode: ContextPresentationCapability["details"];
-}) {
-  const { environmentId } = use(ComposerContextActionsContext);
-  const shell = useThreadShell(
-    environmentId === null ? null : scopeThreadRef(environmentId, props.record.threadId),
-  );
-  const label = shell?.title ?? props.record.title;
-  if (environmentId !== null && shell === null) {
-    return (
-      <ContextChipShell
-        kind="neutral"
-        state="unresolved"
-        icon={<MessageSquareIcon />}
-        label={label}
-        aria-label={`Thread, ${label}`}
-        tooltip="Thread not available in this environment"
-      />
-    );
-  }
-  return (
-    <ContextChip
-      icon={<MessageSquareIcon />}
-      label={label}
-      kindLabel="Thread"
-      details={null}
-      detailsMode={props.detailsMode}
-      kind="neutral"
-    />
-  );
-}
-
 function UnresolvedContextChip(props: { label: string }) {
   return (
     <UnresolvedChip
@@ -452,9 +417,9 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
     {
       kind: "thread",
       canRender: (entry) => entry.kind === "thread",
-      render: (entry, context, definition) =>
+      render: (entry, context) =>
         entry.kind === "thread" ? (
-          <ThreadContextChip record={entry.record} detailsMode={definition.capabilities.details} />
+          <ThreadContextChip record={entry.record} />
         ) : (
           <UnresolvedContextChip label={context.label} />
         ),

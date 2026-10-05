@@ -3,8 +3,9 @@ import {
   MessageId,
   ProjectId,
   ThreadId,
+  EnvironmentId,
   type AgentThreadHistoryAccess,
-  type OrchestrationMessage,
+  type OrchestrationMessageContext,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
@@ -51,21 +52,8 @@ const rows: ReadonlyArray<readonly [AgentThreadHistoryAccess, Relation, boolean]
   ["environment", "referencedOtherProject", true],
 ];
 
-function userMessage(
-  id: string,
-  context?: OrchestrationMessage["context"],
-  text = "hello",
-): OrchestrationMessage {
-  return {
-    id: MessageId.make(id),
-    role: "user",
-    text,
-    ...(context ? { context } : {}),
-    turnId: null,
-    streaming: false,
-    createdAt: "2026-09-01T00:00:00.000Z",
-    updatedAt: "2026-09-01T00:00:00.000Z",
-  };
+function userMessage(id: string, context?: OrchestrationMessageContext, text = "hello") {
+  return { id: MessageId.make(id), role: "user" as const, text, ...(context ? { context } : {}) };
 }
 
 describe("thread history scope", () => {
@@ -101,7 +89,7 @@ describe("thread history scope", () => {
               label: "Earliest work",
               kind: "thread",
               threadId: EARLIER_THREAD_ID,
-              projectId: CALLER_PROJECT_ID,
+              environmentId: EnvironmentId.make("environment-1"),
               title: "Earliest work",
             },
           ],
@@ -117,7 +105,7 @@ describe("thread history scope", () => {
                 label: "Earlier work",
                 kind: "thread",
                 threadId: REFERENCED_THREAD_ID,
-                projectId: OTHER_PROJECT_ID,
+                environmentId: EnvironmentId.make("environment-1"),
                 title: "Earlier work",
               },
               {

@@ -1,4 +1,4 @@
-import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextFragment,
@@ -14,10 +14,12 @@ import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
  */
 export async function copyThreadChip(input: {
   readonly environmentId: EnvironmentId;
-  readonly thread: { readonly id: ThreadId; readonly projectId: ProjectId; readonly title: string };
+  readonly thread: { readonly id: ThreadId; readonly title: string };
 }): Promise<void> {
   try {
-    const { text, fragment } = buildThreadChipClipboard(input);
+    const { text, fragment } = buildThreadChipClipboard({
+      thread: { ...input.thread, environmentId: input.environmentId },
+    });
     const encoded = encodeComposerContextFragment(fragment);
     const didCopy = await writeTextToClipboard(
       text,

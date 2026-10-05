@@ -1,191 +1,118 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import {
-  activity,
   assistantMessage,
   checkpoint,
-  latestTurn,
+  commandItem,
+  file,
   makeThread,
-  reasoningMessage,
-  turn,
+  run,
+  runId,
   userMessage,
 } from "./testFixtures.ts";
-import { reconstructTurns } from "./turns.ts";
+import { reconstructTurns, runState } from "./turns.ts";
 
-const A = turn("turn-a");
-const B = turn("turn-b");
-const C = turn("turn-c");
+const A = runId("run-a");
+const B = runId("run-b");
+const C = runId("run-c");
 
 const messageIds = (messages: ReadonlyArray<{ readonly id: string }>) =>
   messages.map((message) => message.id);
 
 describe("reconstructTurns", () => {
-  it("attaches a user message to the turn that follows it", () => {
+  it("makes each run a turn with its prompt, replies, items and files", () => {
     const turns = reconstructTurns(
-      makeThread({ messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)] }),
+      makeThread({
+        runs: [run({ id: A, ordinal: 1, userMessageId: "u1" })],
+        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
+        turnItems: [commandItem("cmd", 3, A, "vp test")],
+        checkpoints: [checkpoint(A, 1, [file("src/a.ts")])],
+      }),
     );
 
     expect(turns).toHaveLength(1);
-    expect(turns[0]).toMatchObject({ n: 1, turnId: A, state: "completed" });
+    expect(turns[0]).toMatchObject({ n: 1, runId: A, state: "completed" });
     expect(messageIds(turns[0]!.userMessages)).toEqual(["u1"]);
     expect(messageIds(turns[0]!.assistantMessages)).toEqual(["a1"]);
+    expect(turns[0]!.items.map((item) => item.id)).toEqual(["cmd"]);
+    expect(turns[0]!.files.map((entry) => entry.path)).toEqual(["src/a.ts"]);
   });
 
-  it("keeps assistant-only turns as their own turns", () => {
-    const turns = reconstructTurns(
-      makeThread({ messages: [assistantMessage("a1", 1, A), assistantMessage("a2", 2, B)] }),
-    );
-
-    expect(turns.map((entry) => entry.turnId)).toEqual([A, B]);
-    expect(turns.map((entry) => entry.userMessages)).toEqual([[], []]);
-    expect(messageIds(turns[1]!.assistantMessages)).toEqual(["a2"]);
-  });
-
-  it("keeps a trailing user message as a queued turn", () => {
-    const messages = [userMessage("u1", 1), assistantMessage("a1", 2, A), userMessage("u2", 3)];
-
-    const queued = reconstructTurns(
-      makeThread({ messages, latestTurn: latestTurn(A, "completed") }),
-    );
-    expect(queued).toHaveLength(2);
-    expect(queued[1]).toMatchObject({ n: 2, turnId: null, state: "queued" });
-    expect(messageIds(queued[1]!.userMessages)).toEqual(["u2"]);
-    expect(queued[1]!.assistantMessages).toEqual([]);
-
-    // The provider has started the turn but has not answered yet.
-    const started = reconstructTurns(
-      makeThread({
-        messages,
-        latestTurn: latestTurn(B, "running"),
-        activities: [activity({ id: "e1", t: 4, kind: "tool.started", turnId: B, tone: "tool" })],
-      }),
-    );
-    expect(started[1]).toMatchObject({ n: 2, turnId: B, state: "running" });
-    expect(started[1]!.activities.map((entry) => entry.id)).toEqual(["e1"]);
-  });
-
-  it("takes the latest turn's state and marks earlier turns with a runtime.error as error", () => {
-    const failure = activity({
-      id: "e-error",
-      t: 2,
-      kind: "runtime.error",
-      tone: "error",
-      turnId: A,
-      payload: { message: "provider crashed" },
-    });
+  it("orders runs by ordinal and joins a steering message to the run it steered", () => {
     const turns = reconstructTurns(
       makeThread({
+        // Stored out of order.
+        runs: [
+          run({ id: B, ordinal: 2, userMessageId: "u2" }),
+          run({ id: A, ordinal: 1, userMessageId: "u1" }),
+        ],
         messages: [
-          assistantMessage("a1", 1, A),
-          assistantMessage("a2", 3, B),
-          assistantMessage("a3", 5, C),
-          assistantMessage("a4", 7, turn("turn-d")),
-        ],
-        activities: [
-          failure,
-          activity({
-            id: "e-start",
-            t: 4,
-            kind: "provider.turn.start.failed",
-            tone: "error",
-            turnId: B,
-          }),
-          // Error-tone activities that are not turn failures leave the state alone.
-          activity({ id: "e-denied", t: 6, kind: "tool.denied", tone: "error", turnId: C }),
-        ],
-        checkpoints: [checkpoint(A, 1), checkpoint(C, 3)],
-        latestTurn: latestTurn(turn("turn-d"), "interrupted"),
-      }),
-    );
-
-    expect(turns.map((entry) => entry.state)).toEqual([
-      "error",
-      "error",
-      "completed",
-      "interrupted",
-    ]);
-    expect(turns[0]!.activities).toEqual([failure]);
-    expect(turns[0]!.checkpoint?.checkpointTurnCount).toBe(1);
-    expect(turns[1]!.checkpoint).toBeNull();
-
-    // The latest turn's recorded state wins over its own error activities.
-    const recovered = reconstructTurns(
-      makeThread({
-        messages: [assistantMessage("a1", 1, A)],
-        activities: [failure],
-        latestTurn: latestTurn(A, "completed"),
-      }),
-    );
-    expect(recovered[0]!.state).toBe("completed");
-  });
-
-  it("appends an unseen errored or interrupted latest turn as its own turn", () => {
-    const D = turn("turn-d");
-    const failure = activity({
-      id: "e-d",
-      t: 3,
-      kind: "runtime.error",
-      tone: "error",
-      turnId: D,
-      payload: { message: "provider crashed before replying" },
-    });
-    const turns = reconstructTurns(
-      makeThread({
-        messages: [userMessage("u1", 1), assistantMessage("a1", 2, A)],
-        activities: [failure],
-        latestTurn: latestTurn(D, "error"),
-      }),
-    );
-
-    expect(turns).toHaveLength(2);
-    expect(turns[1]).toMatchObject({ n: 2, turnId: D, state: "error" });
-    expect(turns[1]!.userMessages).toEqual([]);
-    expect(turns[1]!.assistantMessages).toEqual([]);
-    expect(turns[1]!.activities).toEqual([failure]);
-
-    const interrupted = reconstructTurns(
-      makeThread({
-        messages: [assistantMessage("a1", 1, A)],
-        latestTurn: latestTurn(D, "interrupted"),
-      }),
-    );
-    expect(interrupted.map((entry) => [entry.turnId, entry.state])).toEqual([
-      [A, "completed"],
-      [D, "interrupted"],
-    ]);
-
-    // A running turn with no messages yet is left to the header status.
-    const running = reconstructTurns(
-      makeThread({
-        messages: [assistantMessage("a1", 1, A)],
-        latestTurn: latestTurn(D, "running"),
-      }),
-    );
-    expect(running).toHaveLength(1);
-  });
-
-  it("numbers turns from 1 in message order", () => {
-    const turns = reconstructTurns(
-      makeThread({
-        // Stored out of order; reasoning never opens a turn of its own.
-        messages: [
-          assistantMessage("a3", 6, C),
-          userMessage("u1", 1),
-          reasoningMessage("r0", 0, turn("turn-thinking-only")),
-          assistantMessage("a1", 2, A),
-          reasoningMessage("r2", 4, B),
-          userMessage("u2", 3),
-          assistantMessage("a2", 5, B),
+          userMessage("u2", 300),
+          userMessage("u1", 100),
+          userMessage("steer", 150, "go faster", A),
+          assistantMessage("a1", 160, A),
+          assistantMessage("a2", 310, B),
         ],
       }),
     );
 
-    expect(turns.map((entry) => [entry.n, entry.turnId])).toEqual([
+    expect(turns.map((entry) => [entry.n, entry.runId])).toEqual([
       [1, A],
       [2, B],
-      [3, C],
     ]);
-    expect(messageIds(turns[1]!.userMessages)).toEqual(["u2"]);
+    expect(messageIds(turns[0]!.userMessages)).toEqual(["u1", "steer"]);
     expect(messageIds(turns[1]!.assistantMessages)).toEqual(["a2"]);
+  });
+
+  it("leaves out undone runs and queued runs cancelled before they started", () => {
+    const turns = reconstructTurns(
+      makeThread({
+        runs: [
+          run({ id: A, ordinal: 1, userMessageId: "u1" }),
+          run({ id: B, ordinal: 2, userMessageId: "u2", status: "rolled_back" }),
+          {
+            ...run({ id: C, ordinal: 3, userMessageId: "u3", status: "cancelled" }),
+            startedAt: null,
+          },
+        ],
+        messages: [userMessage("u1", 1), userMessage("u2", 200), userMessage("u3", 300)],
+      }),
+    );
+
+    expect(turns.map((entry) => entry.runId)).toEqual([A]);
+  });
+
+  it("groups a v1 thread's imported messages into turns before any v2 run", () => {
+    const turns = reconstructTurns(
+      makeThread({
+        runs: [run({ id: A, ordinal: 1, userMessageId: "u-new", t: 500 })],
+        messages: [
+          userMessage("old-u1", 1),
+          userMessage("old-u1b", 2),
+          { ...assistantMessage("old-a1", 3, A), runId: null },
+          userMessage("old-u2", 4),
+          { ...assistantMessage("old-a2", 5, A), runId: null },
+          userMessage("u-new", 500),
+          assistantMessage("a-new", 501, A),
+        ],
+      }),
+    );
+
+    expect(turns.map((entry) => [entry.n, entry.runId, messageIds(entry.userMessages)])).toEqual([
+      [1, null, ["old-u1", "old-u1b"]],
+      [2, null, ["old-u2"]],
+      [3, A, ["u-new"]],
+    ]);
+    expect(messageIds(turns[0]!.assistantMessages)).toEqual(["old-a1"]);
+  });
+});
+
+describe("runState", () => {
+  it("reads a run's status as a digest state", () => {
+    expect(
+      (
+        ["queued", "running", "waiting", "completed", "interrupted", "cancelled", "failed"] as const
+      ).map((status) => runState({ status })),
+    ).toEqual(["queued", "running", "running", "completed", "interrupted", "interrupted", "error"]);
   });
 });

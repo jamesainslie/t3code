@@ -10,12 +10,18 @@ import * as Tool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import * as ProjectionSnapshotQuery from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,
-  ProjectionSnapshotQuery.ProjectionSnapshotQuery,
+  ThreadManagementService.ThreadManagementService,
+  ThreadSearch.ThreadSearch,
+  ProjectService.ProjectService,
+  DocumentComments.DocumentComments,
   ServerSettings.ServerSettingsService,
 ];
 

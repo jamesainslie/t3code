@@ -2,6 +2,8 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
+import { ProjectSyncError } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { openReadOnlyDatabase, snapshotDatabase } from "./SqliteSnapshot.ts";
 
@@ -20,6 +22,22 @@ const decodeRestore = Schema.decodeUnknownSync(
 );
 const digest = (bytes: Uint8Array) => NodeCrypto.createHash("sha256").update(bytes).digest("hex");
 const backupRoot = (stateDir: string) => NodePath.join(NodePath.dirname(stateDir), "sync-recovery");
+
+/** The live database. Backups taken before orchestration v2 hold `state.sqlite` instead. */
+const DATABASE = "statev2.sqlite";
+const LEGACY_DATABASE = "state.sqlite";
+/** Database files are snapshotted, not copied, and the frozen v1 database is left out. */
+const SKIPPED_ENTRIES = new Set([
+  DATABASE,
+  `${DATABASE}-wal`,
+  `${DATABASE}-shm`,
+  LEGACY_DATABASE,
+  `${LEGACY_DATABASE}-wal`,
+  `${LEGACY_DATABASE}-shm`,
+  "server-runtime.json",
+  "logs",
+  "providers",
+]);
 
 async function syncPath(path: string) {
   const handle = await NodeFSP.open(path, "r");
@@ -61,23 +79,10 @@ export async function createRecoveryBackup(stateDir: string, createdAt: string):
   const staging = NodePath.join(root, `${id}.staging`);
   await NodeFSP.mkdir(staging, { recursive: true, mode: 0o700 });
   try {
-    await snapshotDatabase(
-      NodePath.join(stateDir, "state.sqlite"),
-      NodePath.join(staging, "state.sqlite"),
-    );
-    await checkDatabase(NodePath.join(staging, "state.sqlite"));
+    await snapshotDatabase(NodePath.join(stateDir, DATABASE), NodePath.join(staging, DATABASE));
+    await checkDatabase(NodePath.join(staging, DATABASE));
     for (const entry of await NodeFSP.readdir(stateDir, { withFileTypes: true })) {
-      if (
-        [
-          "state.sqlite",
-          "state.sqlite-wal",
-          "state.sqlite-shm",
-          "server-runtime.json",
-          "logs",
-          "providers",
-        ].includes(entry.name)
-      )
-        continue;
+      if (SKIPPED_ENTRIES.has(entry.name)) continue;
       if (entry.isSymbolicLink())
         throw new Error(`Recovery cannot include a symbolic link: ${entry.name}`);
       await NodeFSP.cp(NodePath.join(stateDir, entry.name), NodePath.join(staging, entry.name), {
@@ -150,10 +155,13 @@ async function verifyBackup(stateDir: string, id: string) {
     if (digest(await NodeFSP.readFile(path)) !== file.sha256)
       throw new Error(`Recovery checksum failed: ${file.path}`);
   }
-  if (!manifest.files.some((file) => file.path === "state.sqlite"))
-    throw new Error("Recovery backup has no database.");
+  // A v1 backup restores `state.sqlite` alone, and startup cuts it over to v2 again.
+  const database = [DATABASE, LEGACY_DATABASE].find((name) =>
+    manifest.files.some((file) => file.path === name),
+  );
+  if (database === undefined) throw new Error("Recovery backup has no database.");
   if (manifest.id !== id) throw new Error("Recovery backup identity does not match.");
-  await checkDatabase(NodePath.join(root, "state.sqlite"));
+  await checkDatabase(NodePath.join(root, database));
   return { root, manifest };
 }
 
@@ -263,3 +271,17 @@ export async function restorePendingRecovery(stateDir: string): Promise<void> {
   await NodeFSP.rm(NodePath.join(root, "restore-pending.json"));
   await syncPath(root);
 }
+
+/**
+ * Startup hook: runs before the v2 database is opened or cut over, so a restored
+ * v1 backup is migrated again. A prepared recovery that cannot be restored must
+ * stop startup, not run on the wrong data.
+ */
+export const restorePendingSyncRecovery = (dbPath: string) =>
+  Effect.tryPromise({
+    try: () => restorePendingRecovery(NodePath.dirname(dbPath)),
+    catch: (cause) =>
+      new ProjectSyncError({
+        message: `Could not restore the prepared recovery backup: ${String(cause)}`,
+      }),
+  }).pipe(Effect.orDie);

@@ -32,7 +32,7 @@ import {
   buildContinuePrompt,
   buildThreadContextRecord,
 } from "@t3tools/shared/threadContextReference";
-import { readProjects, readThreadShell, useProjects, useThread } from "../state/entities";
+import { readProjects, readThreadShell, useProjects, useThreadShell } from "../state/entities";
 import {
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
@@ -136,7 +136,7 @@ export function useNewThreadHandler() {
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
         setModelSelection,
-        addThreadReference,
+        addThreadContexts,
         setPrompt,
       } = useComposerDraftStore.getState();
       const requestingRouteHref = router.state.location.href;
@@ -221,8 +221,12 @@ export function useNewThreadHandler() {
       // mounts with them.
       const seedContinuation = (destinationDraftId: DraftId) => {
         if (!continuedFromThread) return;
-        const record = buildThreadContextRecord(continuedFromThread);
-        addThreadReference(destinationDraftId, record);
+        const record = buildThreadContextRecord({
+          ...continuedFromThread,
+          environmentId: projectRef.environmentId,
+        });
+        // The prompt below places the chip itself.
+        addThreadContexts(destinationDraftId, [record], { appendReference: false });
         setPrompt(destinationDraftId, buildContinuePrompt(record));
         if (continuedFromModelSelection) {
           setModelSelection(destinationDraftId, continuedFromModelSelection, {
@@ -528,7 +532,7 @@ export function useHandleNewThread() {
   });
   const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
   const routeDraftId = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
-  const activeThread = useThread(routeThreadRef);
+  const activeThread = useThreadShell(routeThreadRef);
   const getDraftThread = useComposerDraftStore((store) => store.getDraftThread);
   const activeDraftThread = useComposerDraftStore(() =>
     routeTarget

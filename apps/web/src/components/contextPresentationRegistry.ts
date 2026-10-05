@@ -46,7 +46,7 @@ const DEFINITIONS = [
   },
   {
     kind: "thread",
-    capabilities: { details: "none", expanded: "none", defaultDraftView: "compact" },
+    capabilities: { details: "tooltip", expanded: "none", defaultDraftView: "compact" },
   },
 ] as const satisfies ReadonlyArray<ContextPresentationDefinition>;
 

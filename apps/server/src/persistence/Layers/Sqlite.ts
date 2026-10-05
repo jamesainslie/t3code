@@ -6,9 +6,10 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runMigrations } from "../Migrations.ts";
-import { restorePendingRecovery } from "../../projectSync/Recovery.ts";
-import { ProjectSyncError } from "@t3tools/contracts";
-import { ServerConfig } from "../../config.ts";
+import { reconcileForkLedger, runForkMigrations } from "../fork/ForkMigrations.ts";
+import { restorePendingSyncRecovery } from "../../projectSync/Recovery.ts";
+import { initializeV2Database } from "../initializeV2Database.ts";
+import * as ServerConfig from "../../config.ts";
 
 // Size the -wal file is cut back to on the first commit after a WAL reset.
 export const WAL_SIZE_LIMIT_BYTES = 32 * 1024 * 1024;
@@ -23,7 +24,9 @@ const setup = Layer.effectDiscard(
     // PASSIVE checkpoints never shrink the -wal file, so it otherwise keeps its
     // largest size until the last connection closes.
     yield* sql.unsafe(`PRAGMA journal_size_limit = ${WAL_SIZE_LIMIT_BYTES};`);
+    yield* reconcileForkLedger();
     yield* runMigrations();
+    yield* runForkMigrations();
   }),
 );
 
@@ -32,15 +35,6 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  if (path.basename(dbPath) === "state.sqlite") {
-    yield* Effect.tryPromise({
-      try: () => restorePendingRecovery(path.dirname(dbPath)),
-      catch: (cause) =>
-        new ProjectSyncError({
-          message: `Could not restore the prepared recovery backup: ${String(cause)}`,
-        }),
-    });
-  }
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
 
   return Layer.provideMerge(
@@ -62,7 +56,9 @@ export const SqlitePersistenceMemory = Layer.provideMerge(
 
 export const layerConfig = Layer.unwrap(
   Effect.gen(function* () {
-    const { dbPath } = yield* ServerConfig;
+    const { dbPath } = yield* ServerConfig.ServerConfig;
+    yield* restorePendingSyncRecovery(dbPath);
+    yield* initializeV2Database(dbPath);
     return makeSqlitePersistenceLive(dbPath);
   }),
 );

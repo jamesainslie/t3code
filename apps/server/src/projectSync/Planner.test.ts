@@ -1,20 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import {
   ProjectId,
-  ThreadId,
   ProviderInstanceId,
-  MessageId,
-  type OrchestrationProject,
+  ThreadId,
+  type ProjectSyncProjectSnapshot,
+  type ProjectSyncRecord,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { decideOrchestrationCommand } from "../orchestration/decider.ts";
-import { projectEvent } from "../orchestration/projector.ts";
-import { createEmptyReadModel } from "../orchestration/projector.ts";
-import { planImport } from "./Planner.ts";
+import { planImport, planUndo, syncedThreadKey } from "./Planner.ts";
+import type { SyncSource, SyncThread } from "./Source.ts";
 
 const at = "2026-09-07T00:00:00Z";
-const project: OrchestrationProject = {
+const project: ProjectSyncProjectSnapshot = {
   id: ProjectId.make("upstream-project"),
   title: "Upstream",
   workspaceRoot: "/example",
@@ -24,69 +20,81 @@ const project: OrchestrationProject = {
   updatedAt: at,
   deletedAt: null,
 };
+const sourceOf = (projects: SyncSource["projects"], contentHash = "content"): SyncSource => ({
+  version: 2,
+  sourceHome: "/source",
+  sourceId: "source-id",
+  contentHash,
+  projects,
+});
+const record = (overrides: Partial<ProjectSyncRecord>): ProjectSyncRecord => ({
+  id: "first",
+  sourceId: "source-id",
+  sourceHome: "/source",
+  createdAt: at,
+  parentId: null,
+  undoBatchId: null,
+  contentHash: "old",
+  mappings: [],
+  visibleThreadIds: [],
+  hiddenThreadIds: [],
+  projectChanges: [],
+  ...overrides,
+});
+const conversation: SyncThread = {
+  id: ThreadId.make("upstream-thread"),
+  title: "A conversation",
+  modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+  runtimeMode: "full-access",
+  interactionMode: "default",
+  branch: null,
+  createdAt: at,
+  updatedAt: at,
+  messages: [
+    {
+      id: "upstream-message",
+      role: "user",
+      text: "Existing question",
+      attachments: [],
+      createdAt: at,
+    },
+  ],
+  activities: [],
+};
 
 it("preserves settings on a matched fork project", () => {
   const local = { ...project, id: ProjectId.make("local-project"), title: "My fork title" };
   const plan = planImport({
-    source: {
-      version: 1,
-      sourceHome: "/source",
-      sourceId: "source-id",
-      contentHash: "content",
-      projects: [{ project, threads: [], warnings: [] }],
-    },
-    snapshot: { ...createEmptyReadModel(at), projects: [local] },
+    source: sourceOf([{ project, threads: [], warnings: [] }]),
+    projects: [local],
+    threads: [],
     history: [],
     mappings: [{ sourceProjectId: project.id, projectId: local.id }],
     batchId: "batch-1",
     now: at,
   });
   expect(plan.record.mappings[0]?.projectId).toBe(local.id);
-  expect(plan.commands).toEqual([]);
+  expect(plan.steps).toEqual([]);
   expect(plan.record.projectChanges).toEqual([]);
 });
 
-it.effect("allows an explicit separate imported project at an existing workspace", () =>
-  Effect.gen(function* () {
-    const local = { ...project, id: ProjectId.make("local") };
-    const snapshot = { ...createEmptyReadModel(at), projects: [local] };
-    const plan = planImport({
-      source: {
-        version: 1,
-        sourceHome: "/source",
-        sourceId: "source",
-        contentHash: "content",
-        projects: [{ project, threads: [], warnings: [] }],
-      },
-      snapshot,
-      history: [],
-      mappings: [{ sourceProjectId: project.id, projectId: ProjectId.make("separate") }],
-      batchId: "separate",
-      now: at,
-    });
-    const events = yield* decideOrchestrationCommand({ command: plan, readModel: snapshot }).pipe(
-      Effect.provide(NodeServices.layer),
-    );
-    expect(Array.isArray(events) && events.some((event) => event.type === "project.created")).toBe(
-      true,
-    );
-  }),
-);
+it("allows an explicit separate imported project at an existing workspace", () => {
+  const plan = planImport({
+    source: sourceOf([{ project, threads: [], warnings: [] }]),
+    projects: [{ ...project, id: ProjectId.make("local") }],
+    threads: [],
+    history: [],
+    mappings: [{ sourceProjectId: project.id, projectId: ProjectId.make("separate") }],
+    batchId: "separate",
+    now: at,
+  });
+  expect(plan.steps).toMatchObject([{ type: "project.create", projectId: "separate" }]);
+});
 
 it("keeps a local title override across successive upstream setting updates", () => {
   const local = { ...project, title: "My title", autoPull: false };
   const history = [
-    {
-      id: "first",
-      sourceId: "source-id",
-      sourceHome: "/source",
-      createdAt: at,
-      parentId: null,
-      undoBatchId: null,
-      contentHash: "old",
-      mappings: [],
-      visibleThreadIds: [],
-      hiddenThreadIds: [],
+    record({
       projectChanges: [
         {
           before: null,
@@ -94,25 +102,23 @@ it("keeps a local title override across successive upstream setting updates", ()
           ownedSettings: ["title", "autoPull"],
         },
       ],
-    },
+    }),
   ];
-  const source = {
-    version: 1 as const,
-    sourceHome: "/source",
-    sourceId: "source-id",
-    contentHash: "new",
-    projects: [
+  const source = sourceOf(
+    [
       {
         project: { ...project, title: "Upstream renamed", autoPull: true },
         threads: [],
         warnings: [],
       },
     ],
-  };
+    "new",
+  );
   const mappings = [{ sourceProjectId: project.id, projectId: project.id }];
   const first = planImport({
     source,
-    snapshot: { ...createEmptyReadModel(at), projects: [local] },
+    projects: [local],
+    threads: [],
     history,
     mappings,
     batchId: "second",
@@ -122,16 +128,15 @@ it("keeps a local title override across successive upstream setting updates", ()
   expect(after.title).toBe("My title");
   expect(after.autoPull).toBe(true);
   const second = planImport({
-    source: {
-      ...source,
-      projects: [
-        {
-          ...source.projects[0]!,
-          project: { ...source.projects[0]!.project, title: "Another rename", autoPull: false },
-        },
-      ],
-    },
-    snapshot: { ...createEmptyReadModel(at), projects: [after] },
+    source: sourceOf([
+      {
+        project: { ...project, title: "Another rename", autoPull: false },
+        threads: [],
+        warnings: [],
+      },
+    ]),
+    projects: [after],
+    threads: [],
     history: [first.record, ...history],
     mappings,
     batchId: "third",
@@ -141,119 +146,137 @@ it("keeps a local title override across successive upstream setting updates", ()
 });
 
 it("preserves an explicit local setting even when its value still matches the last import", () => {
-  const history = [
-    {
-      id: "first",
-      sourceId: "source",
-      sourceHome: "/source",
-      createdAt: at,
-      parentId: null,
-      undoBatchId: null,
-      contentHash: "old",
-      mappings: [],
-      visibleThreadIds: [],
-      hiddenThreadIds: [],
-      projectChanges: [{ before: null, after: project }],
-    },
-  ];
   const plan = planImport({
-    source: {
-      version: 1,
-      sourceHome: "/source",
-      sourceId: "source",
-      contentHash: "new",
-      projects: [{ project: { ...project, title: "Renamed" }, threads: [], warnings: [] }],
-    },
-    snapshot: { ...createEmptyReadModel(at), projects: [project] },
-    history,
+    source: sourceOf(
+      [{ project: { ...project, title: "Renamed" }, threads: [], warnings: [] }],
+      "new",
+    ),
+    projects: [project],
+    threads: [],
+    history: [record({ projectChanges: [{ before: null, after: project }] })],
     mappings: [{ sourceProjectId: project.id, projectId: project.id }],
     localSettingOverrides: new Map([[project.id, new Set(["title"])]]),
     batchId: "second",
     now: at,
   });
-  expect(plan.commands).toEqual([]);
+  expect(plan.steps).toEqual([]);
 });
 
-it.effect(
-  "imports a new project and history, then plans no duplicate work on the same source",
-  () =>
-    Effect.gen(function* () {
-      const source = {
-        version: 1 as const,
-        sourceHome: "/source",
-        sourceId: "source-id",
-        contentHash: "content",
-        projects: [
-          {
-            project,
-            warnings: [],
-            threads: [
-              {
-                id: ThreadId.make("upstream-thread"),
-                projectId: project.id,
-                title: "A conversation",
-                modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
-                runtimeMode: "full-access" as const,
-                interactionMode: "default" as const,
-                branch: null,
-                worktreePath: null,
-                latestTurn: null,
-                session: null,
-                createdAt: at,
-                updatedAt: at,
-                archivedAt: null,
-                deletedAt: null,
-                settledOverride: null,
-                settledAt: null,
-                activities: [],
-                proposedPlans: [],
-                checkpoints: [],
-                pullRequests: [],
-                messages: [
-                  {
-                    id: MessageId.make("upstream-message"),
-                    role: "user" as const,
-                    text: "Existing question",
-                    turnId: null,
-                    streaming: false,
-                    createdAt: at,
-                    updatedAt: at,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-      const snapshot = createEmptyReadModel(at);
-      const mappings = [{ sourceProjectId: project.id, projectId: ProjectId.make("new-project") }];
-      const first = planImport({
-        source,
-        snapshot,
-        history: [],
-        mappings,
-        batchId: "first",
-        now: at,
-      });
-      const next = yield* Effect.gen(function* () {
-        const events = yield* decideOrchestrationCommand({ command: first, readModel: snapshot });
-        let model = snapshot;
-        for (const [index, event] of (Array.isArray(events) ? events : [events]).entries()) {
-          model = yield* projectEvent(model, { ...event, sequence: index + 1 });
-        }
-        return model;
-      }).pipe(Effect.provide(NodeServices.layer));
-      expect(next.projects[0]?.title).toBe("Upstream");
-      expect(next.threads[0]?.messages[0]?.text).toBe("Existing question");
-      expect(next.threads[0]?.archivedAt).not.toBeNull();
-      const second = planImport({
-        source,
-        snapshot: next,
-        history: [first.record],
-        mappings,
-        batchId: "second",
-        now: at,
-      });
-      expect(second.commands).toEqual([]);
+it("imports a new project and history archived, then plans no duplicate work", () => {
+  const source = sourceOf([{ project, threads: [conversation], warnings: [] }]);
+  const projectId = ProjectId.make("new-project");
+  const mappings = [{ sourceProjectId: project.id, projectId }];
+  const first = planImport({
+    source,
+    projects: [],
+    threads: [],
+    history: [],
+    mappings,
+    batchId: "first",
+    now: at,
+  });
+  expect(first.steps.map((step) => step.type)).toEqual([
+    "project.create",
+    "thread.import",
+    "thread.archive",
+  ]);
+  const threadId = first.record.visibleThreadIds[0]!;
+  expect(threadId.startsWith("t3sync-")).toBe(true);
+  const second = planImport({
+    source,
+    projects: [{ ...project, id: projectId }],
+    threads: [{ id: threadId, projectId, deletedAt: null, archivedAt: at, settledOverride: null }],
+    history: [first.record],
+    mappings,
+    batchId: "second",
+    now: at,
+  });
+  expect(second.steps).toEqual([]);
+});
+
+it("replaces a changed conversation and carries the user's organization to the new version", () => {
+  const projectId = ProjectId.make("new-project");
+  const mappings = [{ sourceProjectId: project.id, projectId }];
+  const first = planImport({
+    source: sourceOf([{ project, threads: [conversation], warnings: [] }]),
+    projects: [],
+    threads: [],
+    history: [],
+    mappings,
+    batchId: "first",
+    now: at,
+  });
+  const oldId = first.record.visibleThreadIds[0]!;
+  const next = planImport({
+    source: sourceOf([{ project, threads: [{ ...conversation, title: "Renamed" }], warnings: [] }]),
+    projects: [{ ...project, id: projectId }],
+    threads: [
+      { id: oldId, projectId, deletedAt: null, archivedAt: null, settledOverride: "active" },
+    ],
+    history: [first.record],
+    mappings,
+    batchId: "second",
+    now: at,
+    localThreadManagement: new Map([
+      [syncedThreadKey(oldId), { archived: false, settledOverride: "active" as const }],
+    ]),
+  });
+  const newId = next.record.visibleThreadIds[0]!;
+  expect(syncedThreadKey(newId)).toBe(syncedThreadKey(oldId));
+  expect(next.record.hiddenThreadIds).toEqual([oldId]);
+  expect(next.steps.map((step) => step.type)).toEqual([
+    "thread.visibility",
+    "thread.import",
+    "thread.unsettle",
+  ]);
+});
+
+it("undoes a batch: hides its versions, restores what it hid, drops an untouched new project", () => {
+  const created = ProjectId.make("created");
+  const visible = ThreadId.make("t3sync-a-b-new");
+  const hidden = ThreadId.make("t3sync-a-c-old");
+  const plan = planUndo({
+    active: record({
+      id: "batch",
+      visibleThreadIds: [visible],
+      hiddenThreadIds: [hidden],
+      projectChanges: [{ before: null, after: { ...project, id: created } }],
     }),
-);
+    projects: [{ ...project, id: created }],
+    threads: [
+      { id: hidden, projectId: created, deletedAt: at, archivedAt: at, settledOverride: null },
+    ],
+    localThreadProjects: new Set(),
+    localSettingOverrides: new Map(),
+    localThreadManagement: new Map(),
+    batchId: "undo",
+    now: at,
+    schedule: { enabled: false, hour: 3, timezone: "UTC" },
+  });
+  expect(plan.steps).toEqual([
+    { type: "thread.visibility", threadId: visible, visible: false },
+    { type: "thread.visibility", threadId: hidden, visible: true },
+    { type: "project.delete", projectId: created },
+  ]);
+  expect(plan.record).toMatchObject({
+    undoBatchId: "batch",
+    visibleThreadIds: [hidden],
+    hiddenThreadIds: [visible],
+  });
+});
+
+it("keeps a new project on undo once the user has made it their own", () => {
+  const created = ProjectId.make("created");
+  const plan = planUndo({
+    active: record({ projectChanges: [{ before: null, after: { ...project, id: created } }] }),
+    projects: [{ ...project, id: created }],
+    threads: [],
+    localThreadProjects: new Set([created]),
+    localSettingOverrides: new Map(),
+    localThreadManagement: new Map(),
+    batchId: "undo",
+    now: at,
+    schedule: { enabled: false, hour: 3, timezone: "UTC" },
+  });
+  expect(plan.steps).toEqual([]);
+});
