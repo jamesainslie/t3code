@@ -28,7 +28,13 @@ line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
 | Move to the newest release                       | `t3f update`                                               |
 | Remove it again                                  | `t3f uninstall`                                            |
 
-Run `t3f --help` for the full reference.
+Run `t3f help` or `t3f --help` for the full reference. To start in a new working
+directory, use an explicit path such as `t3f ./my-project`. A bare directory name
+is accepted only if it already exists.
+
+If `t3f` or `t3f start` reports an already running server, connect to that server
+instead. Stop it before starting a replacement, or use a different `--base-dir`
+for an independent server.
 
 To try it once without installing, run `npx @jamesainslie/t3code@latest` instead
 (needs Node.js for `npx`).

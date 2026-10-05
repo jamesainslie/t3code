@@ -37,8 +37,14 @@ const SEARCH_MATCH_LIMIT = 50;
 
 const readFailed = (cause: unknown) => new ThreadHistoryReadFailedError({ cause });
 
+/** The calling thread. History is read relative to it, so a caller outside a thread has none. */
 const requireThreadHistory = McpInvocationContext.requireMcpCapability("thread-history").pipe(
   Effect.mapError(() => new ThreadHistoryOffError()),
+  Effect.flatMap((scope) =>
+    scope.thread === undefined
+      ? Effect.fail(new ThreadHistoryOffError())
+      : Effect.succeed({ threadId: scope.thread.threadId }),
+  ),
 );
 
 const make = Effect.gen(function* () {

@@ -26,11 +26,15 @@ const invocation = (
   capabilities: ReadonlyArray<McpInvocationContext.McpCapability>,
 ): McpInvocationContext.McpInvocationScope => ({
   environmentId: EnvironmentId.make("environment-1"),
-  threadId: THREAD_ID,
-  providerSessionId: "provider-session-1",
-  providerInstanceId: ProviderInstanceId.make("codex"),
   capabilities: new Set(capabilities),
   issuedAt: 1,
+  requestNamespace: "test",
+  thread: {
+    threadId: THREAD_ID,
+    providerSessionId: "provider-session-1",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
 });
 
 const thread = { id: THREAD_ID, deletedAt: null } as unknown as OrchestrationV2ThreadShell;

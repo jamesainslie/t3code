@@ -33,7 +33,14 @@ const make = Effect.gen(function* () {
   const threadComments = Effect.fn("DocumentCommentsToolkit.threadComments")(function* (
     Failure: typeof DocumentCommentListFailedError | typeof DocumentCommentResolveFailedError,
   ) {
-    const scope = yield* McpInvocationContext.requireMcpCapability("document-comments");
+    const invocation = yield* McpInvocationContext.requireMcpCapability("document-comments");
+    // Comments belong to the calling thread; a caller outside a thread has none.
+    if (invocation.thread === undefined) {
+      return yield* new Failure({
+        cause: "Document comments are read from the calling T3 thread.",
+      });
+    }
+    const scope = { threadId: invocation.thread.threadId };
     const thread = yield* orchestrator
       .getThreadShell(scope.threadId)
       .pipe(Effect.mapError((cause) => new Failure({ cause })));
