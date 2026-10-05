@@ -57,7 +57,8 @@ export function questionLeadIn(
         item.providerTurnId === request.providerTurnId &&
         item.ordinal < request.ordinal,
     )
-    .toSorted((a, b) => a.ordinal - b.ordinal);
+    // filter returns a fresh array; Hermes (mobile) has no toSorted.
+    .sort((a, b) => a.ordinal - b.ordinal);
   const thoughts: string[] = [];
   for (let index = earlier.length - 1; index >= 0; index -= 1) {
     const item = earlier[index]!;
