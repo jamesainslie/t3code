@@ -1247,7 +1247,12 @@ export function ThreadWorkGroupToggle(props: {
                 themeAppearance={props.themeAppearance}
               />
             </WorkLogIconSlot>
-            <WorkLogLabel key={props.rowSizing.textSizeKey}>{props.summary}</WorkLogLabel>
+            <WorkLogLabel
+              key={props.rowSizing.textSizeKey}
+              tone={props.summaryKind === "reasoning" ? "thought" : "default"}
+            >
+              {props.summary}
+            </WorkLogLabel>
           </>
         )}
         <ThreadDisclosureChevron

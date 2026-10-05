@@ -268,6 +268,13 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
             run to continue.
           </Text>
         ) : null}
+        {props.pendingUserInput.leadIn ? (
+          // Fork: the agent's reasoning right before it asked, as plain text
+          // like the feed's thought previews.
+          <Text className="font-sans text-sm italic leading-5 text-foreground-muted">
+            {props.pendingUserInput.leadIn.replace(/(\*\*|__)(.+?)\1/gu, "$2")}
+          </Text>
+        ) : null}
         {props.pendingUserInput.questions.map((question) => {
           const draft = props.drafts[question.id];
           return (
