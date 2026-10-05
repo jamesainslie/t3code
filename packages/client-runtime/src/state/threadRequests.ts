@@ -7,6 +7,7 @@ import type {
   RuntimeRequestId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { questionLeadIn } from "../work-log/thinking.ts";
 
 export interface ThreadPendingApproval {
   readonly requestId: RuntimeRequestId;
@@ -34,6 +35,8 @@ export interface ThreadPendingUserInput {
   readonly responseCapability: OrchestrationV2RuntimeRequest["responseCapability"]["type"];
   readonly responseMode?: "message";
   readonly dismissible: boolean;
+  /** Fork: the agent's reasoning right before it asked (see work-log/thinking). */
+  readonly leadIn?: string;
 }
 
 export interface PendingThreadRequests {
@@ -57,7 +60,9 @@ export function derivePendingThreadRequests(
           candidate.type === "user_input_request" && candidate.requestId === request.id,
       );
       if (item === undefined || item.type !== "user_input_request") continue;
+      const leadIn = questionLeadIn(projection.turnItems, item);
       userInputs.push({
+        ...(leadIn === undefined ? {} : { leadIn }),
         requestId: request.id,
         createdAt: DateTime.formatIso(request.createdAt),
         questions: item.questions.map((question) => ({

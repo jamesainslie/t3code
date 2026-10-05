@@ -2205,7 +2205,9 @@ describe("deriveMessagesTimelineRows", () => {
     expect(shape(expanded)).toEqual([
       "user:launch",
       "fold:Worked for 8.0s",
-      "work-toggle",
+      // Fork: the thought gets its own row instead of joining the command's group.
+      "work",
+      "work",
       "assistant:launch-answer",
       "user:resume",
       "fold:Worked for 8.0s",
