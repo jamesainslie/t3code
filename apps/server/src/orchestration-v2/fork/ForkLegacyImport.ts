@@ -69,7 +69,7 @@ export function rewriteThreadContextRecords(
   return changed ? JSON.stringify({ ...context, records: rewritten }) : null;
 }
 
-export const prepareContextRecords = Effect.fn("ForkLegacyImport.prepareContextRecords")(function* (
+const prepareContextRecords = Effect.fn("ForkLegacyImport.prepareContextRecords")(function* (
   environmentId: EnvironmentId,
 ) {
   const sql = yield* SqlClient.SqlClient;
@@ -104,7 +104,7 @@ interface ForkFieldRow {
   readonly payload_json: string;
 }
 
-export const importForkFields = Effect.gen(function* () {
+const importForkFields = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const eventSink = yield* EventSink.EventSinkV2;
   const tables = yield* sql<{ readonly name: string }>`

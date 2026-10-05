@@ -12,7 +12,7 @@ import type { McpCapability } from "../../mcp/McpInvocationContext.ts";
 const FORK_CAPABILITIES: ReadonlyArray<McpCapability> = ["thread-history", "thread-search"];
 
 /** Reading other threads needs any level above off; searching needs project or environment. */
-export function threadHistoryCapabilities(
+function threadHistoryCapabilities(
   settings: ServerSettings,
   projectId: Parameters<typeof resolveProjectSettings>[1],
 ): ReadonlyArray<McpCapability> {

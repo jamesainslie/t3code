@@ -120,7 +120,7 @@ export function dependencySatisfiedReason(
   }
 }
 
-export class ForkThreadReactor extends Context.Service<
+class ForkThreadReactor extends Context.Service<
   ForkThreadReactor,
   { readonly start: () => Effect.Effect<void, never, Scope.Scope | Scheduler> }
 >()("t3/orchestration-v2/fork/ForkThreadReactor") {}
@@ -265,8 +265,6 @@ export const make = Effect.gen(function* () {
 
   return ForkThreadReactor.of({ start });
 });
-
-export const layer = Layer.effect(ForkThreadReactor, make);
 
 /** Starts the reactor for the server's lifetime. */
 export const workerLive = Layer.effectDiscard(Effect.flatMap(make, (reactor) => reactor.start()));

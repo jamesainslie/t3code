@@ -218,7 +218,7 @@ export function collectCitations(text: string) {
 }
 
 /** Titles and previews include the selected text and user comment without Markdown escaping. */
-export function citationsToPlainText(prompt: string): string {
+export function assistantCitationsToPlainText(prompt: string): string {
   return prompt.replace(CITATION_LINK, (source: string, label: string, href: string) => {
     const citation = parseLabeledCitation(label, href);
     if (!citation) return source;
@@ -323,10 +323,3 @@ export function renderCitationsAsText(prompt: string): string {
   }
   return text + prompt.slice(cursor);
 }
-
-// Upstream's names for the assistant-only versions. The fork's functions handle
-// document citations too, so upstream call sites keep working unchanged.
-export const collectAssistantCitations = collectCitations;
-export const assistantCitationsToPlainText = citationsToPlainText;
-export const expandAssistantCitationsForProvider = expandCitationsForProvider;
-export const renderAssistantCitationsAsText = renderCitationsAsText;

@@ -156,7 +156,7 @@ interface OwnedProcess {
  * code; anything else waiting on a page is a browser step whose return URL, or the code the
  * provider's page shows, can be pasted back. The provider keeps the credentials.
  */
-export function withAuthInteraction(state: ProviderAuthState): ProviderAuthState {
+function withAuthInteraction(state: ProviderAuthState): ProviderAuthState {
   const waitingOnPage =
     state.phase === "waiting" && state.flowId !== null && state.authorizationUrl !== null;
   return {

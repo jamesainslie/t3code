@@ -27,7 +27,7 @@ import ProjectionThreadsSnoozeReminder from "./migrations/004_ProjectionThreadsS
 import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsContinuedFrom.ts";
 import ProjectSyncRecords from "./migrations/006_ProjectSyncRecords.ts";
 
-export const FORK_MIGRATIONS_TABLE = "fork_sql_migrations";
+const FORK_MIGRATIONS_TABLE = "fork_sql_migrations";
 
 /**
  * The fork's schema changes. Every one checks before it alters, so a database

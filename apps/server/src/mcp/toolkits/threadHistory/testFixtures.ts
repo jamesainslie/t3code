@@ -203,7 +203,7 @@ export const proposedPlan = (
   markdown,
 });
 
-export function makeAppThread(
+function makeAppThread(
   overrides: Partial<OrchestrationV2AppThread> = {},
 ): OrchestrationV2AppThread {
   return {

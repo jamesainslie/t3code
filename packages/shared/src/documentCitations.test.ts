@@ -7,7 +7,7 @@ import {
   type DocumentCitation,
 } from "@t3tools/contracts";
 import {
-  citationsToPlainText,
+  assistantCitationsToPlainText,
   collectCitations,
   expandCitationsForProvider,
   formatDocumentCitationHref,
@@ -134,7 +134,7 @@ describe("document citation references", () => {
   it("uses the quote text in titles and names the file in native clients", () => {
     const marker = serializeCitation({ ...document, comment: "Why?" });
 
-    expect(citationsToPlainText(marker)).toBe(`${document.text}\nComment: Why?`);
+    expect(assistantCitationsToPlainText(marker)).toBe(`${document.text}\nComment: Why?`);
     const rendered = renderCitationsAsText(marker);
     expect(rendered).toContain(
       "> Quote from rfcs/RFC\\-20260923\\-1 titan \\(v2\\)/storage &amp; state\\.md, lines 16 to 18:",

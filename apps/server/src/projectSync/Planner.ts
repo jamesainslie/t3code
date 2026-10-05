@@ -37,7 +37,7 @@ const settingsKeys = [
 ] as const;
 export type ProjectSettings = ReturnType<typeof projectSettings>;
 
-export function projectSettings(project: ProjectSyncProjectSnapshot) {
+function projectSettings(project: ProjectSyncProjectSnapshot) {
   return {
     title: project.title,
     defaultModelSelection: project.defaultModelSelection,
@@ -79,7 +79,7 @@ export interface SyncPlan {
 }
 
 /** Reapplies local organization when replacing or restoring an imported version. */
-export function planThreadManagement(
+function planThreadManagement(
   threadId: ThreadId,
   existing: Pick<SyncedThreadState, "archivedAt" | "settledOverride"> | undefined,
   local: SyncedThreadManagement | undefined,
@@ -124,7 +124,7 @@ function activeHistory(history: ReadonlyArray<ProjectSyncRecord>): ProjectSyncRe
 }
 
 /** The content-addressed id of one imported version of a source conversation. */
-export function syncedThreadId(sourceId: string, thread: SyncThread, projectId: ProjectId) {
+function syncedThreadId(sourceId: string, thread: SyncThread, projectId: ProjectId) {
   const prefix = `t3sync-${sourceId.slice(0, 12)}-${contentHash(thread.id).slice(0, 12)}-`;
   return {
     prefix,

@@ -9,7 +9,7 @@ import {
   type AssistantCitation,
 } from "@t3tools/contracts";
 import {
-  citationsToPlainText,
+  assistantCitationsToPlainText,
   collectCitations,
   expandCitationsForProvider,
   formatAssistantCitationHref,
@@ -109,7 +109,7 @@ describe("assistant citation references", () => {
     expect(parseAssistantCitationHref(href)).toBeNull();
     const prompt = `[Assistant quote](${href})`;
     expect(collectCitations(prompt)).toEqual([]);
-    expect(citationsToPlainText(prompt)).toBe(prompt);
+    expect(assistantCitationsToPlainText(prompt)).toBe(prompt);
     expect(expandCitationsForProvider(prompt)).toBe(prompt);
     expect(renderCitationsAsText(prompt)).toBe(prompt);
   });
@@ -143,7 +143,7 @@ describe("assistant citation references", () => {
 
     expect(parseAssistantCitationHref(oversizedHref)).toBeNull();
     expect(collectCitations(prompt)).toEqual([]);
-    expect(citationsToPlainText(prompt)).toBe(prompt);
+    expect(assistantCitationsToPlainText(prompt)).toBe(prompt);
     expect(expandCitationsForProvider(prompt)).toBe(prompt);
     expect(renderCitationsAsText(prompt)).toBe(prompt);
   });
@@ -172,7 +172,7 @@ describe("assistant citation references", () => {
     expect(readProviderContext(expandCitationsForProvider(marker))).toEqual([
       { id: "assistant-quote-1", citation: largeCitation },
     ]);
-    expect(citationsToPlainText(marker)).toBe(
+    expect(assistantCitationsToPlainText(marker)).toBe(
       `${largeCitation.text}\nComment: ${largeCitation.comment}`,
     );
     expect(renderCitationsAsText(marker)).toBe(
@@ -278,7 +278,7 @@ describe("assistant citation references", () => {
     const selected = { ...citation, text: ` \t${citation.text}\n ` };
     const prompt = `Before\n${serializeCitation(selected)}\tAfter`;
 
-    expect(citationsToPlainText(prompt)).toBe(`Before\n${selected.text}\tAfter`);
+    expect(assistantCitationsToPlainText(prompt)).toBe(`Before\n${selected.text}\tAfter`);
   });
 
   it("includes bound comments in plain-text titles and stash previews without escaping", () => {
@@ -286,7 +286,7 @@ describe("assistant citation references", () => {
     const marker = serializeCitation(commented);
     const prompt = `Before ${marker}\n${marker} After`;
 
-    expect(citationsToPlainText(prompt)).toBe(
+    expect(assistantCitationsToPlainText(prompt)).toBe(
       `Before ${citation.text}\nComment: ${commented.comment}\n${citation.text}\nComment: ${commented.comment} After`,
     );
   });
@@ -296,15 +296,17 @@ describe("assistant citation references", () => {
     const marker = serializeCitation(citation);
     const prompt = `${marker}${serializeCitation(second)}\n${marker}`;
 
-    expect(citationsToPlainText(prompt)).toBe(`${citation.text}${second.text}\n${citation.text}`);
+    expect(assistantCitationsToPlainText(prompt)).toBe(
+      `${citation.text}${second.text}\n${citation.text}`,
+    );
   });
 
   it("leaves ordinary text, bare citation URLs, and noncanonical labels unchanged", () => {
     const href = formatAssistantCitationHref(citation);
     const prompt = `  Ordinary *text*\n${href} [Other quote](${href})\t`;
 
-    expect(citationsToPlainText("")).toBe("");
-    expect(citationsToPlainText(prompt)).toBe(prompt);
+    expect(assistantCitationsToPlainText("")).toBe("");
+    expect(assistantCitationsToPlainText(prompt)).toBe(prompt);
   });
 
   it("shows the full quote in clients without source navigation and leaves regular messages alone", () => {
