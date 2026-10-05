@@ -9,6 +9,7 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as ForkLegacyImport from "./orchestration-v2/fork/ForkLegacyImport.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
@@ -507,11 +508,15 @@ const make = (options?: StartupOptions) =>
       const { recovery, bootstrap: bootstrapTargets } = yield* runOrderedV2StartupPhases({
         importLegacyShells: runStartupPhase(
           "orchestration-v2.legacy-v1.import-shells",
-          legacyV1ThreadImporter.reconcileShells.pipe(
-            Effect.tap((summary) =>
-              summary.importedThreadCount === 0
-                ? Effect.void
-                : Effect.logInfo("Imported legacy v1 thread shells", summary),
+          // Fork: fork thread references and fields cross the cutover with the shells.
+          ForkLegacyImport.aroundLegacyImport(
+            serverEnvironment.getEnvironmentId,
+            legacyV1ThreadImporter.reconcileShells.pipe(
+              Effect.tap((summary) =>
+                summary.importedThreadCount === 0
+                  ? Effect.void
+                  : Effect.logInfo("Imported legacy v1 thread shells", summary),
+              ),
             ),
           ),
         ),
