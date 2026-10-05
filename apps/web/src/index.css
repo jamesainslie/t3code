@@ -2044,17 +2044,15 @@ code {
   border-bottom: 1px solid color-mix(in srgb, var(--contrast-border) 60%, transparent);
 }
 
-/* Collapsed (default): single-line cells truncate so arbitrary chat content
-   cannot blow the column out; the footer toggle expands cells to wrap. */
-.chat-markdown .chat-markdown-table-container[data-expanded="false"] th,
-.chat-markdown .chat-markdown-table-container[data-expanded="false"] td {
-  overflow: hidden;
-  max-width: 24rem;
-  text-overflow: ellipsis;
+/* The footer toggle chooses how long cells fit. Unwrapped cells keep one line
+   at full width and the table scrolls sideways; wrapped cells fold within a
+   readable width. Neither cuts content off. */
+.chat-markdown .chat-markdown-table-container[data-wrap="false"] th,
+.chat-markdown .chat-markdown-table-container[data-wrap="false"] td {
   white-space: nowrap;
 }
 
-.chat-markdown .chat-markdown-table-container[data-expanded="true"] td {
+.chat-markdown .chat-markdown-table-container[data-wrap="true"] td {
   max-width: 24rem;
   overflow-wrap: anywhere;
 }

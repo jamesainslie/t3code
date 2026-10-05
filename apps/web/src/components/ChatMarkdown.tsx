@@ -25,7 +25,7 @@ import {
   WrapTextIcon,
   type LucideIcon,
 } from "lucide-react";
-import { Check, Copy, Maximize2, Minimize2 } from "lucide";
+import { Check, Copy } from "lucide";
 import type {
   AssetResource,
   EnvironmentId,
@@ -789,38 +789,18 @@ function readInitialWordWrapSetting(): boolean {
   return getClientSettings().wordWrap;
 }
 
+/**
+ * Wrapped cells fold long content within a readable width. Unwrapped cells stay on one
+ * line at full width and the table scrolls sideways, so nothing is cut off either way.
+ * Starts from the word wrap setting, like code blocks.
+ */
 function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const tableRef = useRef<HTMLTableElement | null>(null);
-  const [expanded, setExpanded] = useState(readInitialWordWrapSetting);
+  const [wrapped, setWrapped] = useState(readInitialWordWrapSetting);
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const expandLabel = expanded ? "Collapse table cells" : "Expand table cells";
+  const wrapLabel = wrapped ? "Disable line wrap" : "Wrap lines";
   const copyLabel = copied ? "Copied" : "Copy table";
-
-  function toggleExpanded() {
-    const table = tableRef.current;
-    if (!table) return;
-
-    if (!expanded) {
-      const rows = [...table.rows];
-      const columnWidths = rows.reduce<number[]>((widths, row) => {
-        [...row.cells].forEach((cell, columnIndex) => {
-          widths[columnIndex] = Math.max(
-            widths[columnIndex] ?? 0,
-            cell.getBoundingClientRect().width,
-          );
-        });
-        return widths;
-      }, []);
-
-      [...(table.tHead?.rows[0]?.cells ?? [])].forEach((cell, columnIndex) => {
-        cell.style.minWidth = `${columnWidths[columnIndex] ?? cell.getBoundingClientRect().width}px`;
-      });
-    }
-
-    setExpanded((value) => !value);
-  }
 
   const handleCopy = useCallback((format: "markdown" | "csv") => {
     const table = containerRef.current?.querySelector("table");
@@ -862,12 +842,10 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
     <div
       ref={containerRef}
       className="chat-markdown-table-container"
-      data-expanded={expanded ? "true" : "false"}
+      data-wrap={wrapped ? "true" : "false"}
     >
       <ScrollArea radius="none" chainVerticalScroll scrollFade className="w-full max-w-full">
-        <table ref={tableRef} {...props}>
-          {children}
-        </table>
+        <table {...props}>{children}</table>
       </ScrollArea>
       <div className="mt-0.5 flex items-center justify-between select-none">
         <Tooltip>
@@ -875,17 +853,17 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
             render={
               <Button
                 type="button"
-                variant={expanded ? "secondary" : "ghost-muted"}
+                variant={wrapped ? "secondary" : "ghost-muted"}
                 size="icon-xs"
-                aria-pressed={expanded}
-                onClick={toggleExpanded}
-                aria-label={expandLabel}
+                aria-pressed={wrapped}
+                onClick={() => setWrapped((value) => !value)}
+                aria-label={wrapLabel}
               />
             }
           >
-            <MorphIcon className="size-3" icon={expanded ? Minimize2 : Maximize2} />
+            <WrapTextIcon className="size-3" />
           </TooltipTrigger>
-          <TooltipPopup side="top">{expandLabel}</TooltipPopup>
+          <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
         </Tooltip>
         <Menu>
           <Tooltip>
