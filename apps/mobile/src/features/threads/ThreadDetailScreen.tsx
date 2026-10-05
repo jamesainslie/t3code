@@ -983,6 +983,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     composerEditorRef.current?.blur();
   }, []);
 
+  // Fork: `t3sync-` threads mirror a conversation from another tool. They
+  // are read-only here, so the composer gives way to SyncedConversation.
+  const isSyncedConversation = props.selectedThread.id.startsWith("t3sync-");
   const handleRepairMermaid = useCallback(
     (prompt: string) => {
       const draft = draftMessageRef.current;
@@ -1119,10 +1122,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               onEndFollowEnabledChange={setEndFollowEnabled}
               skills={selectedProviderSkills}
               onUseArtifactTemplate={handleUseArtifactTemplate}
-              onRepairMermaid={
-                props.selectedThread.id.startsWith("t3sync-") ? undefined : handleRepairMermaid
-              }
-              loadEarlier={props.loadEarlier ?? null}
+              onRepairMermaid={isSyncedConversation ? undefined : handleRepairMermaid}
             />
           </RenderErrorBoundary>
         </View>
@@ -1321,6 +1321,12 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       }
                     />
                   </View>
+                ) : isSyncedConversation ? (
+                  <SyncedConversation
+                    environmentId={props.environmentId}
+                    threadId={props.selectedThread.id}
+                    bottomInset={composerBottomInset}
+                  />
                 ) : (
                   <>
                     <ThreadComposer

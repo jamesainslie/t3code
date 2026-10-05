@@ -9,7 +9,7 @@ import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
-import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
@@ -303,6 +303,7 @@ function ThreadNavigationSidebarPane(
     snoozedShelfExpanded,
     workingShelfEnabled,
     workingShelfExpanded,
+    toggleBlockedShelf,
     toggleSettledShelf,
     toggleSnoozedShelf,
     toggleWorkingShelf,
@@ -332,6 +333,11 @@ function ThreadNavigationSidebarPane(
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
     titleRegenerationEnvironmentIds,
+    // Fork capabilities.
+    snoozeReminderEnvironmentIds,
+    dependencyEnvironmentIds,
+    highlightEnvironmentIds,
+    continuationServerByEnvironmentId,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
   const pendingOrder = usePendingThreadOrder(nowMinute, snoozeWakeTick);
@@ -371,6 +377,7 @@ function ThreadNavigationSidebarPane(
     queuedThreadKeys,
     settlementEnvironmentIds,
     snoozeEnvironmentIds,
+    dependencyEnvironmentIds,
     nowMinute,
     snoozeWakeTick,
   ]);
@@ -392,6 +399,7 @@ function ThreadNavigationSidebarPane(
       workingShelfEnabled,
       workingShelfExpanded,
       inboxReturnAt: threadListInboxReturns.returnedAt,
+      blockedShelfExpanded,
       snoozedShelfExpanded,
       settledShelfExpanded,
       selectedThreadKey: props.selectedThreadKey ?? null,
@@ -455,6 +463,9 @@ function ThreadNavigationSidebarPane(
       workingCount: threadListV2Layout.workingCount,
       workingShelfExpanded,
       workingShelfHeaderIndex: threadListV2Layout.workingShelfHeaderIndex,
+      blockedCount: threadListV2Layout.blockedCount,
+      blockedShelfExpanded,
+      blockedShelfHeaderIndex: threadListV2Layout.blockedShelfHeaderIndex,
       snoozedCount: threadListV2Layout.snoozedCount,
       snoozedShelfExpanded,
       snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
@@ -706,7 +717,7 @@ function ThreadNavigationSidebarPane(
               onNewThreadOnBranch={props.onNewThreadOnBranch}
               onContinueInNewThread={props.onContinueInNewThread}
               continueSupported={canContinueThread(
-                serverConfigs.get(thread.environmentId),
+                continuationServerByEnvironmentId.get(thread.environmentId),
                 thread.projectId,
               )}
               thread={thread}
@@ -789,6 +800,16 @@ function ThreadNavigationSidebarPane(
               pane="sidebar"
             />
           );
+        case "v2-blocked-shelf":
+          return (
+            <ThreadListV2BlockedShelfHeader
+              count={item.count}
+              disabled={item.disabled}
+              expanded={item.expanded}
+              onToggle={toggleBlockedShelf}
+              pane="sidebar"
+            />
+          );
         case "v2-snoozed-shelf":
           return (
             <ThreadListV2SnoozedShelfHeader
@@ -859,6 +880,10 @@ function ThreadNavigationSidebarPane(
       snoozeEnvironmentIds,
       snoozeReminderEnvironmentIds,
       dependencyEnvironmentIds,
+      continuationServerByEnvironmentId,
+      releaseThreadDependencies,
+      props.onAddThreadDependency,
+      props.onNewThreadToUnblock,
       snoozeThread,
       toggleSettledShelf,
       toggleBlockedShelf,

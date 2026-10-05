@@ -11,6 +11,7 @@ import {
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
 import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { canContinueThread } from "@t3tools/shared/threadContextReference";
 import { useAtomValue } from "@effect/atom-react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -493,6 +494,7 @@ export function HomeScreen(props: HomeScreenProps) {
     snoozedShelfExpanded,
     workingShelfEnabled,
     workingShelfExpanded,
+    toggleBlockedShelf,
     toggleSettledShelf,
     toggleSnoozedShelf,
     toggleWorkingShelf,
@@ -524,6 +526,11 @@ export function HomeScreen(props: HomeScreenProps) {
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
     titleRegenerationEnvironmentIds,
+    // Fork capabilities.
+    snoozeReminderEnvironmentIds,
+    dependencyEnvironmentIds,
+    highlightEnvironmentIds,
+    continuationServerByEnvironmentId,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
   const pendingOrder = usePendingThreadOrder(nowMinute, snoozeWakeTick);
@@ -563,6 +570,7 @@ export function HomeScreen(props: HomeScreenProps) {
     queuedThreadKeys,
     settlementEnvironmentIds,
     snoozeEnvironmentIds,
+    dependencyEnvironmentIds,
     nowMinute,
     snoozeWakeTick,
   ]);
@@ -586,6 +594,7 @@ export function HomeScreen(props: HomeScreenProps) {
       workingShelfEnabled,
       workingShelfExpanded,
       inboxReturnAt: threadListInboxReturns.returnedAt,
+      blockedShelfExpanded,
       snoozedShelfExpanded,
       settledShelfExpanded,
       selectedThreadKey: null,
@@ -652,6 +661,9 @@ export function HomeScreen(props: HomeScreenProps) {
         workingCount: threadListV2Layout.workingCount,
         workingShelfExpanded,
         workingShelfHeaderIndex: threadListV2Layout.workingShelfHeaderIndex,
+        blockedCount: threadListV2Layout.blockedCount,
+        blockedShelfExpanded,
+        blockedShelfHeaderIndex: threadListV2Layout.blockedShelfHeaderIndex,
         snoozedCount: threadListV2Layout.snoozedCount,
         snoozedShelfExpanded,
         snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
@@ -720,6 +732,16 @@ export function HomeScreen(props: HomeScreenProps) {
           />
         );
       }
+      if (item.type === "v2-blocked-shelf") {
+        return (
+          <ThreadListV2BlockedShelfHeader
+            count={item.count}
+            disabled={item.disabled}
+            expanded={item.expanded}
+            onToggle={toggleBlockedShelf}
+          />
+        );
+      }
       if (item.type === "v2-snoozed-shelf") {
         return (
           <ThreadListV2SnoozedShelfHeader
@@ -746,7 +768,7 @@ export function HomeScreen(props: HomeScreenProps) {
           onNewThreadOnBranch={props.onNewThreadOnBranch}
           onContinueInNewThread={props.onContinueInNewThread}
           continueSupported={canContinueThread(
-            serverConfigs.get(thread.environmentId),
+            continuationServerByEnvironmentId.get(thread.environmentId),
             thread.projectId,
           )}
           thread={thread}
@@ -857,6 +879,8 @@ export function HomeScreen(props: HomeScreenProps) {
       snoozeEnvironmentIds,
       snoozeReminderEnvironmentIds,
       dependencyEnvironmentIds,
+      highlightEnvironmentIds,
+      continuationServerByEnvironmentId,
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
       toggleBlockedShelf,

@@ -165,6 +165,7 @@ import {
   threadFeedRunIsUnsettled,
   isContextCompactionActivityGroup,
   isContextHandoffActivityGroup,
+  snoozeReminderNotice,
   type ThreadFeedEntry,
   type ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
@@ -196,8 +197,6 @@ import {
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { usePreparedConnection } from "../../state/session";
 import { useThreadSelection } from "../../state/use-thread-selection";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { environmentThreadShells } from "../../state/threads";
 import { composerDocumentAttachmentRecord } from "../../lib/composerContext";
 import * as Option from "effect/Option";
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -906,7 +905,8 @@ interface MarkdownLinkHandlers {
 
 const AssistantMarkdownContent = memo(function AssistantMarkdownContent(props: {
   readonly markdown: string;
-  readonly isStreaming: boolean;
+  /** Fork: an incomplete mermaid fence renders as pending while streaming. */
+  readonly isStreaming?: boolean;
   readonly onRepairMermaid?: ((prompt: string) => void) | undefined;
   readonly markdownStyles: MarkdownStyleSet;
   readonly linkHandlers: MarkdownLinkHandlers;
@@ -947,7 +947,7 @@ const AssistantMarkdownContent = memo(function AssistantMarkdownContent(props: {
           <MermaidDiagram
             key={`mermaid:${segment.sourceOffset + part.sourceOffset}`}
             source={part.source}
-            pending={props.isStreaming && !part.complete}
+            pending={props.isStreaming === true && !part.complete}
             onRepair={props.onRepairMermaid}
           />
         );
@@ -1651,24 +1651,32 @@ function renderFeedEntry(
     );
   }
 
-  if (entry.type === "activity-group" && isSnoozeReminderActivityGroup(entry)) {
-    const reminder = entry.activities[0]!.workEntry.snoozeReminder!;
-    const snoozedAtLabel = new Date(reminder.snoozedAt).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+  // Fork: a delivered snooze note renders as its own card.
+  const reminder = entry.type === "activity-group" ? snoozeReminderNotice(entry) : null;
+  if (reminder !== null) {
+    const snoozedAtLabel =
+      reminder.snoozedAt === null
+        ? null
+        : new Date(reminder.snoozedAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
     return (
       <View
         accessible
-        accessibilityLabel={`Reminder from ${snoozedAtLabel}: ${reminder.reminder}`}
+        accessibilityLabel={
+          snoozedAtLabel === null
+            ? `Reminder: ${reminder.reminder}`
+            : `Reminder from ${snoozedAtLabel}: ${reminder.reminder}`
+        }
         className="mb-3 gap-1 rounded-xl bg-subtle px-3 py-2"
       >
         <View className="flex-row items-center gap-1.5">
           <SymbolView name="clock" size={12} tintColor={iconSubtleColor} type="monochrome" />
           <Text className="font-t3-medium text-xs text-foreground-muted">
-            Reminder · snoozed {snoozedAtLabel}
+            {snoozedAtLabel === null ? "Reminder" : `Reminder · snoozed ${snoozedAtLabel}`}
           </Text>
         </View>
         <Text className="text-sm text-foreground">{reminder.reminder}</Text>
@@ -2939,7 +2947,12 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           if (entry.activities[0]?.projectedItem.item.type === "subagent") {
             return undefined;
           }
-          if (isContextCompactionActivityGroup(entry) || isContextHandoffActivityGroup(entry)) {
+          if (
+            isContextCompactionActivityGroup(entry) ||
+            isContextHandoffActivityGroup(entry) ||
+            // Fork: the snooze note card wraps its text, so it is measured.
+            snoozeReminderNotice(entry) !== null
+          ) {
             return undefined;
           }
           if (

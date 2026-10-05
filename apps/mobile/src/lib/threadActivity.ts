@@ -48,7 +48,7 @@ import type {
   RunAttemptId,
   ScheduledTaskId,
 } from "@t3tools/contracts";
-import { RunId, ThreadId } from "@t3tools/contracts";
+import { RunId, SNOOZE_REMINDER_NOTICE_TITLE, ThreadId } from "@t3tools/contracts";
 import {
   classifyToolActivity,
   collectToolFilePaths,
@@ -312,13 +312,22 @@ export function isContextHandoffActivityGroup(entry: ThreadFeedActivityGroup): b
   );
 }
 
-/** A delivered snooze note always sits alone in its group. */
-export function isSnoozeReminderActivityGroup(
-  entry: Extract<ThreadFeedEntry, { readonly type: "activity-group" }>,
-): boolean {
-  return (
-    entry.activities.length === 1 && entry.activities[0]?.workEntry.snoozeReminder !== undefined
-  );
+/**
+ * Fork: a delivered snooze note, which the server posts as a system notice
+ * titled SNOOZE_REMINDER_NOTICE_TITLE. Notices are prominent items, so the
+ * note always sits alone in its group. `snoozedAt` is when the note was
+ * written, null when the server did not stamp it.
+ */
+export function snoozeReminderNotice(
+  entry: ThreadFeedActivityGroup,
+): { readonly reminder: string; readonly snoozedAt: string | null } | null {
+  if (entry.activities.length !== 1) return null;
+  const item = entry.activities[0]?.projectedItem.item;
+  if (item?.type !== "system_notice" || item.title !== SNOOZE_REMINDER_NOTICE_TITLE) return null;
+  return {
+    reminder: item.message,
+    snoozedAt: item.startedAt === null ? null : DateTime.formatIso(item.startedAt),
+  };
 }
 
 function isUserInputActivityGroup(entry: ThreadFeedActivityGroup): boolean {

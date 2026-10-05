@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  ProjectId,
   ProviderInstanceId,
   ProviderDriverKind,
   type ServerConfig,
@@ -201,6 +202,35 @@ describe("thread list environment projection", () => {
       const detected = h.read();
       h.write({ ...config, settings: { ...config.settings, environmentIcon: "laptop" } });
       expect(h.read()).toBe(detected);
+    } finally {
+      h.registry.dispose();
+    }
+  });
+
+  // Fork: Continue in new thread depends on the project's thread history access.
+  it("republishes continuation settings when thread history access changes", () => {
+    const h = harness();
+    try {
+      const initial = h.read();
+      const projectId = ProjectId.make("project");
+      const withOverride = {
+        ...config,
+        settings: {
+          ...config.settings,
+          projectSettingsOverrides: { [projectId]: { agentThreadHistoryAccess: "off" } },
+        },
+      } as unknown as ServerConfig;
+      h.write(withOverride);
+      const updated = h.read();
+      expect(updated).not.toBe(initial);
+      expect(updated.continuationServerByEnvironmentId.get(ID)?.settings).toBe(
+        withOverride.settings,
+      );
+      h.write({
+        ...withOverride,
+        settings: { ...withOverride.settings, environmentIcon: "laptop" },
+      });
+      expect(h.read()).toBe(updated);
     } finally {
       h.registry.dispose();
     }

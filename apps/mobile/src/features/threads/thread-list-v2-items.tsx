@@ -210,17 +210,23 @@ type ThreadListV2ShelfHeaderProps = {
   readonly pane?: "screen" | "sidebar";
 };
 
-const SHELF_LABEL = { working: "Working", snoozed: "Snoozed", settled: "Settled" } as const;
+// Fork: the blocked shelf reads "Depends on" and speaks of "waiting" threads.
+const SHELF_LABELS = {
+  working: { label: "Working", noun: "working" },
+  snoozed: { label: "Snoozed", noun: "snoozed" },
+  settled: { label: "Settled", noun: "settled" },
+  blocked: { label: "Depends on", noun: "waiting" },
+} as const;
 
 function ThreadListV2ShelfHeader(
-  props: ThreadListV2ShelfHeaderProps & { readonly kind: keyof typeof SHELF_LABEL },
+  props: ThreadListV2ShelfHeaderProps & { readonly kind: keyof typeof SHELF_LABELS },
 ) {
-  const label = SHELF_LABEL[props.kind];
+  const { label, noun } = SHELF_LABELS[props.kind];
   return (
     <ThreadListV2Section
       label={props.expanded ? label : `${label} (${props.count})`}
       pane={props.pane}
-      tone={props.kind === "settled" ? "default" : "snoozed"}
+      tone={props.kind === "snoozed" || props.kind === "blocked" ? "snoozed" : "default"}
       disclosure={{
         expanded: props.expanded,
         disabled: props.disabled,
@@ -991,7 +997,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "copy-thread-chip") {
         const showCopyFailed = () => Alert.alert("Could not copy", "Try again.");
         try {
-          const chip = buildThreadChipClipboard({ environmentId: thread.environmentId, thread });
+          const chip = buildThreadChipClipboard({ thread });
           writeComposerContextClipboard(chip.text, chip.fragment).then(
             () => playCopyHaptic({ target: "thread-chip" }),
             showCopyFailed,
@@ -1050,7 +1056,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleUnpin,
       handleUnsettle,
       handleUnsnooze,
-      setCustomSnoozeOpen,
+      setCustomSnooze,
       snoozePresets,
     ],
   );
@@ -1308,7 +1314,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               displayName={providerInstance.displayName}
               accentColor={providerInstance.accentColor}
               showBadge={providerInstance.showBadge}
-              surfaceColor={rowAppearance.providerIconSurfaceColor}
+              surfaceColor={providerIconSurfaceColor}
             />
           </View>
         ) : null}
@@ -1468,7 +1474,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         onSwipeableWillOpen={props.onSwipeableWillOpen}
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
-        resetKey={`${thread.environmentId}:${thread.id}:${variant}:${snoozedRow}:${thread.settledAt}:${thread.unsettledAt}:${thread.snoozedUntil}`}
+        resetKey={`${thread.environmentId}:${thread.id}:${variant}:${snoozedRow}:${blockedRow}:${thread.settledAt}:${thread.unsettledAt}:${thread.snoozedUntil}`}
         simultaneousWith={props.simultaneousSwipeGesture}
         threadTitle={thread.title}
       >

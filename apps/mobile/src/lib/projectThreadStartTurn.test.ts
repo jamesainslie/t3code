@@ -142,8 +142,8 @@ describe("new thread on an existing branch", () => {
 
 describe("continuing another thread", () => {
   const source = buildThreadContextRecord({
+    environmentId: EnvironmentId.make("source-environment"),
     id: ThreadId.make("thread-earlier"),
-    projectId: ProjectId.make("project"),
     title: "Earlier investigation",
   });
   const spec = {

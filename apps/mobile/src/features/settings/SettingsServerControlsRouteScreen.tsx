@@ -14,7 +14,7 @@ import {
   type ProjectScopedServerSettingKey,
 } from "@t3tools/contracts";
 import { useRef, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { RUNTIME_MODE_CHOICES } from "../threads/thread-settings-options";
@@ -29,6 +29,7 @@ import {
 } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
+import { SettingsControlRow } from "./components/SettingsControlRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
@@ -433,7 +434,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                         ) : null
                       }
                     >
-                      <ChoiceRow
+                      <SettingsChoiceRow
                         label="Inherit"
                         description="Use the environment's account rules, or the active gh account."
                         selected={
@@ -444,7 +445,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                         onPress={() => clearProjectOverrides(["gitHubAccount"])}
                       />
                       {gitHubAccounts.map((account) => (
-                        <ChoiceRow
+                        <SettingsChoiceRow
                           key={account.login}
                           label={account.login}
                           description={
@@ -534,7 +535,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     }
                   >
                     {THREAD_HISTORY_CHOICES.map((choice, index) => (
-                      <ChoiceRow
+                      <SettingsChoiceRow
                         key={choice.mode}
                         label={choice.label}
                         description={choice.description}
@@ -707,47 +708,6 @@ function RecentTurnsStepperRow(props: {
           <Text className="text-lg text-foreground">+</Text>
         </Pressable>
       </View>
-    </SettingsControlRow>
-  );
-}
-
-function FanoutSwitchRow(props: {
-  readonly icon: ComponentProps<typeof SymbolView>["name"];
-  readonly label: string;
-  readonly subtitle: string;
-  readonly value: boolean | null;
-  readonly disabled: boolean;
-  readonly onValueChange: (value: boolean) => void;
-}) {
-  if (props.value !== null) {
-    return (
-      <SettingsSwitchRow
-        icon={props.icon}
-        label={props.label}
-        subtitle={props.subtitle}
-        value={props.value}
-        disabled={props.disabled}
-        onValueChange={props.onValueChange}
-      />
-    );
-  }
-
-  return (
-    <SettingsControlRow
-      disabled={props.disabled}
-      icon={props.icon}
-      label={props.label}
-      subtitle={props.subtitle}
-    >
-      <Pressable
-        accessibilityLabel={`Set ${props.label} on for selected environments`}
-        accessibilityRole="button"
-        disabled={props.disabled}
-        className="rounded-full bg-subtle px-3 py-2 active:opacity-70"
-        onPress={() => props.onValueChange(true)}
-      >
-        <Text className="text-sm font-t3-medium text-foreground">Mixed · Set on</Text>
-      </Pressable>
     </SettingsControlRow>
   );
 }

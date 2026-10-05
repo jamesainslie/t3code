@@ -3,6 +3,7 @@ import { useRoute, type RouteProp } from "@react-navigation/native";
 import { useMemo, useRef, useState } from "react";
 import {
   EnvironmentId,
+  pickForkThreadFields,
   ThreadId,
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2ThreadShell,
@@ -116,6 +117,8 @@ function threadDetailToShell(
     snoozedUntil: thread.snoozedUntil ?? null,
     snoozedAt: thread.snoozedAt ?? null,
     deletedAt: thread.deletedAt,
+    // Fork: highlight, dependencies, snooze note and continuation link.
+    ...pickForkThreadFields(thread),
   });
 }
 

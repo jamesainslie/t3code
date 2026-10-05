@@ -865,10 +865,9 @@ describe("mobile composer drafts", () => {
   it("keeps one record when the same thread chip is pasted twice", () => {
     const draftKey = "context-environment:thread-chip-twice";
     const chip = buildThreadChipClipboard({
-      environmentId: EnvironmentId.make("context-environment"),
       thread: {
+        environmentId: EnvironmentId.make("context-environment"),
         id: ThreadId.make("thread-earlier"),
-        projectId: ProjectId.make("project-1"),
         title: "Earlier investigation",
       },
     });
@@ -899,6 +898,7 @@ describe("mobile composer drafts", () => {
   it("a continue draft sends continuedFromThreadId and the thread chip on first send", () => {
     const environmentId = EnvironmentId.make("context-environment");
     const source = {
+      environmentId,
       id: ThreadId.make("thread-earlier"),
       projectId: ProjectId.make("project-1"),
       title: "Earlier investigation",
@@ -963,13 +963,14 @@ describe("mobile composer drafts", () => {
 
   it("leads unsent draft content with the continue prompt instead of replacing it", () => {
     const source = {
+      environmentId: EnvironmentId.make("context-environment"),
       id: ThreadId.make("thread-earlier"),
       projectId: ProjectId.make("project-1"),
       title: "Earlier investigation",
       modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
     };
     const draftKey = createNewTaskDraft({
-      environmentId: EnvironmentId.make("context-environment"),
+      environmentId: source.environmentId,
       projectId: source.projectId,
     });
     const unsent = contextDraft(0, 1);
@@ -1003,13 +1004,14 @@ describe("mobile composer drafts", () => {
 
   it("does not repeat the continue prompt when the draft already starts with it", () => {
     const source = {
+      environmentId: EnvironmentId.make("context-environment"),
       id: ThreadId.make("thread-earlier"),
       projectId: ProjectId.make("project-1"),
       title: "Earlier investigation",
       modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
     };
     const draftKey = createNewTaskDraft({
-      environmentId: EnvironmentId.make("context-environment"),
+      environmentId: source.environmentId,
       projectId: source.projectId,
     });
     const prompt = buildContinuePrompt(buildThreadContextRecord(source));

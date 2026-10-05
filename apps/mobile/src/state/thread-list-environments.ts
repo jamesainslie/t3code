@@ -6,6 +6,7 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
+import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
 
 export type ThreadListProvider = Pick<
   ServerProvider,
@@ -20,6 +21,11 @@ const capabilityKeys = [
   "threadPinReorder",
   "threadActiveReorder",
   "threadTitleRegeneration",
+  // Fork: snooze reminders, dependencies, highlights, continuation.
+  "threadSnoozeReminder",
+  "threadDependencies",
+  "threadHighlight",
+  "threadContinuation",
 ] as const;
 
 function selectEnvironment(config: ServerConfig) {
@@ -35,7 +41,27 @@ function selectEnvironment(config: ServerConfig) {
     ),
     machineKind: resolveEnvironmentMachineKind(config),
     capabilities: config.environment.capabilities,
+    // Fork: "Continue in new thread" reads the project's thread history
+    // access, so the list keeps what `canContinueThread` needs. Only the
+    // access values decide whether the list republishes.
+    continuation: {
+      settings: config.settings,
+      environment: { capabilities: config.environment.capabilities },
+    },
+    continuationKey: threadHistoryAccessKey(config.settings),
   };
+}
+
+/** Every thread history access value `canContinueThread` can resolve to, as one string. */
+function threadHistoryAccessKey(settings: ServerConfig["settings"]): string {
+  const overrides = Object.entries(settings.projectSettingsOverrides ?? {})
+    .flatMap(([projectId, override]) =>
+      override?.agentThreadHistoryAccess === undefined
+        ? []
+        : [`${projectId}=${override.agentThreadHistoryAccess}`],
+    )
+    .join(",");
+  return `${settings.agentThreadHistoryAccess}|${overrides}`;
 }
 
 type ListEnvironment = ReturnType<typeof selectEnvironment>;
@@ -69,7 +95,15 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
   const pinReorderEnvironmentIds = new Set<EnvironmentId>();
   const activeReorderEnvironmentIds = new Set<EnvironmentId>();
   const titleRegenerationEnvironmentIds = new Set<EnvironmentId>();
-  for (const [id, { providers, machineKind, capabilities }] of environments) {
+  // Fork capability sets.
+  const snoozeReminderEnvironmentIds = new Set<EnvironmentId>();
+  const dependencyEnvironmentIds = new Set<EnvironmentId>();
+  const highlightEnvironmentIds = new Set<EnvironmentId>();
+  const continuationServerByEnvironmentId = new Map<
+    EnvironmentId,
+    ListEnvironment["continuation"]
+  >();
+  for (const [id, { providers, machineKind, capabilities, continuation }] of environments) {
     providersByEnvironmentId.set(id, providers);
     machineByEnvironmentId.set(id, machineKind);
     if (capabilities.threadSettlement === true) settlementEnvironmentIds.add(id);
@@ -79,6 +113,10 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
     if (capabilities.threadPinReorder === true) pinReorderEnvironmentIds.add(id);
     if (capabilities.threadActiveReorder === true) activeReorderEnvironmentIds.add(id);
     if (capabilities.threadTitleRegeneration === true) titleRegenerationEnvironmentIds.add(id);
+    if (supportsSnoozeReminder(capabilities)) snoozeReminderEnvironmentIds.add(id);
+    if (capabilities.threadDependencies === true) dependencyEnvironmentIds.add(id);
+    if (capabilities.threadHighlight === true) highlightEnvironmentIds.add(id);
+    continuationServerByEnvironmentId.set(id, continuation);
   }
   return {
     providersByEnvironmentId,
@@ -90,6 +128,11 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
     titleRegenerationEnvironmentIds,
+    snoozeReminderEnvironmentIds,
+    dependencyEnvironmentIds,
+    highlightEnvironmentIds,
+    /** Feeds `canContinueThread` from @t3tools/shared/threadContextReference. */
+    continuationServerByEnvironmentId,
   };
 }
 
@@ -113,6 +156,7 @@ export function createThreadListEnvironmentsAtom(
         prior &&
         prior.providers === selected.providers &&
         prior.machineKind === selected.machineKind &&
+        prior.continuationKey === selected.continuationKey &&
         capabilityKeys.every(
           (key) => (prior.capabilities[key] === true) === (selected.capabilities[key] === true),
         );

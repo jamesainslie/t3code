@@ -104,9 +104,11 @@ export function ComposerContextSheet(props: {
   const [bodyHeight, setBodyHeight] = useState(0);
   const measuredHeight = headerHeight + bodyHeight;
   const record = props.record;
+  // Fork: a thread chip shows the thread's live title, or says it is unavailable. Looked up in
+  // the record's own environment, the same one "Open thread" navigates to.
   const referencedThread = useThreadShell(
-    record?.kind === "thread" && "threadId" in record && props.environmentId
-      ? { environmentId: props.environmentId, threadId: record.threadId }
+    record?.kind === "thread" && "threadId" in record && "environmentId" in record
+      ? { environmentId: record.environmentId, threadId: record.threadId }
       : null,
   );
   const localAttachment =
@@ -358,7 +360,12 @@ export function ComposerContextSheet(props: {
                 ) : null}
                 {record.kind === "thread" ? (
                   <View className="gap-3">
-                    <ContextField label="Thread" value={record.title} />
+                    <ContextField label="Thread" value={referencedThread?.title ?? record.title} />
+                    {referencedThread === null ? (
+                      <Text className="text-foreground">
+                        This thread is not available on this server.
+                      </Text>
+                    ) : null}
                     {props.onOpenThread ? (
                       <Pressable
                         accessibilityRole="button"

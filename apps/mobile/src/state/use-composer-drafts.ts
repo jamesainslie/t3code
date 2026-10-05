@@ -1317,8 +1317,8 @@ export function setComposerDraftText(draftKey: string, value: string): void {
 export function seedContinuationDraft(
   draftKey: string,
   thread: {
+    readonly environmentId: EnvironmentId;
     readonly id: ThreadId;
-    readonly projectId: ProjectId;
     readonly title: string;
     readonly modelSelection: ModelSelection;
   },

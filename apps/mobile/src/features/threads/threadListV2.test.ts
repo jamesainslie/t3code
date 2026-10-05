@@ -1393,6 +1393,8 @@ describe("depends on shelf", () => {
       key: "v2-blocked-shelf",
       count: 1,
       expanded: false,
+      // Fork: the header carries the loading state like upstream's other shelves.
+      disabled: false,
     });
   });
 
@@ -2141,6 +2143,7 @@ describe("isThreadListV2ListItem", () => {
   it("narrows the v2 kinds and rejects the legacy discriminators", () => {
     expect(isThreadListV2ListItem({ type: "v2-thread" })).toBe(true);
     expect(isThreadListV2ListItem({ type: "v2-pending" })).toBe(true);
+    expect(isThreadListV2ListItem({ type: "v2-blocked-shelf" })).toBe(true);
     expect(isThreadListV2ListItem({ type: "v2-snoozed-shelf" })).toBe(true);
     expect(isThreadListV2ListItem({ type: "v2-settled-shelf" })).toBe(true);
     expect(isThreadListV2ListItem({ type: "thread" })).toBe(false);
@@ -2602,5 +2605,46 @@ describe("Working section beta", () => {
       "v2-settled-shelf",
       "settled",
     ]);
+  });
+
+  // Fork: the Depends on shelf sits between Working and Snoozed, as on web.
+  it("places the Depends on shelf after the Working shelf", () => {
+    const layout = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("working"), title: "working", runtime: running }),
+        makeThread({
+          id: ThreadId.make("blocked"),
+          title: "blocked",
+          runtime: running,
+          dependencies: [
+            {
+              threadId: ThreadId.make("working"),
+              linkedAt: "2026-06-01T10:00:00.000Z",
+              satisfiedAt: null,
+              satisfiedReason: null,
+            },
+          ],
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      workingShelfEnabled: true,
+      workingShelfExpanded: true,
+      blockedShelfExpanded: true,
+    });
+    const items = buildThreadListV2ListItems({
+      items: layout.items,
+      pendingTasks: [],
+      workingCount: layout.workingCount,
+      workingShelfExpanded: true,
+      workingShelfHeaderIndex: layout.workingShelfHeaderIndex,
+      blockedCount: layout.blockedCount,
+      blockedShelfExpanded: true,
+      blockedShelfHeaderIndex: layout.blockedShelfHeaderIndex,
+    });
+    expect(
+      items.map((item) => (item.type === "v2-thread" ? item.item.thread.id : item.type)),
+    ).toEqual(["v2-working-shelf", "working", "v2-blocked-shelf", "blocked"]);
   });
 });

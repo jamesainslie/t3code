@@ -13,6 +13,7 @@ import {
   RunId,
   RunAttemptId,
   ScheduledTaskId,
+  SNOOZE_REMINDER_NOTICE_TITLE,
   ThreadId,
   TurnItemId,
   type OrchestrationV2RunAttempt,
@@ -37,6 +38,7 @@ import {
   setPendingUserInputCustomAnswer,
   isPendingUserInputOptionSelected,
   buildPendingUserInputAnswers,
+  snoozeReminderNotice,
 } from "./threadActivity";
 
 const threadId = ThreadId.make("thread-1");
@@ -424,6 +426,50 @@ describe("buildThreadFeed", () => {
       workEntry: { tone: "info", itemType: "system_notice" },
     });
     expect(presented.some((entry) => entry.type === "run-fold")).toBe(false);
+  });
+
+  // Fork: snooze notes arrive as a titled system notice and render as their own card.
+  it("keeps a delivered snooze note as its own row, apart from neighbouring work", () => {
+    const note = {
+      ...base("item-snooze-note", "2026-06-20T00:00:02.000Z", 2),
+      startedAt: DateTime.makeUnsafe("2026-06-19T20:00:00.000Z"),
+      title: SNOOZE_REMINDER_NOTICE_TITLE,
+      type: "system_notice" as const,
+      message: "Check the deploy",
+    };
+    const plainNotice = {
+      ...base("item-plain-notice", "2026-06-20T00:00:04.000Z", 4),
+      type: "system_notice" as const,
+      message: "Switched to Opus 4.8.",
+    };
+    const feed = buildThreadFeed([
+      projected(userMessage(), 0),
+      projected(command(), 1),
+      projected(note, 2),
+      projected(assistantMessage(), 3),
+      projected(plainNotice, 4),
+    ]);
+    const presented = deriveThreadFeedPresentation(
+      feed,
+      {
+        runId,
+        status: "completed",
+        startedAt: "2026-06-20T00:00:01.000Z",
+        completedAt: "2026-06-20T00:00:04.000Z",
+      },
+      new Set(),
+    );
+    const groups = presented.flatMap((entry) => (entry.type === "activity-group" ? [entry] : []));
+    const notes = groups.flatMap((group) => {
+      const notice = snoozeReminderNotice(group);
+      return notice === null ? [] : [{ group, notice }];
+    });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.group.activities).toHaveLength(1);
+    expect(notes[0]?.notice).toEqual({
+      reminder: "Check the deploy",
+      snoozedAt: "2026-06-19T20:00:00.000Z",
+    });
   });
 
   it("presents a usage-limit stop as a warning while preserving its explanation", () => {
