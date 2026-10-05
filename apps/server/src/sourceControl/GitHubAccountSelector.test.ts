@@ -80,14 +80,16 @@ function makeSelector(input: {
       `;
     }
     for (const [index, thread] of (input.threads ?? []).entries()) {
+      // The v2 thread projection; only the columns and payload fields the selector reads.
       yield* sql`
-        INSERT INTO projection_threads (
-          thread_id, project_id, title, model_selection_json, worktree_path, created_at, updated_at
+        INSERT INTO orchestration_v2_projection_threads (
+          thread_id, project_id, title, default_provider, provider_instance_id, runtime_mode,
+          interaction_mode, created_at, updated_at, deleted_at, payload_json
         )
         VALUES (
-          ${`thread-${index}`}, ${thread.projectId}, 'Thread',
-          '{"instanceId":"codex","model":"gpt-5.4"}', ${thread.worktreePath},
-          '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z'
+          ${`thread-${index}`}, ${thread.projectId}, 'Thread', 'codex', 'codex', 'full-access',
+          'default', '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z', NULL,
+          json_object('worktreePath', ${thread.worktreePath})
         )
       `;
     }

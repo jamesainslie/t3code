@@ -11,7 +11,12 @@ const forbiddenImport =
 const legacyTable =
   /\bprojection_(?:threads|thread_messages|thread_activities|thread_proposed_plans|thread_pull_requests|thread_sessions|turns|pending_approvals|state)\b/;
 /** Directories whose files may read the V1 tables: the importer and the schema history. */
-const legacyReaders = ["orchestration-v2/legacy/", "persistence/Migrations/"] as const;
+const legacyReaders = [
+  "orchestration-v2/legacy/",
+  "persistence/Migrations/",
+  // Fork: the fork's schema history, kept in its own ledger.
+  "persistence/fork/migrations/",
+] as const;
 /**
  * Individual files allowed to read the V1 tables, each with its reason. Keep this
  * list short; new V1 reads belong in the importer.
@@ -19,6 +24,10 @@ const legacyReaders = ["orchestration-v2/legacy/", "persistence/Migrations/"] as
 const legacyReaderFiles: Record<string, string> = {
   // Provider history for settings migration reads V1 thread sessions once at load.
   "serverSettings.ts": "one-time provider history for settings migration",
+  // Fork: carries fork columns across the cutover, around the legacy importer.
+  "orchestration-v2/fork/ForkLegacyImport.ts": "fork thread fields at the v1 cutover",
+  // Fork: reads another install's database, which may still be on v1.
+  "projectSync/Source.ts": "sync reads a v1 source install",
 };
 const retiredPaths = [
   "orchestration",

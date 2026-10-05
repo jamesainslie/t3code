@@ -78,10 +78,12 @@ export const make = Effect.gen(function* () {
   const projectIndex = yield* Cache.makeWith(
     (_key: string) =>
       Effect.gen(function* () {
+        // Live threads' worktrees, from the v2 projection (the v1 table froze at the cutover).
         const worktrees = yield* sql<{ readonly root: string; readonly projectId: ProjectId }>`
-          SELECT worktree_path AS "root", project_id AS "projectId"
-          FROM projection_threads
-          WHERE worktree_path IS NOT NULL
+          SELECT json_extract(payload_json, '$.worktreePath') AS "root", project_id AS "projectId"
+          FROM orchestration_v2_projection_threads
+          WHERE json_extract(payload_json, '$.worktreePath') IS NOT NULL
+            AND deleted_at IS NULL
             AND project_id IN (SELECT project_id FROM projection_projects)
         `;
         const roots = yield* sql<{ readonly root: string; readonly projectId: ProjectId }>`
