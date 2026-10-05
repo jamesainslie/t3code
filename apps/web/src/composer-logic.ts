@@ -46,7 +46,7 @@ export function composerSubmissionIntentForKey(input: {
   const { event } = input;
   if (input.isMobileViewport || event.isComposing || event.keyCode === 229 || event.repeat)
     return null;
-  const command = resolveShortcutCommand(event, input.keybindings, {
+  const resolved = resolveShortcutCommand(event, input.keybindings, {
     ...(input.platform === undefined ? {} : { platform: input.platform }),
     context: {
       composerFocus: true,
@@ -54,6 +54,9 @@ export function composerSubmissionIntentForKey(input: {
       turnRunning: input.isRunning === true,
     },
   });
+  // Fork: composer.send sends from outside the editor (ChatView); inside it the key keeps
+  // the send setting's own meaning, so it must not swallow the keystroke here.
+  const command = resolved === "composer.send" ? null : resolved;
   if (command === "composer.sendAlternate" && input.isRunning) return "alternate";
   if (command === "composer.sendBackground" && input.isDraftThread) return "background";
   if (command === "composer.sendAndNewThread" && !input.isDraftThread) return "background";
