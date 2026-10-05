@@ -58,6 +58,22 @@ export const ForkThreadFields = {
   continuedFromThreadId: Schema.optional(Schema.NullOr(ThreadId)),
 } as const;
 
+type ForkThreadFieldValues = {
+  readonly [K in keyof typeof ForkThreadFields]?: (typeof ForkThreadFields)[K]["Type"];
+};
+
+/** A thread's fork fields, for code that copies thread fields one by one (shell builders). */
+export function pickForkThreadFields(thread: ForkThreadFieldValues): ForkThreadFieldValues {
+  return {
+    ...(thread.highlightColor === undefined ? {} : { highlightColor: thread.highlightColor }),
+    ...(thread.dependencies === undefined ? {} : { dependencies: thread.dependencies }),
+    ...(thread.snoozeReminder === undefined ? {} : { snoozeReminder: thread.snoozeReminder }),
+    ...(thread.continuedFromThreadId === undefined
+      ? {}
+      : { continuedFromThreadId: thread.continuedFromThreadId }),
+  };
+}
+
 /** Extra fields on upstream's `thread.snooze` command. */
 export const ForkSnoozeCommandFields = {
   /** Absent keeps the note of a pending snooze, "" clears it, any other value replaces it. */
@@ -123,15 +139,11 @@ export const ForkThreadInternalUpdateCommand = Schema.Struct({
 });
 export type ForkThreadInternalUpdateCommand = typeof ForkThreadInternalUpdateCommand.Type;
 
-/** Notification kind carrying a delivered snooze reminder into the chat. */
-export const SNOOZE_REMINDER_NOTIFICATION_KIND = "snooze.reminder";
-
-export const SnoozeReminderNotice = Schema.Struct({
-  reminder: TrimmedNonEmptyString,
-  snoozedAt: IsoDateTime,
-  snoozedUntil: IsoDateTime,
-});
-export type SnoozeReminderNotice = typeof SnoozeReminderNotice.Type;
+/**
+ * Title of the `system_notice` turn item a delivered snooze reminder becomes. The note
+ * reaches the timeline without starting a run; clients render it as the reminder row.
+ */
+export const SNOOZE_REMINDER_NOTICE_TITLE = "Snooze reminder";
 
 /** Reserved for immutable conversations owned by another T3 environment. */
 export const isSyncedThreadId = (threadId: string): boolean => threadId.startsWith("t3sync-");

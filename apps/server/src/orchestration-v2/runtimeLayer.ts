@@ -1,5 +1,6 @@
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
+import * as ForkThreadReactor from "./fork/ForkThreadReactor.ts";
 import * as Layer from "effect/Layer";
 import * as OrchestrationCommandReceipts from "../persistence/Layers/OrchestrationCommandReceipts.ts";
 import * as OrchestrationEventStore from "../persistence/Layers/OrchestrationEventStore.ts";
@@ -319,6 +320,8 @@ export const OrchestrationV2ProductionLayerLive = Layer.mergeAll(
   ),
   providerContinuationWorkerProvided,
   agentSessionImporterProvided,
+  // Fork: thread dependencies and snooze reminders.
+  ForkThreadReactor.workerLive.pipe(Layer.provide(orchestratorProvided)),
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(OrchestrationEventInfrastructureLayerLive),

@@ -25,6 +25,7 @@ import {
   ProviderThreadId,
   ProviderTurnId,
   RunId,
+  SNOOZE_REMINDER_NOTICE_TITLE,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -4753,6 +4754,103 @@ it.layer(TestLayer)("usage-limit recovery", (it) => {
         assert.equal(resumed.runs[1]?.status, "starting");
         assert.isFalse(resumed.runs[1]?.queueHeld);
       }
+    }),
+  );
+});
+
+// Fork: highlight, dependency, snooze reminder, and continuation through the real orchestrator.
+it.layer(SharedApplicationDataPlaneTestLayer)("fork thread fields", (it) => {
+  it.effect("carries fork mutations through the V2 thread and shell projections", () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectService.ProjectService;
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projectId = ProjectId.make("runtime-layer-fork-project");
+      const waiter = ThreadId.make("runtime-layer-fork-waiter");
+      const worker = ThreadId.make("runtime-layer-fork-worker");
+      yield* projects.create({
+        commandId: CommandId.make("runtime-layer-fork-project-create"),
+        projectId,
+        title: "Fork fields",
+        workspaceRoot: "/tmp/runtime-layer-fork-project",
+      });
+      for (const threadId of [waiter, worker]) {
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          createdBy: "user",
+          creationSource: "web",
+          commandId: CommandId.make(`runtime-layer-fork-create-${threadId}`),
+          threadId,
+          projectId,
+          title: threadId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
+      }
+
+      yield* orchestrator.dispatch({
+        type: "thread.fork.update",
+        commandId: CommandId.make("runtime-layer-fork-highlight"),
+        threadId: waiter,
+        update: { kind: "highlight.set", color: "#ff8800" },
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.snooze",
+        commandId: CommandId.make("runtime-layer-fork-snooze"),
+        threadId: waiter,
+        snoozedUntil: "2099-07-25T09:00:00.000Z",
+        reminder: "Check the deploy",
+      });
+      const snoozed = yield* orchestrator.getThreadProjection(waiter);
+      assert.strictEqual(snoozed.thread.snoozeReminder, "Check the deploy");
+
+      // Waiting on another thread wakes the snoozed one and lands its note in the timeline.
+      yield* orchestrator.dispatch({
+        type: "thread.fork.update",
+        commandId: CommandId.make("runtime-layer-fork-depend"),
+        threadId: waiter,
+        update: { kind: "dependency.add", dependsOnThreadId: worker },
+      });
+      const linked = yield* orchestrator.getThreadProjection(waiter);
+      assert.isNull(linked.thread.snoozedUntil);
+      assert.isNull(linked.thread.snoozeReminder);
+      assert.deepStrictEqual(
+        linked.thread.dependencies?.map((link) => link.threadId),
+        [worker],
+      );
+      const notice = linked.turnItems.find((item) => item.type === "system_notice");
+      assert.strictEqual(notice?.title, SNOOZE_REMINDER_NOTICE_TITLE);
+      assert.isNull(notice?.runId);
+
+      const shell = (yield* orchestrator.getShellSnapshot()).threads.find(
+        (candidate) => candidate.id === waiter,
+      );
+      assert.strictEqual(shell?.highlightColor, "#ff8800");
+      assert.deepStrictEqual(
+        shell?.dependencies?.map((link) => link.threadId),
+        [worker],
+      );
+
+      const continued = ThreadId.make("runtime-layer-fork-continued");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("runtime-layer-fork-continue"),
+        threadId: continued,
+        projectId,
+        title: "Continued",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        continuedFromThreadId: waiter,
+      });
+      const continuation = yield* orchestrator.getThreadProjection(continued);
+      assert.strictEqual(continuation.thread.continuedFromThreadId, waiter);
     }),
   );
 });

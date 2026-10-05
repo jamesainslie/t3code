@@ -177,3 +177,25 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
     );
   },
 );
+
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "fork ledger beside a local build's migration",
+  (it) => {
+    it.effect("leaves unknown rows for upstream's divergence warning", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* migrateLikeTheServer;
+        yield* sql`UPDATE effect_sql_migrations SET name = 'LocalOnlyMigration' WHERE migration_id = 41`;
+
+        const result = yield* migrateLikeTheServer;
+
+        assert.deepStrictEqual(result.moved, []);
+        const ledgers = yield* readLedgers;
+        assert.deepStrictEqual(
+          ledgers.upstream.find(([id]) => id === 41),
+          [41, "LocalOnlyMigration"],
+        );
+      }),
+    );
+  },
+);

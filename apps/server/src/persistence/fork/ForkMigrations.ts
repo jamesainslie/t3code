@@ -44,6 +44,22 @@ const forkMigrationEntries = [
 export const forkMigrationManifest = forkMigrationEntries.map(([id, name]) => [id, name] as const);
 
 /**
+ * Names fork builds recorded in upstream's ledger. Only these rows are moved:
+ * any other unknown row (a local build's migration) stays for upstream's
+ * divergence warning.
+ */
+const LEGACY_FORK_MIGRATION_NAMES: ReadonlySet<string> = new Set([
+  "ProjectionThreadPlacement",
+  "ForkRepairSkippedUpstreamMigrations",
+  "ProjectionThreadsDependencies",
+  "ProjectionThreadsHighlight",
+  "ProjectionThreadDocumentComments",
+  "ForkRepairAutoSettleDisabledAt",
+  "ProjectionThreadsSnoozeReminder",
+  "ProjectionThreadsContinuedFrom",
+]);
+
+/**
  * Upstream migrations the fork's old repair migrations replayed. Their ids sit
  * below the highest upstream id a fork database recorded, so upstream's
  * migrator would never run them again; the reconcile replays them (each checks
@@ -78,7 +94,10 @@ export const reconcileForkLedger = Effect.fn("reconcileForkLedger")(function* ()
   const recorded = yield* sql<{ readonly migration_id: number; readonly name: string }>`
     SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id ASC
   `;
-  const forkRows = recorded.filter((row) => upstreamNames.get(row.migration_id) !== row.name);
+  const forkRows = recorded.filter(
+    (row) =>
+      upstreamNames.get(row.migration_id) !== row.name && LEGACY_FORK_MIGRATION_NAMES.has(row.name),
+  );
   if (forkRows.length === 0) return [];
   const forkIds = new Map<string, number>(forkMigrationEntries.map(([id, name]) => [name, id]));
   return yield* sql.withTransaction(

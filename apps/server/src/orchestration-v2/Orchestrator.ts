@@ -119,6 +119,7 @@ import {
   ThreadForkServiceV2,
 } from "./ThreadForkService.ts";
 import { planThreadDeletion } from "./ThreadDeletion.ts";
+import * as ForkThreadMutations from "./fork/ForkThreadMutations.ts";
 
 export class OrchestratorDispatchError extends Schema.TaggedError<OrchestratorDispatchError>()(
   "OrchestratorDispatchError",
@@ -419,6 +420,8 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "checkpoint.rollback.fail":
     case "thread.background-work.settle":
     case "provider.switch":
+    case "thread.fork.update":
+    case "thread.fork.internal-update":
       return command.threadId;
     case "delegated_task.request":
     case "delegated_task.wake-policy":
@@ -748,6 +751,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const projects = yield* ProjectStore.ProjectStoreV2;
   const projectionStore = yield* ProjectionStoreV2;
   const effectOutbox = yield* EffectOutbox.EffectOutboxV2;
+  // Fork: another thread for fork mutations, or null when it does not exist.
+  const forkGetThread = (threadId: ThreadId) =>
+    projectionStore.getThread(threadId).pipe(Effect.orElseSucceed(() => null));
   const nextTurnItemOrdinal = (
     projection: Pick<OrchestrationV2ThreadProjection, "thread"> &
       Partial<Pick<OrchestrationV2ThreadProjection, "turnItems">>,
@@ -2165,6 +2171,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       snoozedAt: null,
       lastVisitedAt: null,
       deletedAt: null,
+      ...(yield* ForkThreadMutations.forkCreateFields(command, forkGetThread)),
     };
 
     yield* emitEvent({
@@ -2207,6 +2214,72 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       });
     }
   });
+
+  // Fork: highlight, dependency, and snooze reminder mutations (fork/ForkThreadMutations.ts).
+  const dispatchForkThreadMutation = Effect.fn("orchestrationV2.dispatch.forkThreadMutation")(
+    function* (
+      command: ForkThreadMutations.ForkThreadCommand,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    ) {
+      const thread = yield* projectionStore
+        .getThread(command.threadId)
+        .pipe(
+          Effect.mapError(
+            (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+          ),
+        );
+      if (thread.deletedAt !== null) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Thread ${command.threadId} is deleted.`,
+        });
+      }
+      const now = yield* DateTime.now;
+      const outcome = yield* ForkThreadMutations.decideForkThreadUpdate(command, thread, {
+        now,
+        getThread: forkGetThread,
+        hasBlockingWork: (threadId) =>
+          projectionStore.getThreadRecords(threadId, ["runs", "runtimeRequests"]).pipe(
+            Effect.map(
+              (records) =>
+                records.runtimeRequests.some((request) => request.status === "pending") ||
+                records.runs.some((run) => run.status === "queued"),
+            ),
+            Effect.orElseSucceed(() => true),
+          ),
+        nextTurnItemOrdinal: nextTurnItemOrdinal({ thread }).pipe(Effect.orDie),
+      }).pipe(
+        Effect.mapError(
+          (rejected) =>
+            new OrchestratorDispatchError({
+              commandId: command.commandId,
+              commandType: command.type,
+              cause: rejected.reason,
+            }),
+        ),
+      );
+      const emitEvent = emit(events, command);
+      if (outcome.notice !== null) {
+        yield* emitEvent({
+          type: "turn-item.updated",
+          threadId: command.threadId,
+          providerInstanceId: thread.providerInstanceId,
+          occurredAt: now,
+          payload: outcome.notice,
+        });
+      }
+      if (outcome.thread !== thread) {
+        yield* emitEvent({
+          type: "thread.metadata-updated",
+          threadId: command.threadId,
+          providerInstanceId: outcome.thread.providerInstanceId,
+          occurredAt: now,
+          payload: outcome.thread,
+        });
+      }
+    },
+  );
 
   const dispatchThreadVisit = Effect.fn("orchestrationV2.dispatch.threadVisit")(function* (
     command: Extract<OrchestrationV2Command, { readonly type: "thread.visit" }>,
@@ -2710,6 +2783,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           const existingSnoozedAt = sameWakeTime ? (thread.snoozedAt ?? null) : null;
           return {
             ...thread,
+            ...ForkThreadMutations.forkSnoozeFields(thread, command),
             snoozedUntil,
             limitRecovery: thread.limitRecovery ? { ...thread.limitRecovery, snooze: false } : null,
             snoozedAt: existingSnoozedAt ?? now,
@@ -9434,6 +9508,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "thread.visit":
         yield* dispatchThreadVisit(command, events);
+        break;
+      case "thread.fork.update":
+      case "thread.fork.internal-update":
+        yield* dispatchForkThreadMutation(command, events);
         break;
       case "thread.auto-settle": {
         // Automatic settlement (#8600): the sweep evaluated a shell snapshot,
