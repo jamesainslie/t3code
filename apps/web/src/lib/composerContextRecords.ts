@@ -25,7 +25,6 @@ import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
 } from "@t3tools/shared/composerContextReferences";
-import { threadContextId } from "@t3tools/shared/threadContextReference";
 
 import {
   type ComposerContextReference,
@@ -340,12 +339,6 @@ export function buildMessageContext(input: {
     ),
     ...(input.attachments ?? []).map(attachmentContextRecord),
   ];
-  if (input.threadReferences && input.threadReferences.length > 0) {
-    const linkedIds = new Set<string>(
-      collectComposerContextReferences(input.text).map((occurrence) => occurrence.contextId),
-    );
-    records.push(...input.threadReferences.filter((record) => linkedIds.has(record.contextId)));
-  }
   return records.length === 0 ? undefined : { version: 1, records };
 }
 

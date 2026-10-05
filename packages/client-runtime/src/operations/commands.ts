@@ -156,6 +156,8 @@ interface StartThreadBootstrap {
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly createdAt: string;
+    /** Fork: the thread the new one continues. */
+    readonly continuedFromThreadId?: ThreadId;
   };
   readonly prepareWorktree?: {
     /** V2 worktree launches always fail rather than falling back to the project checkout. */
@@ -692,6 +694,9 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
         ...(context ? { context } : {}),
         attachments,
       },
+      ...(bootstrap?.continuedFromThreadId === undefined
+        ? {}
+        : { continuedFromThreadId: bootstrap.continuedFromThreadId }),
     });
   }
 

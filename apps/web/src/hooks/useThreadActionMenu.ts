@@ -1,8 +1,7 @@
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { customSnoozeOptions } from "../components/CustomSnoozeDialog.logic";
 import { openThreadDependencyPicker } from "../commandPaletteBus";
-import { scopeProjectRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,

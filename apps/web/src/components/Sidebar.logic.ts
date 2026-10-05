@@ -382,6 +382,7 @@ export function planSidebarThreadDrop(input: {
               unpin: activePinned,
               unsettle: activeSettled,
               unsnooze: activeSection === "snoozed",
+              release: activeSection === "blocked",
             };
       }
       const order = target.activeOrder;

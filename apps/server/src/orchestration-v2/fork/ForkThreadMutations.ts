@@ -98,7 +98,8 @@ const reminderNotice = Effect.fn("fork.snoozeReminder.notice")(function* (
     ordinal: yield* deps.nextTurnItemOrdinal,
     status: "completed",
     title: SNOOZE_REMINDER_NOTICE_TITLE,
-    startedAt: deps.now,
+    // When the note was written; the timeline shows it beside the note.
+    startedAt: thread.snoozedAt ?? deps.now,
     completedAt: deps.now,
     updatedAt: deps.now,
     type: "system_notice",

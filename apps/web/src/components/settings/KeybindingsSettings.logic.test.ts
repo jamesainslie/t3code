@@ -309,7 +309,8 @@ describe("KeybindingsSettings.logic", () => {
         "script.setup-db.run",
       ]),
     );
-    for (const command of ["thread.stop", "composer.cycleHost"]) {
+    // Fork: Escape stops a run by default, so only composer.cycleHost is unbound.
+    for (const command of ["composer.cycleHost"]) {
       expect(DEFAULT_RESOLVED_KEYBINDINGS.some((binding) => binding.command === command)).toBe(
         false,
       );

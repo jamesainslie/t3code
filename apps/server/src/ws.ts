@@ -1985,6 +1985,9 @@ const makeWsRpcLayer = (
                             : { context: input.initialMessage.context }),
                         },
                       }),
+                  ...(input.continuedFromThreadId === undefined
+                    ? {}
+                    : { continuedFromThreadId: input.continuedFromThreadId }),
                   createdBy: "user",
                   creationSource: input.creationSource ?? "web",
                 }).pipe(Effect.provide(intakeContext)),

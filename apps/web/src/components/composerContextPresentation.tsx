@@ -3,14 +3,13 @@ import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
 import type { PreviewAnnotationPayload, ThreadContextRecord } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { videoMimeType } from "@t3tools/shared/video";
-import { MessageCircleIcon, MessageSquareIcon, MousePointerClickIcon } from "lucide-react";
+import { MessageCircleIcon, MousePointerClickIcon } from "lucide-react";
 import { createContext, type MouseEvent, type ReactElement, type ReactNode, use } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
 import { useTheme } from "~/hooks/useTheme";
-import { useThreadShell } from "~/state/entities";
 import {
   formatAttachmentUploadProgress,
   type AttachmentUploadState,
@@ -57,7 +56,6 @@ export type ComposerDraftContextRecord =
   | { kind: "terminal"; record: TerminalContextDraft }
   | { kind: "review-comment"; record: ReviewCommentContext }
   | { kind: "preview-annotation"; record: PreviewAnnotationPayload }
-  | { kind: "thread"; record: ThreadContextRecord }
   | { kind: "image"; record: ComposerImageAttachment; upload?: AttachmentUploadState | undefined }
   | { kind: "file"; record: ComposerFileAttachment; upload?: AttachmentUploadState | undefined }
   | { kind: "thread"; record: ThreadContextRecord };
@@ -101,7 +99,6 @@ export function composerContextRecordsFromDraft(input: {
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
   images?: ReadonlyArray<ComposerImageAttachment>;
   files?: ReadonlyArray<ComposerFileAttachment>;
-  threadReferences?: ReadonlyArray<ThreadContextRecord>;
   uploadsByImageId?: Readonly<Record<string, AttachmentUploadState>>;
 }): ComposerDraftContextRecords {
   const records = new Map<string, ComposerDraftContextRecord>();
@@ -315,40 +312,6 @@ function ComposerPreviewAnnotationDetails({
         {summary}
       </div>
     </div>
-  );
-}
-
-/** Shows the thread's current title, or the unavailable state when this environment lacks it. */
-function ThreadContextChip(props: {
-  record: ThreadContextRecord;
-  detailsMode: ContextPresentationCapability["details"];
-}) {
-  const { environmentId } = use(ComposerContextActionsContext);
-  const shell = useThreadShell(
-    environmentId === null ? null : scopeThreadRef(environmentId, props.record.threadId),
-  );
-  const label = shell?.title ?? props.record.title;
-  if (environmentId !== null && shell === null) {
-    return (
-      <ContextChipShell
-        kind="neutral"
-        state="unresolved"
-        icon={<MessageSquareIcon />}
-        label={label}
-        aria-label={`Thread, ${label}`}
-        tooltip="Thread not available in this environment"
-      />
-    );
-  }
-  return (
-    <ContextChip
-      icon={<MessageSquareIcon />}
-      label={label}
-      kindLabel="Thread"
-      details={null}
-      detailsMode={props.detailsMode}
-      kind="neutral"
-    />
   );
 }
 

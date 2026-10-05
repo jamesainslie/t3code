@@ -3044,6 +3044,7 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
       attachments: Schema.Array(ChatAttachment),
     }),
   ),
+  ...ForkThreadCreateCommandFields,
 });
 export type OrchestrationV2ThreadLaunchInput = typeof OrchestrationV2ThreadLaunchInput.Type;
 

@@ -32,6 +32,7 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { cn } from "~/lib/utils";
 import { ProxyUsagePill } from "./ProxyUsagePill";
+import { ThreadContinuationBreadcrumbs } from "./ThreadContinuationBreadcrumbs";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;

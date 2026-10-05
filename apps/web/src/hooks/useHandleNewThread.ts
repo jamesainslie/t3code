@@ -136,7 +136,7 @@ export function useNewThreadHandler() {
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
         setModelSelection,
-        addThreadReference,
+        addThreadContexts,
         setPrompt,
       } = useComposerDraftStore.getState();
       const requestingRouteHref = router.state.location.href;
@@ -221,8 +221,12 @@ export function useNewThreadHandler() {
       // mounts with them.
       const seedContinuation = (destinationDraftId: DraftId) => {
         if (!continuedFromThread) return;
-        const record = buildThreadContextRecord(continuedFromThread);
-        addThreadReference(destinationDraftId, record);
+        const record = buildThreadContextRecord({
+          ...continuedFromThread,
+          environmentId: projectRef.environmentId,
+        });
+        // The prompt below places the chip itself.
+        addThreadContexts(destinationDraftId, [record], { appendReference: false });
         setPrompt(destinationDraftId, buildContinuePrompt(record));
         if (continuedFromModelSelection) {
           setModelSelection(destinationDraftId, continuedFromModelSelection, {

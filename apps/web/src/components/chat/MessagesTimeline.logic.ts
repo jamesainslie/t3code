@@ -34,8 +34,9 @@ import {
   type WorkLogEntry,
 } from "../../session-logic";
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
+import * as DateTime from "effect/DateTime";
 import {
-  SNOOZE_REMINDER_ACTIVITY_KIND,
+  SNOOZE_REMINDER_NOTICE_TITLE,
   type MessageId,
   type WorktreeSetupSnapshot,
   type OrchestrationV2ProjectedTurnItem,
@@ -534,6 +535,8 @@ type MessagesTimelineRowContent =
       id: string;
       createdAt: string;
       runId: RunId;
+      runStartedAt: string;
+      runEndedAt: string;
       label: string;
       expanded: boolean;
     }
@@ -1022,14 +1025,17 @@ function deriveTurnFolds(input: {
     // terminal message — take whichever ended last.
     const lastEntryEnd =
       lastEntry.kind === "message" ? lastEntry.message.updatedAt : lastEntry.createdAt;
-    const elapsedMs =
+    const latestRunSpan =
       input.latestRun?.runId === runId && input.latestRun.startedAt && input.latestRun.completedAt
-        ? computeElapsedMs(input.latestRun.startedAt, input.latestRun.completedAt)
-        : computeElapsedMs(
-            group.startBoundary ?? firstEntry.createdAt,
-            maxIsoTimestamp(group.terminalEntry?.message.updatedAt ?? null, lastEntryEnd) ??
-              lastEntryEnd,
-          );
+        ? { startedAt: input.latestRun.startedAt, completedAt: input.latestRun.completedAt }
+        : null;
+    // Fork: the span is kept on the fold so its header can show when the run ran.
+    const runStartedAt = latestRunSpan?.startedAt ?? group.startBoundary ?? firstEntry.createdAt;
+    const runEndedAt =
+      latestRunSpan?.completedAt ??
+      maxIsoTimestamp(group.terminalEntry?.message.updatedAt ?? null, lastEntryEnd) ??
+      lastEntryEnd;
+    const elapsedMs = computeElapsedMs(runStartedAt, runEndedAt);
     const duration = elapsedMs !== null ? formatDuration(elapsedMs) : null;
     const label = isLatestInterruptedTurn
       ? duration
@@ -1043,6 +1049,8 @@ function deriveTurnFolds(input: {
       runId,
       anchorEntryId: group.anchorEntryId,
       createdAt: group.startBoundary ?? firstEntry.createdAt,
+      runStartedAt,
+      runEndedAt,
       hiddenEntryIds,
       label,
     });
@@ -1199,6 +1207,23 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
     }
     return settled;
   });
+}
+
+/** Fork: a delivered snooze note, a system notice the server titles as one. */
+function snoozeReminderNotice(
+  entry: TimelineEntry,
+): { readonly reminder: string; readonly snoozedAt: string | null } | null {
+  if (entry.kind !== "work") return null;
+  const item = entry.entry.structuredPayload;
+  if (item?.type !== "system_notice" || item.title !== SNOOZE_REMINDER_NOTICE_TITLE) return null;
+  return {
+    reminder: item.message,
+    snoozedAt: item.startedAt === null ? null : DateTime.formatIso(item.startedAt),
+  };
+}
+
+function isSnoozeReminderEntry(entry: TimelineEntry): boolean {
+  return snoozeReminderNotice(entry) !== null;
 }
 
 export function deriveMessagesTimelineRows(input: {
@@ -1415,6 +1440,8 @@ export function deriveMessagesTimelineRows(input: {
         id: `turn-fold:${turnFold.runId}`,
         createdAt: turnFold.createdAt,
         runId: turnFold.runId,
+        runStartedAt: turnFold.runStartedAt,
+        runEndedAt: turnFold.runEndedAt,
         label: turnFold.label,
         expanded: input.expandedRunIds?.has(turnFold.runId) ?? false,
       });
@@ -1461,13 +1488,13 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
-    if (timelineEntry.kind === "work" && isSnoozeReminderEntry(timelineEntry)) {
+    const reminderNotice = snoozeReminderNotice(timelineEntry);
+    if (reminderNotice !== null) {
       nextRows.push({
         kind: "snooze-reminder",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
-        reminder: timelineEntry.entry.snoozeReminder?.reminder ?? timelineEntry.entry.label,
-        snoozedAt: timelineEntry.entry.snoozeReminder?.snoozedAt ?? null,
+        ...reminderNotice,
       });
       continue;
     }

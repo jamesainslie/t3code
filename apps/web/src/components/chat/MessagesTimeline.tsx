@@ -22,7 +22,7 @@ import {
   type AssistantCitation,
   type Citation,
   type EnvironmentId,
-  type MessageId,
+  MessageId,
   type OrchestrationV2TurnItem,
   type RunAttemptId,
   type ScopedThreadRef,
@@ -262,6 +262,11 @@ import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
+import {
+  type ChatEventTimestampOptions,
+  resolveChatEventTimestampOptions,
+} from "../../chatEventTimestamps";
+import { ChatEventTimestamp } from "./ChatEventTimestamp";
 import {
   formatChatTimestampTooltip,
   formatDayAwareTimestamp,
@@ -1200,6 +1205,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertToTurnCount,
       onRunShellCommand,
+      onRepairMermaid,
       onImageExpand,
       onFileOpen,
       onUseArtifactTemplate,
@@ -1236,6 +1242,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertToTurnCount,
       onRunShellCommand,
+      onRepairMermaid,
       onImageExpand,
       onFileOpen,
       onUseArtifactTemplate,
@@ -1951,7 +1958,7 @@ function SnoozeReminderTimelineRow({
     <div
       role="note"
       aria-label="Reminder"
-      className="mx-auto flex w-full max-w-(--chat-max-width) items-start gap-2 rounded-lg border border-border/70 px-3 py-2"
+      className="mx-auto flex w-full max-w-(--chat-content-max-width) items-start gap-2 rounded-lg border border-border/70 px-3 py-2"
     >
       <AlarmClockIcon
         aria-hidden="true"
@@ -2779,12 +2786,23 @@ function AssistantMessageMeta({
           {projectedItem.item.status}
         </span>
       ) : null}
-      <AssistantCopyButton
-        message={message}
-        showCopyButton={showCopyButton}
-        streaming={copyStreaming}
-      />
-      {!message.streaming && (
+      {ctx.eventTimestamps && !alwaysVisible ? (
+        <span className={cn("flex transition-opacity duration-200", hoverClassName)}>
+          {copyButton}
+        </span>
+      ) : (
+        copyButton
+      )}
+      {!message.streaming && ctx.eventTimestamps ? (
+        // Both callers pad the row by `px-1`; this adds the rest of the timestamp edge.
+        <ChatEventTimestamp
+          iso={message.updatedAt}
+          timestampFormat={ctx.timestampFormat}
+          options={ctx.eventTimestamps}
+          className="ms-auto pe-0.5"
+        />
+      ) : null}
+      {!message.streaming && !ctx.eventTimestamps && (
         <Tooltip>
           <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
             {formatDayAwareTimestamp(message.updatedAt, ctx.timestampFormat)}
@@ -4069,36 +4087,6 @@ function UserMessageContextChip(props: {
       aria-label={props.kindLabel ? `${props.kindLabel}, ${props.label}` : undefined}
       data-markdown-copy={props.copyMarkdown}
       tooltip={props.tooltip}
-    />
-  );
-}
-
-/** Opens the referenced thread when it exists in the current environment. */
-function UserMessageThreadContextChip(props: {
-  record: Extract<KnownComposerContextRecord, { kind: "thread" }>;
-  copyMarkdown: string;
-}) {
-  const { activeThreadEnvironmentId } = use(TimelineRowCtx);
-  const navigate = useNavigate();
-  const shell = useThreadShell(scopeThreadRef(activeThreadEnvironmentId, props.record.threadId));
-  const threadId = props.record.threadId;
-  return (
-    <UserMessageContextChip
-      icon={<MessageSquareIcon />}
-      label={shell?.title ?? props.record.title}
-      kindLabel="Thread"
-      copyMarkdown={props.copyMarkdown}
-      kind="neutral"
-      {...(shell === null
-        ? { tooltip: "Thread not available in this environment", state: "unresolved" as const }
-        : {
-            onClick: () => {
-              void navigate({
-                to: "/$environmentId/$threadId",
-                params: { environmentId: activeThreadEnvironmentId, threadId },
-              });
-            },
-          })}
     />
   );
 }
@@ -5508,7 +5496,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
           !toolIconAcceptsTint(entryIconName, entryToolIcon) ? (
             <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
           ) : null}
-          {eventTimestamps ? null : (
+          {ctx.eventTimestamps ? null : (
             <TimelineRowTimestamp
               createdAt={workEntry.createdAt}
               timestampFormat={timestampFormat}

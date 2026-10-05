@@ -15,6 +15,7 @@ import type {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
+import { type ForkThreadFieldValues, pickForkThreadFields } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 import { formatSubagentDisplayTitle } from "./subagentDisplay.ts";
@@ -85,7 +86,8 @@ function threadRunStatusIsActive(status: ThreadRuntimeSummary["status"]): boolea
   );
 }
 
-export interface EnvironmentThreadShell {
+/** Fork: highlights, dependency links, snooze notes and continuation links ride along. */
+export interface EnvironmentThreadShell extends ForkThreadFieldValues {
   readonly environmentId: EnvironmentId;
   readonly id: ThreadId;
   readonly projectId: ProjectId;
@@ -280,6 +282,7 @@ export function presentThreadShell(
             startedAt: iso(thread.titleRegeneration.startedAt),
           },
     deletedAt: nullableIso(thread.deletedAt),
+    ...pickForkThreadFields(thread),
     source: thread,
   };
 }

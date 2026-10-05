@@ -58,7 +58,7 @@ export const ForkThreadFields = {
   continuedFromThreadId: Schema.optional(Schema.NullOr(ThreadId)),
 } as const;
 
-type ForkThreadFieldValues = {
+export type ForkThreadFieldValues = {
   readonly [K in keyof typeof ForkThreadFields]?: (typeof ForkThreadFields)[K]["Type"];
 };
 

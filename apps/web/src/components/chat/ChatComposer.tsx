@@ -223,7 +223,6 @@ import {
   uploadedAttachmentContextRecord,
   fileContextReference,
   imageContextReference,
-  importedThreadContextRecord,
   previewAnnotationContextId,
   previewAnnotationContextRecord,
   previewAnnotationFromRecord,
@@ -242,11 +241,7 @@ import { THREAD_CONTEXT_DROP_EVENT, threadContextDropTargetProps } from "./threa
 import { readThreadShell, useThreadShells } from "~/state/entities";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import type {
-  ComposerContextClipboardFragment,
-  ComposerContextRecord,
-  ThreadContextRecord,
-} from "@t3tools/contracts";
+import type { ComposerContextClipboardFragment, ComposerContextRecord } from "@t3tools/contracts";
 import { resolveAssetUrl } from "~/assets/assetUrls";
 import { assetEnvironment } from "~/state/assets";
 import { readPreparedConnection } from "~/state/session";
@@ -1925,7 +1920,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         threadContexts: composerThreadContexts,
         images: composerImages,
         files: composerFiles,
-        threadReferences: composerThreadReferences,
         uploadsByImageId,
       }),
     [
@@ -1985,9 +1979,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const removeComposerDraftReviewComment = useComposerDraftStore(
     (store) => store.removeReviewComment,
-  );
-  const removeComposerDraftThreadReference = useComposerDraftStore(
-    (store) => store.removeThreadReference,
   );
   const clearComposerDraftPersistedAttachments = useComposerDraftStore(
     (store) => store.clearPersistedAttachments,
@@ -2516,10 +2507,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         prompt,
         imageCount: composerImages.length + composerFiles.length,
         terminalContexts: composerTerminalContexts,
-        elementContextCount:
-          composerPreviewAnnotations.length +
-          composerReviewComments.length +
-          composerThreadReferences.length,
+        elementContextCount: composerPreviewAnnotations.length + composerReviewComments.length,
       }),
     [
       composerFiles.length,
@@ -2527,7 +2515,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerPreviewAnnotations.length,
       composerReviewComments.length,
       composerTerminalContexts,
-      composerThreadReferences.length,
       prompt,
     ],
   );
@@ -3076,9 +3063,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (store) => store.addTerminalContexts,
   );
   const addComposerDraftReviewComment = useComposerDraftStore((store) => store.addReviewComment);
-  const addComposerDraftThreadReference = useComposerDraftStore(
-    (store) => store.addThreadReference,
-  );
   const addComposerDraftPreviewAnnotation = useComposerDraftStore(
     (store) => store.addPreviewAnnotation,
   );
@@ -3124,7 +3108,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             );
             return record ? [record] : [];
           }),
-        ...composerThreadReferences.filter((record) => wanted.has(record.contextId)),
       ];
       if (records.length === 0) return null;
       return encodeComposerContextFragment({
@@ -3140,7 +3123,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerPreviewAnnotations,
       composerReviewComments,
       composerTerminalContexts,
-      composerThreadReferences,
       environmentId,
       uploadsByImageId,
     ],
@@ -3351,13 +3333,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             const localId = dependentAttachmentLocalIds.get(record.contextId) ?? randomUUID();
             rewritten.set(record.contextId, toKindScopedComposerContextId(record.kind, localId));
             void importAttachmentRecord(record, localId, sourceEnvironmentId);
-            break;
-          }
-          case "thread": {
-            // One id per thread, so a repeat paste refreshes the record under the same chip.
-            const imported = importedThreadContextRecord(record);
-            addComposerDraftThreadReference(composerDraftTarget, imported);
-            rewritten.set(record.contextId, imported.contextId);
             break;
           }
           default:
@@ -3765,21 +3740,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }
       }
 
-      for (const record of composerThreadReferences) {
-        if (!referenced.has(record.contextId)) {
-          retained.threadReferences.set(record.contextId, record);
-          removeComposerDraftThreadReference(composerDraftTarget, record.contextId);
-        }
-      }
-      const liveThreadIds = new Set<string>(
-        composerThreadReferences.map((record) => record.contextId),
-      );
-      for (const contextId of referenced) {
-        if (liveThreadIds.has(contextId)) continue;
-        const record = retained.threadReferences.get(contextId);
-        if (record) addComposerDraftThreadReference(composerDraftTarget, record);
-      }
-
       const attachmentChanges = reconcileAttachmentContextReferences({
         referencedContextIds: referenced,
         files: composerFiles,
@@ -3826,16 +3786,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerPreviewAnnotations,
       composerImages,
       composerFiles,
-      composerThreadReferences,
       removeComposerDraftReviewComment,
       removeComposerDraftPreviewAnnotation,
       removeComposerDraftFile,
-      removeComposerDraftThreadReference,
       addComposerDraftReviewComment,
       addComposerDraftPreviewAnnotation,
       addComposerDraftImages,
       addComposerDraftFiles,
-      addComposerDraftThreadReference,
       attachmentDraftTarget,
     ],
   );
@@ -4885,7 +4842,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             : undefined,
         }),
       ),
-      ...composerThreadReferences,
     ];
     if (prompt.length === 0 && images.length === 0 && files.length === 0) {
       const entries = usePromptStashStore.getState().entries;
@@ -4990,9 +4946,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       clearComposerDraftTerminalContexts(stashTarget);
       for (const comment of composerReviewComments) {
         removeComposerDraftReviewComment(stashTarget, comment.id);
-      }
-      for (const record of composerThreadReferences) {
-        removeComposerDraftThreadReference(stashTarget, record.contextId);
       }
       for (const annotation of composerPreviewAnnotations) {
         releaseAttachmentUpload(annotation.id);
@@ -5100,10 +5053,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerTerminalContextsRef,
     composerReviewComments,
     composerPreviewAnnotations,
-    composerThreadReferences,
     removeComposerDraftReviewComment,
     removeComposerDraftPreviewAnnotation,
-    removeComposerDraftThreadReference,
     environmentId,
     finalizeStashEntryImages,
     promptRef,
@@ -6437,7 +6388,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       },
       isMenuOpen: () =>
         composerMenuOpenRef.current || resolveActiveComposerTrigger().trigger !== null,
-      submit: () => submitComposer(undefined, "foreground"),
+      submit: () => submitComposer(undefined),
       isCaretAtStart: () => {
         const range = composerEditorRef.current?.readSelectionRange();
         return range !== undefined && range.start === 0 && range.end === 0;
@@ -6552,7 +6503,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerTerminalContextsRef,
       composerPreviewAnnotations,
       composerReviewComments,
-      composerThreadReferences,
       focusComposer,
       environmentId,
       primaryEnvironmentId,

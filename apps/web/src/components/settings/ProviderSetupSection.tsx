@@ -26,8 +26,6 @@ interface ProviderSetupSectionProps {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
   readonly instanceId: ProviderInstanceId;
-  readonly driver: ProviderDriverKind;
-  readonly driverLabel: string;
   readonly provider: ServerProvider | undefined;
   readonly binaryPath?: string | undefined;
   readonly authMethod?: AntigravityAuthMethod | undefined;
@@ -47,19 +45,15 @@ export function readAntigravityAuthMethod(config: unknown): AntigravityAuthMetho
   );
 }
 
-/** Narrow rows stack their label above the control instead of sitting beside it. */
-const STACKED_ROW =
-  "@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3";
-
 /** Setup state belongs to the selected environment and is never saved in client settings. */
 export function ProviderSetupSection(props: ProviderSetupSectionProps) {
   return (
     <section
-      aria-label={`${props.driverLabel} setup`}
+      aria-label="Antigravity setup"
       className="@container/setup divide-y divide-border/50 text-xs"
     >
       <SettingsRow
-        className={STACKED_ROW}
+        className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
         title="Environment"
         description="Device that runs this provider."
         control={
@@ -69,7 +63,7 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
             </span>
             {!props.enabled && !props.readOnly ? (
               <Button size="sm" variant="outline" onClick={props.onEnable}>
-                Enable {props.driverLabel}
+                Enable Antigravity
               </Button>
             ) : null}
           </div>
@@ -80,7 +74,7 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
       ) : props.provider?.setup === undefined ? (
         <SettingsRow
           title="Update required"
-          description={`Update this environment to set up ${props.driverLabel} here.`}
+          description="Update this environment to manage Antigravity."
         />
       ) : (
         <ProviderSetupActions
@@ -88,8 +82,6 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
           environmentId={props.environmentId}
           environmentLabel={props.environmentLabel}
           instanceId={props.instanceId}
-          driver={props.driver}
-          driverLabel={props.driverLabel}
           provider={props.provider}
           binaryPath={props.binaryPath}
           authMethod={props.authMethod ?? "oauth-personal"}
@@ -104,30 +96,19 @@ function ProviderSetupActions({
   environmentId,
   environmentLabel,
   instanceId,
-  driver,
-  driverLabel,
   provider,
   enabled,
   binaryPath,
 }: Pick<
   ProviderSetupSectionProps,
-  | "environmentId"
-  | "environmentLabel"
-  | "instanceId"
-  | "driver"
-  | "driverLabel"
-  | "enabled"
-  | "binaryPath"
+  "environmentId" | "environmentLabel" | "instanceId" | "enabled" | "binaryPath"
 > & {
   readonly provider: ServerProvider;
   readonly authMethod: AntigravityAuthMethod;
 }) {
   const target = { environmentId, input: { instanceId } };
   const authQuery = useEnvironmentQuery(serverEnvironment.providerAuthState(target));
-  // Only installable providers have an installer to watch.
-  const installQuery = useEnvironmentQuery(
-    canInstall ? serverEnvironment.providerInstallState(target) : null,
-  );
+  const installQuery = useEnvironmentQuery(serverEnvironment.providerInstallState(target));
   const auth = authQuery.data;
   const installation = installQuery.data;
   const commandOptions = { reportFailure: false, reportDefect: false };
@@ -155,15 +136,15 @@ function ProviderSetupActions({
     installation?.phase === "downloading"
       ? `Downloading ${(installation.downloadedBytes / 1_000_000).toFixed(1)} MB${installation.totalBytes === null ? "" : ` of ${(installation.totalBytes / 1_000_000).toFixed(1)} MB`}.`
       : installation?.phase === "extracting"
-        ? `Extracting ${driverLabel}.`
+        ? "Extracting Antigravity."
         : installation?.phase === "verifying"
           ? "Checking the downloaded runtime."
           : installed
             ? "Installed."
             : usesCustomBinary
               ? enabled
-                ? `The configured ${driverLabel} runtime is unavailable.`
-                : `The configured ${driverLabel} runtime has not been checked.`
+                ? "The configured Antigravity runtime is unavailable."
+                : "The configured Antigravity runtime has not been checked."
               : installation?.totalBytes
                 ? `${Math.ceil(installation.totalBytes / 1_000_000)} MB download.`
                 : "Not installed.";
@@ -197,7 +178,7 @@ function ProviderSetupActions({
 
   async function removeRuntime() {
     const confirmed = await ensureLocalApi().dialogs.confirm(
-      `Remove the downloaded ${driverLabel} runtime from ${environmentLabel}? Sign-in and thread history are kept.`,
+      `Remove the downloaded Antigravity runtime from ${environmentLabel}? Google sign-in and thread history are kept.`,
     );
     if (confirmed) {
       await runCommand("Removing runtime", () => removeInstall(target));
@@ -206,110 +187,110 @@ function ProviderSetupActions({
 
   return (
     <div className="divide-y divide-border/50">
-      {canInstall ? (
-        <SettingsRow
-          title="Runtime"
-          className={STACKED_ROW}
-          description={`Install and manage ${driverLabel}.`}
-          status={
-            usesCustomBinary ? (
+      <SettingsRow
+        title="Runtime"
+        className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
+        description="Install and manage Antigravity."
+        status={
+          <div className="space-y-2">
+            {usesCustomBinary ? (
               <p className="text-muted-foreground">
                 Uses the custom binary path below. Installation keeps that path.
               </p>
-            ) : null
-          }
-          control={
-            <div className="flex w-full min-w-0 flex-col gap-2 sm:w-56 sm:text-right">
-              <p role="status" className="min-h-4 text-muted-foreground tabular-nums">
-                {installationStatusMessage}
+            ) : null}
+            {!installed && !provider.setup?.canInstall ? (
+              <p className="text-muted-foreground">
+                Automatic installation unavailable. Set a binary path or use another environment.
               </p>
-              <div className="h-1">
-                {installation?.phase === "downloading" &&
-                installation.totalBytes !== null &&
-                installation.totalBytes > 0 ? (
-                  <progress
-                    aria-label={`${driverLabel} download`}
-                    className="block h-1 w-full accent-foreground"
-                    value={installation.downloadedBytes}
-                    max={installation.totalBytes}
-                  />
-                ) : null}
-              </div>
-              {!installActive &&
-              installation?.message &&
-              installation.message !== installationStatusMessage ? (
-                <p className="text-muted-foreground [overflow-wrap:anywhere]">
-                  {installation.message}
-                </p>
+            ) : null}
+          </div>
+        }
+        control={
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-56 sm:text-right">
+            <p role="status" className="min-h-4 text-muted-foreground tabular-nums">
+              {installationStatusMessage}
+            </p>
+            <div className="h-1">
+              {installation?.phase === "downloading" &&
+              installation.totalBytes !== null &&
+              installation.totalBytes > 0 ? (
+                <progress
+                  aria-label="Antigravity download"
+                  className="block h-1 w-full accent-foreground"
+                  value={installation.downloadedBytes}
+                  max={installation.totalBytes}
+                />
               ) : null}
-              <div className="grid min-h-7 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
-                <div className="col-start-2 row-start-1 grid">
-                  {installActive && installation.operationId ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionsDisabled}
-                      onClick={() => {
-                        const operationId = installation.operationId;
-                        if (!operationId) return;
-                        void runCommand("Cancelling installation", () =>
-                          cancelInstall({ environmentId, input: { instanceId, operationId } }),
-                        );
-                      }}
-                    >
-                      Cancel installation
-                    </Button>
-                  ) : !installActive ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionsDisabled || installation === null || authActive}
-                      onClick={() =>
-                        void runCommand("Starting installation", () => startInstall(target))
-                      }
-                    >
-                      {installation?.installedVersion
-                        ? installation.version &&
-                          installation.version !== installation.installedVersion
-                          ? `Update ${driverLabel}`
-                          : `Reinstall ${driverLabel}`
-                        : installation?.phase === "failed" || installation?.phase === "cancelled"
-                          ? "Retry installation"
-                          : installed
-                            ? "Install managed runtime"
-                            : `Install ${driverLabel}`}
-                    </Button>
-                  ) : null}
-                </div>
-                {installation?.canRemove && !installActive ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          className="col-start-1 row-start-1"
-                          aria-label="Remove downloaded runtime"
-                          disabled={actionsDisabled || authActive}
-                          onClick={() => void removeRuntime()}
-                        />
-                      }
-                    >
-                      <Trash2Icon className="size-3.5" />
-                    </TooltipTrigger>
-                    <TooltipPopup>Remove downloaded runtime</TooltipPopup>
-                  </Tooltip>
+            </div>
+            {!installActive &&
+            installation?.message &&
+            installation.message !== installationStatusMessage ? (
+              <p className="text-muted-foreground [overflow-wrap:anywhere]">
+                {installation.message}
+              </p>
+            ) : null}
+            <div className="grid min-h-7 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
+              <div className="col-start-2 row-start-1 grid">
+                {installActive && installation.operationId ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionsDisabled}
+                    onClick={() => {
+                      const operationId = installation.operationId;
+                      if (!operationId) return;
+                      void runCommand("Cancelling installation", () =>
+                        cancelInstall({ environmentId, input: { instanceId, operationId } }),
+                      );
+                    }}
+                  >
+                    Cancel installation
+                  </Button>
+                ) : !installActive && provider.setup?.canInstall ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionsDisabled || installation === null || authActive}
+                    onClick={() =>
+                      void runCommand("Starting installation", () => startInstall(target))
+                    }
+                  >
+                    {installation?.installedVersion
+                      ? installation.version &&
+                        installation.version !== installation.installedVersion
+                        ? "Update Antigravity"
+                        : "Reinstall Antigravity"
+                      : installation?.phase === "failed" || installation?.phase === "cancelled"
+                        ? "Retry installation"
+                        : installed
+                          ? "Install managed runtime"
+                          : "Install Antigravity"}
+                  </Button>
                 ) : null}
               </div>
+              {installation?.canRemove && !installActive ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="col-start-1 row-start-1"
+                        aria-label="Remove downloaded runtime"
+                        disabled={actionsDisabled || authActive}
+                        onClick={() => void removeRuntime()}
+                      />
+                    }
+                  >
+                    <Trash2Icon className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipPopup>Remove downloaded runtime</TooltipPopup>
+                </Tooltip>
+              ) : null}
             </div>
-          }
-        />
-      ) : !installed ? (
-        <SettingsRow
-          title="Runtime"
-          description={`Install ${driverLabel} on ${environmentLabel} before signing in.`}
-        />
-      ) : null}
+          </div>
+        }
+      />
 
       <ProviderAuthenticationSection
         environmentId={environmentId}

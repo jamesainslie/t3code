@@ -74,7 +74,8 @@ import {
   type AssistantCitationSourceAnchor,
 } from "~/lib/assistantTextSelection";
 import { sourceLinesBetween, sourceLineSpanAt } from "~/markdown-document";
-import { useServerConfigs, useThreadDetail } from "~/state/entities";
+import { useServerConfigs } from "~/state/entities";
+import { useThreadDocumentComments } from "~/state/documentComments";
 import { DocumentCommentsMargin, type DocumentCommentDraft } from "./DocumentCommentsMargin";
 import {
   canCommentOnDocument,
@@ -1130,15 +1131,15 @@ export default function FilePreviewPanel({
     isAttachment: attachment !== undefined,
     isMarkdown,
   });
-  const threadDetail = useThreadDetail(commentsSupported ? threadRef : null);
+  const documentComments = useThreadDocumentComments(commentsSupported ? threadRef : null);
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const allFileComments = useMemo(
     () =>
       commentsSupported && previewPath
-        ? documentCommentsForFile(threadDetail?.documentComments ?? [], previewPath, true)
+        ? documentCommentsForFile(documentComments ?? [], previewPath, true)
         : [],
-    [commentsSupported, previewPath, threadDetail?.documentComments],
+    [commentsSupported, previewPath, documentComments],
   );
   const visibleFileComments = useMemo(
     () =>

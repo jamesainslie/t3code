@@ -1,7 +1,7 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef, ThreadDocumentCommentMutation } from "@t3tools/contracts";
 import { useMemo } from "react";
 
-import { threadEnvironment } from "~/state/threads";
+import { documentCommentsEnvironment } from "~/state/documentComments";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import type { DocumentCommentActions } from "./DocumentCommentsMargin";
@@ -11,24 +11,19 @@ export function useDocumentCommentActions(
   threadRef: ScopedThreadRef,
   filePath: string,
 ): DocumentCommentActions {
-  const add = useAtomCommand(threadEnvironment.addDocumentComment);
-  const update = useAtomCommand(threadEnvironment.updateDocumentComment);
-  const remove = useAtomCommand(threadEnvironment.deleteDocumentComment);
-  const resolve = useAtomCommand(threadEnvironment.resolveDocumentComment);
-  const reopen = useAtomCommand(threadEnvironment.reopenDocumentComment);
+  const mutate = useAtomCommand(documentCommentsEnvironment.mutate);
   const { environmentId, threadId } = threadRef;
 
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    const send = (mutation: ThreadDocumentCommentMutation) =>
+      void mutate({ environmentId, input: { threadId, mutation } });
+    return {
       add: ({ commentId, anchor, body }) =>
-        void add({ environmentId, input: { threadId, commentId, filePath, anchor, body } }),
-      update: (commentId, body) =>
-        void update({ environmentId, input: { threadId, commentId, body } }),
-      remove: (commentId) => void remove({ environmentId, input: { threadId, commentId } }),
-      resolve: (commentId) =>
-        void resolve({ environmentId, input: { threadId, commentId, resolution: null } }),
-      reopen: (commentId) => void reopen({ environmentId, input: { threadId, commentId } }),
-    }),
-    [add, environmentId, filePath, remove, reopen, resolve, threadId, update],
-  );
+        send({ type: "add", commentId, filePath, anchor, body }),
+      update: (commentId, body) => send({ type: "update", commentId, body }),
+      remove: (commentId) => send({ type: "delete", commentId }),
+      resolve: (commentId) => send({ type: "resolve", commentId, resolution: null }),
+      reopen: (commentId) => send({ type: "reopen", commentId }),
+    };
+  }, [environmentId, filePath, mutate, threadId]);
 }

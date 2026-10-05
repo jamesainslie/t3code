@@ -2,7 +2,6 @@ import {
   resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
-import type { OrchestrationThreadShell } from "@t3tools/contracts";
 
 /** A snooze pick. `reminder` follows thread.snooze: absent keeps any note, "" clears it. */
 export interface SnoozeChoice {
@@ -28,7 +27,10 @@ export interface CustomSnoozeOptions {
 export function customSnoozeOptions(input: {
   readonly focusReminder: boolean;
   readonly supportsReminder: boolean;
-  readonly snoozed: Pick<OrchestrationThreadShell, "snoozedUntil" | "snoozeReminder"> | null;
+  readonly snoozed: {
+    readonly snoozedUntil: string | null;
+    readonly snoozeReminder?: string | null | undefined;
+  } | null;
 }): CustomSnoozeOptions {
   const snoozedUntil = input.snoozed?.snoozedUntil;
   return {

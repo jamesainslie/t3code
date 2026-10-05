@@ -65,7 +65,9 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.subscribeVcsStatus
   | typeof WS_METHODS.subscribeWorktreeSetup
   | typeof WS_METHODS.subscribeProjectClones
-  | typeof WS_METHODS.terminalAttach;
+  | typeof WS_METHODS.terminalAttach
+  // Fork: document comments.
+  | typeof WS_METHODS.subscribeThreadDocumentComments;
 
 export type EnvironmentStreamCommandRpcTag =
   | typeof WS_METHODS.chatGptHandoffSubscribe

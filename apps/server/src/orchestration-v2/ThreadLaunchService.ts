@@ -89,6 +89,8 @@ export interface ThreadLaunchInput {
   };
   readonly createdBy: OrchestrationV2Actor;
   readonly creationSource: OrchestrationV2CreationSource;
+  /** Fork: the thread this one continues. */
+  readonly continuedFromThreadId?: ThreadId;
 }
 
 /** What workspace preparation reads from a launch; a retry rebuilds it from the run. */
@@ -769,6 +771,9 @@ const make = Effect.gen(function* () {
                 ...(input.importedNativeThread === undefined
                   ? {}
                   : { importedNativeThread: input.importedNativeThread }),
+                ...(input.continuedFromThreadId === undefined
+                  ? {}
+                  : { continuedFromThreadId: input.continuedFromThreadId }),
                 createdBy: input.createdBy,
                 creationSource: input.creationSource,
               });

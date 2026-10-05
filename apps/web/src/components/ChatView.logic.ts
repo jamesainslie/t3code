@@ -13,7 +13,6 @@ import {
   type ModelSelection,
   type OrchestrationV2ProjectedTurnItem,
   type PreviewAnnotationPayload,
-  type ThreadContextRecord,
   type ProviderInteractionMode,
   type RuntimeMode,
   ProviderDriverKind,

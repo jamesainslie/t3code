@@ -2280,7 +2280,90 @@ describe("Working shelf (beta)", () => {
         unpin: true,
         unsettle: false,
         unsnooze: false,
+        release: false,
       });
     });
+  });
+});
+
+describe("resolveSidebarWokeAt", () => {
+  const now = "2026-09-19T12:00:00.000Z";
+  const base = {
+    snoozedAt: null,
+    snoozedUntil: null,
+    dependencies: [],
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    latestTurn: null,
+    session: null,
+  } satisfies Parameters<typeof resolveSidebarWokeAt>[0];
+  const satisfied = (satisfiedAt: string) => [
+    {
+      threadId: ThreadId.make("thread-dependency"),
+      linkedAt: "2026-09-19T09:00:00.000Z",
+      satisfiedAt,
+      satisfiedReason: "turn-finished" as const,
+    },
+  ];
+
+  it("is null when the thread neither snoozed nor waited", () => {
+    expect(resolveSidebarWokeAt(base, { now })).toBeNull();
+  });
+
+  it("reports an elapsed snooze on its own", () => {
+    expect(
+      resolveSidebarWokeAt(
+        {
+          ...base,
+          snoozedAt: "2026-09-19T09:00:00.000Z",
+          snoozedUntil: "2026-09-19T11:00:00.000Z",
+        },
+        { now },
+      ),
+    ).toBe("2026-09-19T11:00:00.000Z");
+  });
+
+  it("reports a satisfied dependency on its own", () => {
+    expect(
+      resolveSidebarWokeAt(
+        { ...base, dependencies: satisfied("2026-09-19T10:00:00.000Z") },
+        { now },
+      ),
+    ).toBe("2026-09-19T10:00:00.000Z");
+  });
+
+  it("keeps the later of the two wakes so a visit clears both", () => {
+    const shell = {
+      ...base,
+      snoozedAt: "2026-09-19T08:00:00.000Z",
+      snoozedUntil: "2026-09-19T10:30:00.000Z",
+      dependencies: satisfied("2026-09-19T11:30:00.000Z"),
+    };
+    expect(resolveSidebarWokeAt(shell, { now })).toBe("2026-09-19T11:30:00.000Z");
+    expect(
+      resolveSidebarWokeAt(
+        { ...shell, dependencies: satisfied("2026-09-19T09:30:00.000Z") },
+        { now },
+      ),
+    ).toBe("2026-09-19T10:30:00.000Z");
+  });
+
+  it("stays null while the thread is still waiting", () => {
+    expect(
+      resolveSidebarWokeAt(
+        {
+          ...base,
+          dependencies: [
+            {
+              threadId: ThreadId.make("thread-dependency"),
+              linkedAt: "2026-09-19T09:00:00.000Z",
+              satisfiedAt: null,
+              satisfiedReason: null,
+            },
+          ],
+        },
+        { now },
+      ),
+    ).toBeNull();
   });
 });

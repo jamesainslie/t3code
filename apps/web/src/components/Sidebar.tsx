@@ -139,9 +139,13 @@ import {
   useThreadSelectionStore,
 } from "../threadSelectionStore";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { continueInNewThreadOptions, useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
-import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
+import {
+  isCommandPaletteOpen,
+  openCommandPalette,
+  openThreadDependencyPicker,
+} from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { copyThreadChip } from "../lib/copyThreadChip";
 import { useClientSettings } from "../hooks/useSettings";
@@ -224,6 +228,7 @@ import {
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
+  resolveSidebarWokeAt,
 } from "./Sidebar.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
@@ -297,6 +302,7 @@ const SETTLED_TAIL_INITIAL_COUNT = 10;
 const SETTLED_TAIL_PAGE_COUNT = 25;
 // Fresh keys deliberately reset both shelves to collapsed for existing users.
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
+const BLOCKED_SHELF_EXPANDED_KEY = "t3code:sidebar:blocked-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
 
@@ -460,6 +466,14 @@ function SidebarThreadTooltip({
           ) : null
         }
       >
+        {snoozeReminder ? (
+          <div className="flex min-w-0 items-start gap-2 pl-0.5 text-xs text-info-foreground">
+            <AlarmClockIcon aria-hidden className="mt-0.5 size-3 shrink-0 stroke-current" />
+            <div className="line-clamp-4 min-w-0 flex-1 wrap-break-word whitespace-pre-line leading-5">
+              {snoozeReminder}
+            </div>
+          </div>
+        ) : null}
         {projectDisplayName ? (
           <div className="flex min-w-0 items-center gap-2">
             {project ? <ProjectFavicon project={project} className="size-3 shrink-0" /> : null}
@@ -744,7 +758,8 @@ function SidebarSectionPlaceholder(props: {
 // action button starts a sweep. Shorter presses stay clicks.
 const SIDEBAR_DRAG_DISTANCE = 6;
 
-type SidebarSweepAction = "settle" | "unsettle" | "unsnooze";
+// Fork: "release" wakes a thread waiting on others.
+type SidebarSweepAction = "settle" | "unsettle" | "unsnooze" | "release";
 
 // Zero-height markers reserve no label space at rest. During a drag the
 // sorting strategy opens 24px for a 16px label with 4px clearance on each side.
@@ -787,7 +802,7 @@ function SidebarDragBoundary(props: {
 
 // Shelf headers stay visible and keep their measured height while dragging.
 function SidebarSectionHeader(props: {
-  marker: "working-header" | "snoozed-header" | "settled-header";
+  marker: "working-header" | "blocked-header" | "snoozed-header" | "settled-header";
   label: string;
   className?: string;
   // While dragging, the settled header reads at full strength and takes the
@@ -799,10 +814,13 @@ function SidebarSectionHeader(props: {
   const shelf =
     props.marker === "working-header"
       ? "working"
-      : props.marker === "snoozed-header"
-        ? "snoozed"
-        : "settled";
-  const snoozed = shelf === "snoozed";
+      : props.marker === "blocked-header"
+        ? "blocked"
+        : props.marker === "snoozed-header"
+          ? "snoozed"
+          : "settled";
+  // Both parked shelves read in the info tone.
+  const snoozed = shelf === "snoozed" || shelf === "blocked";
   return (
     <SortableSidebarMarker
       marker={props.marker}
@@ -852,8 +870,7 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
     composer.files.length +
     composer.terminalContexts.length +
     composer.previewAnnotations.length +
-    composer.reviewComments.length +
-    composer.threadReferences.length;
+    composer.reviewComments.length;
   const preview =
     promptPreview.length > 0
       ? promptPreview
@@ -1112,6 +1129,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   settlementSupported: boolean;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
+  // Same contract for the reminder on thread.snooze.
+  snoozeReminderSupported: boolean;
+  // Same contract for "depends on" links.
+  dependenciesSupported: boolean;
   // Renders the pin glyph. Pinned cards keep the full settle/snooze quick
   // actions: settling clears the pin server-side, and snoozing hides the
   // card until wake with the pin intact underneath. The glyph is also the
@@ -1132,8 +1153,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   dragOverPinned: boolean;
   // The action this row will take when the sweep is released.
   sweepAction: SidebarSweepAction | null;
-  // Compact wake countdown ("2h") for rows in the snoozed shelf.
-  snoozeWakeLabelText: string | null;
+  // What a parked row says instead of its timestamp: a compact wake
+  // countdown ("2h") on the snoozed shelf, "Waiting on ..." on the blocked one.
+  parkedLabelText: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
   // the user visits the thread.
   wokeAt: string | null;
@@ -1631,7 +1653,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // Sweeps reuse the corresponding row-drop action badge.
   const destinationVerb = sortable?.isDragging
     ? props.dropVerb
-    : props.sweepAction === "unsnooze"
+    : props.sweepAction === "unsnooze" || props.sweepAction === "release"
       ? "wake"
       : props.sweepAction;
   const dragDestination =
@@ -1915,7 +1937,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                     <button
                       type="button"
                       aria-label="Wake thread now"
-                      onClick={handleUnsnoozeClick}
+                      onClick={
+                        variantAction === "release" ? handleReleaseClick : handleUnsnoozeClick
+                      }
                       onPointerDown={handleActionPointerDown}
                       className={cn(
                         "pointer-events-none absolute inset-y-0 right-0 -mr-1 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100",
@@ -2403,6 +2427,7 @@ export default function Sidebar() {
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
+  const threadHighlightPalette = useClientSettings((s) => s.threadHighlightPalette);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     setThreadHighlight,
@@ -2767,6 +2792,8 @@ export default function Sidebar() {
     activeReorderableThreadKeys,
     activeThreads,
     workingThreads,
+    blockedThreads,
+    blockedWaitLabelByKey,
     snoozedThreads,
     settledThreads,
     snoozeNow,
@@ -2788,6 +2815,7 @@ export default function Sidebar() {
     // put them, and snoozed or settled threads keep their shelves.
     const inbox = (thread: EnvironmentThreadShell) =>
       workingShelfEnabled && isSidebarThreadWorking(thread) ? working : active;
+    const blocked: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
     const settled: EnvironmentThreadShell[] = [];
     const draggable = new Set<string>();
@@ -2828,16 +2856,19 @@ export default function Sidebar() {
       } else {
         const section = resolveSidebarThreadSection({
           snoozed: supportsSnooze && effectiveSnoozed(thread, { now: preciseNow }),
+          blocked: supportsDependencies && effectiveBlocked(thread),
           settled: supportsSettlement && thread.settledOverride === "settled",
           pinned: thread.pinnedAt != null,
         });
-        (section === "snoozed"
-          ? snoozed
-          : section === "settled"
-            ? settled
-            : section === "pinned"
-              ? pinned
-              : inbox(thread)
+        (section === "blocked"
+          ? blocked
+          : section === "snoozed"
+            ? snoozed
+            : section === "settled"
+              ? settled
+              : section === "pinned"
+                ? pinned
+                : inbox(thread)
         ).push(thread);
       }
     }
@@ -2850,6 +2881,24 @@ export default function Sidebar() {
     const sortedActive = workingShelfEnabled
       ? sortInboxThreadsByReturn(active, inboxReturns.returnedAt)
       : sortThreadsForSidebar(active);
+    // Wait labels name the threads being waited on, so they need titles from
+    // outside the current project scope. Built only when something waits.
+    const waitLabels = new Map<string, string>();
+    if (blocked.length > 0) {
+      const titleByRef = new Map<string, string>();
+      for (const thread of threads) {
+        titleByRef.set(`${thread.environmentId}:${thread.id}`, thread.title);
+      }
+      for (const thread of blocked) {
+        const label = dependencyWaitLabel(
+          thread,
+          (threadId) => titleByRef.get(`${thread.environmentId}:${threadId}`) ?? null,
+        );
+        if (label !== null) {
+          waitLabels.set(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), label);
+        }
+      }
+    }
     return {
       pinnedThreads:
         optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -2871,6 +2920,10 @@ export default function Sidebar() {
             }),
       // Newest send first; finishing and waking again do not move a row.
       workingThreads: sortWorkingThreadsBySend(working),
+      // Most recently parked first: the newest commitment is the one the
+      // user still has in mind.
+      blockedThreads: blocked.toSorted(compareBlockedThreads),
+      blockedWaitLabelByKey: waitLabels,
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -2899,10 +2952,11 @@ export default function Sidebar() {
       ...pinnedThreads,
       ...activeThreads,
       ...workingThreads,
+      ...blockedThreads,
       ...snoozedThreads,
       ...settledThreads,
     ],
-    [activeThreads, pinnedThreads, settledThreads, snoozedThreads, workingThreads],
+    [activeThreads, blockedThreads, pinnedThreads, settledThreads, snoozedThreads, workingThreads],
   );
   const searchEnvironmentIds = useConnectedEnvironmentIds();
   // useThreadSearch owns the debounce and the two-character floor.
@@ -3005,6 +3059,28 @@ export default function Sidebar() {
     );
     return routeThread === undefined ? EMPTY_THREADS : [routeThread];
   }, [routeThreadKey, settledShelfExpanded, visibleSettledThreads]);
+
+  // Fork: the Depends on shelf behaves exactly like the snoozed one: collapsed
+  // by default, and the routed thread still renders so a deep link never
+  // opens a thread with no row.
+  const [blockedShelfExpanded, setBlockedShelfExpanded] = useLocalStorage(
+    BLOCKED_SHELF_EXPANDED_KEY,
+    false,
+    Schema.Boolean,
+  );
+  const toggleBlockedShelf = useCallback(
+    () => setBlockedShelfExpanded((value) => !value),
+    [setBlockedShelfExpanded],
+  );
+  const visibleBlockedThreads = useMemo(() => {
+    if (blockedShelfExpanded) return blockedThreads;
+    if (routeThreadKey === null) return EMPTY_THREADS;
+    const routeThread = blockedThreads.find(
+      (thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === routeThreadKey,
+    );
+    return routeThread === undefined ? EMPTY_THREADS : [routeThread];
+  }, [blockedShelfExpanded, blockedThreads, routeThreadKey]);
 
   // The snoozed shelf is collapsed by default: out of the way, never gone.
   // Collapsed threads don't render (and so don't participate in jump
@@ -3620,7 +3696,9 @@ export default function Sidebar() {
           sectionByThreadKeyRef.current.get(key) === originSection &&
           (action === "unsnooze"
             ? capabilities?.threadSnooze === true
-            : capabilities?.threadSettlement === true)
+            : action === "release"
+              ? capabilities?.threadDependencies === true
+              : capabilities?.threadSettlement === true)
         );
       };
       let targetKey: string | null = null;
@@ -3659,6 +3737,7 @@ export default function Sidebar() {
             const ref = parseScopedThreadKey(key);
             if (ref === null) continue;
             if (action === "unsettle") attemptUnsettle(ref);
+            else if (action === "release") attemptRelease(ref);
             else attemptUnsnooze(ref);
           }
         },
@@ -3666,7 +3745,7 @@ export default function Sidebar() {
         onAbort: () => {},
       });
     },
-    [attemptUnsettle, attemptUnsnooze, serverConfigs, settleThreads],
+    [attemptRelease, attemptUnsettle, attemptUnsnooze, serverConfigs, settleThreads],
   );
   const pinnedKeys = useMemo(
     () =>
@@ -3841,6 +3920,7 @@ export default function Sidebar() {
       pinnedThreads.length +
         activeThreads.length +
         workingThreads.length +
+        blockedThreads.length +
         snoozedThreads.length +
         settledThreads.length ===
       0
@@ -3857,6 +3937,10 @@ export default function Sidebar() {
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
       items.push(...rowsOf(visibleWorkingThreads, "working"));
+    }
+    if (blockedThreads.length > 0) {
+      items.push({ kind: "marker", marker: "blocked-header" });
+      items.push(...rowsOf(visibleBlockedThreads, "blocked"));
     }
     if (snoozedThreads.length > 0) {
       items.push({ kind: "marker", marker: "snoozed-header" });
@@ -5403,12 +5487,14 @@ export default function Sidebar() {
                             sweepAction={
                               actionSweep?.keys.has(threadKey) ? actionSweep.action : null
                             }
-                            snoozeWakeLabelText={
-                              section === "snoozed" && thread.snoozedUntil != null
-                                ? snoozeWakeLabel(thread.snoozedUntil, {
-                                    now: new Date().toISOString(),
-                                  })
-                                : null
+                            parkedLabelText={
+                              section === "blocked"
+                                ? (blockedWaitLabelByKey.get(threadKey) ?? null)
+                                : section === "snoozed" && thread.snoozedUntil != null
+                                  ? snoozeWakeLabel(thread.snoozedUntil, {
+                                      now: new Date().toISOString(),
+                                    })
+                                  : null
                             }
                             // All sections: a woken thread can classify straight
                             // into the settled tail (PR merged while snoozed), and
@@ -5566,12 +5652,32 @@ export default function Sidebar() {
                               />,
                             );
                             break;
+                          case "blocked-header":
+                            items.push(
+                              <SidebarSectionHeader
+                                key="blocked-shelf-header"
+                                marker="blocked-header"
+                                className={cn(workingThreads.length === 0 && "mt-auto")}
+                                label={
+                                  blockedShelfExpanded
+                                    ? "Depends on"
+                                    : `Depends on (${blockedThreads.length})`
+                                }
+                                toggle={{
+                                  expanded: blockedShelfExpanded,
+                                  onToggle: toggleBlockedShelf,
+                                }}
+                              />,
+                            );
+                            break;
                           case "snoozed-header":
                             items.push(
                               <SidebarSectionHeader
                                 key="snoozed-shelf-header"
                                 marker="snoozed-header"
-                                className={cn(workingThreads.length === 0 && "mt-auto")}
+                                className={cn(
+                                  workingThreads.length + blockedThreads.length === 0 && "mt-auto",
+                                )}
                                 label={
                                   snoozedShelfExpanded
                                     ? "Snoozed"
@@ -5590,7 +5696,10 @@ export default function Sidebar() {
                                 key="settled-shelf-header"
                                 marker="settled-header"
                                 className={cn(
-                                  workingThreads.length + snoozedThreads.length === 0 && "mt-auto",
+                                  workingThreads.length +
+                                    blockedThreads.length +
+                                    snoozedThreads.length ===
+                                    0 && "mt-auto",
                                 )}
                                 label={
                                   settledShelfExpanded

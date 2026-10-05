@@ -166,7 +166,6 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { citationsToPlainText } from "@t3tools/shared/assistantCitations";
 import { assistantCitationFromLocation } from "../lib/assistantCitationNavigation";
 import { isMacPlatform } from "../lib/utils";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
@@ -2102,6 +2101,11 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isServerThread = serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  // Fork: the open server thread, for continuation links and "Continue in new thread".
+  const activeServerThread = serverThread;
+  // An open archived thread has no shell, but its projection still names its source.
+  const activeContinuedFromThreadId =
+    serverProjection?.thread.continuedFromThreadId ?? serverThread?.continuedFromThreadId ?? null;
   const serverLatestRun = useMemo(
     () => (serverProjection === null ? null : deriveLatestThreadRun(serverProjection)),
     [serverProjection],
@@ -6954,6 +6958,7 @@ export default function ChatView(props: ChatViewProps) {
   const supportsDependencies = serverConfig?.environment.capabilities.threadDependencies === true;
   const supportsPinning = serverConfig?.environment.capabilities.threadPinning === true;
   const activeThreadPinned = supportsPinning && activeThreadShell?.pinnedAt != null;
+  const snoozeNow = new Date().toISOString();
   const activeThreadSnoozed =
     activeThreadShell !== null &&
     supportsSnooze &&
@@ -7000,10 +7005,6 @@ export default function ChatView(props: ChatViewProps) {
     );
     return () => window.clearTimeout(id);
   }, [activeThreadShell?.snoozedUntil, activeThreadSnoozed, snoozeWakeTick]);
-  const activeThreadWokeAt =
-    activeThreadShell !== null && supportsSnooze
-      ? threadWokeAt(activeThreadShell, { now: new Date().toISOString() })
-      : null;
   const acknowledgeThreadWoke = useAcknowledgeThreadWoke();
   const acknowledgeActiveThreadWoke = useCallback(() => {
     if (activeThreadRef === null || activeThreadWokeAt === null) return;
@@ -9309,7 +9310,7 @@ export default function ChatView(props: ChatViewProps) {
       : null;
     const continuation = resolveDraftContinuation({
       continuedFromThreadId,
-      threadReferences: composerThreadReferencesSnapshot,
+      threadReferences: composerThreadContextsSnapshot,
     });
     if (multipleModelSelections !== null) {
       const failedSelections: ModelSelection[] = [];
@@ -9330,7 +9331,7 @@ export default function ChatView(props: ChatViewProps) {
         );
         const title = truncate(
           continuation?.titleSeed ||
-            citationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
+            assistantCitationsToPlainText(stripInlineContextReferences(trimmed)).trim() ||
             composerAttachmentsSnapshot[0]?.name ||
             "New thread",
         );
@@ -9662,7 +9663,8 @@ export default function ChatView(props: ChatViewProps) {
       }
     }
     let titleSeed =
-      continuation?.titleSeed ?? citationsToPlainText(stripInlineContextReferences(trimmed)).trim();
+      continuation?.titleSeed ??
+      assistantCitationsToPlainText(stripInlineContextReferences(trimmed)).trim();
     if (!titleSeed) {
       if (firstComposerImageName) {
         titleSeed = `Image: ${firstComposerImageName}`;
@@ -11221,7 +11223,7 @@ export default function ChatView(props: ChatViewProps) {
             activeThreadTitle={activeThread.title}
             activeProject={activeProject ?? null}
             rightPanelOpen={inlineRightPanelOwnsTitleBar}
-            continuedFromThreadId={activeServerThread?.continuedFromThreadId ?? null}
+            continuedFromThreadId={activeContinuedFromThreadId}
             onNewThreadInProject={handleNewThreadInActiveProject}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }

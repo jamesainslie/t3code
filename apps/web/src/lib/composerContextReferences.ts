@@ -6,6 +6,9 @@ import {
   toComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
 
+// Fork: the implementation moved to shared, where thread chips also need it.
+export { toComposerContextId };
+
 /**
  * Prompt-string operations on inline context references, independent of kind. Each context
  * kind's draft record supplies a `ComposerContextReference` (kind, id, label); the prompt owns
