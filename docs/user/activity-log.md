@@ -1,8 +1,13 @@
 # Activity log
 
-On web and desktop, consecutive tool calls appear as an expandable summary. Open it to inspect
-commands, tool inputs, status, and exit codes. Raw command output and tool-result bodies are not
-shown. Use **Open diff** on a file change to review its contents.
+Consecutive tool calls appear as an expandable summary. Open it to inspect commands, tool inputs,
+status, and exit codes. Use **Open diff** on a file change to review its contents.
+
+A command opens as a small terminal showing the command, its colored output, and its exit code.
+Its copy button copies the command and output as plain text, ready to paste into another agent
+or tool. Failed commands open on their own. To show every command's output without clicking, set
+**Settings > General > Command display** to **Exposed**, or turn on **Expose commands** under
+**Settings > Appearance > Terminal** on mobile.
 
 T3 Orchestrator summaries describe the actions taken, such as **Ran 2 commands and sent messages
 to 3 threads**. Repeated messages to the same destinations show both counts: **Sent 5 messages to

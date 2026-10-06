@@ -1233,7 +1233,13 @@ export function deriveMessagesTimelineRows(input: {
   runningRunId?: RunId | null;
   expandedRunIds?: ReadonlySet<RunId>;
   expandedAttemptIds?: ReadonlySet<RunAttemptId>;
+  /**
+   * Groups toggled away from their default. Settled groups default to closed,
+   * or to open when `exposeCommandGroups` is set and the group ran a command.
+   */
   expandedWorkGroupIds?: ReadonlySet<string>;
+  /** Fork: the commands display setting is "exposed". */
+  exposeCommandGroups?: boolean;
   isWorking: boolean;
   /**
    * The live work has no app run (a provider-native subagent thread), so
@@ -1591,7 +1597,10 @@ export function deriveMessagesTimelineRows(input: {
           });
         } else {
           const groupId = workGroupId(timelineEntry.id);
-          const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
+          const opensByDefault =
+            input.exposeCommandGroups === true &&
+            visibleGroupedEntries.some((entry) => entry.itemType === "command_execution");
+          const expanded = opensByDefault !== (input.expandedWorkGroupIds?.has(groupId) ?? false);
           const summaryKind = toolGroupSummaryKind(visibleGroupedEntries);
           const primarySourceEntry = visibleGroupedEntries.find(
             (entry) => entry.toolSource !== undefined,

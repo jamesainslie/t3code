@@ -24,7 +24,7 @@ import { Button } from "../ui/button";
 import ChatMarkdown from "../ChatMarkdown";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
-import { ShellCommandBlock } from "./ShellCommandBlock";
+import { TerminalCard } from "./TerminalCard";
 
 interface V2ItemInspectorProps {
   readonly projectedItem: OrchestrationV2ProjectedTurnItem;
@@ -163,18 +163,14 @@ export function FetchedToolOutput(props: {
   );
 }
 
-/** A tool call's body: the call itself in the foreground, its result muted below. */
-function ToolCallBody(
-  props: ToolOutputState & {
-    readonly command?: string;
-    readonly args?: unknown;
-    readonly exitCode?: number | undefined;
-  },
-) {
-  const call = toolCallLines({ command: props.command, args: props.args });
+/**
+ * A tool call's body: the call itself in the foreground, its result muted below.
+ * Commands draw as a TerminalCard instead.
+ */
+function ToolCallBody(props: ToolOutputState & { readonly args?: unknown }) {
+  const call = toolCallLines({ args: props.args });
   return (
     <div className={cn("space-y-1.5", monoClassName)}>
-      {call.command ? <ShellCommandBlock command={call.command} /> : null}
       {call.args ? (
         <div className="text-foreground/85">
           {call.args.map(([key, value]) => (
@@ -187,9 +183,6 @@ function ToolCallBody(
       ) : null}
       {call.argsText ? <StructuredValue value={call.argsText} highlightJson /> : null}
       <ToolOutput {...props} />
-      {props.exitCode !== undefined && props.exitCode !== 0 ? (
-        <div className="text-destructive">exit {props.exitCode}</div>
-      ) : null}
     </div>
   );
 }
@@ -220,7 +213,12 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
 
       {item.type === "command_execution" ? (
-        <ToolCallBody command={item.input} exitCode={item.exitCode} {...outputState} />
+        <TerminalCard
+          command={item.input}
+          exitCode={item.exitCode}
+          className={monoClassName}
+          {...outputState}
+        />
       ) : null}
 
       {item.type === "file_change" ? (

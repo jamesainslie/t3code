@@ -355,6 +355,10 @@
       "types": "./src/work-log/thinking.ts",
       "default": "./src/work-log/thinking.ts"
     },
+    "./work-log/terminal": {
+      "types": "./src/work-log/terminal.ts",
+      "default": "./src/work-log/terminal.ts"
+    },
     "./thread-pull-request-compatibility": {
       "types": "./src/threadPullRequestCompatibility.ts",
       "default": "./src/threadPullRequestCompatibility.ts"

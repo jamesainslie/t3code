@@ -165,9 +165,11 @@ import {
   isContextCompactionActivityGroup,
   isContextHandoffActivityGroup,
   snoozeReminderNotice,
+  threadFeedActivityExpanded,
   type ThreadFeedEntry,
   type ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
+import { useCommandDisplayMode } from "../../state/use-command-display-mode";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 import {
   resolveThreadFeedLiveFollow,
@@ -2246,6 +2248,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     expandedTurnIds: new Set(),
   });
   const { copiedRowId, expandedWorkGroups, expandedWorkRows, expandedTurnIds } = interactionState;
+  const commandDisplayMode = useCommandDisplayMode();
   const [expandedFile, setExpandedFile] = useState<FilePreviewSource | null>(null);
   const [expandedVideo, setExpandedVideo] = useState<VideoPreviewSource | null>(null);
   const fileShareSourceIdentifier = useId();
@@ -2682,6 +2685,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           ),
           props.activeWorkStartedAt,
           props.runlessWorkActive ?? false,
+          commandDisplayMode,
         ),
         props.feed,
         props.queuedMessages,
@@ -2690,6 +2694,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.queuedMessages,
       expandedTurnIds,
       expandedWorkGroups,
+      commandDisplayMode,
       props.activeWorkStartedAt,
       props.runlessWorkActive,
       props.feed,
@@ -2953,7 +2958,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           // Expanded rows append a variable detail block — fall back to
           // measurement for those groups.
           return entry.activities.some(
-            (activity) => activity.prominent || expandedWorkRows[activity.id],
+            (activity) =>
+              activity.prominent ||
+              threadFeedActivityExpanded(activity, expandedWorkRows, commandDisplayMode),
           )
             ? undefined
             : collapsedWorkLogHeight(entry.activities, entry.continuesWorkLog);
@@ -2961,7 +2968,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           return undefined;
       }
     },
-    [expandedWorkRows, workRowSizing.fixedRowHeight],
+    [commandDisplayMode, expandedWorkRows, workRowSizing.fixedRowHeight],
   );
 
   // Disclosures can mount existing offscreen rows as well as new work rows.

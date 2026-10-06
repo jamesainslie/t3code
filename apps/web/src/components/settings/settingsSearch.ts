@@ -390,6 +390,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["timestamp clock locale system browser os 12 hour 24 hour"],
   },
   {
+    id: "command-display",
+    title: "Command display",
+    to: "/settings/general",
+    searchTerms: ["terminal command output tool call shell exposed collapsed expand copy"],
+  },
+  {
     id: "chat-event-timestamps",
     title: "Event timestamps",
     to: "/settings/general",

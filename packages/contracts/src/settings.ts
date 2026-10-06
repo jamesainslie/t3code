@@ -46,6 +46,13 @@ export type TimestampFormat = typeof TimestampFormat.Type;
 const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 
 /**
+ * Fork: whether commands in the chat timeline show their terminal output
+ * open ("exposed") or behind a disclosure ("collapsed", failures still open).
+ */
+export const CommandDisplayMode = Schema.Literals(["collapsed", "exposed"]);
+export type CommandDisplayMode = typeof CommandDisplayMode.Type;
+
+/**
  * How always-visible chat event timestamps read: wall-clock time that adds the
  * date once the event is no longer from today, the date on every event, or a
  * sortable `2026-09-29 11:46:36`.
@@ -582,6 +589,9 @@ export const ClientSettingsSchema = Schema.Struct({
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Copy text to the clipboard as soon as it is selected (fork).
   copyOnSelectEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  commandDisplayMode: CommandDisplayMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("collapsed" as const)),
+  ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -2011,5 +2021,6 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
   copyOnSelectEnabled: Schema.optionalKey(Schema.Boolean),
+  commandDisplayMode: Schema.optionalKey(CommandDisplayMode),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;
