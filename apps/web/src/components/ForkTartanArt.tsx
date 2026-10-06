@@ -1,11 +1,11 @@
 import { useId } from "react";
 
 /**
- * Fork-only header art. The Ainslie tartan (Scottish Register of Tartans STA 2187, designed by
- * Dr Gordon Teall in 1992) replaces upstream's nightly night sky so a fork build is recognisable
- * at a glance. `SidebarStageBackdrop` renders it wherever the nightly variant appears: the sidebar
- * header, the composer's send button and the CLI-connect masthead. Colours come from the
- * `--stage-tartan-*` custom properties in `index.css`.
+ * Fork-only header art and the default edition. The Ainslie tartan (Scottish Register of Tartans
+ * STA 2187, designed by Dr Gordon Teall in 1992) replaces upstream's nightly night sky so a fork
+ * build is recognisable at a glance. `SidebarStageBackdrop` renders it when the tartan edition is
+ * chosen: the sidebar header, the composer's send button and the CLI-connect masthead. Colours
+ * come from the `--stage-tartan-*` custom properties in `index.css`.
  */
 
 type TartanColour = "blue" | "black" | "red" | "white";

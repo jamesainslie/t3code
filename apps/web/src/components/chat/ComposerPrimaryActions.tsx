@@ -5,7 +5,7 @@ import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
-import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
+import { StageBackdropButtonArt, useStageArtworkEdition } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
@@ -116,9 +116,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     }) === "queue";
   const alternateAction = alternateComposerDispatchAction(followUpBehavior);
   const isSendDisabled = sendDisabledReason !== null;
-  const stageBackdropVariant = useSidebarStageBackdropVariant(
-    environmentIdentificationMode === "artwork",
-  );
+  const stageArtworkEdition = useStageArtworkEdition(environmentIdentificationMode === "artwork");
 
   const renderStopGenerationButton = (insidePendingAction: boolean) => (
     <Tooltip key="interrupt">
@@ -284,7 +282,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       type={showResume ? "button" : "submit"}
       className={cn(
         "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
+        stageArtworkEdition
           ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
           : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
       )}
@@ -298,10 +296,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         (!hasSendableContent && !showResume)
       }
       aria-label={submitStatus ?? submitLabel}
+      data-stage-art-button={stageArtworkEdition ? "" : undefined}
     >
-      {stageBackdropVariant ? (
+      {stageArtworkEdition ? (
         <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <StageBackdropButtonArt variant={stageBackdropVariant} />
+          <StageBackdropButtonArt edition={stageArtworkEdition} />
         </span>
       ) : null}
       {isConnecting || isSendBusy ? (
