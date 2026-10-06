@@ -7,6 +7,7 @@ import {
   ClientSettingsPatch,
   ClaudeSettings,
   DEFAULT_SERVER_SETTINGS,
+  Edition,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   resolveProviderInstanceEnabled,
   ServerSettings,
@@ -641,6 +642,36 @@ describe("ClientSettings environment identification", () => {
   it("rejects unsupported presentation modes", () => {
     expect(() => decodeClientSettings({ environmentIdentificationMode: "badge" })).toThrow();
     expect(() => decodeClientSettingsPatch({ environmentIdentificationMode: "badge" })).toThrow();
+  });
+});
+
+describe("ClientSettings edition", () => {
+  it("defaults to the tartan with the app icon and accent following it", () => {
+    const decoded = decodeClientSettings({});
+    expect(decoded.edition).toBe("tartan");
+    expect(decoded.editionAppIcon).toBe(true);
+    expect(decoded.editionAccent).toBe(true);
+  });
+
+  it("round-trips every edition through settings and patches", () => {
+    for (const edition of Edition.literals) {
+      expect(
+        decodeClientSettings(encodeClientSettings({ ...decodeClientSettings({}), edition }))
+          .edition,
+      ).toBe(edition);
+      expect(decodeClientSettingsPatch({ edition }).edition).toBe(edition);
+    }
+  });
+
+  it("falls back to the default for an edition this build does not know", () => {
+    // A newer build may have saved an edition this one lacks; the rest of the file must still load.
+    const decoded = decodeClientSettings({ edition: "retired-edition", syntaxTheme: "graphite" });
+    expect(decoded.edition).toBe("tartan");
+    expect(decoded.syntaxTheme).toBe("graphite");
+  });
+
+  it("rejects unknown editions in patches", () => {
+    expect(() => decodeClientSettingsPatch({ edition: "retired-edition" })).toThrow();
   });
 });
 
