@@ -45,6 +45,7 @@ import * as IdAllocator from "./IdAllocator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import {
   ProviderAdapterEventStreamError,
+  ProviderAdapterSessionReleasedError,
   type ProviderAdapterV2Event,
   ProviderAdapterProtocolError,
   type ProviderAdapterV2RuntimePolicy,
@@ -973,6 +974,48 @@ it.effect("ProviderSessionManagerV2 closes event subscriptions normally on serve
     });
 
     yield* effect.pipe(Effect.provide(makeTestLayer({ state, idleTimeoutMs: 60_000 })));
+  }),
+);
+
+it.effect("ProviderSessionManagerV2 tells subscribers a detach released their session", () =>
+  Effect.gen(function* () {
+    const state = yield* Ref.make(emptyState);
+    const effect = Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread-provider-session-manager-detach-subscription");
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+      });
+      const runtime = yield* manager.open({
+        threadId,
+        providerSessionId,
+        modelSelection,
+        runtimePolicy,
+      });
+      const subscription = yield* runtime.subscribeEvents!;
+
+      // A workspace handoff detaches the thread from its exclusive session.
+      yield* manager.detach({ providerSessionId, threadId, detail: "Workspace changed." });
+
+      const exit = yield* subscription.events.pipe(Stream.runDrain, Effect.exit);
+      assert.isTrue(Exit.isFailure(exit));
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+      assert.instanceOf(error, ProviderAdapterSessionReleasedError);
+      assert.equal((error as ProviderAdapterSessionReleasedError).detail, "Workspace changed.");
+    });
+
+    yield* effect.pipe(
+      Effect.provide(
+        makeTestLayer({ state, idleTimeoutMs: 60_000, capabilities: ExclusiveCapabilities }),
+      ),
+    );
   }),
 );
 

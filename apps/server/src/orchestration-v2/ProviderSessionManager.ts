@@ -41,6 +41,7 @@ import * as IdAllocator from "./IdAllocator.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import {
   ProviderAdapterEventStreamError,
+  ProviderAdapterSessionReleasedError,
   ProviderAdapterV2RuntimePolicy,
   type ProviderAdapterV2Error,
   type ProviderAdapterV2Event,
@@ -547,13 +548,26 @@ export const layerWithOptions = (
           ),
         );
 
-      const failSubscribers = (entry: LiveSessionEntry, detail: string) =>
+      // A manual shutdown is T3 releasing the session on purpose (workspace
+      // handoff, sign-out), so its runs end as cancelled rather than failed.
+      const failSubscribers = (
+        entry: LiveSessionEntry,
+        reason: ProviderSessionReleaseReason,
+        detail: string | undefined,
+      ) =>
         Effect.gen(function* () {
-          const error = new ProviderAdapterEventStreamError({
-            driver: entry.runtime.driver,
-            providerSessionId: entry.runtime.providerSessionId,
-            cause: detail,
-          });
+          const error =
+            reason === "manual_shutdown"
+              ? new ProviderAdapterSessionReleasedError({
+                  driver: entry.runtime.driver,
+                  providerSessionId: entry.runtime.providerSessionId,
+                  ...(detail === undefined ? {} : { detail }),
+                })
+              : new ProviderAdapterEventStreamError({
+                  driver: entry.runtime.driver,
+                  providerSessionId: entry.runtime.providerSessionId,
+                  cause: detail ?? `Provider session released: ${reason}.`,
+                });
           const subscribers = yield* Ref.getAndSet(entry.eventSubscribers, new Map());
           yield* Effect.forEach(
             subscribers.values(),
@@ -891,10 +905,7 @@ export const layerWithOptions = (
                   } else if (input.reason === "server_shutdown") {
                     yield* closeSubscribers(entry);
                   } else {
-                    yield* failSubscribers(
-                      entry,
-                      input.detail ?? `Provider session released: ${input.reason}.`,
-                    );
+                    yield* failSubscribers(entry, input.reason, input.detail);
                   }
                   // Scope close can wedge on a misbehaving adapter finalizer
                   // (e.g. a provider process that never yields its message

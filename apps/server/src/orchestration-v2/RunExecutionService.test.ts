@@ -45,6 +45,7 @@ import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "./IdAllocator.ts";
 import {
   ProviderAdapterEventStreamError,
+  ProviderAdapterSessionReleasedError,
   ProviderAdapterTurnStartError,
   type ProviderAdapterV2Error,
   type ProviderAdapterV2Event,
@@ -3334,6 +3335,75 @@ it.effect("refreshes pull requests after a provider stream exits with an error",
     );
     const error = written.find((item) => item.type === "error");
     assert.include(error?.failure.message ?? "", "provider event stream closed unexpectedly");
+  }),
+);
+
+it.effect("cancels the run when T3 closes its provider session on purpose", () =>
+  Effect.gen(function* () {
+    const { written, observed } = yield* captureRootRunTermination({
+      key: "session-released",
+      shouldFinalizeRun: () => Effect.succeed(true),
+      events: (ids) =>
+        Stream.concat(
+          Stream.make(backgroundTurnItemEvent(ids, "dynamic_tool", "running", 1)),
+          Stream.fail(
+            new ProviderAdapterSessionReleasedError({
+              driver,
+              providerSessionId: ProviderSessionId.make("session:released"),
+              detail: "Workspace changed.",
+            }),
+          ),
+        ),
+    });
+    // Cancelled, not failed: a failed run holds the queue, and the workspace
+    // handoff's continuation waits in that queue.
+    assert.deepEqual(observed, ["run:cancelled", "pull-requests-refreshed"]);
+    assert.deepEqual(
+      written.map((item) => `${item.type}:${item.status}`),
+      ["dynamic_tool:cancelled"],
+    );
+  }),
+);
+
+it.effect("ends the run's open tool calls when its provider stream fails", () =>
+  Effect.gen(function* () {
+    const { written, observed } = yield* captureRootRunTermination({
+      key: "stream-error-open-items",
+      shouldFinalizeRun: () => Effect.succeed(true),
+      events: (ids) =>
+        Stream.concat(
+          Stream.make(
+            backgroundTurnItemEvent(ids, "command_execution", "running", 1),
+            backgroundTurnItemEvent(
+              ids,
+              "dynamic_tool",
+              "running",
+              2,
+              TurnItemId.make("turn-item:stream-error-open-items:tool"),
+            ),
+            backgroundTurnItemEvent(
+              ids,
+              "dynamic_tool",
+              "completed",
+              3,
+              TurnItemId.make("turn-item:stream-error-open-items:tool"),
+            ),
+          ),
+          Stream.fail(
+            new ProviderAdapterEventStreamError({
+              driver,
+              providerSessionId: ProviderSessionId.make("session:exited"),
+              cause: "provider process exited",
+            }),
+          ),
+        ),
+    });
+    assert.deepEqual(observed, ["run:failed", "pull-requests-refreshed"]);
+    // Only the call that was still open ends; the finished one stays as it was.
+    assert.deepEqual(
+      written.map((item) => `${item.type}:${item.status}`),
+      ["command_execution:failed", "error:failed"],
+    );
   }),
 );
 
