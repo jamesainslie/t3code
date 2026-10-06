@@ -10,6 +10,7 @@
 import type {
   ServerProviderUsageWindow,
   UsageLimitSourceAccount,
+  UsageLimitSourceAccountLogin,
   UsageLimitSourceSnapshot,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/usageLimits";
@@ -36,6 +37,26 @@ export interface ProxyAccountView {
   /** The countdown or verdict that decides this account's fate soonest. */
   readonly runwayText: string;
   readonly runwayTone: ProxyTone;
+  /** The gateway flagged the account's credential dead; a login fixes it. */
+  readonly needsLogin: boolean;
+  /** The account's open login on the gateway, if any. */
+  readonly login: ProxyLoginView | null;
+}
+
+/**
+ * One account's login as its panel shows it. `step` is what the panel asks
+ * of the user now: paste the consent page's code, approve the device code
+ * elsewhere, wait, or read the outcome.
+ */
+export interface ProxyLoginView {
+  readonly sessionId: string;
+  readonly mode: "paste" | "device";
+  readonly step: "paste" | "approve" | "working" | "done" | "failed";
+  readonly authorizeUrl: string | null;
+  readonly userCode: string | null;
+  readonly verificationUrl: string | null;
+  /** What to tell the user beside the step; null when the step says it all. */
+  readonly message: string | null;
 }
 
 export interface ProxyPillView {
@@ -52,6 +73,42 @@ export interface ProxyPillView {
   readonly footer: string;
   readonly pending: { userCode: string; verificationUrl: string; expiresAt: string } | null;
   readonly error: string | null;
+  /** How many accounts need a login, for the trigger's dot. */
+  readonly needsLogin: number;
+}
+
+/** The gateway's stable failure codes, as the next thing to do. */
+const LOGIN_ADVICE: Record<string, string> = {
+  bad_code: "That code didn't work. Copy it again from the consent page and paste it here.",
+  provider_unavailable: "Couldn't reach the provider just now. Try again.",
+  save_failed: "Logged in, but the gateway could not save it: it will not survive a restart.",
+};
+
+function loginView(login: UsageLimitSourceAccountLogin): ProxyLoginView {
+  const step: ProxyLoginView["step"] =
+    login.state === "awaiting_code"
+      ? "paste"
+      : login.state === "awaiting_approval"
+        ? "approve"
+        : login.state === "exchanging"
+          ? "working"
+          : login.state === "completed"
+            ? "done"
+            : "failed";
+  const advice = login.errorCode ? LOGIN_ADVICE[login.errorCode] : undefined;
+  const message =
+    advice ??
+    (login.state === "expired" ? "The login timed out." : null) ??
+    (step === "failed" ? (login.error ?? "The login failed.") : null);
+  return {
+    sessionId: login.sessionId,
+    mode: login.mode,
+    step,
+    authorizeUrl: login.authorizeUrl ?? null,
+    userCode: login.userCode ?? null,
+    verificationUrl: login.verificationUrl ?? null,
+    message,
+  };
 }
 
 const DEFAULT_THRESHOLD = 90;
@@ -97,7 +154,13 @@ function spent(window: ServerProviderUsageWindow, threshold: number, now: number
 
 function accountView(
   account: UsageLimitSourceAccount,
-  input: { threshold: number; modelThreshold: number; now: number; seconds: boolean },
+  input: {
+    threshold: number;
+    modelThreshold: number;
+    now: number;
+    seconds: boolean;
+    login: UsageLimitSourceAccountLogin | undefined;
+  },
 ): ProxyAccountView {
   const windows = account.usageLimits.windows.map((window): ProxyWindowView => {
     const threshold =
@@ -199,6 +262,8 @@ function accountView(
     headline: headline ? `${Math.round(headline.usedPercent)}%` : "no data",
     runwayText,
     runwayTone,
+    needsLogin: proxy?.state === "reauthentication",
+    login: input.login ? loginView(input.login) : null,
   };
 }
 
@@ -268,8 +333,15 @@ export function deriveProxyPill(
   const auth = proxy?.auth ?? { state: "signedOut" as const };
   const threshold = proxy?.rotationThresholdPercent ?? DEFAULT_THRESHOLD;
   const modelThreshold = proxy?.modelThresholdPercent ?? threshold;
+  const logins = proxy?.accountLogins ?? [];
   const accounts = snapshot.accounts.map((account) =>
-    accountView(account, { threshold, modelThreshold, now, seconds }),
+    accountView(account, {
+      threshold,
+      modelThreshold,
+      now,
+      seconds,
+      login: logins.find((login) => login.account === account.id),
+    }),
   );
   const current = accounts.find((account) => account.id === proxy?.current) ?? null;
   const fallbacks = (proxy?.fallback ?? []).map(
@@ -300,6 +372,7 @@ export function deriveProxyPill(
           }
         : null,
     error: snapshot.error ?? null,
+    needsLogin: accounts.filter((account) => account.needsLogin).length,
   };
   if (auth.state !== "signedIn") {
     return {

@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, UsageLimitSourceSnapshot } from "@t3tools/contracts";
 import { useEffect, useMemo, useState } from "react";
 
@@ -9,6 +9,8 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { ProxyLoginPanel } from "./ProxyLoginPanel";
+import { proxyLoginPanelAtom } from "./proxyLoginRequest";
 import {
   deriveProxyPill,
   selectProxySource,
@@ -132,9 +134,12 @@ function windowsOf(account: ProxyAccountView | null) {
 function LedgerRow({
   account,
   threshold,
+  onLogin,
 }: {
   readonly account: ProxyAccountView;
   readonly threshold: number;
+  /** Present when the row offers a login: the account needs one or has one open. */
+  readonly onLogin?: () => void;
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)_2.25rem_4.5rem] items-center gap-x-2.5 border-t border-border/60 py-1.5 first:border-t-0">
@@ -164,11 +169,25 @@ function LedgerRow({
       <div className="text-right font-mono text-2xs text-foreground tabular-nums">
         {account.headline}
       </div>
-      <div
-        className={cn("text-right font-mono text-2xs tabular-nums", TONE_TEXT[account.runwayTone])}
-      >
-        {account.runwayText}
-      </div>
+      {onLogin ? (
+        <Button
+          size="micro"
+          variant="ghost-destructive"
+          className="justify-self-end"
+          onClick={onLogin}
+        >
+          {account.runwayText || "login"}
+        </Button>
+      ) : (
+        <div
+          className={cn(
+            "text-right font-mono text-2xs tabular-nums",
+            TONE_TEXT[account.runwayTone],
+          )}
+        >
+          {account.runwayText}
+        </div>
+      )}
     </div>
   );
 }
@@ -259,10 +278,15 @@ function Ledger({
   environmentId,
   snapshot,
   threshold,
+  loginFor,
+  onLoginFor,
 }: {
   readonly environmentId: EnvironmentId;
   readonly snapshot: UsageLimitSourceSnapshot;
   readonly threshold: number;
+  /** The account whose login panel is open, if any. */
+  readonly loginFor: string | null;
+  readonly onLoginFor: (account: string | null) => void;
 }) {
   // The popover unmounts when it closes, so this second-by-second clock and
   // the re-derivation it drives only run while someone is looking.
@@ -286,7 +310,27 @@ function Ledger({
         <>
           <div className="flex flex-col">
             {pill.accounts.map((account) => (
-              <LedgerRow key={account.id} account={account} threshold={threshold} />
+              <div key={account.id}>
+                <LedgerRow
+                  account={account}
+                  threshold={threshold}
+                  {...(account.needsLogin || account.login
+                    ? {
+                        onLogin: () => onLoginFor(loginFor === account.id ? null : account.id),
+                      }
+                    : {})}
+                />
+                {loginFor === account.id ? (
+                  <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
+                    <ProxyLoginPanel
+                      environmentId={environmentId}
+                      sourceId={pill.sourceId}
+                      account={account}
+                      onClose={() => onLoginFor(null)}
+                    />
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
           {pill.fallbacks.length > 0 ? (
@@ -369,12 +413,34 @@ export function ProxyUsagePill({
     () => (snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null),
     [snapshot, minute],
   );
+  // Controlled so an open login panel pins the popover: approving a login
+  // takes the pointer to another window, which would otherwise close it on
+  // hover-out and lose the code being pasted. While pinned only Escape or the
+  // trigger closes it.
+  const [hovered, setHovered] = useState(false);
+  const loginFor = useAtomValue(proxyLoginPanelAtom);
+  const setLoginFor = useAtomSet(proxyLoginPanelAtom);
   if (!pill) return null;
   const { session, weekly } = windowsOf(pill.current);
   const dim = pill.status !== "live";
   const tone = pill.tone;
   return (
-    <Popover>
+    <Popover
+      open={hovered || loginFor !== null}
+      onOpenChange={(next, details) => {
+        const pinned = loginFor !== null;
+        if (
+          !next &&
+          pinned &&
+          details.reason !== "escape-key" &&
+          details.reason !== "trigger-press"
+        ) {
+          return;
+        }
+        if (!next) setLoginFor(null);
+        setHovered(next);
+      }}
+    >
       <PopoverTrigger
         openOnHover
         delay={150}
@@ -388,7 +454,13 @@ export function ProxyUsagePill({
           />
         }
       >
-        <span className={cn("flex items-center gap-2", dim && "text-muted-foreground")}>
+        <span className={cn("relative flex items-center gap-2", dim && "text-muted-foreground")}>
+          {pill.needsLogin > 0 ? (
+            <span
+              aria-label={`${pill.needsLogin} ${pill.needsLogin === 1 ? "account needs" : "accounts need"} a login`}
+              className="absolute -top-1 -left-1 size-1.5 rounded-full bg-error"
+            />
+          ) : null}
           <IrisGauge
             session={pill.status === "live" ? session : null}
             weekly={pill.status === "live" ? weekly : null}
@@ -444,7 +516,13 @@ export function ProxyUsagePill({
         className="w-[24.5rem] max-w-none text-left whitespace-normal"
       >
         {snapshot ? (
-          <Ledger environmentId={environmentId} snapshot={snapshot} threshold={threshold} />
+          <Ledger
+            environmentId={environmentId}
+            snapshot={snapshot}
+            threshold={threshold}
+            loginFor={loginFor}
+            onLoginFor={setLoginFor}
+          />
         ) : null}
       </PopoverPopup>
     </Popover>

@@ -17,6 +17,8 @@
 import {
   DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL,
   UsageLimitSourceError,
+  type UsageLimitSourceAccountLoginInput,
+  type UsageLimitSourceAccountLoginResult,
   type UsageLimitSourceAuthInput,
   type UsageLimitSourceAuthState,
   type UsageLimitSourceConsumeResetCreditInput,
@@ -42,6 +44,7 @@ import * as Stream from "effect/Stream";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as Settings from "../serverSettings.ts";
 import { makeCliproxyApi } from "./cliproxyApi.ts";
+import { makeModelproxyAccountLogin } from "./modelproxyAccountLogin.ts";
 import { makeModelproxyApi, mapModelproxyStatus } from "./modelproxyApi.ts";
 import { makeModelproxyAuth } from "./modelproxyAuth.ts";
 
@@ -60,6 +63,10 @@ export class UsageLimitSources extends Context.Service<
     readonly auth: (
       input: UsageLimitSourceAuthInput,
     ) => Effect.Effect<UsageLimitSourceAuthState, UsageLimitSourceError>;
+    /** Fork: log a gateway's pooled account in again (modelproxyAccountLogin.ts). */
+    readonly accountLogin: (
+      input: UsageLimitSourceAccountLoginInput,
+    ) => Effect.Effect<UsageLimitSourceAccountLoginResult, UsageLimitSourceError>;
   }
 >()("t3/usage/UsageLimitSources") {}
 
@@ -127,6 +134,7 @@ export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
   const modelproxy = yield* makeModelproxyApi;
   const modelproxyAuth = yield* makeModelproxyAuth;
+  const accountLogins = yield* makeModelproxyAccountLogin;
   const settingsService = yield* Settings.ServerSettingsService;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const stateRef = yield* Ref.make<ReadonlyArray<UsageLimitSourceSnapshot>>([]);
@@ -188,7 +196,14 @@ export const make = Effect.gen(function* () {
       checkedAt: base.checkedAt,
       nowMs: DateTime.toEpochMillis(yield* DateTime.now),
     });
-    return { snapshot: { ...base, accounts: mapped.accounts, proxy: { auth, ...mapped.proxy } } };
+    const logins = yield* accountLogins.sessions(id);
+    return {
+      snapshot: {
+        ...base,
+        accounts: mapped.accounts,
+        proxy: { auth, ...mapped.proxy, ...(logins.length > 0 ? { accountLogins: logins } : {}) },
+      },
+    };
   });
 
   const readSourceOnce = Effect.fn("UsageLimitSources.readSourceOnce")(function* (
@@ -257,7 +272,7 @@ export const make = Effect.gen(function* () {
     const previous = yield* Ref.get(stateRef);
     yield* Effect.forEach(
       previous.filter((source) => source.kind === "modelproxy" && !listed.has(source.id)),
-      (source) => modelproxyAuth.forget(source.id),
+      (source) => Effect.andThen(modelproxyAuth.forget(source.id), accountLogins.forget(source.id)),
     );
     const reads = yield* Effect.forEach(
       entries,
@@ -300,6 +315,34 @@ export const make = Effect.gen(function* () {
     Stream.runForEach(() => refresh),
     Effect.forkScoped,
   );
+
+  // Fork: an account login's every step re-reads the same way, so the pill
+  // shows the panel's next state and, once the login lands, the account back
+  // to ready.
+  yield* accountLogins.changes.pipe(
+    Stream.runForEach(() => refresh),
+    Effect.forkScoped,
+  );
+  const accountLogin = (input: UsageLimitSourceAccountLoginInput) =>
+    Effect.gen(function* () {
+      const settings = yield* settingsService.getSettings.pipe(
+        Effect.mapError(
+          () => new UsageLimitSourceError({ detail: "Could not read source settings." }),
+        ),
+      );
+      const config = settings.usageLimitSources[input.sourceId];
+      if (!config?.enabled || config.kind !== "modelproxy") {
+        return yield* new UsageLimitSourceError({
+          detail: "The gateway source is missing or disabled.",
+        });
+      }
+      return yield* accountLogins.run(input.sourceId, input, {
+        baseUrl: config.url,
+        token: modelproxyAuth
+          .accessToken(input.sourceId, config, { forceRefresh: false })
+          .pipe(Effect.mapError((error) => new UsageLimitSourceError({ detail: error.detail }))),
+      });
+    });
 
   // Shares the refresh lock so a stale in-flight read cannot overwrite a redemption.
   const consumeResetCredit = (input: UsageLimitSourceConsumeResetCreditInput) =>
@@ -366,6 +409,7 @@ export const make = Effect.gen(function* () {
     current: Ref.get(stateRef),
     consumeResetCredit,
     auth,
+    accountLogin,
     refresh,
     get streamChanges() {
       return Stream.unwrap(

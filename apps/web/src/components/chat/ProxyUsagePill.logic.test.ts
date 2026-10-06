@@ -227,3 +227,82 @@ describe("deriveProxyPill", () => {
     expect(pill.tone).toBe("muted");
   });
 });
+
+describe("account logins", () => {
+  const flagged = (logins?: NonNullable<UsageLimitSourceSnapshot["proxy"]>["accountLogins"]) =>
+    snapshot({
+      accounts: [
+        account("claude-1", [], { state: "reauthentication", inflight: 0 }),
+        account("james-max", [["five_hour", 10, at(2)]], { state: "live", inflight: 0 }),
+      ],
+      proxy: {
+        auth: { state: "signedIn" },
+        current: "james-max",
+        ...(logins ? { accountLogins: logins } : {}),
+      },
+    });
+  const login = {
+    account: "claude-1",
+    sessionId: "s1",
+    mode: "paste" as const,
+    state: "awaiting_code" as const,
+    authorizeUrl: "https://claude.com/cai/oauth/authorize",
+    expiresAt: at(0.2),
+  };
+
+  it("counts the accounts that need a login and marks their rows", () => {
+    const pill = deriveProxyPill(flagged(), now)!;
+    expect(pill.needsLogin).toBe(1);
+    expect(pill.accounts[0]!.needsLogin).toBe(true);
+    expect(pill.accounts[0]!.login).toBeNull();
+    expect(pill.accounts[1]!.needsLogin).toBe(false);
+  });
+
+  it("asks for the pasted code, and says what to do when one is refused", () => {
+    const waiting = deriveProxyPill(flagged([login]), now)!.accounts[0]!.login!;
+    expect(waiting.step).toBe("paste");
+    expect(waiting.authorizeUrl).toBe(login.authorizeUrl);
+    expect(waiting.message).toBeNull();
+
+    const refused = deriveProxyPill(
+      flagged([{ ...login, errorCode: "bad_code", error: "that code did not work" }]),
+      now,
+    )!.accounts[0]!.login!;
+    expect(refused.step).toBe("paste");
+    expect(refused.message).toMatch(/didn't work/);
+  });
+
+  it("shows a device code to approve, then the outcome", () => {
+    const device = {
+      ...login,
+      mode: "device" as const,
+      state: "awaiting_approval" as const,
+      userCode: "ABCD-EFGH",
+      verificationUrl: "https://auth.openai.com/codex/device",
+    };
+    const approve = deriveProxyPill(flagged([device]), now)!.accounts[0]!.login!;
+    expect(approve.step).toBe("approve");
+    expect(approve.userCode).toBe("ABCD-EFGH");
+
+    const mismatch = deriveProxyPill(
+      flagged([
+        {
+          ...device,
+          state: "failed",
+          errorCode: "identity_mismatch",
+          error: "signed in as other@example.com",
+        },
+      ]),
+      now,
+    )!.accounts[0]!.login!;
+    expect(mismatch.step).toBe("failed");
+    expect(mismatch.message).toBe("signed in as other@example.com");
+
+    const saved = deriveProxyPill(
+      flagged([{ ...device, state: "completed", errorCode: "save_failed" }]),
+      now,
+    )!.accounts[0]!.login!;
+    expect(saved.step).toBe("done");
+    expect(saved.message).toMatch(/restart/);
+  });
+});

@@ -6,6 +6,7 @@ import {
   NonNegativeInt,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
+import { UsageLimitSourceAccountLogin } from "./forkUsageAccountLogin.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 
@@ -198,6 +199,8 @@ export const UsageLimitSourceProxyStatus = Schema.Struct({
   queueDepth: Schema.optional(NonNegativeInt),
   /** Absent from gateways that predate route publishing. */
   routes: Schema.optional(ForwardCompatibleArray(UsageLimitSourceProxyRoute)),
+  /** Fork: account logins open on the gateway (forkUsageAccountLogin.ts). */
+  accountLogins: Schema.optional(ForwardCompatibleArray(UsageLimitSourceAccountLogin)),
 });
 export type UsageLimitSourceProxyStatus = typeof UsageLimitSourceProxyStatus.Type;
 
