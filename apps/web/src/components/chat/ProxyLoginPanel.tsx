@@ -123,7 +123,7 @@ export function ProxyLoginPanel({
         <div className="text-muted-foreground">
           Enter this code at OpenAI, signed in as the account this slot holds:
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <code className="rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest text-foreground">
             {login.userCode}
           </code>
@@ -150,7 +150,7 @@ export function ProxyLoginPanel({
             ) : null}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-muted-foreground">Waiting for approval…</span>
           <Button size="xs" variant="ghost" disabled={busy} onClick={() => void cancel()}>
             Cancel
@@ -173,7 +173,7 @@ export function ProxyLoginPanel({
         <li>Click Authorize.</li>
         <li>Claude then shows a long code with a # in it. Paste that here.</li>
       </ol>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           size="sm"
           font="mono"
@@ -207,7 +207,7 @@ export function ProxyLoginPanel({
           </Button>
         ) : null}
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-muted-foreground">{working ? "Logging in…" : ""}</span>
         <span className="flex items-center gap-1.5">
           <Button size="xs" variant="ghost" disabled={working} onClick={() => void cancel()}>

@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, UsageLimitSourceSnapshot } from "@t3tools/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
@@ -8,9 +8,13 @@ import { environmentServerConfigsAtom, serverEnvironment } from "../../state/ser
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { XIcon } from "lucide-react";
+
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
-import { proxyLoginPanelAtom } from "./proxyLoginRequest";
+import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
+import { PROXY_PILL_ATTRIBUTE, ProxyStatusCard } from "./ProxyStatusCard";
 import {
   deriveProxyPill,
   selectProxySource,
@@ -134,60 +138,77 @@ function windowsOf(account: ProxyAccountView | null) {
 function LedgerRow({
   account,
   threshold,
+  narrow,
   onLogin,
 }: {
   readonly account: ProxyAccountView;
   readonly threshold: number;
+  /** The card's 280px column: the windows drop below the name and figures. */
+  readonly narrow: boolean;
   /** Present when the row offers a login: the account needs one or has one open. */
   readonly onLogin?: () => void;
 }) {
+  const identity = (
+    <div className="min-w-0">
+      <ProxyAccountIdentity id={account.id} driver={account.driver} />
+      <div className={cn("truncate text-2xs", narrow && "pl-5.5", TONE_TEXT[account.stateTone])}>
+        {account.stateLabel}
+      </div>
+    </div>
+  );
+  const windows = (
+    <div className={cn("flex flex-col gap-1", narrow && "pl-5.5")}>
+      {account.windows.length === 0 ? (
+        <span className="text-3xs text-muted-foreground">no data</span>
+      ) : (
+        account.windows.map((window) => (
+          <div
+            key={window.key}
+            className="grid grid-cols-[1.25rem_1fr_3rem] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
+          >
+            <span className="truncate">{window.label}</span>
+            <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
+            {/* Every window counts down to its own reset; the runway column only shows the one that governs. */}
+            <span className="text-right tabular-nums">{window.resetText}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+  const headline = (
+    <div className="text-right font-mono text-2xs text-foreground tabular-nums">
+      {account.headline}
+    </div>
+  );
+  const runway = onLogin ? (
+    <Button size="micro" variant="ghost-destructive" className="justify-self-end" onClick={onLogin}>
+      {account.runwayText || "login"}
+    </Button>
+  ) : (
+    <div
+      className={cn("text-right font-mono text-2xs tabular-nums", TONE_TEXT[account.runwayTone])}
+    >
+      {account.runwayText}
+    </div>
+  );
+  if (narrow) {
+    return (
+      <div className="flex flex-col gap-1 border-t border-border/60 py-1.5 first:border-t-0">
+        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem_4rem] items-center gap-x-2">
+          {identity}
+          {headline}
+          {runway}
+        </div>
+        {windows}
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)_2.25rem_4.5rem] items-center gap-x-2.5 border-t border-border/60 py-1.5 first:border-t-0">
-      <div className="min-w-0">
-        <div className="truncate font-medium text-foreground">{account.id}</div>
-        <div className={cn("truncate text-2xs", TONE_TEXT[account.stateTone])}>
-          {account.stateLabel}
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        {account.windows.length === 0 ? (
-          <span className="text-3xs text-muted-foreground">no data</span>
-        ) : (
-          account.windows.map((window) => (
-            <div
-              key={window.key}
-              className="grid grid-cols-[1.25rem_1fr_3rem] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
-            >
-              <span className="truncate">{window.label}</span>
-              <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
-              {/* Every window counts down to its own reset; the runway column only shows the one that governs. */}
-              <span className="text-right tabular-nums">{window.resetText}</span>
-            </div>
-          ))
-        )}
-      </div>
-      <div className="text-right font-mono text-2xs text-foreground tabular-nums">
-        {account.headline}
-      </div>
-      {onLogin ? (
-        <Button
-          size="micro"
-          variant="ghost-destructive"
-          className="justify-self-end"
-          onClick={onLogin}
-        >
-          {account.runwayText || "login"}
-        </Button>
-      ) : (
-        <div
-          className={cn(
-            "text-right font-mono text-2xs tabular-nums",
-            TONE_TEXT[account.runwayTone],
-          )}
-        >
-          {account.runwayText}
-        </div>
-      )}
+      {identity}
+      {windows}
+      {headline}
+      {runway}
     </div>
   );
 }
@@ -278,32 +299,51 @@ function Ledger({
   environmentId,
   snapshot,
   threshold,
+  variant,
+  onClose,
   loginFor,
   onLoginFor,
 }: {
   readonly environmentId: EnvironmentId;
   readonly snapshot: UsageLimitSourceSnapshot;
   readonly threshold: number;
+  /**
+   * The card's narrow column rather than the hover peek. Only the card shows
+   * login panels; the peek's login control opens the card on that account.
+   */
+  readonly variant: "peek" | "card";
   /** The account whose login panel is open, if any. */
   readonly loginFor: string | null;
   readonly onLoginFor: (account: string | null) => void;
+  /** The card's close control. */
+  readonly onClose?: () => void;
 }) {
-  // The popover unmounts when it closes, so this second-by-second clock and
-  // the re-derivation it drives only run while someone is looking.
+  // The peek and the card unmount when they close, so this second-by-second
+  // clock and the re-derivation it drives only run while someone is looking.
   const now = useNowSecond();
   const pill = useMemo(() => deriveProxyPill(snapshot, now, { seconds: true }), [snapshot, now]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const auth = useAtomCommand(serverEnvironment.usageLimitSourceAuth, { reportFailure: false });
   if (!pill) return null;
+  const narrow = variant === "card";
   return (
-    <div className="flex flex-col gap-2 p-(--floating-content-inset) text-xs">
+    <div
+      className={cn("flex flex-col gap-2 text-xs", narrow ? "p-3" : "p-(--floating-content-inset)")}
+    >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-medium text-muted-foreground">
+        <span className="truncate font-medium text-muted-foreground">
           {pill.label} · {pill.accounts.length}{" "}
           {pill.accounts.length === 1 ? "account" : "accounts"}
         </span>
-        <span className="font-mono text-2xs text-secondary-label">
-          {pill.runwayText ? `fleet runway ${pill.runwayText}` : ""}
+        <span className="flex items-center gap-1.5">
+          <span className="font-mono text-2xs whitespace-nowrap text-secondary-label">
+            {pill.runwayText ? `${narrow ? "runway" : "fleet runway"} ${pill.runwayText}` : ""}
+          </span>
+          {onClose ? (
+            <Button size="icon-micro" variant="ghost-muted" aria-label="Close" onClick={onClose}>
+              <XIcon />
+            </Button>
+          ) : null}
         </span>
       </div>
       {pill.status === "live" ? (
@@ -314,13 +354,15 @@ function Ledger({
                 <LedgerRow
                   account={account}
                   threshold={threshold}
+                  narrow={narrow}
                   {...(account.needsLogin || account.login
                     ? {
-                        onLogin: () => onLoginFor(loginFor === account.id ? null : account.id),
+                        onLogin: () =>
+                          onLoginFor(narrow && loginFor === account.id ? null : account.id),
                       }
                     : {})}
                 />
-                {loginFor === account.id ? (
+                {narrow && loginFor === account.id ? (
                   <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
                     <ProxyLoginPanel
                       environmentId={environmentId}
@@ -392,7 +434,8 @@ function pillLabel(pill: ProxyPillView): string {
  * The gateway's serving account and headroom, at the size of the other
  * header controls. Two bars are its session and weekly windows against
  * the rotation threshold; the number is the session window; after the
- * rule is the fleet runway. Hover for every pooled account.
+ * rule is the fleet runway. Hover to peek at every pooled account; click
+ * for the card under the thread details card, where logins happen.
  */
 export function ProxyUsagePill({
   environmentId: threadEnvironmentId,
@@ -413,118 +456,143 @@ export function ProxyUsagePill({
     () => (snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null),
     [snapshot, minute],
   );
-  // Controlled so an open login panel pins the popover: approving a login
-  // takes the pointer to another window, which would otherwise close it on
-  // hover-out and lose the code being pasted. While pinned only Escape or the
-  // trigger closes it.
+  // Hovering peeks at the ledger; clicking opens the card under the thread
+  // details card, which stays until closed (a login in it sends the user to
+  // another window). The peek stands down while the card is open so the
+  // ledger is never shown twice.
   const [hovered, setHovered] = useState(false);
   const loginFor = useAtomValue(proxyLoginPanelAtom);
   const setLoginFor = useAtomSet(proxyLoginPanelAtom);
+  const cardRequested = useAtomValue(proxyStatusCardOpenAtom);
+  const setCardRequested = useAtomSet(proxyStatusCardOpenAtom);
+  const cardOpen = cardRequested || loginFor !== null;
+  const closeCard = useCallback(() => {
+    setCardRequested(false);
+    setLoginFor(null);
+  }, [setCardRequested, setLoginFor]);
   if (!pill) return null;
   const { session, weekly } = windowsOf(pill.current);
   const dim = pill.status !== "live";
   const tone = pill.tone;
   return (
-    <Popover
-      open={hovered || loginFor !== null}
-      onOpenChange={(next, details) => {
-        const pinned = loginFor !== null;
-        if (
-          !next &&
-          pinned &&
-          details.reason !== "escape-key" &&
-          details.reason !== "trigger-press"
-        ) {
-          return;
-        }
-        if (!next) setLoginFor(null);
-        setHovered(next);
-      }}
-    >
-      <PopoverTrigger
-        openOnHover
-        delay={150}
-        closeDelay={150}
-        render={
-          <Button
-            size="xs"
-            variant="outline"
-            data-toolbar-control=""
-            aria-label={`${pill.label}: ${pill.current ? `${pill.current.id} ${pill.current.headline}` : pillLabel(pill)}`}
-          />
-        }
+    <>
+      <Popover
+        open={hovered && !cardOpen}
+        onOpenChange={(next, details) => {
+          // A press toggles the card instead; see the trigger's onClick.
+          if (details.reason === "trigger-press") return;
+          setHovered(next);
+        }}
       >
-        <span className={cn("relative flex items-center gap-2", dim && "text-muted-foreground")}>
-          {pill.needsLogin > 0 ? (
+        <PopoverTrigger
+          openOnHover
+          delay={150}
+          closeDelay={150}
+          render={
+            <Button
+              size="xs"
+              variant="outline"
+              data-toolbar-control=""
+              {...{ [PROXY_PILL_ATTRIBUTE]: "" }}
+              aria-expanded={cardOpen}
+              aria-label={`${pill.label}: ${pill.current ? `${pill.current.id} ${pill.current.headline}` : pillLabel(pill)}`}
+              onClick={() => {
+                setHovered(false);
+                if (cardOpen) closeCard();
+                else setCardRequested(true);
+              }}
+            />
+          }
+        >
+          <span className={cn("relative flex items-center gap-2", dim && "text-muted-foreground")}>
+            {pill.needsLogin > 0 ? (
+              <span
+                aria-label={`${pill.needsLogin} ${pill.needsLogin === 1 ? "account needs" : "accounts need"} a login`}
+                className="absolute -top-1 -left-1 size-1.5 rounded-full bg-error"
+              />
+            ) : null}
+            <IrisGauge
+              session={pill.status === "live" ? session : null}
+              weekly={pill.status === "live" ? weekly : null}
+              className={cn(
+                pill.status === "pending" && "text-warning-foreground",
+                tone === "crit" && !dim && "text-error-foreground",
+                dim && "opacity-60",
+              )}
+            />
+            {pill.status === "live" ? (
+              <span className="flex w-8 flex-col gap-0.75" aria-hidden>
+                <Meter
+                  usedPercent={session?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
+                  tone={session?.tone ?? tone}
+                  threshold={threshold}
+                />
+                <Meter
+                  usedPercent={weekly?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
+                  tone={weekly?.tone ?? tone}
+                  threshold={threshold}
+                />
+              </span>
+            ) : null}
             <span
-              aria-label={`${pill.needsLogin} ${pill.needsLogin === 1 ? "account needs" : "accounts need"} a login`}
-              className="absolute -top-1 -left-1 size-1.5 rounded-full bg-error"
+              className={cn(
+                "font-mono text-xs tabular-nums",
+                pill.status === "live" && pill.fallbackText && "text-error-foreground",
+              )}
+            >
+              {pillLabel(pill)}
+            </span>
+            {pill.status === "live" && pill.runwayText ? (
+              <>
+                <span className="h-3.5 w-px bg-border" aria-hidden />
+                <span
+                  className={cn(
+                    "hidden font-mono text-xs tabular-nums @3xl/header-actions:inline",
+                    tone === "crit" ? "text-error-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {pill.runwayText}
+                </span>
+              </>
+            ) : null}
+          </span>
+        </PopoverTrigger>
+        <PopoverPopup
+          tooltipStyle
+          side="bottom"
+          align="end"
+          padding="none"
+          // Wide enough that each window's reset countdown leaves its meter the same length.
+          className="w-[24.5rem] max-w-none text-left whitespace-normal"
+        >
+          {snapshot ? (
+            <Ledger
+              environmentId={environmentId}
+              snapshot={snapshot}
+              threshold={threshold}
+              variant="peek"
+              loginFor={loginFor}
+              onLoginFor={(account) => {
+                setHovered(false);
+                setLoginFor(account);
+              }}
             />
           ) : null}
-          <IrisGauge
-            session={pill.status === "live" ? session : null}
-            weekly={pill.status === "live" ? weekly : null}
-            className={cn(
-              pill.status === "pending" && "text-warning-foreground",
-              tone === "crit" && !dim && "text-error-foreground",
-              dim && "opacity-60",
-            )}
-          />
-          {pill.status === "live" ? (
-            <span className="flex w-8 flex-col gap-0.75" aria-hidden>
-              <Meter
-                usedPercent={session?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
-                tone={session?.tone ?? tone}
-                threshold={threshold}
-              />
-              <Meter
-                usedPercent={weekly?.usedPercent ?? (pill.fallbackText ? 100 : 0)}
-                tone={weekly?.tone ?? tone}
-                threshold={threshold}
-              />
-            </span>
-          ) : null}
-          <span
-            className={cn(
-              "font-mono text-xs tabular-nums",
-              pill.status === "live" && pill.fallbackText && "text-error-foreground",
-            )}
-          >
-            {pillLabel(pill)}
-          </span>
-          {pill.status === "live" && pill.runwayText ? (
-            <>
-              <span className="h-3.5 w-px bg-border" aria-hidden />
-              <span
-                className={cn(
-                  "hidden font-mono text-xs tabular-nums @3xl/header-actions:inline",
-                  tone === "crit" ? "text-error-foreground" : "text-muted-foreground",
-                )}
-              >
-                {pill.runwayText}
-              </span>
-            </>
-          ) : null}
-        </span>
-      </PopoverTrigger>
-      <PopoverPopup
-        tooltipStyle
-        side="bottom"
-        align="end"
-        padding="none"
-        // Wide enough that each window's reset countdown leaves its meter the same length.
-        className="w-[24.5rem] max-w-none text-left whitespace-normal"
-      >
-        {snapshot ? (
+        </PopoverPopup>
+      </Popover>
+      {cardOpen && snapshot ? (
+        <ProxyStatusCard onClose={closeCard}>
           <Ledger
             environmentId={environmentId}
             snapshot={snapshot}
             threshold={threshold}
+            variant="card"
             loginFor={loginFor}
             onLoginFor={setLoginFor}
+            onClose={closeCard}
           />
-        ) : null}
-      </PopoverPopup>
-    </Popover>
+        </ProxyStatusCard>
+      ) : null}
+    </>
   );
 }
