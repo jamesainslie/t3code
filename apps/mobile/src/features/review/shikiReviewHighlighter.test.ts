@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, onTestFinished, vi } from "vite-plus/test";
 
 import type { ReviewRenderableLineRow } from "./reviewModel";
 import {
@@ -49,6 +49,11 @@ describe("highlightSourceFile", () => {
 
   it("initializes source and snippet highlighting without a warmup", async () => {
     vi.resetModules();
+    // Shiki returns a line as one plain token once tokenizing it passes 500 ms
+    // of Date.now() time. The cold first call can take that long on a slow CI
+    // runner, so hold the clock still: this test is about startup, not speed.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    onTestFinished(() => clock.mockRestore());
     const highlighter = await import("./shikiReviewHighlighter");
     const source = "const answer: number = 42;";
 
