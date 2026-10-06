@@ -20,6 +20,7 @@ const {
   setAsDefaultProtocolClientMock,
   setDesktopNameMock,
   setDockIconMock,
+  emptyImage,
   setNameMock,
   setPathMock,
   whenReadyMock,
@@ -41,12 +42,16 @@ const {
   setAsDefaultProtocolClientMock: vi.fn(() => true),
   setDesktopNameMock: vi.fn(),
   setDockIconMock: vi.fn(),
+  emptyImage: { isEmpty: () => true },
   setNameMock: vi.fn(),
   setPathMock: vi.fn(),
   whenReadyMock: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("electron", () => ({
+  nativeImage: {
+    createEmpty: () => emptyImage,
+  },
   autoUpdater: {
     on: autoUpdaterOnMock,
     removeListener: autoUpdaterRemoveListenerMock,
@@ -206,6 +211,16 @@ describe("ElectronApp", () => {
       yield* electronApp.removeCommandLineSwitch("password-store");
 
       assert.deepEqual(removeSwitchMock.mock.calls, [["password-store"]]);
+    }).pipe(Effect.provide(ElectronApp.layer)),
+  );
+
+  it.effect("resets the dock icon with an empty image", () =>
+    Effect.gen(function* () {
+      setDockIconMock.mockClear();
+      const electronApp = yield* ElectronApp.ElectronApp;
+      yield* electronApp.resetDockIcon;
+
+      assert.deepEqual(setDockIconMock.mock.calls, [[emptyImage]]);
     }).pipe(Effect.provide(ElectronApp.layer)),
   );
 });

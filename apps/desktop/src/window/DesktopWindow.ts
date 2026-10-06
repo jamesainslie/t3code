@@ -11,6 +11,7 @@ import * as Electron from "electron";
 import { type DesktopSnapShotEvent, DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
 
 import * as DesktopAssets from "../app/DesktopAssets.ts";
+import * as DesktopEditionIcon from "../app/DesktopEditionIcon.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { makeComponentLogger } from "../app/DesktopObservability.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
@@ -144,14 +145,18 @@ const { logInfo: logWindowInfo, logWarning: logWindowWarning } =
 
 function getIconOption(
   iconPaths: DesktopAssets.DesktopIconPaths,
+  editionIconPath: Option.Option<string>,
   platform: NodeJS.Platform,
 ): { icon: string } | Record<string, never> {
   if (platform === "darwin") return {}; // macOS uses .icns from app bundle
   const ext = platform === "win32" ? "ico" : "png";
-  return Option.match(iconPaths[ext], {
-    onNone: () => ({}),
-    onSome: (icon) => ({ icon }),
-  });
+  return Option.match(
+    Option.orElse(editionIconPath, () => iconPaths[ext]),
+    {
+      onNone: () => ({}),
+      onSome: (icon) => ({ icon }),
+    },
+  );
 }
 
 function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
@@ -314,6 +319,7 @@ function bindFirstRevealTrigger(
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const assets = yield* DesktopAssets.DesktopAssets;
+  const editionIcon = yield* DesktopEditionIcon.DesktopEditionIcon;
   const electronMenu = yield* ElectronMenu.ElectronMenu;
   const electronShell = yield* ElectronShell.ElectronShell;
   const electronTheme = yield* ElectronTheme.ElectronTheme;
@@ -369,7 +375,7 @@ export const make = Effect.gen(function* () {
     yield* previewManager.getBrowserSession();
     const applicationUrl = getDesktopUrl(environment.isDevelopment);
     const iconPaths = yield* assets.iconPaths;
-    const iconOption = getIconOption(iconPaths, environment.platform);
+    const iconOption = getIconOption(iconPaths, yield* editionIcon.iconPath, environment.platform);
     const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;
     const persistedSettings = yield* desktopSettings.get;
     const persistedBounds = persistedSettings.mainWindowBounds;
