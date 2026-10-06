@@ -1,7 +1,12 @@
 import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { deriveProxyPill, formatCountdownSeconds, selectProxySource } from "./ProxyUsagePill.logic";
+import {
+  deriveProxyPill,
+  formatCountdownSeconds,
+  looksLikeEmailCode,
+  selectProxySource,
+} from "./ProxyUsagePill.logic";
 
 const now = Date.parse("2026-09-23T12:00:00Z");
 const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
@@ -270,6 +275,28 @@ describe("account logins", () => {
     )!.accounts[0]!.login!;
     expect(refused.step).toBe("paste");
     expect(refused.message).toMatch(/didn't work/);
+  });
+
+  it("explains an emailed sign-in code, and relays codes it does not know", () => {
+    const email = deriveProxyPill(
+      flagged([{ ...login, errorCode: "email_code", error: "gateway words" }]),
+      now,
+    )!.accounts[0]!.login!;
+    expect(email.step).toBe("paste");
+    expect(email.message).toMatch(/sign-in page/);
+
+    const unknown = deriveProxyPill(
+      flagged([{ ...login, errorCode: "something_new", error: "the gateway says why" }]),
+      now,
+    )!.accounts[0]!.login!;
+    expect(unknown.message).toBe("the gateway says why");
+  });
+
+  it("recognises a pasted email sign-in code before sending it", () => {
+    expect(looksLikeEmailCode("251063")).toBe(true);
+    expect(looksLikeEmailCode(" 2510-63 ")).toBe(true);
+    expect(looksLikeEmailCode("abcDEF123#xyz")).toBe(false);
+    expect(looksLikeEmailCode("12")).toBe(false);
   });
 
   it("shows a device code to approve, then the outcome", () => {

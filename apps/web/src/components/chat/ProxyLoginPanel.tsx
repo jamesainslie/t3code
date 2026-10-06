@@ -5,7 +5,11 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { ProxyAccountView } from "./ProxyUsagePill.logic";
+import {
+  EMAIL_CODE_ADVICE,
+  looksLikeEmailCode,
+  type ProxyAccountView,
+} from "./ProxyUsagePill.logic";
 
 /**
  * Logs one of the gateway's accounts in again, inside the pill's ledger. The
@@ -58,6 +62,13 @@ export function ProxyLoginPanel({
   const submit = async (value: string) => {
     const trimmed = value.trim();
     if (!trimmed || busy) return;
+    // The easy mistake: Claude's emailed sign-in code pasted here. Catch it
+    // before it travels; the gateway refuses it as well.
+    if (looksLikeEmailCode(trimmed)) {
+      setFailure(EMAIL_CODE_ADVICE);
+      setCode("");
+      return;
+    }
     if (await send({ action: "submit", code: trimmed })) setCode("");
   };
 
@@ -154,9 +165,14 @@ export function ProxyLoginPanel({
   const working = login.step === "working" || busy;
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-muted-foreground">
-        Open the consent page, approve as the account this slot holds, then paste the code it shows.
-      </div>
+      <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
+        <li>
+          Open the consent page and sign in as <span className="text-foreground">{account.id}</span>
+          . If Claude emails you a sign-in code, enter it on Claude&apos;s page, not here.
+        </li>
+        <li>Click Authorize.</li>
+        <li>Claude then shows a long code with a # in it. Paste that here.</li>
+      </ol>
       <div className="flex items-center gap-2">
         <Input
           size="sm"

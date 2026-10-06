@@ -78,11 +78,27 @@ export interface ProxyPillView {
 }
 
 /** The gateway's stable failure codes, as the next thing to do. */
+/** Claude's emailed sign-in code belongs on Claude's page; the panel says so. */
+export const EMAIL_CODE_ADVICE =
+  "That is Claude's email sign-in code: enter it on Claude's sign-in page. After you approve, Claude shows a long code with a # in it; paste that here.";
+
 const LOGIN_ADVICE: Record<string, string> = {
   bad_code: "That code didn't work. Copy it again from the consent page and paste it here.",
+  email_code: EMAIL_CODE_ADVICE,
   provider_unavailable: "Couldn't reach the provider just now. Try again.",
   save_failed: "Logged in, but the gateway could not save it: it will not survive a restart.",
 };
+
+/**
+ * Whether a pasted value is a short numeric code, the shape of Claude's
+ * emailed sign-in code. The login code is a long opaque token with a `#`.
+ */
+export function looksLikeEmailCode(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/^[\d -]+$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "").length;
+  return digits >= 4 && digits <= 10;
+}
 
 function loginView(login: UsageLimitSourceAccountLogin): ProxyLoginView {
   const step: ProxyLoginView["step"] =
@@ -96,10 +112,13 @@ function loginView(login: UsageLimitSourceAccountLogin): ProxyLoginView {
             ? "done"
             : "failed";
   const advice = login.errorCode ? LOGIN_ADVICE[login.errorCode] : undefined;
+  // A code this build has no advice for still says something: the gateway's
+  // own message for it.
   const message =
     advice ??
     (login.state === "expired" ? "The login timed out." : null) ??
-    (step === "failed" ? (login.error ?? "The login failed.") : null);
+    (step === "failed" ? (login.error ?? "The login failed.") : null) ??
+    (login.errorCode ? (login.error ?? null) : null);
   return {
     sessionId: login.sessionId,
     mode: login.mode,
