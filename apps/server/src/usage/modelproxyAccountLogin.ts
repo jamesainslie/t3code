@@ -313,7 +313,7 @@ export const makeModelproxyAccountLogin = Effect.gen(function* () {
   /** A removed source takes its logins with it. */
   const forget = (sourceId: UsageLimitSourceId) =>
     Effect.gen(function* () {
-      for (const account of [...(logins.get(sourceId)?.keys() ?? [])]) {
+      for (const account of logins.get(sourceId)?.keys() ?? []) {
         yield* forgetLogin(sourceId, account);
       }
       logins.delete(sourceId);
