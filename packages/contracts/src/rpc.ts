@@ -4,6 +4,10 @@ import {
   ThreadDocumentCommentsError,
   ThreadDocumentCommentsInput,
 } from "./forkOrchestration.ts";
+import {
+  UsageLimitSourceAccountLoginInput,
+  UsageLimitSourceAccountLoginResult,
+} from "./forkUsageAccountLogin.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
 import {
   ChatGptReconnectProfileInput,
@@ -551,6 +555,8 @@ export const WS_METHODS = {
   // Fork: document comments (forkOrchestration.ts).
   threadDocumentCommentsMutate: "threadDocumentComments.mutate",
   subscribeThreadDocumentComments: "subscribeThreadDocumentComments",
+  // Fork: gateway account logins (forkUsageAccountLogin.ts).
+  usageLimitSourceAccountLogin: "usageLimitSource.accountLogin",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -615,6 +621,12 @@ const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeReset
 const WsUsageLimitSourceAuthRpc = Rpc.make(WS_METHODS.usageLimitSourceAuth, {
   payload: UsageLimitSourceAuthInput,
   success: UsageLimitSourceAuthState,
+  error: Schema.Union([UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+const WsUsageLimitSourceAccountLoginRpc = Rpc.make(WS_METHODS.usageLimitSourceAccountLogin, {
+  payload: UsageLimitSourceAccountLoginInput,
+  success: UsageLimitSourceAccountLoginResult,
   error: Schema.Union([UsageLimitSourceError, EnvironmentAuthorizationError]),
 });
 
@@ -1755,6 +1767,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
   WsUsageLimitSourceAuthRpc,
+  WsUsageLimitSourceAccountLoginRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsChatGptReconnectProfileRpc,
