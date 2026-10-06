@@ -14,11 +14,15 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export const MessageCopyButton = memo(function MessageCopyButton({
   text,
   extraFlavors,
+  label = "Copy message",
+  disabled = false,
   size = "xs",
   variant = "outline",
   className,
 }: {
   text: string;
+  label?: string;
+  disabled?: boolean;
   /** Additional clipboard types written beside `text/plain` when the platform allows it. */
   extraFlavors?: Readonly<Record<string, string>>;
   size?: "xs" | "icon-xs";
@@ -38,8 +42,8 @@ export const MessageCopyButton = memo(function MessageCopyButton({
       <TooltipTrigger
         render={
           <Button
-            aria-label="Copy message"
-            disabled={isCopied}
+            aria-label={label}
+            disabled={isCopied || disabled}
             onClick={() => copyToClipboard(text)}
             ref={ref}
             type="button"
@@ -55,7 +59,7 @@ export const MessageCopyButton = memo(function MessageCopyButton({
         />
       </TooltipTrigger>
       <TooltipPopup>
-        <p>Copy message</p>
+        <p>{label}</p>
       </TooltipPopup>
     </Tooltip>
   );

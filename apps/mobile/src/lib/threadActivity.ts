@@ -28,6 +28,7 @@ import {
   type WorkLogToolLifecycleStatus,
 } from "@t3tools/client-runtime/work-log/presentation";
 import { thinkingSplitsWorkGroup } from "@t3tools/client-runtime/work-log/thinking";
+import { commandStartsExpanded } from "@t3tools/client-runtime/work-log/terminal";
 import {
   resolveT3McpToolDefinition,
   resolveT3McpToolPresentation,
@@ -36,6 +37,7 @@ import {
 } from "@t3tools/shared/t3McpToolPresentation";
 import type {
   ChatAttachment,
+  CommandDisplayMode,
   MessageId,
   OrchestrationV2Actor,
   OrchestrationV2CreationSource,
@@ -177,6 +179,8 @@ type ThreadFeedEntryContent =
       readonly groupId: string;
       readonly hiddenCount: number;
       readonly expanded: boolean;
+      /** Exposed commands open this group unless it was toggled (fork). */
+      readonly opensByDefault?: boolean;
       readonly summary: string;
       readonly summaryKind: ToolGroupSummaryKind;
       readonly toolSurface?: WorkLogPresentationEntry["toolSurface"];
@@ -292,6 +296,7 @@ const presentedActivityGroupsCache = new WeakMap<
     readonly activeRunId: RunId | null;
     readonly isWorking: boolean;
     readonly activeTail: boolean;
+    readonly exposeCommandGroups: boolean;
     readonly rows: ReadonlyArray<ThreadFeedEntry>;
   }
 >();
@@ -1184,15 +1189,36 @@ function settleSupersededReasoning(
   return settled;
 }
 
+/**
+ * Whether a work row shows its details. `toggledRows` records rows flipped
+ * away from their default; commands open by default when exposed or failed.
+ */
+export function threadFeedActivityExpanded(
+  activity: ThreadFeedActivity,
+  toggledRows: Readonly<Record<string, boolean>>,
+  mode: CommandDisplayMode,
+): boolean {
+  const opensByDefault =
+    activity.projectedItem.item.type === "command_execution" &&
+    commandStartsExpanded(mode, activity.status === "failure");
+  return opensByDefault !== (toggledRows[activity.id] ?? false);
+}
+
 export function deriveThreadFeedPresentation(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestRun: ThreadFeedLatestRun | null,
   expandedRunIds: ReadonlySet<RunId>,
+  /**
+   * Groups toggled away from their default. Settled groups default to closed,
+   * or to open when commands are exposed and the group ran one.
+   */
   expandedWorkGroupIds: ReadonlySet<string> = new Set(),
   activeWorkStartedAt: string | null = null,
   /** The live work is a provider-native subagent's runless root turn. */
   runlessWorkActive = false,
+  commandDisplayMode: CommandDisplayMode = "collapsed",
 ): ThreadFeedEntry[] {
+  const exposeCommandGroups = commandDisplayMode === "exposed";
   const retainedFeed = feed.filter(
     (entry) =>
       entry.type !== "run-fold" && entry.type !== "work-toggle" && entry.type !== "thinking",
@@ -1279,6 +1305,7 @@ export function deriveThreadFeedPresentation(
         activeRunId,
         isWorking,
         isActiveTailGroup,
+        exposeCommandGroups,
       );
     }
   }
@@ -1345,6 +1372,7 @@ function appendPresentedFeedEntry(
   activeRunId: RunId | null,
   isWorking: boolean,
   activeTail: boolean,
+  exposeCommandGroups: boolean,
 ): void {
   if (entry.type !== "activity-group") {
     result.push(entry);
@@ -1366,13 +1394,24 @@ function appendPresentedFeedEntry(
     cached.activeRunId !== activeRunId ||
     cached.isWorking !== isWorking ||
     cached.activeTail !== activeTail ||
+    cached.exposeCommandGroups !== exposeCommandGroups ||
     cached.rows.some(
-      (row) => row.type === "work-toggle" && expandedWorkGroupIds.has(row.groupId) !== row.expanded,
+      (row) =>
+        row.type === "work-toggle" &&
+        expandedWorkGroupIds.has(row.groupId) !== (row.expanded !== (row.opensByDefault ?? false)),
     )
   ) {
     const rows: ThreadFeedEntry[] = [];
-    appendActivityGroupRows(rows, entry, expandedWorkGroupIds, activeRunId, isWorking, activeTail);
-    cached = { activeRunId, isWorking, activeTail, rows };
+    appendActivityGroupRows(
+      rows,
+      entry,
+      expandedWorkGroupIds,
+      activeRunId,
+      isWorking,
+      activeTail,
+      exposeCommandGroups,
+    );
+    cached = { activeRunId, isWorking, activeTail, exposeCommandGroups, rows };
     presentedActivityGroupsCache.set(entry, cached);
   }
   for (const row of cached.rows) {
@@ -1387,6 +1426,7 @@ function appendActivityGroupRows(
   activeRunId: RunId | null,
   isWorking: boolean,
   activeTail: boolean,
+  exposeCommandGroups: boolean,
 ): void {
   const groupAnchorIdByActivityId = new Map<string, string>();
   let groupAnchorId: string | null = null;
@@ -1420,6 +1460,7 @@ function appendActivityGroupRows(
       activeRunId,
       isWorking,
       activeTail && isTrailingRun,
+      exposeCommandGroups,
     );
     groupableRun = [];
   };
@@ -1451,14 +1492,19 @@ function appendToolGroupRows(
   activeRunId: RunId | null,
   isWorking: boolean,
   activeTail: boolean,
+  exposeCommandGroups: boolean,
 ): void {
-  const expanded = expandedWorkGroupIds.has(groupId);
   const latestActiveActivity = activities.findLast(
     (activity) =>
       isWorking && activity.lifecycleStatus === "inProgress" && activity.runId === activeRunId,
   );
   const active = latestActiveActivity !== undefined;
   const live = activeTail || active;
+  const opensByDefault =
+    exposeCommandGroups &&
+    !live &&
+    activities.some((activity) => activity.projectedItem.item.type === "command_execution");
+  const expanded = opensByDefault !== expandedWorkGroupIds.has(groupId);
   const latestActivity = latestActiveActivity ?? activities.at(-1)!;
   // A successful trailing call remains the live slot until the next activity.
   // Failed/stopped calls hand that slot to the Thinking row.
@@ -1514,6 +1560,7 @@ function appendToolGroupRows(
     groupId,
     hiddenCount: activities.length,
     expanded,
+    ...(opensByDefault ? { opensByDefault } : {}),
     summary,
     summaryKind: toolGroupSummaryKind(
       (live ? [latestActivity] : activities).map((activity) => activity.workEntry),

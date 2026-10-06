@@ -46,6 +46,7 @@ import {
   workEntryViewedImagePath,
 } from "@t3tools/client-runtime/work-log/presentation";
 import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
+import { commandStartsExpanded } from "@t3tools/client-runtime/work-log/terminal";
 import {
   turnItemHasDetail,
   turnItemNeedsDetailFetch,
@@ -73,6 +74,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent,
@@ -260,7 +262,7 @@ import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
+import { type CommandDisplayMode, type TimestampFormat } from "@t3tools/contracts/settings";
 import {
   type ChatEventTimestampOptions,
   resolveChatEventTimestampOptions,
@@ -306,6 +308,7 @@ interface TimelineRowSharedState {
   timestampFormat: TimestampFormat;
   /** Non-null when event timestamps are always shown. */
   eventTimestamps: ChatEventTimestampOptions | null;
+  commandDisplayMode: CommandDisplayMode;
   routeThreadKey: string;
   threadRef: ScopedThreadRef | null;
   markdownCwd: string | undefined;
@@ -338,7 +341,7 @@ interface TimelineRowSharedState {
   onFileOpen: (attachment: ChatFileAttachment) => void;
   onFileDownload: (attachment: ChatFileAttachment) => void;
   openPullRequest: (event: MouseEvent<HTMLElement>, url: string) => void;
-  onToggleWorkGroup: (groupId: string, anchorKey: string) => void;
+  onToggleWorkGroup: (groupId: string, anchorKey: string, expanded: boolean) => void;
   onToggleWorkEntry: (anchorKey: string, collapsed: boolean) => void;
   onCancelWorktreeSetup: (() => void) | null;
   retryableWorkspacePreparationRunIds: ReadonlySet<RunId>;
@@ -368,7 +371,28 @@ const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 
 interface WorkGroupViewState {
   scrollPositions: Map<string, WorkGroupScrollAnchor>;
+  /** Rows showing their details, whether opened by hand or by default. */
   expandedEntries: Set<string>;
+  /** Rows that open by default (such as commands) and were closed by hand. */
+  collapsedEntries: Set<string>;
+}
+
+/** Fork: commands open on their own when exposed, and when they failed. */
+function workEntryOpensByDefault(entry: TimelineWorkEntry, mode: CommandDisplayMode): boolean {
+  return (
+    entry.projectedItem?.item.type === "command_execution" &&
+    commandStartsExpanded(mode, workEntryDisplayIndicatesToolFailure(entry))
+  );
+}
+
+function workEntryIsExpanded(
+  state: WorkGroupViewState,
+  entryId: string,
+  opensByDefault: boolean,
+): boolean {
+  return (
+    state.expandedEntries.has(entryId) || (opensByDefault && !state.collapsedEntries.has(entryId))
+  );
 }
 
 const WorkGroupViewCtx = createContext<{
@@ -635,6 +659,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       rememberedPosition?.disclosures?.workGroupState ?? {
         scrollPositions: new Map(),
         expandedEntries: new Set(),
+        collapsedEntries: new Set(),
       },
     [listIdentityKey, rememberedPosition],
   );
@@ -716,9 +741,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     },
     [suspendEndScrollMaintenanceForDisclosure],
   );
+  // `expandedWorkGroupIds` records the groups toggled away from their default,
+  // which is closed unless exposed commands open the group.
   const onToggleWorkGroup = useCallback(
-    (groupId: string, anchorKey: string) => {
-      suspendEndScrollMaintenanceForDisclosure(anchorKey, expandedWorkGroupIds.has(groupId));
+    (groupId: string, anchorKey: string, expanded: boolean) => {
+      suspendEndScrollMaintenanceForDisclosure(anchorKey, expanded);
       setExpandedWorkGroupIds((existing) => {
         const next = new Set(existing);
         if (next.has(groupId)) {
@@ -729,7 +756,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         return next;
       });
     },
-    [expandedWorkGroupIds, suspendEndScrollMaintenanceForDisclosure],
+    [suspendEndScrollMaintenanceForDisclosure],
   );
   const onToggleAttemptFold = useCallback(
     (attemptId: RunAttemptId) => {
@@ -781,6 +808,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     readonly workspaceRoot: string | undefined;
     readonly projection: MessagesTimelineRowsProjection;
   } | null>(null);
+  const commandDisplayMode = useClientSettings((settings) => settings.commandDisplayMode);
+  const exposeCommandGroups = commandDisplayMode === "exposed";
   const rawRows = useMemo(() => {
     const previous = rowsProjectionRef.current;
     const projection = deriveMessagesTimelineRowsWithState(
@@ -791,6 +820,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         expandedRunIds,
         expandedAttemptIds,
         expandedWorkGroupIds,
+        exposeCommandGroups,
         isWorking,
         runlessWorkActive,
         activeTurnStartedAt,
@@ -814,6 +844,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     expandedRunIds,
     expandedAttemptIds,
     expandedWorkGroupIds,
+    exposeCommandGroups,
     isWorking,
     runlessWorkActive,
     activeTurnStartedAt,
@@ -1192,6 +1223,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       listRef,
       timestampFormat,
       eventTimestamps,
+      commandDisplayMode,
       routeThreadKey,
       // Keep Markdown callbacks memoized during unrelated activity updates.
       threadRef: citationThreadRef,
@@ -1230,6 +1262,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       listRef,
       timestampFormat,
       eventTimestamps,
+      commandDisplayMode,
       routeThreadKey,
       citationThreadRef,
       markdownCwd,
@@ -3389,7 +3422,11 @@ function ExpandedWorkGroupEntries({
   entries: TimelineWorkEntry[];
   workspaceRoot: string | undefined;
 }) {
-  const { workGroupViewState: viewState, onToggleWorkEntry } = use(TimelineRowCtx);
+  const {
+    workGroupViewState: viewState,
+    onToggleWorkEntry,
+    commandDisplayMode,
+  } = use(TimelineRowCtx);
   const [initialScrollIndex] = useState(() =>
     resolveWorkGroupScrollIndex(entries, viewState.scrollPositions.get(anchorKey)),
   );
@@ -3478,10 +3515,21 @@ function ExpandedWorkGroupEntries({
     [workspaceRoot],
   );
 
+  const defaultOpenEntryIds = useMemo(
+    () =>
+      entries.flatMap((entry) =>
+        workEntryOpensByDefault(entry, commandDisplayMode) ? [entry.id] : [],
+      ),
+    [commandDisplayMode, entries],
+  );
   const updateExpandedContentHeight = useCallback(() => {
     const state = listRef.current?.getState();
     let height = 0;
-    for (const entryId of viewState.expandedEntries) {
+    const openEntryIds = new Set(viewState.expandedEntries);
+    for (const entryId of defaultOpenEntryIds) {
+      if (!viewState.collapsedEntries.has(entryId)) openEntryIds.add(entryId);
+    }
+    for (const entryId of openEntryIds) {
       if (state?.indexByKey(entryId) === undefined) continue;
       // Each open row adds room for its details, including while scrolled out of view.
       height += Math.max(
@@ -3490,7 +3538,7 @@ function ExpandedWorkGroupEntries({
       );
     }
     setExpandedContentHeight(height);
-  }, [viewState]);
+  }, [defaultOpenEntryIds, viewState]);
 
   useLayoutEffect(updateExpandedContentHeight, [entries, updateExpandedContentHeight]);
 
@@ -3670,7 +3718,7 @@ function ThinkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "think
       type="button"
       className="group/live-work flex min-h-6 w-full max-w-full cursor-pointer items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       aria-expanded={row.expanded === true}
-      onClick={() => ctx.onToggleWorkGroup(groupId, row.id)}
+      onClick={() => ctx.onToggleWorkGroup(groupId, row.id, row.expanded === true)}
     >
       {activity}
     </button>
@@ -3795,7 +3843,7 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
       className="group/live-work flex min-h-6 w-full max-w-full cursor-pointer items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       aria-label={failed ? `${label}, tool call failed` : undefined}
       aria-expanded={row.expanded}
-      onClick={() => ctx.onToggleWorkGroup(row.groupId, row.id)}
+      onClick={() => ctx.onToggleWorkGroup(row.groupId, row.id, row.expanded)}
     >
       <LiveActivityRow
         label={
@@ -3896,7 +3944,7 @@ function WorkGroupToggleTimelineRow({
       expanded={row.expanded}
       createdAt={row.createdAt}
       timestampFormat={ctx.timestampFormat}
-      onToggle={() => ctx.onToggleWorkGroup(row.groupId, row.id)}
+      onToggle={() => ctx.onToggleWorkGroup(row.groupId, row.id, row.expanded)}
     />
   );
 }
@@ -5216,19 +5264,22 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? notificationChildThreadId(workEntry.projectedItem.item.source)
       : undefined;
   const groupView = use(WorkGroupViewCtx);
-  const [expanded, setExpanded] = useState(
-    () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
-  );
+  const viewState = groupView?.state ?? ctx.workGroupViewState;
+  const opensByDefault = workEntryOpensByDefault(workEntry, ctx.commandDisplayMode);
+  const [, rerenderDisclosure] = useReducer((count: number) => count + 1, 0);
+  const expanded = workEntryIsExpanded(viewState, workEntry.id, opensByDefault);
   const toggleExpanded = () => {
     const next = !expanded;
-    if (groupView) {
-      groupView.onToggleEntry(!next);
-      if (next) groupView.state.expandedEntries.add(workEntry.id);
-      else groupView.state.expandedEntries.delete(workEntry.id);
+    if (groupView) groupView.onToggleEntry(!next);
+    else props.onToggleEntry?.(!next);
+    if (next) {
+      viewState.expandedEntries.add(workEntry.id);
+      viewState.collapsedEntries.delete(workEntry.id);
     } else {
-      props.onToggleEntry?.(!next);
+      viewState.expandedEntries.delete(workEntry.id);
+      if (opensByDefault) viewState.collapsedEntries.add(workEntry.id);
     }
-    setExpanded(next);
+    rerenderDisclosure();
   };
   const failureItem = workEntry.projectedItem?.item;
   if (failureItem?.type === "error" && failureItem.status === "failed") {

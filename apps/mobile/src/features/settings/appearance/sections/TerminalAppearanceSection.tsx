@@ -1,3 +1,4 @@
+import { useAtomSet } from "@effect/atom-react";
 import { useCallback } from "react";
 
 import {
@@ -13,10 +14,14 @@ import {
   TerminalAppearancePreview,
 } from "../components/AppearancePreviews";
 import { FontSizeSliderRow } from "../components/FontSizeSliderRow";
+import { updateMobilePreferencesAtom } from "../../../../state/preferences";
+import { useCommandDisplayMode } from "../../../../state/use-command-display-mode";
 
 export function TerminalAppearanceSection() {
   const { isReady, appearance, setTerminalFontSize } = useAppearancePreferences();
   const custom = appearance.isTerminalFontSizeCustom;
+  const commandDisplayMode = useCommandDisplayMode();
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
 
   const handleToggleCustom = useCallback(
     (enabled: boolean) => {
@@ -49,6 +54,16 @@ export function TerminalAppearanceSection() {
           valueLabel={`${appearance.terminalFontSize.toFixed(1)} pt`}
         />
       ) : null}
+      <SettingsSwitchRow
+        disabled={!isReady}
+        icon="chevron.left.forwardslash.chevron.right"
+        label="Expose commands"
+        subtitle="Show every command's output in threads. Off still opens failed commands."
+        onValueChange={(exposed) =>
+          savePreferences({ commandDisplayMode: exposed ? "exposed" : "collapsed" })
+        }
+        value={commandDisplayMode === "exposed"}
+      />
     </SettingsSection>
   );
 }

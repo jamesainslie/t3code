@@ -43,6 +43,7 @@ import {
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import {
   ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
+  type CommandDisplayMode,
   type EnvironmentId,
   type RunId,
   type ThreadId,
@@ -62,8 +63,11 @@ import {
   type AgentSpawnSummary,
   formatItemFullDetail,
   type ThreadFeedActivity,
+  threadFeedActivityExpanded,
   workEntryRowLabel,
 } from "../../lib/threadActivity";
+import { useCommandDisplayMode } from "../../state/use-command-display-mode";
+import { ThreadTerminalCard } from "./ThreadTerminalCard";
 import { toolCallLines, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
 import { useTurnItemDetail } from "../../state/queries";
 import {
@@ -465,6 +469,7 @@ interface ThreadWorkLogProps {
 }
 
 export function ThreadWorkLog(props: ThreadWorkLogProps) {
+  const commandDisplayMode = useCommandDisplayMode();
   const renderRow = useCallback(
     (row: ThreadFeedActivity) => (
       <ThreadWorkLogRow
@@ -472,7 +477,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
         row={row}
         anchorKey={props.anchorKey}
         copied={props.copiedRowId === row.id}
-        expanded={props.expandedRows[row.id] ?? false}
+        expanded={threadFeedActivityExpanded(row, props.expandedRows, commandDisplayMode)}
         environmentId={props.environmentId}
         iconSubtleColor={props.iconSubtleColor}
         onCopyRow={props.onCopyRow}
@@ -483,6 +488,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
       />
     ),
     [
+      commandDisplayMode,
       props.anchorKey,
       props.copiedRowId,
       props.expandedRows,
@@ -524,6 +530,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
           activities={props.activities}
           edgeFadeColor={props.edgeFadeColor}
           expandedRows={props.expandedRows}
+          commandDisplayMode={commandDisplayMode}
           groupId={props.anchorKey}
           rowSizing={props.rowSizing}
           scrollPositions={props.scrollPositions}
@@ -540,6 +547,7 @@ function ThreadWorkGroupList(props: {
   readonly activities: ReadonlyArray<ThreadFeedActivity>;
   readonly edgeFadeColor: string;
   readonly expandedRows: Readonly<Record<string, boolean>>;
+  readonly commandDisplayMode: CommandDisplayMode;
   readonly groupId: string;
   readonly rowSizing: ReturnType<typeof deriveThreadWorkLogSizing>;
   readonly scrollPositions: Map<string, ThreadWorkGroupScrollPosition>;
@@ -675,10 +683,16 @@ function ThreadWorkGroupList(props: {
   }, []);
   const getFixedItemSize = useCallback(
     (row: ThreadFeedActivity, index: number) =>
-      props.expandedRows[row.id] || props.rowSizing.fixedRowHeight === undefined
+      threadFeedActivityExpanded(row, props.expandedRows, props.commandDisplayMode) ||
+      props.rowSizing.fixedRowHeight === undefined
         ? undefined
         : props.rowSizing.fixedRowHeight + (index < props.activities.length - 1 ? WORK_ROW_GAP : 0),
-    [props.activities.length, props.expandedRows, props.rowSizing.fixedRowHeight],
+    [
+      props.activities.length,
+      props.commandDisplayMode,
+      props.expandedRows,
+      props.rowSizing.fixedRowHeight,
+    ],
   );
   const renderItem = useCallback(
     ({ item, index }: { item: ThreadFeedActivity; index: number }) => (
@@ -931,22 +945,19 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
   const isRead = toolGroupAction(row.workEntry) === "read";
   // Tool calls show the call in the foreground and the result muted below it.
   const shownItem = fetchedItem ?? row.projectedItem.item;
+  // Fork: commands draw as a terminal card instead of call lines.
+  const terminalItem =
+    expanded && !isRead && shownItem.type === "command_execution" ? shownItem : null;
   const call =
-    expanded && !isRead && shownItem.type === "command_execution"
-      ? toolCallLines({ command: shownItem.input })
-      : expanded && !isRead && shownItem.type === "dynamic_tool"
-        ? toolCallLines({ args: shownItem.input })
-        : expanded && shownItem.type === "file_search"
-          ? toolCallLines({ args: { pattern: shownItem.pattern } })
-          : expanded && shownItem.type === "web_search"
-            ? toolCallLines({ args: { query: shownItem.patterns?.join(", ") } })
-            : null;
-  const failedExitCode =
-    call && shownItem.type === "command_execution" && shownItem.exitCode
-      ? shownItem.exitCode
-      : null;
+    expanded && !isRead && shownItem.type === "dynamic_tool"
+      ? toolCallLines({ args: shownItem.input })
+      : expanded && shownItem.type === "file_search"
+        ? toolCallLines({ args: { pattern: shownItem.pattern } })
+        : expanded && shownItem.type === "web_search"
+          ? toolCallLines({ args: { query: shownItem.patterns?.join(", ") } })
+          : null;
   const fullDetail =
-    expanded && !reasoning && !call
+    expanded && !reasoning && !call && !terminalItem
       ? fetchedItem && !isRead
         ? formatItemFullDetail(row.projectedItem, fetchedItem)
         : row.getFullDetail()
@@ -964,6 +975,8 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
               ? "Output is no longer available."
               : "Loading output…"
             : null;
+  const terminalOutput =
+    terminalItem && (fetchedItem || !row.fetchesDetail) ? turnItemOutputText(terminalItem) : null;
   const viewedImagePath = workEntryViewedImagePath(row.workEntry);
   const toolPresentation = resolveWorkEntryToolPresentation(row.workEntry);
   const previewText = workEntryRowLabel(row.workEntry);
@@ -1112,6 +1125,7 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
 
       {expanded &&
       (reasoning ||
+        terminalItem ||
         fullDetail ||
         call ||
         fetchedOutput ||
@@ -1134,53 +1148,62 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
               {props.renderImage({ href: viewedImagePath, alt: null, title: null })}
             </View>
           ) : null}
-          <ScrollView
-            nestedScrollEnabled
-            directionalLockEnabled
-            showsVerticalScrollIndicator
-            className="max-h-60"
-            contentContainerStyle={{ paddingRight: 8 }}
-          >
-            {reasoning ? (
-              props.renderReasoning(reasoning.text)
-            ) : call ? (
-              [
-                call.command,
-                ...(call.args ?? []).map(([key, value]) => `${key} ${value}`),
-                call.argsText,
-              ]
-                .filter((line): line is string => Boolean(line))
-                .map((line, index) => (
-                  <Text
-                    key={`${index}:${line}`}
-                    selectable
-                    className="font-mono text-2xs leading-normal text-foreground"
-                  >
-                    {line}
-                  </Text>
-                ))
-            ) : fullDetail ? (
-              <Text selectable className="font-mono text-2xs leading-normal text-foreground-muted">
-                {fullDetail}
-              </Text>
-            ) : null}
-            {fetchedOutput ? (
-              <Text
-                selectable
-                className={cn(
-                  "font-mono text-2xs leading-normal text-foreground-muted",
-                  (!call || call.command || call.args || call.argsText) && "mt-1.5",
-                )}
-              >
-                {fetchedOutput}
-              </Text>
-            ) : null}
-            {failedExitCode !== null ? (
-              <Text className="mt-1.5 font-mono text-2xs leading-normal text-danger-foreground">
-                exit {failedExitCode}
-              </Text>
-            ) : null}
-          </ScrollView>
+          {terminalItem ? (
+            <ThreadTerminalCard
+              command={terminalItem.input}
+              exitCode={terminalItem.exitCode}
+              output={terminalOutput}
+              status={terminalOutput ? null : fetchedOutput}
+              themeAppearance={props.themeAppearance}
+              onCopy={(transcript) => props.onCopyRow(row.id, transcript)}
+            />
+          ) : (
+            <ScrollView
+              nestedScrollEnabled
+              directionalLockEnabled
+              showsVerticalScrollIndicator
+              className="max-h-60"
+              contentContainerStyle={{ paddingRight: 8 }}
+            >
+              {reasoning ? (
+                props.renderReasoning(reasoning.text)
+              ) : call ? (
+                [
+                  call.command,
+                  ...(call.args ?? []).map(([key, value]) => `${key} ${value}`),
+                  call.argsText,
+                ]
+                  .filter((line): line is string => Boolean(line))
+                  .map((line, index) => (
+                    <Text
+                      key={`${index}:${line}`}
+                      selectable
+                      className="font-mono text-2xs leading-normal text-foreground"
+                    >
+                      {line}
+                    </Text>
+                  ))
+              ) : fullDetail ? (
+                <Text
+                  selectable
+                  className="font-mono text-2xs leading-normal text-foreground-muted"
+                >
+                  {fullDetail}
+                </Text>
+              ) : null}
+              {fetchedOutput ? (
+                <Text
+                  selectable
+                  className={cn(
+                    "font-mono text-2xs leading-normal text-foreground-muted",
+                    (!call || call.command || call.args || call.argsText) && "mt-1.5",
+                  )}
+                >
+                  {fetchedOutput}
+                </Text>
+              ) : null}
+            </ScrollView>
+          )}
         </Animated.View>
       ) : null}
     </Animated.View>

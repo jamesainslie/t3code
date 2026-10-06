@@ -175,6 +175,7 @@ import {
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { ChatEventTimestampSettings } from "./ChatEventTimestampSettings";
+import { CommandDisplaySettings } from "./CommandDisplaySettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -578,6 +579,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatEventTimestampSeconds !== DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds
         ? ["Event timestamps"]
         : []),
+      ...(settings.commandDisplayMode !== DEFAULT_UNIFIED_SETTINGS.commandDisplayMode
+        ? ["Command display"]
+        : []),
       ...(settings.notificationMode !== DEFAULT_UNIFIED_SETTINGS.notificationMode
         ? ["Thread notifications"]
         : []),
@@ -758,6 +762,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatEventTimestampsEnabled,
       settings.chatEventTimestampStyle,
       settings.chatEventTimestampSeconds,
+      settings.commandDisplayMode,
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
       settings.copyOnSelectEnabled,
@@ -838,6 +843,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatEventTimestampsEnabled: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampsEnabled,
       chatEventTimestampStyle: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampStyle,
       chatEventTimestampSeconds: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds,
+      commandDisplayMode: DEFAULT_UNIFIED_SETTINGS.commandDisplayMode,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
       copyOnSelectEnabled: DEFAULT_UNIFIED_SETTINGS.copyOnSelectEnabled,
@@ -2806,6 +2812,7 @@ export function GeneralSettingsPanel() {
           }
         />
         <ChatEventTimestampSettings />
+        <CommandDisplaySettings />
         <SettingsRow
           serverScoped
           settingKeys={["responseStreamingMode"]}
