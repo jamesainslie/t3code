@@ -340,6 +340,23 @@ export class ProviderAdapterEventStreamError extends Schema.TaggedError<Provider
   }
 }
 
+/**
+ * Ends a run's event stream when T3 released the session on purpose, for
+ * example a workspace handoff or a sign-out. The run is cancelled, not failed.
+ */
+export class ProviderAdapterSessionReleasedError extends Schema.TaggedError<ProviderAdapterSessionReleasedError>()(
+  "ProviderAdapterSessionReleasedError",
+  {
+    driver: ProviderDriverKind,
+    providerSessionId: ProviderSessionId,
+    detail: Schema.optional(Schema.String),
+  },
+) {
+  override get message(): string {
+    return `The ${this.driver} provider session ${this.providerSessionId} was released.`;
+  }
+}
+
 export class ProviderAdapterProtocolError extends Schema.TaggedError<ProviderAdapterProtocolError>()(
   "ProviderAdapterProtocolError",
   {
@@ -369,6 +386,7 @@ export const ProviderAdapterV2Error = Schema.Union([
   ProviderAdapterInterruptError,
   ProviderAdapterRuntimeRequestResponseError,
   ProviderAdapterEventStreamError,
+  ProviderAdapterSessionReleasedError,
   ProviderAdapterProtocolError,
 ]);
 export type ProviderAdapterV2Error = typeof ProviderAdapterV2Error.Type;

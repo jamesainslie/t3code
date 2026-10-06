@@ -46,7 +46,10 @@ import type {
   ProviderAdapterV2SessionRuntime,
   ProviderAdapterV2TurnMessage,
 } from "./ProviderAdapter.ts";
-import { ProviderAdapterTurnStartError } from "./ProviderAdapter.ts";
+import {
+  ProviderAdapterSessionReleasedError,
+  ProviderAdapterTurnStartError,
+} from "./ProviderAdapter.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import type { ProjectionStoreV2Error } from "./ProjectionStore.ts";
 import { makeProviderFailure, makeProviderFailureTurnItem } from "./ProviderFailure.ts";
@@ -98,6 +101,13 @@ const backgroundCapableTurnItemTypes: ReadonlySet<OrchestrationV2TurnItem["type"
   "command_execution",
   "dynamic_tool",
   "subagent",
+]);
+
+// Root-run tool calls only the provider can end. When its event stream dies
+// first, finalization ends them so they do not read as background work forever.
+const providerEndedToolTurnItemTypes: ReadonlySet<OrchestrationV2TurnItem["type"]> = new Set([
+  "command_execution",
+  "dynamic_tool",
 ]);
 
 function isSettledTurnItemStatus(status: OrchestrationV2TurnItem["status"]): boolean {
@@ -486,6 +496,15 @@ export class RunExecutionIngestError extends Schema.TaggedError<RunExecutionInge
   }
 }
 
+const isRunExecutionIngestError = Schema.is(RunExecutionIngestError);
+const isProviderSessionReleasedError = Schema.is(ProviderAdapterSessionReleasedError);
+
+/** Whether the run's event stream ended because T3 released its session on purpose. */
+function isSessionReleasedCause(cause: Cause.Cause<unknown>): boolean {
+  const error = Cause.squash(cause);
+  return isRunExecutionIngestError(error) && isProviderSessionReleasedError(error.cause);
+}
+
 export const RunExecutionServiceV2Error = Schema.Union([
   RunExecutionStartError,
   RunExecutionIngestError,
@@ -563,6 +582,8 @@ export const layer: Layer.Layer<
       readonly shouldFinalizeRun?: () => Effect.Effect<boolean, ProjectionStoreV2Error>;
       readonly hasUnpairedRunInterruptRequest?: () => Effect.Effect<boolean, never>;
       readonly openRunOwnedSubagents?: OpenRunOwnedSubagentProjection;
+      /** Tool calls left open because the provider stream ended before the run did. */
+      readonly openToolTurnItems?: ReadonlyArray<OrchestrationV2TurnItem>;
       readonly terminal: ProviderTerminalEvent;
       readonly failureItemPersisted: boolean;
       readonly refreshAfterTurn: Effect.Effect<void>;
@@ -633,6 +654,26 @@ export const layer: Layer.Layer<
                 allocateEventId,
               })
             : [];
+        const terminalStatus = input.terminal.status;
+        const endedToolTurnItemEvents = isRunOwnedSubagentTerminalStatus(terminalStatus)
+          ? yield* Effect.forEach(input.openToolTurnItems ?? [], (turnItem) =>
+              Effect.map(allocateEventId(), (id) => ({
+                id,
+                type: "turn-item.updated" as const,
+                threadId: turnItem.threadId,
+                runId: input.run.id,
+                ...(turnItem.nodeId === null ? {} : { nodeId: turnItem.nodeId }),
+                providerInstanceId: input.run.providerInstanceId,
+                occurredAt: completedAt,
+                payload: {
+                  ...turnItem,
+                  status: terminalStatus,
+                  completedAt,
+                  updatedAt: completedAt,
+                },
+              })),
+            )
+          : [];
         const persistedStatus =
           input.terminal.status === "completed" ? "waiting" : input.terminal.status;
         // Completion cohorts are advanced by Orchestrator while a provider
@@ -687,6 +728,7 @@ export const layer: Layer.Layer<
             // Terminalize open run-owned subagent rows before the root run
             // settles so projections never keep a forever-running subagent card.
             ...cascadedSubagentEvents,
+            ...endedToolTurnItemEvents,
             ...(finalizedAttempt === null
               ? []
               : [
@@ -808,6 +850,12 @@ export const layer: Layer.Layer<
               ),
             ),
           );
+          const unreportedProviderTurnId = (outcome: "failed" | "released") =>
+            input.attempt.providerTurnId ??
+            idAllocator.derive.providerTurn({
+              driver: input.providerThread.driver,
+              nativeTurnId: `${outcome}:${input.attempt.id}`,
+            });
           const makeFailedTerminalEvent = (
             failure: OrchestrationV2ProviderFailure,
             failureItemOrdinal: number,
@@ -815,16 +863,23 @@ export const layer: Layer.Layer<
             type: "turn.terminal",
             driver: input.providerThread.driver,
             providerThreadId: input.providerThread.id,
-            providerTurnId:
-              input.attempt.providerTurnId ??
-              idAllocator.derive.providerTurn({
-                driver: input.providerThread.driver,
-                nativeTurnId: `failed:${input.attempt.id}`,
-              }),
+            providerTurnId: unreportedProviderTurnId("failed"),
             runOrdinal: input.run.ordinal,
             failureItemOrdinal,
             status: "failed",
             failure,
+            threadDisposition: "reusable",
+          });
+          // T3 released the session on purpose (workspace handoff, sign-out),
+          // so the run is cancelled. A failed run would hold the queue.
+          const makeReleasedTerminalEvent = (): ProviderTerminalEvent => ({
+            type: "turn.terminal",
+            driver: input.providerThread.driver,
+            providerThreadId: input.providerThread.id,
+            providerTurnId: unreportedProviderTurnId("released"),
+            runOrdinal: input.run.ordinal,
+            status: "cancelled",
+            failure: null,
             threadDisposition: "reusable",
           });
           const responseStreamingMode = yield* Effect.gen(function* () {
@@ -956,6 +1011,9 @@ export const layer: Layer.Layer<
             ReadonlySet<OrchestrationV2TurnItem["id"]>
           >(new Set(inheritedBackgroundTurnItemsById.keys()));
           const openRunOwnedSubagents = yield* Ref.make(emptyOpenRunOwnedSubagentProjection());
+          const openToolTurnItems = yield* Ref.make<
+            ReadonlyMap<OrchestrationV2TurnItem["id"], OrchestrationV2TurnItem>
+          >(new Map());
           const finalizeRootRun = (terminal: ProviderTerminalEvent) =>
             Effect.gen(function* () {
               if (yield* Ref.get(rootRunFinalized)) {
@@ -1083,6 +1141,18 @@ export const layer: Layer.Layer<
                       next.delete(event.turnItem.id);
                     } else {
                       next.add(event.turnItem.id);
+                    }
+                    return next;
+                  });
+                }
+                if (belongsToRootRun && providerEndedToolTurnItemTypes.has(event.turnItem.type)) {
+                  const turnItem = event.turnItem;
+                  yield* Ref.update(openToolTurnItems, (current) => {
+                    const next = new Map(current);
+                    if (isSettledTurnItemStatus(turnItem.status)) {
+                      next.delete(turnItem.id);
+                    } else {
+                      next.set(turnItem.id, turnItem);
                     }
                     return next;
                   });
@@ -1268,59 +1338,50 @@ export const layer: Layer.Layer<
               }),
             ),
             Effect.catchCause((cause) =>
-              Ref.get(rootRunFinalized).pipe(
-                Effect.flatMap((finalized) =>
-                  Effect.logWarning("orchestration V2 provider event ingestion failed", {
-                    runId: input.run.id,
-                    cause,
-                  }).pipe(
-                    Effect.andThen(
-                      finalized
-                        ? Effect.void
-                        : Ref.get(latestProviderThread).pipe(
-                            Effect.flatMap((providerThread) =>
-                              Ref.get(latestTurnItemOrdinal).pipe(
-                                Effect.flatMap((latestItemOrdinal) =>
-                                  Ref.get(openRunOwnedSubagents).pipe(
-                                    Effect.flatMap((openSubagents) =>
-                                      writeFinalRunEvents({
-                                        run: input.run,
-                                        rootNode: input.rootNode,
-                                        checkpointScope: input.checkpointScope,
-                                        providerThread,
-                                        attempt: input.attempt,
-                                        // The failure may be the ownership
-                                        // read itself, so check in the write.
-                                        writeIfRunCurrent: {
-                                          activeAttemptId: input.attempt.id,
-                                          expectedStatus: "running",
-                                        },
-                                        openRunOwnedSubagents: openSubagents,
-                                        terminal: makeFailedTerminalEvent(
-                                          makeProviderFailure({
-                                            cause: Cause.squash(cause),
-                                            class: "unknown",
-                                          }),
-                                          latestItemOrdinal + 1,
-                                        ),
-                                        failureItemPersisted: false,
-                                        refreshAfterTurn,
-                                      }),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                    ),
-                    Effect.mapError(
-                      (writeCause) =>
-                        new RunExecutionIngestError({
-                          runId: input.run.id,
-                          cause: { ingest: cause, write: writeCause },
+              Effect.gen(function* () {
+                const finalized = yield* Ref.get(rootRunFinalized);
+                yield* Effect.logWarning("orchestration V2 provider event ingestion failed", {
+                  runId: input.run.id,
+                  cause,
+                });
+                if (finalized) {
+                  return;
+                }
+                const providerThread = yield* Ref.get(latestProviderThread);
+                const latestItemOrdinal = yield* Ref.get(latestTurnItemOrdinal);
+                yield* writeFinalRunEvents({
+                  run: input.run,
+                  rootNode: input.rootNode,
+                  checkpointScope: input.checkpointScope,
+                  providerThread,
+                  attempt: input.attempt,
+                  // The failure may be the ownership read itself, so check in
+                  // the write.
+                  writeIfRunCurrent: {
+                    activeAttemptId: input.attempt.id,
+                    expectedStatus: "running",
+                  },
+                  openRunOwnedSubagents: yield* Ref.get(openRunOwnedSubagents),
+                  openToolTurnItems: Array.from((yield* Ref.get(openToolTurnItems)).values()),
+                  terminal: isSessionReleasedCause(cause)
+                    ? makeReleasedTerminalEvent()
+                    : makeFailedTerminalEvent(
+                        makeProviderFailure({
+                          cause: Cause.squash(cause),
+                          class: "unknown",
                         }),
-                    ),
-                  ),
+                        latestItemOrdinal + 1,
+                      ),
+                  failureItemPersisted: false,
+                  refreshAfterTurn,
+                });
+              }).pipe(
+                Effect.mapError(
+                  (writeCause) =>
+                    new RunExecutionIngestError({
+                      runId: input.run.id,
+                      cause: { ingest: cause, write: writeCause },
+                    }),
                 ),
               ),
             ),
