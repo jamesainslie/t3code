@@ -2,7 +2,6 @@ import type { SnapShotSource } from "@t3tools/contracts";
 import { ImageIcon, TextIcon } from "lucide-react";
 import { Suspense } from "react";
 
-import { useTheme } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { Button } from "../ui/button";
@@ -25,12 +24,11 @@ export function SnapShotAccessibilityData({
   details: SnapShotAccessibilityDetails;
   className?: string;
 }) {
-  const { resolvedTheme } = useTheme();
   const content =
     details.format === "json" ? (
       <RenderErrorBoundary fallback={details.content}>
         <Suspense fallback={details.content}>
-          <HighlightedTokens code={details.content} language="json" theme={resolvedTheme} />
+          <HighlightedTokens code={details.content} language="json" />
         </Suspense>
       </RenderErrorBoundary>
     ) : (

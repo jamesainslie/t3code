@@ -2,16 +2,18 @@ import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { parseDiffFromFile } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/types";
 import { unquoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
+import type { SyntaxTheme } from "@t3tools/contracts";
 
-const DIFF_THEME_NAMES = {
-  light: "pierre-light",
-  dark: "pierre-dark",
-} as const;
+import { resolveSyntaxThemeName, type SyntaxThemeName } from "./syntaxThemes";
 
-export type DiffThemeName = (typeof DIFF_THEME_NAMES)[keyof typeof DIFF_THEME_NAMES];
+export type DiffThemeName = SyntaxThemeName;
 
-export function resolveDiffThemeName(theme: "light" | "dark"): DiffThemeName {
-  return theme === "dark" ? DIFF_THEME_NAMES.dark : DIFF_THEME_NAMES.light;
+/** Shiki theme for every code surface: the user's syntax theme in the app's light or dark mode. */
+export function resolveDiffThemeName(
+  appearance: "light" | "dark",
+  syntaxTheme: SyntaxTheme,
+): DiffThemeName {
+  return resolveSyntaxThemeName(appearance, syntaxTheme);
 }
 
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;

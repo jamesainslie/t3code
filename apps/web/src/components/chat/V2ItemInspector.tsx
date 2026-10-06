@@ -13,9 +13,8 @@ import {
 import { ExternalLinkIcon, GitBranchIcon, RotateCcwIcon } from "lucide-react";
 import { memo, Suspense, use, useMemo } from "react";
 
-import { useTheme } from "../../hooks/useTheme";
+import { useDiffThemeName } from "../../hooks/useDiffThemeName";
 import { cn } from "../../lib/utils";
-import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { getSyntaxHighlighterPromise } from "../../lib/syntaxHighlighting";
 import { useTurnItemDetail } from "../../state/queries";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
@@ -40,12 +39,11 @@ interface V2ItemInspectorProps {
 }
 
 function JsonTokens({ text }: { readonly text: string }) {
-  const { resolvedTheme } = useTheme();
-  const highlighter = use(getSyntaxHighlighterPromise("json"));
+  const themeName = useDiffThemeName();
+  const highlighter = use(getSyntaxHighlighterPromise("json", themeName));
   const { tokens } = useMemo(
-    () =>
-      highlighter.codeToTokens(text, { lang: "json", theme: resolveDiffThemeName(resolvedTheme) }),
-    [highlighter, text, resolvedTheme],
+    () => highlighter.codeToTokens(text, { lang: "json", theme: themeName }),
+    [highlighter, text, themeName],
   );
   return tokens.flatMap((line, lineIndex) => [
     lineIndex > 0 ? "\n" : "",

@@ -105,11 +105,7 @@ import {
   isVideoAttachment,
   type TurnDiffSummary,
 } from "../../types";
-import {
-  getRenderablePatch,
-  resolveDiffThemeName,
-  resolveFileDiffPath,
-} from "../../lib/diffRendering";
+import { getRenderablePatch, resolveFileDiffPath } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import ReactMarkdown from "react-markdown";
@@ -255,6 +251,7 @@ import { chatMarkdownClipboardPayload } from "../../markdown-clipboard";
 import { ContextChip, ContextChipLabel, type ContextChipKind } from "../ContextChip";
 import { createContextPresentationRegistry } from "../contextPresentationRegistry";
 import { useOpenPrLink } from "~/lib/openPullRequestLink";
+import { useDiffThemeName } from "~/hooks/useDiffThemeName";
 import { useClientSettings } from "~/hooks/useSettings";
 import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
@@ -4633,6 +4630,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
 });
 
 function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentContext }) {
+  const diffThemeName = useDiffThemeName();
   const ctx = use(TimelineRowCtx);
   const fenceLanguage = comment.fenceLanguage ?? "diff";
   const renderablePatch = getRenderablePatch(
@@ -4673,7 +4671,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
               options={{
                 collapsed: false,
                 diffStyle: "unified",
-                theme: resolveDiffThemeName(ctx.resolvedTheme),
+                theme: diffThemeName,
                 preferredHighlighter: PREFERRED_HIGHLIGHTER,
               }}
             />

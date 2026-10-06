@@ -1,6 +1,6 @@
 import { use, useMemo, type CSSProperties } from "react";
 
-import { resolveDiffThemeName } from "../../lib/diffRendering";
+import { useDiffThemeName } from "../../hooks/useDiffThemeName";
 import type { EmbeddedScript } from "../../lib/embeddedScripts";
 import { getSyntaxHighlighterPromise } from "../../lib/syntaxHighlighting";
 
@@ -36,27 +36,25 @@ export function HighlightedTokens({
   code,
   language,
   embedded = NO_EMBEDDED_SCRIPTS,
-  theme,
   wordClassName,
 }: {
   code: string;
   language: string;
   embedded?: ReadonlyArray<EmbeddedScript>;
-  theme: "light" | "dark";
   wordClassName?: string;
 }) {
-  const highlighter = use(getSyntaxHighlighterPromise(language));
+  const themeName = useDiffThemeName();
+  const highlighter = use(getSyntaxHighlighterPromise(language, themeName));
   // Every grammar loads into the same shared highlighter.
-  for (const script of embedded) use(getSyntaxHighlighterPromise(script.language));
+  for (const script of embedded) use(getSyntaxHighlighterPromise(script.language, themeName));
   const lines = useMemo(() => {
-    const themeName = resolveDiffThemeName(theme);
     const tokenize = (text: string, lang: string) =>
       highlighter.codeToTokens(text, { lang, theme: themeName }).tokens;
     return keyedLines(
       code,
       withEmbeddedScripts(code, tokenize(code, language), embedded, tokenize),
     );
-  }, [code, embedded, highlighter, language, theme]);
+  }, [code, embedded, highlighter, language, themeName]);
 
   return lines.map(({ key, tokens, ending }) => (
     <span key={key}>

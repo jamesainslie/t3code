@@ -19,10 +19,26 @@ it("caches the recovered text highlighter for unsupported languages", async () =
       : Promise.reject(new Error("unsupported language")),
   );
 
-  const first = getSyntaxHighlighterPromise("unsupported-test-language");
+  const first = getSyntaxHighlighterPromise("unsupported-test-language", "pierre-dark");
   await expect(first).resolves.toBe(textHighlighter);
-  const second = getSyntaxHighlighterPromise("unsupported-test-language");
+  const second = getSyntaxHighlighterPromise("unsupported-test-language", "pierre-dark");
 
   expect(second).toBe(first);
   expect(getSharedHighlighter).toHaveBeenCalledTimes(2);
+});
+
+it("loads the requested theme and caches each language per theme", async () => {
+  getSharedHighlighter.mockReset();
+  const highlighter = {} as DiffsHighlighter;
+  getSharedHighlighter.mockResolvedValue(highlighter);
+
+  const graphite = getSyntaxHighlighterPromise("typescript", "t3-graphite-dark");
+  await expect(graphite).resolves.toBe(highlighter);
+  expect(getSyntaxHighlighterPromise("typescript", "t3-graphite-dark")).toBe(graphite);
+  await getSyntaxHighlighterPromise("typescript", "pierre-dark");
+
+  expect(getSharedHighlighter.mock.calls.map(([options]) => options.themes)).toEqual([
+    ["t3-graphite-dark"],
+    ["pierre-dark"],
+  ]);
 });

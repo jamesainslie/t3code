@@ -328,7 +328,7 @@ describe("ChatMarkdown streaming", () => {
   });
 
   it("does not retokenize completed lines when streaming finishes", async () => {
-    const highlighter = await getSyntaxHighlighterPromise("typescript");
+    const highlighter = await getSyntaxHighlighterPromise("typescript", "pierre-dark");
     const highlight = vi.spyOn(highlighter, "codeToHast");
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;
@@ -351,7 +351,7 @@ describe("ChatMarkdown streaming", () => {
   });
 
   it("recovers highlighting after a failed fence changes without resetting its controls", async () => {
-    const highlighter = await getSyntaxHighlighterPromise("text");
+    const highlighter = await getSyntaxHighlighterPromise("text", "pierre-dark");
     const codeToHast = highlighter.codeToHast.bind(highlighter);
     let fail = true;
     vi.spyOn(highlighter, "codeToHast").mockImplementation((...args) => {
@@ -395,7 +395,7 @@ describe("ChatMarkdown streaming", () => {
   });
 
   it("preserves code controls and details without highlighting an unchanged fence again", async () => {
-    const highlighter = await getSyntaxHighlighterPromise("text");
+    const highlighter = await getSyntaxHighlighterPromise("text", "pierre-dark");
     const highlight = vi.spyOn(highlighter, "codeToHast");
     const writeText = vi.fn(async (_text: string) => {});
     vi.stubGlobal("navigator", { clipboard: { writeText } });

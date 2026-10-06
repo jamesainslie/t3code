@@ -5,7 +5,7 @@ import {
   type SupportedLanguages,
 } from "@pierre/diffs";
 
-import { resolveDiffThemeName } from "./diffRendering";
+import type { DiffThemeName } from "./diffRendering";
 
 /**
  * Always highlight with the Oniguruma WASM engine — the JS regex engine can
@@ -17,23 +17,28 @@ export const PREFERRED_HIGHLIGHTER: HighlighterTypes = "shiki-wasm";
 
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
-export function getSyntaxHighlighterPromise(language: string): Promise<DiffsHighlighter> {
-  const cached = highlighterPromiseCache.get(language);
+/** Shared highlighter with `language` and `themeName` attached. */
+export function getSyntaxHighlighterPromise(
+  language: string,
+  themeName: DiffThemeName,
+): Promise<DiffsHighlighter> {
+  const cacheKey = `${themeName}:${language}`;
+  const cached = highlighterPromiseCache.get(cacheKey);
   if (cached) return cached;
 
   const promise = getSharedHighlighter({
-    themes: [resolveDiffThemeName("dark"), resolveDiffThemeName("light")],
+    themes: [themeName],
     langs: [language as SupportedLanguages],
     preferredHighlighter: PREFERRED_HIGHLIGHTER,
   }).catch((error) => {
     if (language === "text") {
-      highlighterPromiseCache.delete(language);
+      highlighterPromiseCache.delete(cacheKey);
       // "text" itself failed — Shiki cannot initialize at all, surface the error
       throw error;
     }
     // Language not supported by Shiki — fall back to "text"
-    return getSyntaxHighlighterPromise("text");
+    return getSyntaxHighlighterPromise("text", themeName);
   });
-  highlighterPromiseCache.set(language, promise);
+  highlighterPromiseCache.set(cacheKey, promise);
   return promise;
 }

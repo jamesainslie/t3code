@@ -30,6 +30,7 @@ const bridge = vi.hoisted(() => ({
 }));
 vi.mock("../../lib/desktopSnapShot", () => ({ getDesktopSnapShotBridge: () => bridge }));
 vi.mock("../../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
+vi.mock("../../hooks/useDiffThemeName", () => ({ useDiffThemeName: () => "pierre-light" }));
 vi.mock("../../hooks/useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: vi.fn(), isCopied: false }),
 }));

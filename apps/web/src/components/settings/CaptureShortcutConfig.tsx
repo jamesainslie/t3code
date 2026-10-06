@@ -9,7 +9,7 @@ import { FileDiff } from "@pierre/diffs/react";
 import { parseDiffFromFile } from "@pierre/diffs";
 import { useMemo, useState } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
-import { resolveDiffThemeName } from "../../lib/diffRendering";
+import { useDiffThemeName } from "../../hooks/useDiffThemeName";
 import { useTheme } from "../../hooks/useTheme";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
@@ -35,6 +35,7 @@ export function CaptureShortcutConfig({
 }) {
   const bridge = getDesktopSnapShotBridge();
   const { resolvedTheme } = useTheme();
+  const diffThemeName = useDiffThemeName();
   const { copyToClipboard, isCopied } = useCopyToClipboard();
   const [preview, setPreview] = useState<DesktopCaptureConfigPreview | null>(null);
   const [result, setResult] = useState<DesktopCaptureConfigApplied | null>(null);
@@ -179,7 +180,7 @@ export function CaptureShortcutConfig({
                 fileDiff={diff}
                 options={{
                   diffStyle: "unified",
-                  theme: resolveDiffThemeName(resolvedTheme),
+                  theme: diffThemeName,
                   overflow: "wrap",
                 }}
               />

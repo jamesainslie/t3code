@@ -51,6 +51,7 @@ import {
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
+  CodeIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderGit2Icon,
@@ -90,7 +91,10 @@ import { continueInNewThreadOptions, useHandleNewThread } from "../hooks/useHand
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
+import { previewSyntaxTheme } from "../lib/syntaxThemePreview";
+import { SYNTAX_THEME_OPTIONS, isSyntaxTheme } from "../lib/syntaxThemes";
+import { SyntaxThemeSwatches } from "./SyntaxThemeSwatches";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
@@ -457,6 +461,8 @@ const APPEARANCE_OPTIONS = [
   { mode: "dark", label: "Dark", icon: MoonIcon },
 ] as const;
 
+const SYNTAX_THEME_ITEM_PREFIX = "syntax-theme:";
+
 function notifyThemeSaveFailure(): void {
   toastManager.add(
     stackedThreadToast({
@@ -728,6 +734,15 @@ function OpenCommandPaletteDialog(props: {
     setHighlightedItemValue(null);
   }
   const clientSettings = useClientSettings();
+  const updateClientSettings = useUpdateClientSettings();
+  // Browsing the syntax theme submenu previews each theme on the code behind the palette.
+  useEffect(() => {
+    const id = highlightedItemValue?.startsWith(SYNTAX_THEME_ITEM_PREFIX)
+      ? highlightedItemValue.slice(SYNTAX_THEME_ITEM_PREFIX.length)
+      : null;
+    previewSyntaxTheme(isSyntaxTheme(id) ? id : null);
+  }, [highlightedItemValue]);
+  useEffect(() => () => previewSyntaxTheme(null), []);
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
@@ -2293,6 +2308,42 @@ function OpenCommandPaletteDialog(props: {
     ],
   };
   actionItems.push(changeThemeItem);
+
+  const changeSyntaxThemeItem: CommandPaletteSubmenuItem = {
+    kind: "submenu",
+    value: "action:change-syntax-theme",
+    searchTerms: ["change syntax theme", "syntax highlighting", "code colors", "subtle"],
+    title: "Change syntax theme",
+    icon: <CodeIcon className={ITEM_ICON_CLASS} />,
+    addonIcon: <CodeIcon className={ADDON_ICON_CLASS} />,
+    groups: [
+      {
+        value: "syntax-themes",
+        label: "Change syntax theme",
+        items: SYNTAX_THEME_OPTIONS.map(({ id, label, description }) => ({
+          kind: "action",
+          value: `${SYNTAX_THEME_ITEM_PREFIX}${id}`,
+          title: label,
+          description,
+          searchTerms: [label, "syntax theme", "code colors"],
+          icon: <CodeIcon className={ITEM_ICON_CLASS} />,
+          titleTrailingContent: (
+            <span className="flex shrink-0 items-center gap-2">
+              {clientSettings.syntaxTheme === id ? (
+                <span className="text-xs text-muted-foreground/70">Current</span>
+              ) : null}
+              <SyntaxThemeSwatches theme={id} />
+            </span>
+          ),
+          run: async () => {
+            previewSyntaxTheme(null);
+            await updateClientSettings({ syntaxTheme: id });
+          },
+        })),
+      },
+    ],
+  };
+  actionItems.push(changeSyntaxThemeItem);
 
   const changeAppearanceItem: CommandPaletteSubmenuItem = {
     kind: "submenu",

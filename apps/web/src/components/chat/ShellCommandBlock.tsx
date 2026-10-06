@@ -4,7 +4,6 @@ import {
 } from "@t3tools/client-runtime/work-log/command-label";
 import { Suspense, use, useMemo } from "react";
 
-import { useTheme } from "../../hooks/useTheme";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { HighlightedTokens } from "./HighlightedTokens";
 
@@ -35,7 +34,7 @@ function PlainWords({ code }: { code: string }) {
   );
 }
 
-function HighlightedCommand({ code, theme }: { code: string; theme: "light" | "dark" }) {
+function HighlightedCommand({ code }: { code: string }) {
   const { embeddedScripts } = use(loadEmbeddedScripts());
   const language = commandHighlightLanguage(code);
   // Only shell syntax nests scripts; PowerShell's own grammar colors its strings.
@@ -48,7 +47,6 @@ function HighlightedCommand({ code, theme }: { code: string; theme: "light" | "d
       code={code}
       language={language}
       embedded={embedded}
-      theme={theme}
       wordClassName={WORD_CLASS_NAME}
     />
   );
@@ -59,7 +57,6 @@ function HighlightedCommand({ code, theme }: { code: string; theme: "light" | "d
  * it, such as a `bash -lc` script or a Python heredoc, get their own grammar.
  */
 export function ShellCommandBlock({ command }: { command: string }) {
-  const { resolvedTheme } = useTheme();
   const code = withVisibleControlCharacters(command.trim());
   if (!code) return null;
   const plain = <PlainWords code={code} />;
@@ -68,7 +65,7 @@ export function ShellCommandBlock({ command }: { command: string }) {
     <div className="text-foreground/85">
       <RenderErrorBoundary fallback={plain} resetKeys={[code]}>
         <Suspense fallback={plain}>
-          <HighlightedCommand code={code} theme={resolvedTheme} />
+          <HighlightedCommand code={code} />
         </Suspense>
       </RenderErrorBoundary>
     </div>

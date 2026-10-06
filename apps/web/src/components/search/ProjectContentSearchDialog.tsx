@@ -4,6 +4,7 @@ import type { ProjectContentMatch } from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useActiveProjectTarget, type ActiveProjectTarget } from "~/hooks/useActiveProjectTarget";
+import { useDiffThemeName } from "~/hooks/useDiffThemeName";
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -105,6 +106,7 @@ function OpenContentSearchDialog(props: {
 }) {
   const { target } = props;
   const { resolvedTheme } = useTheme();
+  const diffThemeName = useDiffThemeName();
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
@@ -289,7 +291,7 @@ function OpenContentSearchDialog(props: {
                         <HighlightedSearchLine
                           match={match}
                           path={group.path}
-                          theme={resolvedTheme}
+                          themeName={diffThemeName}
                         />
                       </span>
                     </button>
