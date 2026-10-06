@@ -924,7 +924,7 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
         data-testid="sidebar-draft-row"
         className={cn(
           "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          props.isActive ? "bg-sidebar-row-active" : draftSurfaceClassName,
+          props.isActive ? "sidebar-row-glass" : draftSurfaceClassName,
         )}
         onClick={handleActivate}
         onContextMenu={handleContextMenu}
@@ -1606,10 +1606,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
           style: { "--thread-highlight": highlightColor } as CSSProperties,
         };
   const rowSurfaceClassName = cn(
-    "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md bg-sidebar-row-rest text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    !props.isActive && "bg-sidebar-row-rest",
     variantAction === "unsettle" && "[&:not(:hover):not(:focus-within)_*]:text-secondary-label/70",
+    // Fork: the open thread reads as glass; a lifted row keeps its opaque card.
     props.isActive
-      ? "bg-sidebar-row-active text-sidebar-foreground"
+      ? cn(
+          props.sortable?.isDragging ? "bg-sidebar-row-active" : "sidebar-row-glass",
+          "text-sidebar-foreground",
+        )
       : isSelected || props.sweepAction !== null
         ? "bg-sidebar-row-selected text-sidebar-foreground"
         : hasUnsentDraft
