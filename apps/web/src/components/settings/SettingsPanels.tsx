@@ -174,6 +174,7 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { SyntaxThemeRow } from "./SyntaxThemeSettings";
 import { ChatEventTimestampSettings } from "./ChatEventTimestampSettings";
 import { CommandDisplaySettings } from "./CommandDisplaySettings";
 import { ProjectFavicon } from "../ProjectFavicon";
@@ -556,6 +557,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       !isDefaultThreadHighlightPalette(settings.threadHighlightPalette)
         ? ["Chat colors"]
         : []),
+      ...(settings.syntaxTheme !== DEFAULT_UNIFIED_SETTINGS.syntaxTheme ? ["Syntax theme"] : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
@@ -707,6 +709,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.browserLinkTarget,
       settings.browserAutoShowFloatingPreview,
       settings.appearanceContrast,
+      settings.syntaxTheme,
       settings.diffColorScheme,
       settings.chatWidth,
       settings.chatMathEnabled,
@@ -837,6 +840,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     }
     updateSettings({
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+      syntaxTheme: DEFAULT_UNIFIED_SETTINGS.syntaxTheme,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
@@ -1436,6 +1440,8 @@ export function AppearanceSettingsPanel() {
             }
           />
         ) : null}
+
+        <SyntaxThemeRow />
 
         <SettingsRow
           {...searchableSetting("diff-color-scheme")}

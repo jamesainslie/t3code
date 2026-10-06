@@ -142,7 +142,8 @@ import {
   usePreferredEditor,
 } from "../editorPreferences";
 import { openInEditorMenuLabel } from "../editorLabels";
-import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
+import type { DiffThemeName } from "../lib/diffRendering";
+import { useDiffThemeName } from "../hooks/useDiffThemeName";
 import { fnv1a32 } from "../lib/diffRendering";
 import { LRUCache } from "../lib/lruCache";
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
@@ -1207,7 +1208,7 @@ function InlineShikiCode({
   language: string;
   themeName: DiffThemeName;
 }) {
-  const highlighter = use(getSyntaxHighlighterPromise(language));
+  const highlighter = use(getSyntaxHighlighterPromise(language, themeName));
   const html = useMemo(() => {
     const options = { theme: themeName, structure: "inline" } as const;
     try {
@@ -1237,7 +1238,7 @@ function UncachedShikiCodeBlock({
   isStreaming,
   preserveLines,
 }: UncachedShikiCodeBlockProps) {
-  const highlighter = use(getSyntaxHighlighterPromise(language));
+  const highlighter = use(getSyntaxHighlighterPromise(language, themeName));
   const incrementalHighlight = useMemo(
     () =>
       preserveLines ? createIncrementalHighlightedDocument(highlighter, language, themeName) : null,
@@ -2510,7 +2511,7 @@ function useChatMarkdownState({
     },
     [environmentId, openInEditor],
   );
-  const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const diffThemeName = useDiffThemeName();
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,

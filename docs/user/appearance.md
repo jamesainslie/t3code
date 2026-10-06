@@ -21,6 +21,17 @@ Android uses **Material You Layout** by default unless you have turned it off in
 It changes shapes, spacing, and controls independently
 of the selected theme.
 
+## Syntax highlighting
+
+On web and desktop, choose a **Syntax theme** in **Settings → Appearance** to change the colors
+of code in chat, the Files view, diffs, and search results. Pierre is the default; the other themes
+are quieter, from grayscale to soft multi-color palettes. Each theme has a light and a dark
+version that follows your appearance mode, and the code background still comes from your app
+theme. Mobile keeps its own code colors.
+
+To try themes against real code, open a thread and use **Change syntax theme** in the command
+palette. Moving through the list previews each theme; press Escape to keep your current one.
+
 ## Math in chat
 
 On web and desktop, chat messages typeset TeX math written as `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, or

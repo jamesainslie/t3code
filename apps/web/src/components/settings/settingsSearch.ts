@@ -208,6 +208,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparent transparency solid menus dialogs composer"],
   },
   {
+    id: "syntax-theme",
+    title: "Syntax theme",
+    to: "/settings/appearance",
+    searchTerms: [
+      "code highlighting colors tokens shiki subtle muted monochrome chat files diffs pierre",
+    ],
+  },
+  {
     id: "diff-color-scheme",
     title: "Diff colors",
     to: "/settings/appearance",

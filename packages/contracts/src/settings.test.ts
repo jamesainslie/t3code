@@ -344,6 +344,26 @@ describe("ClientSettings diff colors", () => {
   });
 });
 
+describe("ClientSettings syntax theme", () => {
+  it("keeps Pierre for existing settings without a saved syntax theme", () => {
+    expect(decodeClientSettings({}).syntaxTheme).toBe("pierre");
+  });
+
+  it.each(["pierre", "graphite", "four-kinds", "ember"])(
+    "round-trips the %s theme",
+    (syntaxTheme) => {
+      const settings = decodeClientSettings({ syntaxTheme });
+      expect(encodeClientSettings(settings).syntaxTheme).toBe(syntaxTheme);
+      expect(decodeClientSettingsPatch({ syntaxTheme }).syntaxTheme).toBe(syntaxTheme);
+    },
+  );
+
+  it("rejects unknown themes", () => {
+    expect(() => decodeClientSettings({ syntaxTheme: "neon" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ syntaxTheme: "neon" })).toThrow();
+  });
+});
+
 describe("ClientSettings chat width", () => {
   // The fork's chat filled the pane before this setting existed.
   it("keeps the full width for existing settings without a saved width", () => {

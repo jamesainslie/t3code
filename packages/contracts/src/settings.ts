@@ -358,6 +358,32 @@ export const LoadBalancingWeights = Schema.Record(
 
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
+/** Token colors for chat code blocks and the Files view. "pierre" is the bundled default. */
+export const SyntaxTheme = Schema.Literals([
+  "pierre",
+  "graphite",
+  "typeset",
+  "ink",
+  "four-kinds",
+  "dusk",
+  "frost",
+  "paper",
+  "duotone",
+  "primer-hush",
+  "pierre-hush",
+  "sumi",
+  "sage",
+  "rose",
+  "lichen",
+  "mono-blue",
+  "solarized-hush",
+  "gruvbox-hush",
+  "kanagawa-hush",
+  "landmarks",
+  "ember",
+]);
+export type SyntaxTheme = typeof SyntaxTheme.Type;
+
 /** Maximum width of the chat timeline and composer on wide screens. */
 export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
@@ -370,6 +396,7 @@ export const ClientSettingsSchema = Schema.Struct({
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
+  syntaxTheme: SyntaxTheme.pipe(Schema.withDecodingDefault(Effect.succeed("pierre" as const))),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("full" as const))),
   // Typeset TeX in chat messages; markdown documents always render it.
   chatMathEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1926,6 +1953,7 @@ export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
+  syntaxTheme: Schema.optionalKey(SyntaxTheme),
   chatWidth: Schema.optionalKey(ChatWidth),
   chatMathEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
