@@ -208,6 +208,28 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparent transparency solid menus dialogs composer"],
   },
   {
+    id: "edition",
+    title: "Edition",
+    to: "/settings/appearance",
+    searchTerms: [
+      "header artwork stage art masthead sidebar tartan blueprint phosphor rain neon horizon night city trace amber terminal signal glitch cyberpunk matrix",
+    ],
+  },
+  {
+    id: "edition-app-icon",
+    title: "Match app icon",
+    to: "/settings/appearance",
+    searchTerms: ["edition dock taskbar desktop icon"],
+    // Only the desktop app renders the row, so the section is the stable destination.
+    targetId: "appearance-edition",
+  },
+  {
+    id: "edition-accent",
+    title: "Use edition accent",
+    to: "/settings/appearance",
+    searchTerms: ["edition accent color tint send button sidebar row"],
+  },
+  {
     id: "syntax-theme",
     title: "Syntax theme",
     to: "/settings/appearance",
@@ -243,8 +265,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Environment identification",
     to: "/settings/appearance",
     searchTerms: ["dev nightly artwork pill label hide none"],
-    // The setting is stage-dependent, so its parent section is the stable destination.
-    targetId: "appearance-interface",
   },
   {
     id: "interface-font",

@@ -105,6 +105,10 @@ export const EDITIONS: ReadonlyArray<EditionDefinition> = [
 
 const EDITIONS_BY_ID = new Map(EDITIONS.map((edition) => [edition.id, edition]));
 
+export function isEdition(value: string | null): value is Edition {
+  return value !== null && EDITIONS_BY_ID.has(value as Edition);
+}
+
 export function getEdition(id: Edition): EditionDefinition {
   return EDITIONS_BY_ID.get(id) ?? EDITIONS_BY_ID.get(DEFAULT_EDITION)!;
 }

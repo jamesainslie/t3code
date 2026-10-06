@@ -174,6 +174,7 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { AboutEditionRow, EditionSettingsSection } from "./EditionSettings";
 import { SyntaxThemeRow } from "./SyntaxThemeSettings";
 import { ChatEventTimestampSettings } from "./ChatEventTimestampSettings";
 import { CommandDisplaySettings } from "./CommandDisplaySettings";
@@ -572,6 +573,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode
         ? ["Environment identification"]
         : []),
+      ...(settings.edition !== DEFAULT_UNIFIED_SETTINGS.edition ? ["Edition"] : []),
+      ...(settings.editionAppIcon !== DEFAULT_UNIFIED_SETTINGS.editionAppIcon
+        ? ["Match app icon"]
+        : []),
+      ...(settings.editionAccent !== DEFAULT_UNIFIED_SETTINGS.editionAccent
+        ? ["Use edition accent"]
+        : []),
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
@@ -732,6 +740,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffLayout,
       settings.proactivePanelsEnabled,
       settings.environmentIdentificationMode,
+      settings.edition,
+      settings.editionAppIcon,
+      settings.editionAccent,
       settings.contextWindowMeterEnabled,
       settings.fontFamilyCode,
       settings.fontFamilyComposer,
@@ -865,6 +876,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
+      edition: DEFAULT_UNIFIED_SETTINGS.edition,
+      editionAppIcon: DEFAULT_UNIFIED_SETTINGS.editionAppIcon,
+      editionAccent: DEFAULT_UNIFIED_SETTINGS.editionAccent,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor,
       composerCaretColor: DEFAULT_UNIFIED_SETTINGS.composerCaretColor,
@@ -1225,8 +1239,8 @@ export function AppearanceSettingsPanel() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const environmentStageLabel = useEnvironmentStageLabel();
-  const showEnvironmentIdentification =
-    resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+  // Edition artwork shows on every build; the version pill only names Dev and Nightly.
+  const pillAvailable = resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -1267,6 +1281,8 @@ export function AppearanceSettingsPanel() {
           />
         </div>
       </SettingsSection>
+
+      <EditionSettingsSection />
 
       <SettingsSection id="appearance-chat-colors" title="Chat colors">
         <ColorSettingsRow
@@ -1395,51 +1411,55 @@ export function AppearanceSettingsPanel() {
           }
         />
 
-        {showEnvironmentIdentification ? (
-          <SettingsRow
-            {...searchableSetting("environment-identification")}
-            description="Choose how Dev and Nightly environments are identified."
-            resetAction={
-              settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
-                <SettingResetButton
-                  label="environment identification"
-                  onClick={() =>
-                    updateSettings({
-                      environmentIdentificationMode: DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Select
-                value={settings.environmentIdentificationMode}
-                onValueChange={(value) => {
-                  if (value === "artwork" || value === "pill" || value === "none") {
-                    updateSettings({ environmentIdentificationMode: value });
-                  }
-                }}
+        <SettingsRow
+          {...searchableSetting("environment-identification")}
+          description={
+            pillAvailable
+              ? "Show the edition artwork in the sidebar header, a version pill, or nothing."
+              : "Show the edition artwork in the sidebar header, or nothing."
+          }
+          resetAction={
+            settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
+              <SettingResetButton
+                label="environment identification"
+                onClick={() =>
+                  updateSettings({
+                    environmentIdentificationMode: DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.environmentIdentificationMode}
+              onValueChange={(value) => {
+                if (value === "artwork" || value === "pill" || value === "none") {
+                  updateSettings({ environmentIdentificationMode: value });
+                }
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label="Environment identification"
               >
-                <SelectTrigger
-                  size="sm"
-                  className="w-full sm:w-40"
-                  aria-label="Environment identification"
-                >
-                  <SelectValue>
-                    {ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {Object.entries(ENVIRONMENT_IDENTIFICATION_LABELS).map(([value, label]) => (
+                <SelectValue>
+                  {ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {Object.entries(ENVIRONMENT_IDENTIFICATION_LABELS)
+                  .filter(([value]) => pillAvailable || value !== "pill")
+                  .map(([value, label]) => (
                     <SelectItem hideIndicator key={value} value={value}>
                       {label}
                     </SelectItem>
                   ))}
-                </SelectPopup>
-              </Select>
-            }
-          />
-        ) : null}
+              </SelectPopup>
+            </Select>
+          }
+        />
 
         <SyntaxThemeRow />
 
@@ -3635,6 +3655,7 @@ export function GeneralSettingsPanel() {
             {IS_NIGHTLY_BUILD ? <NightlyMobileBetaRow /> : null}
           </>
         )}
+        <AboutEditionRow />
       </SettingsSection>
       <SettingsSection title="Diagnostics">
         <SettingsRow
