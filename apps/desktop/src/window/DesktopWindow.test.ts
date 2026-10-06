@@ -37,6 +37,7 @@ vi.mock("electron", async (importOriginal) => ({
 
 import * as DesktopAssets from "../app/DesktopAssets.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
+import * as DesktopEditionIcon from "../app/DesktopEditionIcon.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -154,6 +155,10 @@ function makeFakeBrowserWindow() {
 
 const desktopClientSettingsLayer = Layer.mock(DesktopClientSettings.DesktopClientSettings)({
   get: Effect.succeedNone,
+});
+
+const desktopEditionIconLayer = Layer.mock(DesktopEditionIcon.DesktopEditionIcon)({
+  iconPath: Effect.succeedNone,
 });
 
 const electronAppLayer = Layer.mock(ElectronApp.ElectronApp)({
@@ -288,6 +293,7 @@ function makeTestLayer(input: {
     Layer.provide(
       Layer.mergeAll(
         desktopAssetsLayer,
+        desktopEditionIconLayer,
         desktopEnvironmentLayer,
         desktopAppSettingsLayer,
         desktopClientSettingsLayer,
@@ -403,6 +409,7 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
       Layer.provide(
         Layer.mergeAll(
           desktopAssetsLayer,
+          desktopEditionIconLayer,
           desktopEnvironmentLayer,
           DesktopAppSettings.layerTest(),
           desktopClientSettingsLayer,

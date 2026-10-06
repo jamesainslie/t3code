@@ -1,27 +1,25 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { Edition } from "@t3tools/contracts";
 import { useId } from "react";
 
 import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
+import { getEdition, type EditionStrip } from "../editions/editions";
+import { useEdition } from "../editions/editionPreview";
 import { AinslieTartanArt } from "./ForkTartanArt";
 import { primaryServerConfigAtom } from "../state/server";
 
-export type SidebarStageBackdropVariant = "nightly" | "dev";
 export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
 
 // A wide viewBox keeps the 96-unit art height at a fixed scale while sidebar resizing reveals
 // more horizontal canvas instead of zooming the scene.
 const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
+// Generated strips are 2048 art units wide; see scripts/export-edition-art.ts.
+const EDITION_STRIP_WIDTH = 2048;
 
-export function resolveSidebarStageBackdropVariant(
-  stageLabel: string,
-  enabled = true,
-): SidebarStageBackdropVariant | null {
-  if (!enabled) return null;
-  const normalized = stageLabel.trim().toLowerCase();
-  if (normalized === "nightly") return "nightly";
-  if (normalized === "dev") return "dev";
-  return null;
+/** The edition to draw, or null when the user turned stage artwork off. Every build shows it. */
+export function resolveStageArtworkEdition(edition: Edition, enabled: boolean): Edition | null {
+  return enabled ? edition : null;
 }
 
 export function resolveEnvironmentIdentificationPillLabel(
@@ -43,28 +41,66 @@ export function useEnvironmentStageLabel(): string {
   });
 }
 
-export function useSidebarStageBackdropVariant(enabled = true): SidebarStageBackdropVariant | null {
-  return resolveSidebarStageBackdropVariant(useEnvironmentStageLabel(), enabled);
+/** Pass whether artwork is on (`useEnvironmentIdentificationMode() === "artwork"`). */
+export function useStageArtworkEdition(enabled: boolean): Edition | null {
+  return resolveStageArtworkEdition(useEdition(), enabled);
 }
 
-/** Stage-channel header art. Dev mirrors the dev app icon in `assets/`; nightly shows the fork tartan. */
-export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdropVariant }) {
+/** Header art for the user's edition, behind the sidebar brand. */
+export function SidebarStageBackdrop({ edition }: { edition: Edition }) {
   return (
     <div
       aria-hidden
       className="sidebar-stage-backdrop pointer-events-none absolute inset-x-0 top-0 z-0 h-20 select-none overflow-hidden"
     >
-      <StageBackdropArt variant={variant} />
+      <StageBackdropArt edition={edition} />
     </div>
   );
 }
 
-export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <AinslieTartanArt /> : <DevBlueprintArt />;
+export function StageBackdropArt({ edition }: { edition: Edition }) {
+  if (edition === "tartan") return <AinslieTartanArt />;
+  if (edition === "blueprint") return <DevBlueprintArt />;
+  const { strip } = getEdition(edition);
+  return strip ? <EditionStripArt edition={edition} strip={strip} offset={0} /> : null;
 }
 
-export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <AinslieTartanArt compact /> : <DevBlueprintArt compact />;
+export function StageBackdropButtonArt({ edition }: { edition: Edition }) {
+  if (edition === "tartan") return <AinslieTartanArt compact />;
+  if (edition === "blueprint") return <DevBlueprintArt compact />;
+  const { strip } = getEdition(edition);
+  return strip ? (
+    <EditionStripArt edition={edition} strip={strip} offset={strip.buttonOffset} />
+  ) : null;
+}
+
+// The strip is an image so the browser rasterises it once; its dense scenes would be
+// thousands of nodes as inline SVG. It scales to the container's height like the drawn art.
+function EditionStripArt({
+  edition,
+  strip,
+  offset,
+}: {
+  edition: Edition;
+  strip: EditionStrip;
+  offset: number;
+}) {
+  return (
+    <div
+      data-stage-art={edition}
+      className="relative h-full w-full overflow-hidden"
+      style={{ backgroundColor: strip.ground }}
+    >
+      <img
+        alt=""
+        className="absolute inset-y-0 left-0 h-full w-auto max-w-none"
+        decoding="async"
+        draggable={false}
+        src={strip.url}
+        style={{ transform: `translateX(${(-offset / EDITION_STRIP_WIDTH) * 100}%)` }}
+      />
+    </div>
+  );
 }
 
 function DevBlueprintArt({ compact = false }: { compact?: boolean }) {

@@ -30,6 +30,7 @@ import {
   type WebAssetBrand,
 } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
+import { GENERATED_EDITIONS } from "./lib/edition-art.ts";
 import {
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
@@ -465,6 +466,18 @@ export class DesktopIconSourceMissingError extends Schema.TaggedError<DesktopIco
 ) {
   override get message(): string {
     return `Desktop ${desktopIconPlatformNames[this.platform]} icon source is missing at ${this.sourcePath}`;
+  }
+}
+
+export class DesktopEditionIconSourceMissingError extends Schema.TaggedError<DesktopEditionIconSourceMissingError>()(
+  "DesktopEditionIconSourceMissingError",
+  {
+    edition: Schema.String,
+    sourcePath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Desktop edition icon for "${this.edition}" is missing at ${this.sourcePath}`;
   }
 }
 
@@ -2509,6 +2522,44 @@ function stageWindowsIcons(stageResourcesDir: string, sourceIco: string) {
   });
 }
 
+// The Edition literals in packages/contracts/src/settings.ts. The app reads each icon from
+// resources/editions/<id>/ (apps/desktop DesktopEditionIcon), whose test checks that every
+// contract edition has these source files.
+const DESKTOP_EDITION_IDS = ["tartan", "blueprint", ...GENERATED_EDITIONS] as const;
+
+// Stages the current platform's icon for every edition. A missing source fails
+// the build: a picker whose icons silently do nothing is worse than no build.
+function stageEditionIcons(
+  repoRoot: string,
+  stageResourcesDir: string,
+  platform: typeof BuildPlatform.Type,
+) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const icon =
+      platform === "mac"
+        ? { source: "macos-1024.png", target: "macos.png" }
+        : platform === "win"
+          ? { source: "windows.ico", target: "windows.ico" }
+          : { source: "universal-1024.png", target: "universal.png" };
+    for (const edition of DESKTOP_EDITION_IDS) {
+      // Blueprint is the development brand, so its icons already live in assets/dev.
+      const sourceDir =
+        edition === "blueprint"
+          ? path.join(repoRoot, "assets/dev")
+          : path.join(repoRoot, "assets/editions", edition);
+      const sourcePath = path.join(sourceDir, `${edition}-${icon.source}`);
+      if (!(yield* fs.exists(sourcePath))) {
+        return yield* new DesktopEditionIconSourceMissingError({ edition, sourcePath });
+      }
+      const targetDir = path.join(stageResourcesDir, "editions", edition);
+      yield* fs.makeDirectory(targetDir, { recursive: true });
+      yield* fs.copyFile(sourcePath, path.join(targetDir, icon.target));
+    }
+  });
+}
+
 function validateBundledClientAssets(clientDir: string) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -3638,6 +3689,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     },
     options.verbose,
   );
+  yield* stageEditionIcons(repoRoot, stageResourcesDir, options.platform);
 
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");

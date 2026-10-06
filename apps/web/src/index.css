@@ -419,6 +419,18 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 /*
+ * Fork: with "Use edition accent" on, `EditionAccentSync` sets the edition's accent here;
+ * it tints the open row's rim and rings the send button while that button shows the art.
+ */
+html[data-edition-accent] {
+  --sidebar-row-glass-rim: color-mix(in srgb, var(--edition-accent) 55%, transparent);
+}
+html[data-edition-accent] [data-stage-art-button] {
+  outline: 1.5px solid color-mix(in srgb, var(--edition-accent) 60%, transparent);
+  outline-offset: 1.5px;
+}
+
+/*
  * Fork: the active sidebar row as a pane of glass, after Apple's Liquid Glass.
  * The theme's row color (or the thread's highlight) stays the tint; a sheen,
  * a specular top edge and a hairline rim catch the light, and a soft shadow
@@ -437,7 +449,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     );
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 95%),
-    inset 0 0 0 1px color-mix(in srgb, var(--contrast-sidebar-foreground) 10%, transparent),
+    inset 0 0 0 1px
+      var(
+        --sidebar-row-glass-rim,
+        color-mix(in srgb, var(--contrast-sidebar-foreground) 10%, transparent)
+      ),
     inset 0 -8px 14px -10px rgb(0 0 0 / 14%),
     inset 0 -1px 0 rgb(0 0 0 / 6%),
     0 1px 1px rgb(0 0 0 / 6%),
@@ -457,7 +473,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       );
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 18%),
-      inset 0 0 0 1px rgb(255 255 255 / 7%),
+      inset 0 0 0 1px var(--sidebar-row-glass-rim, rgb(255 255 255 / 7%)),
       inset 0 -1px 0 rgb(0 0 0 / 30%),
       0 1px 1px rgb(0 0 0 / 30%),
       0 4px 12px -4px rgb(0 0 0 / 55%);

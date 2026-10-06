@@ -57,6 +57,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ImageIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -92,6 +93,8 @@ import { useThreadActions } from "../hooks/useThreadActions";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
+import { EDITIONS, isEdition } from "../editions/editions";
+import { previewEdition } from "../editions/editionPreview";
 import { previewSyntaxTheme } from "../lib/syntaxThemePreview";
 import { SYNTAX_THEME_OPTIONS, isSyntaxTheme } from "../lib/syntaxThemes";
 import { SyntaxThemeSwatches } from "./SyntaxThemeSwatches";
@@ -462,6 +465,7 @@ const APPEARANCE_OPTIONS = [
 ] as const;
 
 const SYNTAX_THEME_ITEM_PREFIX = "syntax-theme:";
+const EDITION_ITEM_PREFIX = "edition:";
 
 function notifyThemeSaveFailure(): void {
   toastManager.add(
@@ -743,6 +747,14 @@ function OpenCommandPaletteDialog(props: {
     previewSyntaxTheme(isSyntaxTheme(id) ? id : null);
   }, [highlightedItemValue]);
   useEffect(() => () => previewSyntaxTheme(null), []);
+  // Browsing the edition submenu previews each edition on the sidebar header and send button.
+  useEffect(() => {
+    const id = highlightedItemValue?.startsWith(EDITION_ITEM_PREFIX)
+      ? highlightedItemValue.slice(EDITION_ITEM_PREFIX.length)
+      : null;
+    previewEdition(isEdition(id) ? id : null);
+  }, [highlightedItemValue]);
+  useEffect(() => () => previewEdition(null), []);
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
@@ -2344,6 +2356,38 @@ function OpenCommandPaletteDialog(props: {
     ],
   };
   actionItems.push(changeSyntaxThemeItem);
+
+  const changeEditionItem: CommandPaletteSubmenuItem = {
+    kind: "submenu",
+    value: "action:change-edition",
+    searchTerms: ["change edition", "header artwork", "stage art", "app icon"],
+    title: "Change edition",
+    icon: <ImageIcon className={ITEM_ICON_CLASS} />,
+    addonIcon: <ImageIcon className={ADDON_ICON_CLASS} />,
+    groups: [
+      {
+        value: "editions",
+        label: "Change edition",
+        items: EDITIONS.map(({ id, label, description, iconUrl }) => ({
+          kind: "action",
+          value: `${EDITION_ITEM_PREFIX}${id}`,
+          title: label,
+          description,
+          searchTerms: [label, "edition", "artwork"],
+          icon: <img alt="" className="size-4 rounded-xs" draggable={false} src={iconUrl} />,
+          titleTrailingContent:
+            clientSettings.edition === id ? (
+              <span className="text-xs text-muted-foreground/70">Current</span>
+            ) : undefined,
+          run: async () => {
+            previewEdition(null);
+            await updateClientSettings({ edition: id });
+          },
+        })),
+      },
+    ],
+  };
+  actionItems.push(changeEditionItem);
 
   const changeAppearanceItem: CommandPaletteSubmenuItem = {
     kind: "submenu",

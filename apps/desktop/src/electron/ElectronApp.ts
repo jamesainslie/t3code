@@ -71,6 +71,8 @@ export class ElectronApp extends Context.Service<
     ) => Effect.Effect<boolean>;
     readonly setDesktopName: (desktopName: string) => Effect.Effect<void>;
     readonly setDockIcon: (iconPath: string) => Effect.Effect<void>;
+    /** Hands the macOS dock tile back to the bundle's own icon. */
+    readonly resetDockIcon: Effect.Effect<void>;
     readonly appendCommandLineSwitch: (switchName: string, value?: string) => Effect.Effect<void>;
     readonly onBeforeQuitForUpdate: (
       listener: () => void,
@@ -183,6 +185,11 @@ export const make = ElectronApp.of({
     Effect.sync(() => {
       Electron.app.dock?.setIcon(iconPath);
     }),
+  // Electron hands an empty image to Cocoa as nil, which restores the bundle
+  // icon, including a custom one the user attached to the app.
+  resetDockIcon: Effect.sync(() => {
+    Electron.app.dock?.setIcon(Electron.nativeImage.createEmpty());
+  }),
   appendCommandLineSwitch: (switchName, value) =>
     Effect.sync(() => {
       if (value === undefined) {

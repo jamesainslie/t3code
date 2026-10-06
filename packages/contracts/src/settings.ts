@@ -184,6 +184,23 @@ export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill",
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 
+/**
+ * Fork stage artwork shown in the sidebar header, send button and connect pages. Ids are
+ * permanent: saved settings name them, so retire one by keeping its literal.
+ */
+export const Edition = Schema.Literals([
+  "tartan",
+  "blueprint",
+  "rain",
+  "horizon",
+  "night-city",
+  "trace",
+  "amber",
+  "glitch",
+]);
+export type Edition = typeof Edition.Type;
+export const DEFAULT_EDITION: Edition = "tartan";
+
 export const SnapShotKeyChord = KeybindingShortcut.check(
   Schema.makeFilter(
     (shortcut) =>
@@ -473,6 +490,13 @@ export const ClientSettingsSchema = Schema.Struct({
   environmentIdentificationMode: EnvironmentIdentificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE)),
   ),
+  // An unknown edition (saved by a newer build) falls back rather than failing the whole file.
+  edition: Edition.pipe(
+    Schema.catchDecoding(() => Effect.succeedSome(DEFAULT_EDITION)),
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_EDITION)),
+  ),
+  editionAppIcon: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  editionAccent: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
   ),
@@ -1978,6 +2002,9 @@ export const ClientSettingsPatch = Schema.Struct({
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
+  edition: Schema.optionalKey(Edition),
+  editionAppIcon: Schema.optionalKey(Schema.Boolean),
+  editionAccent: Schema.optionalKey(Schema.Boolean),
   glassOpacity: Schema.optionalKey(GlassOpacity),
   onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),

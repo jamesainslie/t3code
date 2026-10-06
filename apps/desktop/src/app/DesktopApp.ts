@@ -16,6 +16,7 @@ import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
+import * as DesktopEditionIcon from "./DesktopEditionIcon.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
@@ -187,6 +188,9 @@ const bootstrap = Effect.gen(function* () {
   );
 
   yield* snapShot.initialize;
+  // After DesktopAppIdentity.configure, which sets the unpackaged dock icon,
+  // and before any window, which opens with the edition icon.
+  yield* (yield* DesktopEditionIcon.DesktopEditionIcon).initialize;
 
   if (!settings.localEnvironmentEnabled) {
     yield* logBootstrapInfo("bootstrap skipping local environment (disabled in settings)");

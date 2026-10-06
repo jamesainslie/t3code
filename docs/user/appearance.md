@@ -32,6 +32,19 @@ theme. Mobile keeps its own code colors.
 To try themes against real code, open a thread and use **Change syntax theme** in the command
 palette. Moving through the list previews each theme; press Escape to keep your current one.
 
+## Editions
+
+An edition is the artwork behind the sidebar header and inside the send button. On web and
+desktop, pick one in **Settings → Appearance → Edition**, or use **Change edition** in the command
+palette. Hovering or moving through editions previews them; your choice is saved on this device.
+
+Artwork only shows while **Environment identification** is set to **Artwork**. Some themes, including
+custom ones, hide it. **Use edition accent** tints the open thread and the send button ring with
+the edition's color.
+
+In the desktop app, **Match app icon** shows the edition's icon in the dock or taskbar while T3 Code
+runs. Finder, Launchpad, and Linux launchers keep the installed icon.
+
 ## Math in chat
 
 On web and desktop, chat messages typeset TeX math written as `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, or

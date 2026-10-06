@@ -83,6 +83,7 @@ import {
   type KeybindingsUpdateToastController,
 } from "../components/KeybindingsUpdateToast.logic";
 
+import { EditionAccentSync } from "../editions/EditionAccentSync";
 import { getDesktopSnapShotBridge } from "../lib/desktopSnapShot";
 import { installDesktopPasteAsText } from "../lib/desktopPasteAsText";
 import { shouldResumeSnapShotSetupOnStartup } from "../lib/snapShotSetupResume";
@@ -184,6 +185,7 @@ function RootRouteView() {
           <GlassAppearanceSync />
           <FontAppearanceSync />
           <ColorAppearanceSync />
+          <EditionAccentSync />
           <ProviderAuthCallbackCoordinator />
           <CustomSnoozeDialogHost />
           <CommandPalette>
@@ -226,6 +228,7 @@ function RootRouteView() {
         <GlassAppearanceSync />
         <FontAppearanceSync />
         <ColorAppearanceSync />
+        <EditionAccentSync />
         <CopyOnSelectSync />
         <ProviderAuthCallbackCoordinator />
         <ChatGptWelcomeCoordinator />

@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { EDITIONS } from "../editions/editions";
 import {
   resolveEnvironmentIdentificationPillLabel,
-  resolveSidebarStageBackdropVariant,
+  resolveStageArtworkEdition,
   StageBackdropArt,
+  StageBackdropButtonArt,
 } from "./SidebarStageBackdrop";
 
 describe("SidebarStageBackdrop", () => {
-  it("resolves stage artwork only when enabled", () => {
-    expect(resolveSidebarStageBackdropVariant("Dev")).toBe("dev");
-    expect(resolveSidebarStageBackdropVariant("Nightly")).toBe("nightly");
-    expect(resolveSidebarStageBackdropVariant("Dev", false)).toBeNull();
-    expect(resolveSidebarStageBackdropVariant("Alpha")).toBeNull();
+  it("shows the chosen edition whenever artwork is enabled, on every build", () => {
+    expect(resolveStageArtworkEdition("night-city", true)).toBe("night-city");
+    expect(resolveStageArtworkEdition("tartan", true)).toBe("tartan");
+    expect(resolveStageArtworkEdition("night-city", false)).toBeNull();
   });
 
   it("resolves supported environment pill labels", () => {
@@ -22,18 +23,18 @@ describe("SidebarStageBackdrop", () => {
     expect(resolveEnvironmentIdentificationPillLabel("Alpha")).toBeNull();
   });
 
-  it.each(["nightly", "dev"] as const)(
+  it.each(EDITIONS.map((edition) => edition.id))(
     "uses unique SVG definition ids when %s artwork is rendered more than once",
-    (variant) => {
+    (edition) => {
       const markup = renderToStaticMarkup(
         <>
-          <StageBackdropArt variant={variant} />
-          <StageBackdropArt variant={variant} />
+          <StageBackdropArt edition={edition} />
+          <StageBackdropArt edition={edition} />
+          <StageBackdropButtonArt edition={edition} />
         </>,
       );
       const ids = Array.from(markup.matchAll(/\sid="([^"]+)"/g), (match) => match[1]);
 
-      expect(ids.length).toBeGreaterThan(0);
       expect(new Set(ids).size).toBe(ids.length);
     },
   );

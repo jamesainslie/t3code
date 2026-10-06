@@ -4,15 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const stageArtworkState = vi.hoisted(() => ({
   mode: "none" as "artwork" | "none",
-  variant: null as "nightly" | "dev" | null,
+  edition: null as "tartan" | "amber" | null,
 }));
 
 vi.mock("~/hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => stageArtworkState.mode,
 }));
 vi.mock("../SidebarStageBackdrop", () => ({
-  StageBackdropButtonArt: ({ variant }: { variant: string }) => `stage-${variant}`,
-  useSidebarStageBackdropVariant: (enabled = true) => (enabled ? stageArtworkState.variant : null),
+  StageBackdropButtonArt: ({ edition }: { edition: string }) => `stage-${edition}`,
+  useStageArtworkEdition: (enabled: boolean) => (enabled ? stageArtworkState.edition : null),
 }));
 
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -69,7 +69,7 @@ function renderSendButton(sendDisabledReason: string | null = null) {
 
 afterEach(() => {
   stageArtworkState.mode = "none";
-  stageArtworkState.variant = null;
+  stageArtworkState.edition = null;
 });
 
 describe("ComposerPrimaryActions", () => {
@@ -90,18 +90,18 @@ describe("ComposerPrimaryActions", () => {
 
   it("renders stage artwork inside the send button when artwork identification is active", () => {
     stageArtworkState.mode = "artwork";
-    stageArtworkState.variant = "nightly";
+    stageArtworkState.edition = "amber";
 
     const markup = renderSendButton();
 
-    expect(markup).toContain("stage-nightly");
+    expect(markup).toContain("stage-amber");
   });
 
   it("hides stage artwork when artwork identification is inactive", () => {
-    stageArtworkState.variant = "nightly";
+    stageArtworkState.edition = "amber";
 
     const markup = renderSendButton();
 
-    expect(markup).not.toContain("stage-nightly");
+    expect(markup).not.toContain("stage-amber");
   });
 });

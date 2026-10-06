@@ -291,8 +291,22 @@ describe("searchSettings", () => {
     expect(searchSettings("environment identification")[0]).toMatchObject({
       id: "environment-identification",
       to: "/settings/appearance",
-      targetId: "appearance-interface",
     });
+  });
+
+  it("finds editions by their names and what they change", () => {
+    for (const query of ["edition", "night city", "header artwork"]) {
+      expect(searchSettings(query)[0]).toMatchObject({
+        id: "edition",
+        to: "/settings/appearance",
+      });
+    }
+    // The icon switch only renders in the desktop app, so search lands on its section.
+    expect(searchSettings("match app icon")[0]).toMatchObject({
+      id: "edition-app-icon",
+      targetId: "appearance-edition",
+    });
+    expect(searchSettings("edition accent")[0]).toMatchObject({ id: "edition-accent" });
   });
 
   it("routes conditional window capture settings to the stable toggle row", () => {
