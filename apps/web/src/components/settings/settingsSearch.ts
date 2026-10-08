@@ -424,6 +424,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["terminal command output tool call shell exposed collapsed expand copy"],
   },
   {
+    id: "gateway-account-summary",
+    title: "Gateway account summary",
+    to: "/settings/general",
+    searchTerms: ["iris modelproxy gateway ledger account usage limits rings meters"],
+  },
+  {
     id: "chat-event-timestamps",
     title: "Event timestamps",
     to: "/settings/general",

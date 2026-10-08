@@ -53,6 +53,13 @@ export const CommandDisplayMode = Schema.Literals(["collapsed", "exposed"]);
 export type CommandDisplayMode = typeof CommandDisplayMode.Type;
 
 /**
+ * Fork: how each gateway account's windows are summarised on its one-line row
+ * in the Iris ledger: concentric rings or three mini meters.
+ */
+export const ProxyLedgerSummaryStyle = Schema.Literals(["rings", "meters"]);
+export type ProxyLedgerSummaryStyle = typeof ProxyLedgerSummaryStyle.Type;
+
+/**
  * How always-visible chat event timestamps read: wall-clock time that adds the
  * date once the event is no longer from today, the date on every event, or a
  * sortable `2026-09-29 11:46:36`.
@@ -642,6 +649,9 @@ export const ClientSettingsSchema = Schema.Struct({
   copyOnSelectEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   commandDisplayMode: CommandDisplayMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("collapsed" as const)),
+  ),
+  proxyLedgerSummaryStyle: ProxyLedgerSummaryStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed("rings" as const)),
   ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
@@ -2077,5 +2087,6 @@ export const ClientSettingsPatch = Schema.Struct({
   wordWrap: Schema.optionalKey(Schema.Boolean),
   copyOnSelectEnabled: Schema.optionalKey(Schema.Boolean),
   commandDisplayMode: Schema.optionalKey(CommandDisplayMode),
+  proxyLedgerSummaryStyle: Schema.optionalKey(ProxyLedgerSummaryStyle),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

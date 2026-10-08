@@ -147,6 +147,12 @@ The same accounts appear under **Usage → Limits**. A single missed read, such 
 before its network does, keeps the last reading; the pill shows the gateway offline only when it
 has not answered for two refresh intervals, and it reads again as soon as you come back to T3.
 
+The pooled accounts are grouped by provider, with the accounts the gateway can use now listed above
+the spent or paused ones. Each account takes one line; click it to see every window and when it
+resets. Choose rings or meters for the one-line summary under **Settings → General → Gateway
+account summary**. T3 reads the gateway every few minutes, so an account you just added may take a
+moment to appear: use the refresh button in the pill's header to read it now.
+
 ### Pick models the gateway routes
 
 A gateway can serve a model name from another upstream, for example `kimi-k3` from OpenRouter.

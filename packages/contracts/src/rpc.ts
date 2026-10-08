@@ -382,6 +382,7 @@ export const WS_METHODS = {
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
   usageLimitSourceAuth: "usageLimitSource.auth",
+  usageLimitSourceRefresh: "usageLimitSource.refresh",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -622,6 +623,12 @@ const WsUsageLimitSourceAuthRpc = Rpc.make(WS_METHODS.usageLimitSourceAuth, {
   payload: UsageLimitSourceAuthInput,
   success: UsageLimitSourceAuthState,
   error: Schema.Union([UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+/** Re-reads every configured usage-limit source now, without re-checking providers. */
+const WsUsageLimitSourceRefreshRpc = Rpc.make(WS_METHODS.usageLimitSourceRefresh, {
+  payload: Schema.Struct({}),
+  error: EnvironmentAuthorizationError,
 });
 
 const WsUsageLimitSourceAccountLoginRpc = Rpc.make(WS_METHODS.usageLimitSourceAccountLogin, {
@@ -1767,6 +1774,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
   WsUsageLimitSourceAuthRpc,
+  WsUsageLimitSourceRefreshRpc,
   WsUsageLimitSourceAccountLoginRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
