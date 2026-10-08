@@ -1,16 +1,22 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, UsageLimitSourceSnapshot } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProxyLedgerSummaryStyle,
+  UsageLimitSourceSnapshot,
+} from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useClientSettings } from "~/hooks/useSettings";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
 import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
-import { XIcon } from "lucide-react";
+import { ChevronRightIcon, FeatherIcon, RefreshCwIcon, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
 import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
@@ -21,6 +27,8 @@ import {
   type ProxyAccountView,
   type ProxyPillView,
   type ProxyTone,
+  type ProxyWindowGlyph,
+  type ProxyWindowView,
 } from "./ProxyUsagePill.logic";
 
 const TONE_TEXT: Record<ProxyTone | "live", string> = {
@@ -135,53 +143,107 @@ function windowsOf(account: ProxyAccountView | null) {
   return { session, weekly };
 }
 
+const GLYPHS: Record<ProxyWindowGlyph, typeof FeatherIcon> = { feather: FeatherIcon };
+
+/** A window's label: its glyph with the full name on hover, or its short text. */
+function WindowLabel({ window, className }: { window: ProxyWindowView; className?: string }) {
+  if (!window.glyph) return <span className={cn("truncate", className)}>{window.label}</span>;
+  const Glyph = GLYPHS[window.glyph];
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className={cn("flex", className)} aria-label={window.title} tabIndex={0} />}
+      >
+        <Glyph className="size-2.5" aria-hidden />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{window.title}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+/** The session, weekly, and first per-model window: what a row summarises. */
+function summaryWindows(account: ProxyAccountView) {
+  return [
+    account.windows.find((window) => window.key === "five_hour") ?? null,
+    account.windows.find((window) => window.key === "seven_day") ?? null,
+    account.windows.find((window) => window.key.startsWith("seven_day_")) ?? null,
+  ] as const;
+}
+
+/** Nested gauges: session outermost, then weekly, then the model window. */
+function SummaryRings({ account }: { readonly account: ProxyAccountView }) {
+  const radii = [6.6, 4.4, 2.2];
+  return (
+    <svg viewBox="0 0 16 16" className="size-4 shrink-0 -rotate-90" aria-hidden>
+      {summaryWindows(account).map((window, index) => (
+        <g key={SUMMARY_KEYS[index]}>
+          {ring(8, radii[index]!, window?.usedPercent ?? null, window?.tone ?? "muted", 1.4)}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+const SUMMARY_KEYS = ["session", "weekly", "model"] as const;
+
+/** Three labelled meters side by side; a window the gateway lacks leaves its slot empty. */
+function SummaryMeters({
+  account,
+  threshold,
+}: {
+  readonly account: ProxyAccountView;
+  readonly threshold: number;
+}) {
+  return (
+    <span className="flex items-end gap-1" aria-hidden>
+      {summaryWindows(account).map((window, index) => (
+        <span key={SUMMARY_KEYS[index]} className="flex w-6 flex-col items-center gap-0.5">
+          {window ? (
+            <>
+              <WindowLabel
+                window={window}
+                className="h-2.5 items-center font-mono text-4xs leading-none text-muted-foreground"
+              />
+              <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
+            </>
+          ) : null}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * One account on one line: who, its state, a summary of its windows, and
+ * the figure that decides its fate soonest. Clicking the row opens the
+ * per-window breakdown under it.
+ */
 function LedgerRow({
   account,
   threshold,
-  narrow,
+  summaryStyle,
+  expanded,
+  onToggle,
   onLogin,
 }: {
   readonly account: ProxyAccountView;
   readonly threshold: number;
-  /** The card's 280px column: the windows drop below the name and figures. */
-  readonly narrow: boolean;
+  readonly summaryStyle: ProxyLedgerSummaryStyle;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
   /** Present when the row offers a login: the account needs one or has one open. */
   readonly onLogin?: () => void;
 }) {
-  const identity = (
-    <div className="min-w-0">
-      <ProxyAccountIdentity id={account.id} driver={account.driver} />
-      <div className={cn("truncate text-2xs", narrow && "pl-5.5", TONE_TEXT[account.stateTone])}>
-        {account.stateLabel}
-      </div>
-    </div>
-  );
-  const windows = (
-    <div className={cn("flex flex-col gap-1", narrow && "pl-5.5")}>
-      {account.windows.length === 0 ? (
-        <span className="text-3xs text-muted-foreground">no data</span>
-      ) : (
-        account.windows.map((window) => (
-          <div
-            key={window.key}
-            className="grid grid-cols-[1.25rem_1fr_3rem] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
-          >
-            <span className="truncate">{window.label}</span>
-            <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
-            {/* Every window counts down to its own reset; the runway column only shows the one that governs. */}
-            <span className="text-right tabular-nums">{window.resetText}</span>
-          </div>
-        ))
-      )}
-    </div>
-  );
-  const headline = (
-    <div className="text-right font-mono text-2xs text-foreground tabular-nums">
-      {account.headline}
-    </div>
-  );
   const runway = onLogin ? (
-    <Button size="micro" variant="ghost-destructive" className="justify-self-end" onClick={onLogin}>
+    <Button
+      size="micro"
+      variant="ghost-destructive"
+      className="justify-self-end"
+      onClick={(event) => {
+        event.stopPropagation();
+        onLogin();
+      }}
+    >
       {account.runwayText || "login"}
     </Button>
   ) : (
@@ -191,24 +253,57 @@ function LedgerRow({
       {account.runwayText}
     </div>
   );
-  if (narrow) {
-    return (
-      <div className="flex flex-col gap-1 border-t border-border/60 py-1.5 first:border-t-0">
-        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem_4rem] items-center gap-x-2">
-          {identity}
-          {headline}
-          {runway}
-        </div>
-        {windows}
-      </div>
-    );
-  }
   return (
-    <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)_2.25rem_4.5rem] items-center gap-x-2.5 border-t border-border/60 py-1.5 first:border-t-0">
-      {identity}
-      {windows}
-      {headline}
-      {runway}
+    <div className="py-1">
+      <div
+        className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto_2.25rem_4rem_1rem] items-center gap-x-2"
+        onClick={onToggle}
+      >
+        <div className="min-w-0">
+          <ProxyAccountIdentity id={account.id} driver={account.driver} />
+          <div className={cn("truncate pl-5.5 text-2xs", TONE_TEXT[account.stateTone])}>
+            {account.stateLabel}
+          </div>
+        </div>
+        {account.windows.length === 0 ? (
+          <span className="text-3xs text-muted-foreground">no data</span>
+        ) : summaryStyle === "meters" ? (
+          <SummaryMeters account={account} threshold={threshold} />
+        ) : (
+          <SummaryRings account={account} />
+        )}
+        <div className="text-right font-mono text-2xs text-foreground tabular-nums">
+          {account.headline}
+        </div>
+        {runway}
+        <Button
+          size="icon-tiny"
+          variant="ghost-muted"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Hide" : "Show"} ${account.id} windows`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+        >
+          <ChevronRightIcon className={cn(expanded && "rotate-90")} />
+        </Button>
+      </div>
+      {expanded && account.windows.length > 0 ? (
+        <div className="flex flex-col gap-1 pt-1 pl-5.5">
+          {account.windows.map((window) => (
+            <div
+              key={window.key}
+              className="grid grid-cols-[1.25rem_1fr_3rem] items-center gap-1.5 font-mono text-3xs text-muted-foreground"
+            >
+              <WindowLabel window={window} />
+              <Meter usedPercent={window.usedPercent} tone={window.tone} threshold={threshold} />
+              {/* Every window counts down to its own reset; the runway column only shows the one that governs. */}
+              <span className="text-right tabular-nums">{window.resetText}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -324,8 +419,47 @@ function Ledger({
   const pill = useMemo(() => deriveProxyPill(snapshot, now, { seconds: true }), [snapshot, now]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const auth = useAtomCommand(serverEnvironment.usageLimitSourceAuth, { reportFailure: false });
+  const refreshSources = useAtomCommand(serverEnvironment.usageLimitSourceRefresh, {
+    label: "refresh gateway accounts",
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  const summaryStyle = useClientSettings((settings) => settings.proxyLedgerSummaryStyle);
+  // Rows open independently and stay open while the ledger does.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setExpanded((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   if (!pill) return null;
   const narrow = variant === "card";
+  const row = (account: ProxyAccountView) => (
+    <div key={account.id}>
+      <LedgerRow
+        account={account}
+        threshold={threshold}
+        summaryStyle={summaryStyle}
+        expanded={expanded.has(account.id)}
+        onToggle={() => toggle(account.id)}
+        {...(account.needsLogin || account.login
+          ? {
+              onLogin: () => onLoginFor(narrow && loginFor === account.id ? null : account.id),
+            }
+          : {})}
+      />
+      {narrow && loginFor === account.id ? (
+        <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
+          <ProxyLoginPanel
+            environmentId={environmentId}
+            sourceId={pill.sourceId}
+            account={account}
+            onClose={() => onLoginFor(null)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
   return (
     <div
       className={cn("flex flex-col gap-2 text-xs", narrow ? "p-3" : "p-(--floating-content-inset)")}
@@ -339,6 +473,21 @@ function Ledger({
           <span className="font-mono text-2xs whitespace-nowrap text-secondary-label">
             {pill.runwayText ? `${narrow ? "runway" : "fleet runway"} ${pill.runwayText}` : ""}
           </span>
+          {pill.status === "live" ? (
+            <Button
+              size="icon-micro"
+              variant="ghost-muted"
+              aria-label="Refresh accounts"
+              disabled={refreshing}
+              onClick={async () => {
+                setRefreshing(true);
+                await refreshSources({ environmentId, input: {} });
+                setRefreshing(false);
+              }}
+            >
+              <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+            </Button>
+          ) : null}
           {onClose ? (
             <Button size="icon-micro" variant="ghost-muted" aria-label="Close" onClick={onClose}>
               <XIcon />
@@ -348,30 +497,17 @@ function Ledger({
       </div>
       {pill.status === "live" ? (
         <>
-          <div className="flex flex-col">
-            {pill.accounts.map((account) => (
-              <div key={account.id}>
-                <LedgerRow
-                  account={account}
-                  threshold={threshold}
-                  narrow={narrow}
-                  {...(account.needsLogin || account.login
-                    ? {
-                        onLogin: () =>
-                          onLoginFor(narrow && loginFor === account.id ? null : account.id),
-                      }
-                    : {})}
-                />
-                {narrow && loginFor === account.id ? (
-                  <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
-                    <ProxyLoginPanel
-                      environmentId={environmentId}
-                      sourceId={pill.sourceId}
-                      account={account}
-                      onClose={() => onLoginFor(null)}
-                    />
-                  </div>
+          <div className="flex flex-col gap-1.5">
+            {pill.groups.map((group) => (
+              <div key={group.driver}>
+                <div className="flex items-center gap-2 text-3xs tracking-wider text-muted-foreground uppercase after:h-px after:flex-1 after:bg-border/60">
+                  {group.label}
+                </div>
+                {group.available.map(row)}
+                {group.unavailable.length > 0 && group.available.length > 0 ? (
+                  <div className="mt-0.5 border-t border-dashed border-border/60" />
                 ) : null}
+                {group.unavailable.map(row)}
               </div>
             ))}
           </div>

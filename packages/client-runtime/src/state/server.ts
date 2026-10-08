@@ -1138,6 +1138,14 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceId]),
       },
     }),
+    usageLimitSourceRefresh: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:usage-limit-source-refresh",
+      tag: WS_METHODS.usageLimitSourceRefresh,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId }) => environmentId,
+      },
+    }),
     usageLimitSourceAccountLogin: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:usage-limit-source-account-login",
       tag: WS_METHODS.usageLimitSourceAccountLogin,

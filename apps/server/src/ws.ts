@@ -2410,6 +2410,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.usageLimitSourceAuth, usageLimitSources.auth(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.usageLimitSourceRefresh]: () =>
+          observeRpcEffect(WS_METHODS.usageLimitSourceRefresh, usageLimitSources.refresh, {
+            "rpc.aggregate": "server",
+          }),
         [WS_METHODS.usageLimitSourceAccountLogin]: (input) =>
           observeRpcEffect(
             WS_METHODS.usageLimitSourceAccountLogin,

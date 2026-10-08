@@ -333,3 +333,79 @@ describe("account logins", () => {
     expect(saved.message).toMatch(/restart/);
   });
 });
+
+describe("ledger groups", () => {
+  const idle = { state: "ready" as const, inflight: 0 };
+  const pool = () =>
+    snapshot({
+      accounts: [
+        account("spent-late", [["seven_day", 100, at(40)]], idle),
+        { ...account("codex", [["seven_day", 3, at(50)]], idle), driver: "codex" as never },
+        account("ready-b", [["five_hour", 10, at(3)]], idle),
+        account("spent-soon", [["seven_day", 100, at(19)]], idle),
+        account("paused", [["five_hour", 0, at(3)]], { state: "paused", inflight: 0 }),
+        account("serving", [["five_hour", 0, at(4)]], { state: "live", inflight: 0 }),
+        account("ready-a", [["five_hour", 20, at(3)]], idle),
+      ],
+      proxy: { ...snapshot().proxy!, current: "serving" },
+    });
+
+  it("groups accounts by provider, Anthropic before OpenAI", () => {
+    const pill = deriveProxyPill(pool(), now)!;
+    expect(pill.groups.map((group) => group.label)).toEqual(["Anthropic", "OpenAI"]);
+    expect(pill.groups[1]!.available.map((account) => account.id)).toEqual(["codex"]);
+  });
+
+  it("puts the serving account first, then ready accounts by name", () => {
+    const anthropic = deriveProxyPill(pool(), now)!.groups[0]!;
+    expect(anthropic.available.map((account) => account.id)).toEqual([
+      "serving",
+      "ready-a",
+      "ready-b",
+    ]);
+  });
+
+  it("lists unavailable accounts below, soonest back first, untimed ones last", () => {
+    const anthropic = deriveProxyPill(pool(), now)!.groups[0]!;
+    expect(anthropic.unavailable.map((account) => account.id)).toEqual([
+      "spent-soon",
+      "spent-late",
+      "paused",
+    ]);
+  });
+
+  it("keeps an account on credits with the available ones", () => {
+    const pill = deriveProxyPill(
+      snapshot({
+        accounts: [account("credits", [["seven_day", 100, at(10)]], { ...idle, credits: true })],
+      }),
+      now,
+    )!;
+    expect(pill.groups[0]!.available.map((account) => account.id)).toEqual(["credits"]);
+  });
+});
+
+describe("model windows", () => {
+  it("shows a known model's window as its glyph, titled in full", () => {
+    const pill = deriveProxyPill(
+      snapshot({
+        accounts: [
+          {
+            ...account("fable-user", [], { state: "live", inflight: 0 }),
+            usageLimits: {
+              checkedAt: at(0),
+              windows: [
+                { id: "seven_day_fable", kind: "weekly", label: "Weekly · Fable", usedPercent: 35 },
+                { id: "seven_day_other", kind: "weekly", label: "Weekly · Other", usedPercent: 5 },
+              ],
+            },
+          },
+        ],
+      }),
+      now,
+    )!;
+    const [fable, other] = pill.accounts[0]!.windows;
+    expect(fable).toMatchObject({ glyph: "feather", title: "Weekly · Fable" });
+    expect(other).toMatchObject({ glyph: null, label: "other", title: "Weekly · Other" });
+  });
+});

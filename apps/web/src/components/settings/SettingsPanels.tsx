@@ -178,6 +178,7 @@ import { AboutEditionRow, EditionSettingsSection } from "./EditionSettings";
 import { SyntaxThemeRow } from "./SyntaxThemeSettings";
 import { ChatEventTimestampSettings } from "./ChatEventTimestampSettings";
 import { CommandDisplaySettings } from "./CommandDisplaySettings";
+import { ProxyLedgerSummarySettings } from "./ProxyLedgerSummarySettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -592,6 +593,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.commandDisplayMode !== DEFAULT_UNIFIED_SETTINGS.commandDisplayMode
         ? ["Command display"]
         : []),
+      ...(settings.proxyLedgerSummaryStyle !== DEFAULT_UNIFIED_SETTINGS.proxyLedgerSummaryStyle
+        ? ["Gateway account summary"]
+        : []),
       ...(settings.notificationMode !== DEFAULT_UNIFIED_SETTINGS.notificationMode
         ? ["Thread notifications"]
         : []),
@@ -777,6 +781,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatEventTimestampStyle,
       settings.chatEventTimestampSeconds,
       settings.commandDisplayMode,
+      settings.proxyLedgerSummaryStyle,
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
       settings.copyOnSelectEnabled,
@@ -859,6 +864,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatEventTimestampStyle: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampStyle,
       chatEventTimestampSeconds: DEFAULT_UNIFIED_SETTINGS.chatEventTimestampSeconds,
       commandDisplayMode: DEFAULT_UNIFIED_SETTINGS.commandDisplayMode,
+      proxyLedgerSummaryStyle: DEFAULT_UNIFIED_SETTINGS.proxyLedgerSummaryStyle,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
       copyOnSelectEnabled: DEFAULT_UNIFIED_SETTINGS.copyOnSelectEnabled,
@@ -2839,6 +2845,7 @@ export function GeneralSettingsPanel() {
         />
         <ChatEventTimestampSettings />
         <CommandDisplaySettings />
+        <ProxyLedgerSummarySettings />
         <SettingsRow
           serverScoped
           settingKeys={["responseStreamingMode"]}

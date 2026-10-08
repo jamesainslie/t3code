@@ -16,10 +16,19 @@ import type {
 import { formatDuration } from "@t3tools/shared/usageLimits";
 
 export type ProxyTone = "ok" | "warn" | "crit" | "muted";
+export type ProxyWindowGlyph = "feather";
+
+/** Model families whose weekly window is drawn as a glyph rather than cut-off text. */
+const MODEL_GLYPHS: Record<string, ProxyWindowGlyph> = { fable: "feather" };
 
 export interface ProxyWindowView {
   readonly key: string;
+  /** Short text label: `5h`, `7d`, or a model family the ledger has no glyph for. */
   readonly label: string;
+  /** The window's full name, for a tooltip: `Weekly · Fable`. */
+  readonly title: string;
+  /** Drawn instead of the label for a model family that has one. */
+  readonly glyph: ProxyWindowGlyph | null;
   readonly usedPercent: number;
   readonly tone: ProxyTone;
   /** Countdown to this window's own reset; empty when the source never observed one. */
@@ -37,6 +46,10 @@ export interface ProxyAccountView {
   /** The countdown or verdict that decides this account's fate soonest. */
   readonly runwayText: string;
   readonly runwayTone: ProxyTone;
+  /** The gateway would route to this account now: live, ready, or on credits. */
+  readonly available: boolean;
+  /** When an unavailable account comes back, if the gateway knows. */
+  readonly resumesAtMs: number | null;
   /** The gateway flagged the account's credential dead; a login fixes it. */
   readonly needsLogin: boolean;
   /** The account's open login on the gateway, if any. */
@@ -59,6 +72,15 @@ export interface ProxyLoginView {
   readonly message: string | null;
 }
 
+export interface ProxyAccountGroup {
+  readonly driver: string;
+  readonly label: string;
+  /** Serving account first, then the rest by name. */
+  readonly available: readonly ProxyAccountView[];
+  /** Soonest back first; accounts with no known return last. */
+  readonly unavailable: readonly ProxyAccountView[];
+}
+
 export interface ProxyPillView {
   readonly sourceId: string;
   readonly label: string;
@@ -69,6 +91,8 @@ export interface ProxyPillView {
   readonly runwayText: string;
   readonly fallbackText: string | null;
   readonly accounts: readonly ProxyAccountView[];
+  /** The accounts by provider, each split into those serving now and those waiting. */
+  readonly groups: readonly ProxyAccountGroup[];
   readonly fallbacks: readonly string[];
   readonly footer: string;
   readonly pending: { userCode: string; verificationUrl: string; expiresAt: string } | null;
@@ -186,9 +210,12 @@ function accountView(
       window.id === "five_hour" || window.id === "seven_day"
         ? input.threshold
         : input.modelThreshold;
+    const label = shortLabel(window);
     return {
       key: window.id,
-      label: shortLabel(window),
+      label,
+      title: window.label,
+      glyph: window.id.startsWith("seven_day_") ? (MODEL_GLYPHS[label] ?? null) : null,
       usedPercent: window.usedPercent,
       tone: windowTone(window.usedPercent, threshold),
       resetText: countdown(window.resetsAt, input.now, input.seconds),
@@ -203,6 +230,7 @@ function accountView(
   let stateTone: ProxyAccountView["stateTone"] = "muted";
   let runwayText = "";
   let runwayTone: ProxyTone = "muted";
+  let resumesAt: string | undefined;
   switch (proxy?.state) {
     case "live":
       stateLabel = proxy.inflight > 0 ? `live now · ${proxy.inflight} in flight` : "live now";
@@ -217,6 +245,7 @@ function accountView(
         ? countdown(proxy.coolingUntil, input.now, input.seconds)
         : "circuit";
       runwayTone = "crit";
+      resumesAt = proxy.coolingUntil;
       break;
     case "paused":
       stateLabel = "paused by operator";
@@ -262,6 +291,7 @@ function accountView(
           ? countdown(governing.resetsAt, input.now, input.seconds)
           : "spent";
         runwayTone = "crit";
+        resumesAt = governing.resetsAt;
       }
     } else {
       const soonest = [...account.usageLimits.windows]
@@ -281,9 +311,46 @@ function accountView(
     headline: headline ? `${Math.round(headline.usedPercent)}%` : "no data",
     runwayText,
     runwayTone,
+    available: stateTone !== "crit" && runwayText !== "off",
+    resumesAtMs: resumesAt && Number.isFinite(Date.parse(resumesAt)) ? Date.parse(resumesAt) : null,
     needsLogin: proxy?.state === "reauthentication",
     login: input.login ? loginView(input.login) : null,
   };
+}
+
+const DRIVER_LABELS: Record<string, string> = { claudeAgent: "Anthropic", codex: "OpenAI" };
+const DRIVER_ORDER = Object.keys(DRIVER_LABELS);
+
+function driverRank(driver: string): number {
+  const index = DRIVER_ORDER.indexOf(driver);
+  return index === -1 ? DRIVER_ORDER.length : index;
+}
+
+function groupAccounts(accounts: readonly ProxyAccountView[]): ProxyAccountGroup[] {
+  const drivers = [...new Set(accounts.map((account) => account.driver))].toSorted(
+    (left, right) => driverRank(left) - driverRank(right),
+  );
+  return drivers.map((driver) => {
+    const members = accounts.filter((account) => account.driver === driver);
+    return {
+      driver,
+      label: DRIVER_LABELS[driver] ?? driver,
+      available: members
+        .filter((account) => account.available)
+        .toSorted(
+          (left, right) =>
+            Number(right.stateTone === "live") - Number(left.stateTone === "live") ||
+            left.id.localeCompare(right.id),
+        ),
+      unavailable: members
+        .filter((account) => !account.available)
+        .toSorted(
+          (left, right) =>
+            (left.resumesAtMs ?? Infinity) - (right.resumesAtMs ?? Infinity) ||
+            left.id.localeCompare(right.id),
+        ),
+    };
+  });
 }
 
 function fleetRunway(snapshot: UsageLimitSourceSnapshot, now: number, seconds: boolean): string {
@@ -380,6 +447,7 @@ export function deriveProxyPill(
     sourceId: snapshot.id,
     label: snapshot.label,
     accounts,
+    groups: groupAccounts(accounts),
     fallbacks,
     footer,
     pending:
