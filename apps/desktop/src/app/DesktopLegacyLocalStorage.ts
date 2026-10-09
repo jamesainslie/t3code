@@ -6,9 +6,9 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
-import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import { readChromiumLocalStorage } from "./chromiumLocalStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
+import { FORK_LEGACY_LOCAL_STORAGE } from "./DesktopForkLegacyLocalStorage.ts";
 
 /**
  * Carries the renderer's localStorage (prompt stash, unsent drafts, layout,
@@ -30,11 +30,11 @@ export class DesktopLegacyLocalStorage extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
-const MARKER_FILE_NAME = "v1-local-storage-imported";
+const MARKER_FILE_NAME = FORK_LEGACY_LOCAL_STORAGE.markerFileName;
 // V1 used "T3 Code (Alpha)" when that folder existed and "t3code" otherwise.
-// Fork: those are upstream's profiles, beside which the fork installs, and the fork keeps
-// its own one profile across the v2 update. There is nothing to import, so nothing is read.
-const V1_PROFILE_NAMES: ReadonlyArray<string> = [];
+// Fork: those are upstream's profiles, beside which the fork installs. The fork imports
+// instead from its own pre-rename origin; see DesktopForkLegacyLocalStorage.ts.
+const V1_PROFILE_NAMES: ReadonlyArray<string> = FORK_LEGACY_LOCAL_STORAGE.profileNames;
 
 const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -91,7 +91,7 @@ const make = Effect.gen(function* () {
     yield* Ref.set(markerPath, Option.some(marker));
     const directory = yield* findV1LocalStorage;
     if (directory === null) return yield* writeMarker;
-    const origin = ElectronProtocol.getDesktopUrl(false).replace(/\/$/, "");
+    const origin = FORK_LEGACY_LOCAL_STORAGE.origin;
     const read = yield* readChromiumLocalStorage(directory, origin).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
