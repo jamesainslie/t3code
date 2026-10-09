@@ -255,7 +255,9 @@ describe("DesktopEditionIcon", () => {
         const editionIcon = yield* DesktopEditionIcon.DesktopEditionIcon;
         yield* editionIcon.apply({ edition: "blueprint", editionAppIcon: true });
 
-        assert.deepEqual(calls.windowIcons, ["/repo/assets/lathe/dev/blueprint-universal-1024.png"]);
+        assert.deepEqual(calls.windowIcons, [
+          "/repo/assets/lathe/dev/blueprint-universal-1024.png",
+        ]);
       }),
       {
         calls,

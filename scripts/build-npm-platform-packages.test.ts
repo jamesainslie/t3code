@@ -233,12 +233,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         yield* fs.makeDirectory(installedLauncher);
         const unpack = yield* run(
           "tar",
-          [
-            "-xf",
-            path.join(fixture.outputDir, "@jamesainslie/lathe.tgz"),
-            "-C",
-            installedLauncher,
-          ],
+          ["-xf", path.join(fixture.outputDir, "@jamesainslie/lathe.tgz"), "-C", installedLauncher],
           {
             cwd: fixture.root,
           },

@@ -22,13 +22,13 @@ afterwards, that directory is not on your `PATH` yet; the installer prints the
 line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
 `T3CODE_VERSION` to pin an exact version.
 
-| Task                                             | Command                                                    |
-| ------------------------------------------------ | ---------------------------------------------------------- |
-| Start the server and open the web app            | `lathe`                                                    |
-| Start the server without a browser               | `lathe serve`                                              |
+| Task                                             | Command                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| Start the server and open the web app            | `lathe`                                                      |
+| Start the server without a browser               | `lathe serve`                                                |
 | Keep it running in the background (macOS, Linux) | `lathe service install` ([details](./background-service.md)) |
-| Move to the newest release                       | `lathe update`                                             |
-| Remove it again                                  | `lathe uninstall`                                          |
+| Move to the newest release                       | `lathe update`                                               |
+| Remove it again                                  | `lathe uninstall`                                            |
 
 Run `lathe help` or `lathe --help` for the full reference. To start in a new working
 directory, use an explicit path such as `lathe ./my-project`. A bare directory name
