@@ -108,7 +108,7 @@ describe("ssh tunnel scripts", () => {
       script,
       "T3_RELEASE_BASE_URL='https://github.com/jamesainslie/t3code/releases/download'",
     );
-    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.lathe/runtime/versions/$T3_ARCHIVE_VERSION"');
+    assert.include(script, '/runtime/versions/$T3_ARCHIVE_VERSION"');
     assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
@@ -131,10 +131,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(script, 'exec t3 "$@"');
     // Concurrent launches serialize on a per-version mkdir lock and recheck
     // the completion marker after acquiring it.
-    assert.include(
-      script,
-      'T3_LOCK="$HOME/.lathe/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
-    );
+    assert.include(script, '/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"');
     // mkdir is the exclusive create; the pid follows atomically. A dead owner
     // is reclaimed at once, a never-published owner after a short grace.
     assert.include(script, 'while ! mkdir "$T3_LOCK" 2>/dev/null; do');
@@ -972,6 +969,33 @@ describe("archive runner script", () => {
         const afterUnowned = yield* runRunner(home, runner);
         assert.equal(afterUnowned.exitCode, 0, afterUnowned.stderr);
         assert.isFalse(yield* fs.exists(lock));
+      }).pipe(Effect.provide(NodeServices.layer)),
+    60_000,
+  );
+
+  // Fork: a remote that still runs from the pre-rename base directory keeps
+  // using it, so its running server, state and runtimes stay together.
+  it.effect.skipIf(windowsHost)(
+    "keeps installing into a pre-rename base directory that is still in use",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const releaseBaseUrl = yield* makeMirror(root);
+        const runner = `${root}/run-t3.sh`;
+        yield* fs.writeFileString(
+          runner,
+          SshTunnel.buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+        );
+        const home = `${root}/home`;
+        yield* fs.makeDirectory(`${home}/.t3f`, { recursive: true });
+
+        const result = yield* runRunner(home, runner);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.deepEqual(yield* fs.readDirectory(`${home}/.t3f/runtime/versions`), [
+          archiveVersion,
+        ]);
+        assert.isFalse(yield* fs.exists(`${home}/.lathe`));
       }).pipe(Effect.provide(NodeServices.layer)),
     60_000,
   );

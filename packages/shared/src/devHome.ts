@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { FORK_IDENTITY } from "./forkIdentity.ts";
+import { forkBaseDirName } from "./forkBaseDir.ts";
 
 /**
  * A `.git` file points at the real git directory. A linked worktree's lives at
@@ -100,5 +100,5 @@ export const resolveWorktreeT3Home = (
       return undefined;
     }
     const path = yield* Path.Path;
-    return path.join(worktreePath, FORK_IDENTITY.baseDirName);
+    return path.join(worktreePath, forkBaseDirName(worktreePath));
   });
