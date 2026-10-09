@@ -8,28 +8,37 @@
  * dependency-free: the web bundle imports it too.
  */
 export const FORK_IDENTITY = Object.freeze({
-  npmPackageName: "@jamesainslie/t3code",
-  cliBin: "t3f",
+  npmPackageName: "@jamesainslie/lathe",
+  cliBin: "lathe",
   /** Per-platform executable packages the launcher (`npmPackageName`) depends on. */
   npm: Object.freeze({
     platformPackageScope: "@jamesainslie",
-    platformPackagePrefix: "t3code-",
+    platformPackagePrefix: "lathe-",
   }),
-  baseDirName: ".t3f",
+  baseDirName: ".lathe",
+  /**
+   * The base directory before the Lathe rename. An existing one is used in
+   * place while `baseDirName` is absent; see `forkBaseDir.ts`.
+   */
+  legacyBaseDirName: ".t3f",
+  /** Repository directory holding the fork's icon sets, in place of upstream's `assets`. */
+  assetsDir: "assets/lathe",
   defaultPort: 4773,
-  productBaseName: "T3 Code Fork",
-  artifactBaseName: "T3-Code-Fork",
+  productBaseName: "Lathe",
+  artifactBaseName: "Lathe",
   appId: "us.ainslies.t3code",
   repositoryUrl: "https://github.com/jamesainslie/t3code",
   /** GitHub `owner/repo` whose releases host the CLI archives and SHA256SUMS. */
   releaseRepository: "jamesainslie/t3code",
   releasesUrl: "https://github.com/jamesainslie/t3code/releases",
-  urlHandlerDesktopEntryName: "t3code-fork-url-handler.desktop",
+  urlHandlerDesktopEntryName: "lathe-url-handler.desktop",
   /** Debian control fields for the Linux .deb; upstream's package is named `t3code`. */
   linuxPackage: Object.freeze({
-    name: "t3code-fork",
+    name: "lathe",
     maintainer: "James Ainslie <42301770+jamesainslie@users.noreply.github.com>",
   }),
+  // Service names keep their pre-rename values: a renamed unit would leave the
+  // old one installed and restarting beside it.
   bootService: Object.freeze({
     systemdName: "t3code-fork",
     launchdLabel: "us.ainslies.t3code.service",
@@ -37,21 +46,25 @@ export const FORK_IDENTITY = Object.freeze({
   desktop: Object.freeze({
     production: Object.freeze({
       appId: "us.ainslies.t3code",
-      scheme: "t3code-fork",
-      executableName: "t3code-fork",
-      userDataDirName: "t3code-fork",
-      legacyUserDataDirName: "T3 Code Fork (Alpha)",
-      desktopEntryName: "t3code-fork.desktop",
-      wmClass: "t3code-fork",
+      scheme: "lathe",
+      executableName: "lathe",
+      userDataDirName: "lathe",
+      /** The pre-rename profile, used in place when it exists. */
+      legacyUserDataDirName: "t3code-fork",
+      /** Renderer scheme before the rename; its localStorage is imported once. */
+      legacyScheme: "t3code-fork",
+      desktopEntryName: "lathe.desktop",
+      wmClass: "lathe",
     }),
     development: Object.freeze({
       appId: "us.ainslies.t3code.dev",
-      scheme: "t3code-fork-dev",
-      executableName: "t3code-fork-dev",
-      userDataDirName: "t3code-fork-dev",
-      legacyUserDataDirName: "T3 Code Fork (Dev)",
-      desktopEntryName: "t3code-fork-dev.desktop",
-      wmClass: "t3code-fork-dev",
+      scheme: "lathe-dev",
+      executableName: "lathe-dev",
+      userDataDirName: "lathe-dev",
+      legacyUserDataDirName: "t3code-fork-dev",
+      legacyScheme: "t3code-fork-dev",
+      desktopEntryName: "lathe-dev.desktop",
+      wmClass: "lathe-dev",
     }),
   }),
 } as const);

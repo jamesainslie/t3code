@@ -55,7 +55,7 @@ describe("FORK_IDENTITY", () => {
       `${FORK_IDENTITY.desktop.production.scheme}-dev`,
     );
     expect(FORK_IDENTITY.bootService.launchdLabel).toBe(`${FORK_IDENTITY.appId}.service`);
-    expect(forkPlatformPackageName("linux-x64")).toBe("@jamesainslie/t3code-linux-x64");
+    expect(forkPlatformPackageName("linux-x64")).toBe("@jamesainslie/lathe-linux-x64");
     // The launcher tarball sits in the same scope directory as the platform
     // tarballs, so the platform prefix must never match the launcher name.
     expect(
@@ -69,8 +69,20 @@ describe("FORK_IDENTITY", () => {
     );
   });
 
+  it("is branded Lathe, with the T3 Code Fork names kept only as migration sources", () => {
+    expect(FORK_IDENTITY.productBaseName).toBe("Lathe");
+    expect(FORK_IDENTITY.cliBin).toBe("lathe");
+    expect(FORK_IDENTITY.npmPackageName).toBe("@jamesainslie/lathe");
+    expect(FORK_IDENTITY.baseDirName).toBe(".lathe");
+    expect(FORK_IDENTITY.legacyBaseDirName).toBe(".t3f");
+    expect(FORK_IDENTITY.assetsDir).toBe("assets/lathe");
+  });
+
   it("uses a base directory name that stays hidden and a usable port", () => {
     expect(FORK_IDENTITY.baseDirName.startsWith(".")).toBe(true);
+    expect(FORK_IDENTITY.legacyBaseDirName.startsWith(".")).toBe(true);
+    expect(FORK_IDENTITY.legacyBaseDirName).not.toBe(FORK_IDENTITY.baseDirName);
+    expect(FORK_IDENTITY.legacyBaseDirName).not.toBe(UPSTREAM.baseDirName);
     expect(FORK_IDENTITY.defaultPort).toBeGreaterThanOrEqual(1024);
     expect(FORK_IDENTITY.defaultPort).toBeLessThanOrEqual(65535);
   });
@@ -85,9 +97,9 @@ describe("forkDesktopIds", () => {
 
 describe("forkPackageSpec", () => {
   it.each([
-    ["nightly", "@jamesainslie/t3code@nightly"],
-    ["latest", "@jamesainslie/t3code@latest"],
-    ["0.0.39-nightly.20260906.12", "@jamesainslie/t3code@0.0.39-nightly.20260906.12"],
+    ["nightly", "@jamesainslie/lathe@nightly"],
+    ["latest", "@jamesainslie/lathe@latest"],
+    ["0.0.39-nightly.20260906.12", "@jamesainslie/lathe@0.0.39-nightly.20260906.12"],
   ])("renders %s as %s", (input, expected) => {
     expect(forkPackageSpec(input)).toBe(expected);
   });

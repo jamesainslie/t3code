@@ -1001,16 +1001,16 @@ it.effect("returns successful desktop sign-in to the original Welcome step", () 
     Effect.gen(function* () {
       const h = yield* makeHarness;
       // Fork: sign-in returns to the fork desktop's own scheme.
-      h.setReturnUrl("t3code-fork-dev://app/welcome#agents:test-environment");
+      h.setReturnUrl("lathe-dev://app/welcome#agents:test-environment");
       yield* h.signIn;
       yield* h.phase("succeeded");
       assert.include(
         h.callbackResponses[0]!.body,
-        'content="1;url=t3code-fork-dev://app/welcome#agents:test-environment"',
+        'content="1;url=lathe-dev://app/welcome#agents:test-environment"',
       );
       assert.include(
         h.callbackResponses[0]!.body,
-        'href="t3code-fork-dev://app/welcome#agents:test-environment"',
+        'href="lathe-dev://app/welcome#agents:test-environment"',
       );
     }),
   ),

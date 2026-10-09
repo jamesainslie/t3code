@@ -135,7 +135,7 @@ const withIdentity = <A, E, R>(
               input.legacyPathProbeError
                 ? Effect.fail(input.legacyPathProbeError)
                 : Effect.succeed(
-                    input.legacyPathExists === true && /T3 Code Fork \((Alpha|Dev)\)/.test(path),
+                    input.legacyPathExists === true && /\/t3code-fork(-dev)?$/.test(path),
                   ),
             readFileString: () =>
               Effect.succeed(input.packageJson ?? '{"t3codeCommitHash":"abcdef1234567890"}'),

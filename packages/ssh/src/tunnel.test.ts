@@ -108,7 +108,7 @@ describe("ssh tunnel scripts", () => {
       script,
       "T3_RELEASE_BASE_URL='https://github.com/jamesainslie/t3code/releases/download'",
     );
-    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.t3f/runtime/versions/$T3_ARCHIVE_VERSION"');
+    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.lathe/runtime/versions/$T3_ARCHIVE_VERSION"');
     assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
@@ -117,10 +117,10 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'node "$T3_STAGING/bin.mjs" --version');
     assert.include(script, `printf 'node\\n' > "$T3_STAGING/.launcher"`);
     assert.include(script, 'exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"');
-    // A host-installed t3f at the exact release is used instead of the archive.
-    assert.include(script, "if command -v t3f >/dev/null 2>&1; then");
-    assert.include(script, `*"$T3_ARCHIVE_VERSION"*) exec t3f "$@" ;;`);
-    assert.isBelow(script.indexOf('exec t3f "$@"'), script.indexOf("T3_RUNTIME_DIR="));
+    // A host-installed lathe at the exact release is used instead of the archive.
+    assert.include(script, "if command -v lathe >/dev/null 2>&1; then");
+    assert.include(script, `*"$T3_ARCHIVE_VERSION"*) exec lathe "$@" ;;`);
+    assert.isBelow(script.indexOf('exec lathe "$@"'), script.indexOf("T3_RUNTIME_DIR="));
     assert.isBelow(
       script.indexOf('"$T3_STAGING/t3" --version'),
       script.indexOf('node "$T3_STAGING/bin.mjs" --version'),
@@ -133,7 +133,7 @@ describe("ssh tunnel scripts", () => {
     // the completion marker after acquiring it.
     assert.include(
       script,
-      'T3_LOCK="$HOME/.t3f/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
+      'T3_LOCK="$HOME/.lathe/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
     );
     // mkdir is the exclusive create; the pid follows atomically. A dead owner
     // is reclaimed at once, a never-published owner after a short grace.
@@ -951,7 +951,7 @@ describe("archive runner script", () => {
           assert.equal(result.exitCode, 0, result.stderr);
           assert.include(result.stdout, `t3 v${archiveVersion}`);
         }
-        const versionsDir = `${home}/.t3f/runtime/versions`;
+        const versionsDir = `${home}/.lathe/runtime/versions`;
         assert.deepEqual(yield* fs.readDirectory(versionsDir), [archiveVersion]);
         assert.equal(
           (yield* fs.readFileString(`${versionsDir}/${archiveVersion}/.install-complete`)).trim(),
