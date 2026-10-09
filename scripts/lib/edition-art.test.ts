@@ -6,6 +6,8 @@ import {
   editionStripSvg,
   GENERATED_EDITIONS,
   type IconEdition,
+  LATHE_CARET_PATH,
+  LATHE_CARET_TIP_PATH,
 } from "./edition-art.ts";
 
 const ICON_EDITIONS: ReadonlyArray<IconEdition> = [...GENERATED_EDITIONS, "tartan"];
@@ -22,6 +24,15 @@ describe("edition art", () => {
   it.each(ICON_EDITIONS)("renders the %s icons identically on every run", (edition) => {
     expect(editionIconSvg(edition)).toBe(editionIconSvg(edition));
     expect(editionMacIconSvg(edition)).toBe(editionMacIconSvg(edition));
+  });
+
+  it.each(ICON_EDITIONS)("marks the %s icons with the Lathe caret, never the T3 wordmark", (edition) => {
+    for (const svg of [editionIconSvg(edition), editionMacIconSvg(edition)]) {
+      expect(svg).toContain(`d="${LATHE_CARET_PATH}"`);
+      expect(svg).toMatch(new RegExp(`d="${LATHE_CARET_TIP_PATH}"[^>]*fill="#FF5A1F"`));
+      // The T3 wordmark outline starts with its T crossbar.
+      expect(svg).not.toContain("M33.4509 93V47.56");
+    }
   });
 
   it.each(GENERATED_EDITIONS)("draws %s text as paths, never fonts", (edition) => {

@@ -21,8 +21,14 @@ export type IconEdition = GeneratedEdition | "tartan";
 const STRIP_WIDTH = 2048;
 const STRIP_HEIGHT = 96;
 
-const T3_PATH =
-  "M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z";
+/**
+ * The Lathe caret on Icon Composer's 128-unit layer canvas, the geometry of
+ * each assets/lathe app-icon.icon: a steel bar ground to a 45 degree point, and
+ * the ember tip drawn over it. Exported for the brand-leak test.
+ */
+export const LATHE_CARET_PATH = "M56.85 23.6L71.15 23.6L71.15 101.3L56.85 87Z";
+export const LATHE_CARET_TIP_PATH = "M65.14 95.29L71.15 95.29L71.15 101.3Z";
+const EMBER = "#FF5A1F";
 
 function rng(seed: number) {
   let state = seed >>> 0;
@@ -530,7 +536,7 @@ const MAC_BODY = 824;
 const MAC_INSET = 100;
 
 const markTransform = (scale: number, cx: number, cy: number) =>
-  `translate(${n(cx - 62.73 * scale)} ${n(cy - 65.48 * scale)}) scale(${scale})`;
+  `translate(${n(cx - 64 * scale)} ${n(cy - 62.45 * scale)}) scale(${scale})`;
 
 /** One 96-unit window of a strip, scaled to fill the icon tile. */
 function iconWindow(
@@ -544,35 +550,38 @@ function iconWindow(
 }
 
 function iconBody(edition: IconEdition, ids: Ids) {
-  const scale = 6.1;
-  const mark = markTransform(scale, 512, 540);
+  const scale = 8;
+  const mark = markTransform(scale, 512, 500);
+  // Every edition keeps the brand's one accent on the top layer of its mark.
+  const tip = (transform: string) =>
+    `<path d="${LATHE_CARET_TIP_PATH}" transform="${transform}" fill="${EMBER}"/>`;
   const glow = ids("fx");
   const glowFilter = (deviation: number) =>
     `<filter id="${glow}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${deviation}"/></filter>`;
   switch (edition) {
     case "tartan":
-      return `${iconWindow(tartanArt, ids, 30)}<path d="${T3_PATH}" transform="${mark}" fill="#fff"/>`;
+      return `${iconWindow(tartanArt, ids, 30)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#fff"/>${tip(mark)}`;
     case "rain":
-      return `<defs>${glowFilter(18)}</defs>${iconWindow(rainArt, ids, 40, { seed: 41 })}<rect width="1024" height="1024" fill="#000" opacity="0.25"/><path d="${T3_PATH}" transform="${mark}" fill="#2bff7a" filter="url(#${glow})" opacity="0.9"/><path d="${T3_PATH}" transform="${mark}" fill="#c9ffd9"/>`;
+      return `<defs>${glowFilter(18)}</defs>${iconWindow(rainArt, ids, 40, { seed: 41 })}<rect width="1024" height="1024" fill="#000" opacity="0.25"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#2bff7a" filter="url(#${glow})" opacity="0.9"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#c9ffd9"/>${tip(mark)}`;
     case "horizon": {
       const chrome = ids("chrome");
-      return `<defs><linearGradient id="${chrome}" x1="0" y1="330" x2="0" y2="720" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="0.5" stop-color="#e9dcff"/><stop offset="0.52" stop-color="#7b5cff"/><stop offset="1" stop-color="#ffd1f0"/></linearGradient></defs>${iconWindow(horizonArt, ids, 6, { vanish: 54 })}<path d="${T3_PATH}" transform="${markTransform(scale, 512, 552)}" fill="#ff3ea5" opacity="0.85"/><path d="${T3_PATH}" transform="${markTransform(scale, 512, 528)}" fill="url(#${chrome})"/>`;
+      return `<defs><linearGradient id="${chrome}" x1="0" y1="330" x2="0" y2="720" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="0.5" stop-color="#e9dcff"/><stop offset="0.52" stop-color="#7b5cff"/><stop offset="1" stop-color="#ffd1f0"/></linearGradient></defs>${iconWindow(horizonArt, ids, 6, { vanish: 54 })}<path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 512, 512)}" fill="#ff3ea5" opacity="0.85"/><path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 512, 488)}" fill="url(#${chrome})"/>${tip(markTransform(scale, 512, 488))}`;
     }
     case "night-city": {
-      const raised = markTransform(scale, 512, 470);
-      return `<defs>${glowFilter(22)}</defs>${iconWindow(nightCityArt, ids, 180, { seed: 13, sign: 248 })}<rect width="1024" height="560" fill="#02040a" opacity="0.35"/><path d="${T3_PATH}" transform="${raised}" fill="#45e3ff" filter="url(#${glow})" opacity="0.7"/><path d="${T3_PATH}" transform="${raised}" fill="#f4fbff"/>`;
+      const raised = markTransform(scale, 512, 430);
+      return `<defs>${glowFilter(22)}</defs>${iconWindow(nightCityArt, ids, 180, { seed: 13, sign: 248 })}<rect width="1024" height="560" fill="#02040a" opacity="0.35"/><path d="${LATHE_CARET_PATH}" transform="${raised}" fill="#45e3ff" filter="url(#${glow})" opacity="0.7"/><path d="${LATHE_CARET_PATH}" transform="${raised}" fill="#f4fbff"/>${tip(raised)}`;
     }
     case "trace": {
       const gold = ids("gold");
-      return `<defs>${glowFilter(10)}<linearGradient id="${gold}" x1="0" y1="330" x2="0" y2="720" gradientUnits="userSpaceOnUse"><stop stop-color="#f6d08f"/><stop offset="1" stop-color="#b9783e"/></linearGradient></defs>${iconWindow(traceArt, ids, 120, { seed: 9 })}<rect width="1024" height="1024" fill="#021310" opacity="0.3"/><path d="${T3_PATH}" transform="${mark}" fill="#000" opacity="0.5" filter="url(#${glow})"/><path d="${T3_PATH}" transform="${mark}" fill="url(#${gold})"/>`;
+      return `<defs>${glowFilter(10)}<linearGradient id="${gold}" x1="0" y1="330" x2="0" y2="720" gradientUnits="userSpaceOnUse"><stop stop-color="#f6d08f"/><stop offset="1" stop-color="#b9783e"/></linearGradient></defs>${iconWindow(traceArt, ids, 120, { seed: 9 })}<rect width="1024" height="1024" fill="#021310" opacity="0.3"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#000" opacity="0.5" filter="url(#${glow})"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="url(#${gold})"/>${tip(mark)}`;
     }
     case "amber": {
       const [scan, crt] = [ids("scan"), ids("crt")];
-      return `<defs>${glowFilter(26)}<pattern id="${scan}" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="3.5" fill="#000" opacity="0.35"/></pattern><radialGradient id="${crt}" cx="0.5" cy="0.5" r="0.72"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.7"/></radialGradient></defs>${iconWindow(amberArt, ids, 112)}<rect width="1024" height="1024" fill="#0f0802" opacity="0.55"/><path d="${T3_PATH}" transform="${mark}" fill="#ff9a00" filter="url(#${glow})" opacity="0.8"/><path d="${T3_PATH}" transform="${mark}" fill="#ffc04a"/><rect x="868" y="730" width="72" height="22" fill="#ffc04a"/><rect width="1024" height="1024" fill="url(#${scan})"/><rect width="1024" height="1024" fill="url(#${crt})"/>`;
+      return `<defs>${glowFilter(26)}<pattern id="${scan}" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="3.5" fill="#000" opacity="0.35"/></pattern><radialGradient id="${crt}" cx="0.5" cy="0.5" r="0.72"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.7"/></radialGradient></defs>${iconWindow(amberArt, ids, 112)}<rect width="1024" height="1024" fill="#0f0802" opacity="0.55"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#ff9a00" filter="url(#${glow})" opacity="0.8"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#ffc04a"/>${tip(mark)}<rect width="1024" height="1024" fill="url(#${scan})"/><rect width="1024" height="1024" fill="url(#${crt})"/>`;
     }
     case "glitch": {
       const [bandA, bandB] = [ids("ba"), ids("bb")];
-      return `<defs><clipPath id="${bandA}"><rect width="1024" height="560"/><rect y="610" width="1024" height="414"/></clipPath><clipPath id="${bandB}"><rect y="560" width="1024" height="50"/></clipPath></defs>${iconWindow(glitchArt, ids, 200, { seed: 23 })}<g clip-path="url(#${bandA})"><path d="${T3_PATH}" transform="${markTransform(scale, 500, 540)}" fill="#18e6ff" opacity="0.8"/><path d="${T3_PATH}" transform="${markTransform(scale, 524, 540)}" fill="#ff2e63" opacity="0.8"/><path d="${T3_PATH}" transform="${mark}" fill="#f2f6ff"/></g><g clip-path="url(#${bandB})"><path d="${T3_PATH}" transform="${markTransform(scale, 470, 540)}" fill="#18e6ff" opacity="0.85"/><path d="${T3_PATH}" transform="${markTransform(scale, 494, 540)}" fill="#f2f6ff"/></g>`;
+      return `<defs><clipPath id="${bandA}"><rect width="1024" height="560"/><rect y="610" width="1024" height="414"/></clipPath><clipPath id="${bandB}"><rect y="560" width="1024" height="50"/></clipPath></defs>${iconWindow(glitchArt, ids, 200, { seed: 23 })}<g clip-path="url(#${bandA})"><path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 500, 500)}" fill="#18e6ff" opacity="0.8"/><path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 524, 500)}" fill="#ff2e63" opacity="0.8"/><path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#f2f6ff"/>${tip(mark)}</g><g clip-path="url(#${bandB})"><path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 470, 500)}" fill="#18e6ff" opacity="0.85"/><path d="${LATHE_CARET_PATH}" transform="${markTransform(scale, 494, 500)}" fill="#f2f6ff"/>${tip(markTransform(scale, 494, 500))}</g>`;
     }
   }
 }
