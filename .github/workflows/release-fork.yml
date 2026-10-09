@@ -4,7 +4,7 @@
 # release-desktop.yml unchanged; only the job graph, runners, and identity
 # differ. npm publish uses OIDC trusted publishing configured on npmjs.com for
 # this workflow file (jamesainslie/t3code, release-fork.yml) on the launcher
-# package and on every @jamesainslie/t3code-<platform> package.
+# package and on every @jamesainslie/lathe-<platform> package.
 name: Release (fork)
 
 on:
@@ -154,7 +154,7 @@ jobs:
             echo "release_channel=stable" >> "$GITHUB_OUTPUT"
             echo "version=$version" >> "$GITHUB_OUTPUT"
             echo "tag=v$version" >> "$GITHUB_OUTPUT"
-            echo "name=T3 Code Fork v$version" >> "$GITHUB_OUTPUT"
+            echo "name=Lathe v$version" >> "$GITHUB_OUTPUT"
             echo "cli_dist_tag=latest" >> "$GITHUB_OUTPUT"
             if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
@@ -443,7 +443,7 @@ jobs:
       - name: Check npm publish access (dry run)
         run: |
           if ! node apps/server/scripts/cli.ts publish --packages-dir npm-packages --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --provenance --dry-run --verbose; then
-            echo "::error::npm publish --dry-run failed. Make sure @jamesainslie/t3code and every @jamesainslie/t3code-<platform> package has a trusted publisher registered for .github/workflows/release-fork.yml." >&2
+            echo "::error::npm publish --dry-run failed. Make sure @jamesainslie/lathe and every @jamesainslie/lathe-<platform> package has a trusted publisher registered for .github/workflows/release-fork.yml." >&2
             exit 1
           fi
 

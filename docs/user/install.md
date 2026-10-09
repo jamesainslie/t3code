@@ -14,29 +14,31 @@ launch T3 Code and configure providers afterwards.
 curl -fsSL https://raw.githubusercontent.com/jamesainslie/t3code/main/scripts/install.sh | sh
 ```
 
-This puts `t3f` in `~/.local/bin` and keeps its data in `~/.t3f`, beside any
-upstream T3 Code install. If your shell reports `command not found`
+This puts `lathe` in `~/.local/bin` and keeps its data in `~/.lathe`, beside
+any upstream T3 Code install. A machine that ran the fork before it became Lathe
+keeps using its `~/.t3f`; move it to `~/.lathe` yourself while nothing is
+running if you want the new name. If your shell reports `command not found`
 afterwards, that directory is not on your `PATH` yet; the installer prints the
 line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
 `T3CODE_VERSION` to pin an exact version.
 
 | Task                                             | Command                                                    |
 | ------------------------------------------------ | ---------------------------------------------------------- |
-| Start the server and open the web app            | `t3f`                                                      |
-| Start the server without a browser               | `t3f serve`                                                |
-| Keep it running in the background (macOS, Linux) | `t3f service install` ([details](./background-service.md)) |
-| Move to the newest release                       | `t3f update`                                               |
-| Remove it again                                  | `t3f uninstall`                                            |
+| Start the server and open the web app            | `lathe`                                                    |
+| Start the server without a browser               | `lathe serve`                                              |
+| Keep it running in the background (macOS, Linux) | `lathe service install` ([details](./background-service.md)) |
+| Move to the newest release                       | `lathe update`                                             |
+| Remove it again                                  | `lathe uninstall`                                          |
 
-Run `t3f help` or `t3f --help` for the full reference. To start in a new working
-directory, use an explicit path such as `t3f ./my-project`. A bare directory name
+Run `lathe help` or `lathe --help` for the full reference. To start in a new working
+directory, use an explicit path such as `lathe ./my-project`. A bare directory name
 is accepted only if it already exists.
 
-If `t3f` or `t3f start` reports an already running server, connect to that server
+If `lathe` or `lathe start` reports an already running server, connect to that server
 instead. Stop it before starting a replacement, or use a different `--base-dir`
 for an independent server.
 
-To try it once without installing, run `npx @jamesainslie/t3code@latest` instead
+To try it once without installing, run `npx @jamesainslie/lathe@latest` instead
 (needs Node.js for `npx`).
 
 ### Intel Macs and Windows
@@ -51,18 +53,18 @@ cd t3code && vp i && vp run build:desktop
 node apps/server/dist/bin.mjs
 ```
 
-`t3f update` and the background service do not apply to a server run this way;
+`lathe update` and the background service do not apply to a server run this way;
 update it with `git pull` and a rebuild.
 
 ## Desktop app
 
 Download a release from [GitHub Releases](https://github.com/jamesainslie/t3code/releases).
-The fork installs as **T3 Code Fork** with its own data directory, so it runs
+The fork installs as **Lathe** with its own data directory, so it runs
 alongside the upstream desktop app. Builds are published for macOS (Apple
 Silicon and Intel) and Linux (AppImage and `.deb`, x64 and arm64).
 
-On Debian or Ubuntu, install the `.deb` with `sudo apt install ./T3-Code-Fork-*.deb`.
-Its package is named `t3code-fork`, so it installs beside upstream's `t3code`
+On Debian or Ubuntu, install the `.deb` with `sudo apt install ./Lathe-*.deb`.
+Its package is named `lathe`, so it installs beside upstream's `t3code`
 package rather than replacing it. The `.deb` updates itself like the other
 desktop builds. It asks for your password to install each update. If your
 desktop has no password prompt, the update fails. Download the new `.deb` and

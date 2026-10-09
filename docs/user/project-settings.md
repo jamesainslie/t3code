@@ -145,7 +145,7 @@ On web or desktop, open **Settings → Projects & threads** and keep **All proje
 breadcrumb. Choose the environment running your fork in the breadcrumb, or use **Destination
 machine** in the sync section; with a single connected environment it is selected for you. Enter
 the main install's T3 home on that machine, usually `~/.t3`, then choose **Preview import**. The
-fork must use a separate home, usually `~/.t3f`.
+fork must use a separate home, usually `~/.lathe` (or `~/.t3f` from before the rename).
 
 Review each project and choose an existing destination, a separate project, or **Skip**.
 Imports include project settings, conversations, attachments, historical tool activity, and
