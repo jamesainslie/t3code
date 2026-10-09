@@ -1,3 +1,4 @@
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -87,7 +88,7 @@ function resolveSourceTreeIconPath(
       : environment.platform === "darwin"
         ? fileNames.macPng
         : fileNames.universalPng;
-  return environment.path.join(environment.rootDir, "assets", brand, fileName);
+  return environment.path.join(environment.rootDir, FORK_IDENTITY.assetsDir, brand, fileName);
 }
 
 const resolveIconPath = Effect.fn("desktop.assets.resolveIconPath")(function* (

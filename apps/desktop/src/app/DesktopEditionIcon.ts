@@ -1,3 +1,4 @@
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -47,7 +48,7 @@ export function resolveEditionIconLocation(input: {
   // Blueprint is the development brand, so its icons already live in assets/dev.
   const directory =
     input.edition === "blueprint"
-      ? input.path.join(input.rootDir, "assets", "dev")
+      ? input.path.join(input.rootDir, FORK_IDENTITY.assetsDir, "dev")
       : input.path.join(input.rootDir, "assets", "editions", input.edition);
   return {
     _tag: "SourceTree",
