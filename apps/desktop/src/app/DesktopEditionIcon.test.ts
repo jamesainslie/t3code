@@ -83,15 +83,15 @@ describe("resolveEditionIconLocation", () => {
     Effect.gen(function* () {
       assert.deepEqual(yield* resolve("blueprint", "darwin", false), {
         _tag: "SourceTree",
-        path: "/repo/assets/dev/blueprint-macos-1024.png",
+        path: "/repo/assets/lathe/dev/blueprint-macos-1024.png",
       });
       assert.deepEqual(yield* resolve("blueprint", "win32", false), {
         _tag: "SourceTree",
-        path: "/repo/assets/dev/blueprint-windows.ico",
+        path: "/repo/assets/lathe/dev/blueprint-windows.ico",
       });
       assert.deepEqual(yield* resolve("blueprint", "linux", false), {
         _tag: "SourceTree",
-        path: "/repo/assets/dev/blueprint-universal-1024.png",
+        path: "/repo/assets/lathe/dev/blueprint-universal-1024.png",
       });
     }),
   );
@@ -255,13 +255,15 @@ describe("DesktopEditionIcon", () => {
         const editionIcon = yield* DesktopEditionIcon.DesktopEditionIcon;
         yield* editionIcon.apply({ edition: "blueprint", editionAppIcon: true });
 
-        assert.deepEqual(calls.windowIcons, ["/repo/assets/dev/blueprint-universal-1024.png"]);
+        assert.deepEqual(calls.windowIcons, [
+          "/repo/assets/lathe/dev/blueprint-universal-1024.png",
+        ]);
       }),
       {
         calls,
         platform: "linux",
         isPackaged: false,
-        existingPaths: ["/repo/assets/dev/blueprint-universal-1024.png"],
+        existingPaths: ["/repo/assets/lathe/dev/blueprint-universal-1024.png"],
       },
     );
   });

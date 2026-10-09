@@ -32,8 +32,8 @@ const callbackUrl = `http://127.0.0.1:54213/auth/callback?state=${"a".repeat(43)
 describe("Codex desktop handoff", () => {
   it("keeps the hosted return route, account, and environment with the code in a fragment", () => {
     // Fork: the handoff opens the fork's desktop, never upstream's beside it.
-    expect(new URL(codexAuthHandoffUrl(input)).protocol).toBe("t3code-fork:");
-    expect(new URL(codexAuthHandoffUrl(input, true)).protocol).toBe("t3code-fork-dev:");
+    expect(new URL(codexAuthHandoffUrl(input)).protocol).toBe("lathe:");
+    expect(new URL(codexAuthHandoffUrl(input, true)).protocol).toBe("lathe-dev:");
     expect(readCodexAuthHandoff(codexAuthHandoffUrl(input), false)).toEqual(input);
     const delivery = codexAuthDeliveryUrl(input, callbackUrl);
     expect(new URL(delivery).search).toBe("");

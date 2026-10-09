@@ -81,7 +81,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, FORK_IDENTITY.desktop.development.appId);
       assert.equal(environment.linuxWmClass, FORK_IDENTITY.desktop.development.wmClass);
-      assert.equal(environment.linuxDesktopEntryName, "t3code-fork-dev.desktop");
+      assert.equal(environment.linuxDesktopEntryName, "lathe-dev.desktop");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -153,7 +153,7 @@ describe("DesktopEnvironment", () => {
         resourcesPath: "/tmp/.mount_t3code/resources",
       });
 
-      assert.equal(environment.linuxDesktopEntryName, "t3code-fork.desktop");
+      assert.equal(environment.linuxDesktopEntryName, "lathe.desktop");
     }),
   );
 

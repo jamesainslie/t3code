@@ -391,6 +391,10 @@
       "types": "./src/forkIdentity.ts",
       "import": "./src/forkIdentity.ts"
     },
+    "./forkBaseDir": {
+      "types": "./src/forkBaseDir.ts",
+      "import": "./src/forkBaseDir.ts"
+    },
     "./cliRelease": {
       "types": "./src/cliRelease.ts",
       "import": "./src/cliRelease.ts"

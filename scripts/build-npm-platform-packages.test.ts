@@ -123,20 +123,20 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       assert.deepStrictEqual(
         outputs.map((output) => output.name),
         [
-          "@jamesainslie/t3code-darwin-arm64",
-          "@jamesainslie/t3code-linux-x64",
-          "@jamesainslie/t3code",
+          "@jamesainslie/lathe-darwin-arm64",
+          "@jamesainslie/lathe-linux-x64",
+          "@jamesainslie/lathe",
         ],
       );
       for (const output of outputs) {
         assert.isTrue(yield* fs.exists(output.tarball), output.tarball);
       }
 
-      const linuxDir = path.join(fixture.outputDir, "@jamesainslie/t3code-linux-x64");
+      const linuxDir = path.join(fixture.outputDir, "@jamesainslie/lathe-linux-x64");
       const linuxManifest = yield* decodeManifest(
         yield* fs.readFileString(path.join(linuxDir, "package.json")),
       );
-      assert.equal(linuxManifest.name, "@jamesainslie/t3code-linux-x64");
+      assert.equal(linuxManifest.name, "@jamesainslie/lathe-linux-x64");
       assert.equal(linuxManifest.version, VERSION);
       assert.deepStrictEqual(linuxManifest.os, ["linux"]);
       assert.deepStrictEqual(linuxManifest.cpu, ["x64"]);
@@ -162,30 +162,30 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       // A root README, or npm would display a bundled dependency's.
       assert.include(
         yield* fs.readFileString(path.join(linuxDir, "README.md")),
-        "# @jamesainslie/t3code-linux-x64",
+        "# @jamesainslie/lathe-linux-x64",
       );
       assert.isTrue(yield* fs.exists(path.join(linuxDir, "node_modules/node-pty")));
       assert.equal(Number((yield* fs.stat(path.join(linuxDir, "t3"))).mode) & 0o111, 0o111);
 
       const darwinManifest = yield* decodeManifest(
         yield* fs.readFileString(
-          path.join(fixture.outputDir, "@jamesainslie/t3code-darwin-arm64/package.json"),
+          path.join(fixture.outputDir, "@jamesainslie/lathe-darwin-arm64/package.json"),
         ),
       );
       assert.deepStrictEqual(darwinManifest.os, ["darwin"]);
       assert.deepStrictEqual(darwinManifest.cpu, ["arm64"]);
 
-      const launcherDir = path.join(fixture.outputDir, "@jamesainslie/t3code");
+      const launcherDir = path.join(fixture.outputDir, "@jamesainslie/lathe");
       const launcherManifest = yield* decodeManifest(
         yield* fs.readFileString(path.join(launcherDir, "package.json")),
       );
-      assert.equal(launcherManifest.name, "@jamesainslie/t3code");
+      assert.equal(launcherManifest.name, "@jamesainslie/lathe");
       assert.equal(launcherManifest.version, VERSION);
-      assert.deepStrictEqual(launcherManifest.bin, { t3f: "./bin/t3.js" });
+      assert.deepStrictEqual(launcherManifest.bin, { lathe: "./bin/t3.js" });
       assert.deepStrictEqual(launcherManifest.files, ["bin", "dist"]);
       assert.deepStrictEqual(launcherManifest.optionalDependencies, {
-        "@jamesainslie/t3code-darwin-arm64": VERSION,
-        "@jamesainslie/t3code-linux-x64": VERSION,
+        "@jamesainslie/lathe-darwin-arm64": VERSION,
+        "@jamesainslie/lathe-linux-x64": VERSION,
       });
       assert.isUndefined(launcherManifest.engines);
       assert.isTrue(yield* fs.exists(path.join(launcherDir, "bin/t3.js")));
@@ -199,7 +199,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       // executable bit intact.
       const listing = yield* run(
         "tar",
-        ["-tzvf", path.join(fixture.outputDir, "@jamesainslie/t3code-linux-x64.tgz")],
+        ["-tzvf", path.join(fixture.outputDir, "@jamesainslie/lathe-linux-x64.tgz")],
         { cwd: fixture.outputDir },
       );
       assert.equal(listing.exitCode, 0, listing.stderr);
@@ -233,12 +233,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         yield* fs.makeDirectory(installedLauncher);
         const unpack = yield* run(
           "tar",
-          [
-            "-xf",
-            path.join(fixture.outputDir, "@jamesainslie/t3code.tgz"),
-            "-C",
-            installedLauncher,
-          ],
+          ["-xf", path.join(fixture.outputDir, "@jamesainslie/lathe.tgz"), "-C", installedLauncher],
           {
             cwd: fixture.root,
           },
@@ -248,7 +243,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         // does; the launcher must then run the bundled script under this Node.
         const stub = path.join(
           fixture.outputDir,
-          `@jamesainslie/t3code-${hostPlatform}-${hostArch}/t3`,
+          `@jamesainslie/lathe-${hostPlatform}-${hostArch}/t3`,
         );
         yield* fs.chmod(stub, 0o644);
         const scripted = yield* run(process.execPath, ["bin/t3.js", "serve", "--port", "1234"], {

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the T3 Code CLI from a GitHub Release archive. Needs only sh, tar,
+# Installs the Lathe CLI from a GitHub Release archive. Needs only sh, tar,
 # sha256sum or shasum, and curl or wget; no Node, npm, or compiler.
 #
 #   curl -fsSL https://raw.githubusercontent.com/jamesainslie/t3code/main/scripts/install.sh | sh
@@ -8,32 +8,42 @@
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              T3 home directory (default: ~/.t3f)
-#   T3CODE_INSTALL_BIN_DIR   where the `t3f` symlink goes (default: ~/.local/bin)
+#   T3CODE_HOME              home directory (default: ~/.lathe, or an existing
+#                            pre-rename ~/.t3f, which stays in use)
+#   T3CODE_INSTALL_BIN_DIR   where the `lathe` symlink goes (default: ~/.local/bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
 # The archive is unpacked into $T3CODE_HOME/runtime/versions/<version>, the
-# same layout `t3f service install` uses, so the service reuses this download
+# same layout `lathe service install` uses, so the service reuses this download
 # instead of fetching the release again.
 set -eu
 
 repo="jamesainslie/t3code"
 base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
-t3_home="${T3CODE_HOME:-$HOME/.t3f}"
+# A pre-rename ~/.t3f keeps serving while ~/.lathe is absent, like the app
+# itself (packages/shared/src/forkBaseDir.ts).
+if [ -n "${T3CODE_HOME:-}" ]; then
+  t3_home="$T3CODE_HOME"
+elif [ ! -e "$HOME/.lathe" ] && [ -d "$HOME/.t3f" ]; then
+  t3_home="$HOME/.t3f"
+else
+  t3_home="$HOME/.lathe"
+fi
 bin_dir="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 
 fail() {
-  printf '\nt3 install: %s\n' "$1" >&2
+  printf '\nlathe install: %s\n' "$1" >&2
   exit 1
 }
 
 # ANSI stays on stderr, so `curl ... | sh` still gets progress.
 interactive=false
 if [ -t 2 ] && [ "${TERM:-}" != dumb ]; then interactive=true; fi
-reset= bold= muted= accent= green=
+reset= bold= muted= accent= green= ember=
 if "$interactive" && [ -z "${NO_COLOR:-}" ]; then
   reset="$(printf '\033[0m')"; bold="$(printf '\033[1m')"
   muted="$(printf '\033[2m')"; accent="$(printf '\033[94m')"; green="$(printf '\033[32m')"
+  ember="$(printf '\033[38;5;202m')"
 fi
 step() {
   if "$interactive"; then printf '\r\033[2K  %s%s%s' "$muted" "$1" "$reset" >&2
@@ -41,11 +51,12 @@ step() {
 }
 if "$interactive"; then
   printf '\n%s' "$bold" >&2
-  printf '  %s\n' '██████████ ████████ ' >&2
-  printf '  %s\n' '    ███       ▄██▀       T3 Code' >&2
-  printf '  %s%s     %sCLI installer%s\n' '    ███       ████▄ ' "$reset" "$muted" "$reset$bold" >&2
-  printf '  %s\n' '    ███    ▄     ███' >&2
-  printf '  %s\n' '    ███    ███████▀ ' >&2
+  # The Lathe caret: a steel bar ground to a point, the point in ember.
+  printf '  %s\n' '███' >&2
+  printf '  %s\n' '███     Lathe' >&2
+  printf '  %s%s     %sCLI installer%s\n' '███' "$reset" "$muted" "$reset$bold" >&2
+  printf '  %s\n' '███' >&2
+  printf '  %s%s%s\n' ' ▀' "$ember" '█' >&2
   printf '%s\n' "$reset" >&2
 fi
 step "Finding your release..."
@@ -162,7 +173,7 @@ fi
 case "$version" in
   *-preview.*)
     printf '%s\n' \
-      "t3f ${version} is a preview build." \
+      "lathe ${version} is a preview build." \
       "  Preview builds are cut by maintainers from unreleased branches to exercise the release" \
       "  pipeline. They can be broken, receive no fixes, and are never offered as updates." \
       "  Set T3CODE_CHANNEL=stable (the default) for a supported build." >&2
@@ -188,12 +199,12 @@ else
   trap 'printf "\n" >&2; exit 143' TERM
 
   if "$interactive"; then printf '\r\033[2K' >&2; fi
-  printf '  %sInstalling%s T3 Code %s%s%s\n\n' "$muted" "$reset" "$bold" "$version" "$reset" >&2
+  printf '  %sInstalling%s Lathe %s%s%s\n\n' "$muted" "$reset" "$bold" "$version" "$reset" >&2
   step "Downloading..."
   fetch_status=0
   fetch "${base_url}/v${version}/SHA256SUMS" "${staging}/SHA256SUMS" || fetch_status=$?
   if [ "$fetch_status" -eq 44 ]; then
-    fail "t3f ${version} has no release archive for ${platform}-${arch}; releases before the self-contained CLI can only be installed with \`npm install -g @jamesainslie/t3code@${version}\`"
+    fail "lathe ${version} has no release archive for ${platform}-${arch}; releases before the self-contained CLI can only be installed with \`npm install -g @jamesainslie/t3code@${version}\`"
   elif [ "$fetch_status" -ne 0 ]; then
     fail "could not download the release checksums"
   fi
@@ -205,7 +216,7 @@ else
   actual="$(checksum "${staging}/${archive}")"
   [ "$actual" = "$expected" ] || fail "checksum mismatch for ${archive}"
 
-  step "Extracting T3 Code..."
+  step "Extracting Lathe..."
   tar -xzf "${staging}/${archive}" -C "$staging" --strip-components=1
   rm -f "${staging}/${archive}" "${staging}/SHA256SUMS"
   "${staging}/t3" --version >/dev/null || fail "the downloaded executable does not run"
@@ -216,12 +227,12 @@ else
   trap - EXIT
 fi
 
-step "Setting up the t3f command..."
+step "Setting up the lathe command..."
 mkdir -p "$bin_dir"
-ln -sfn "${target_dir}/t3" "${bin_dir}/t3f"
+ln -sfn "${target_dir}/t3" "${bin_dir}/lathe"
 if "$interactive"; then printf '\r\033[2K' >&2; fi
-printf '  %sInstalled T3 Code %s%s\n\n' "$green" "$version" "$reset" >&2
+printf '  %sInstalled Lathe %s%s\n\n' "$green" "$version" "$reset" >&2
 case ":${PATH}:" in
-  *":${bin_dir}:"*) printf '  Run %st3f%s to get started.\n\n' "$bold" "$reset" ;;
-  *) printf '  Add %s to your PATH, then run %st3f%s.\n\n' "$bin_dir" "$bold" "$reset" ;;
+  *":${bin_dir}:"*) printf '  Run %slathe%s to get started.\n\n' "$bold" "$reset" ;;
+  *) printf '  Add %s to your PATH, then run %slathe%s.\n\n' "$bin_dir" "$bold" "$reset" ;;
 esac

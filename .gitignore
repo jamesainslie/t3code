@@ -16,6 +16,8 @@ build/
 release/
 release-mock/
 .t3
+.t3f
+.lathe
 .idea/
 apps/web/.playwright
 apps/web/playwright-report

@@ -1,5 +1,5 @@
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { forkBaseDirName } from "@t3tools/shared/forkBaseDir";
 import {
   listLoginShellCandidates,
   mergePathEntries,
@@ -106,7 +106,7 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    return join(NodeOS.homedir(), FORK_IDENTITY.baseDirName);
+    return join(NodeOS.homedir(), forkBaseDirName(NodeOS.homedir()));
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

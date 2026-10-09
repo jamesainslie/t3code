@@ -1,0 +1,50 @@
+{
+  "fill": {
+    "solid": "srgb:0.95686,0.95686,0.96471,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "tip.svg",
+          "name": "Tip",
+          "position": {
+            "scale": 8,
+            "translation-in-points": [0, 0]
+          }
+        },
+        {
+          "glass": true,
+          "image-name": "caret.svg",
+          "name": "Caret",
+          "position": {
+            "scale": 8,
+            "translation-in-points": [0, 0]
+          }
+        },
+        {
+          "glass": false,
+          "image-name": "grid.svg",
+          "name": "Grid",
+          "position": {
+            "scale": 8,
+            "translation-in-points": [0, 0]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": ["watchOS"],
+    "squares": "shared"
+  }
+}

@@ -2547,7 +2547,7 @@ function stageEditionIcons(
       // Blueprint is the development brand, so its icons already live in assets/dev.
       const sourceDir =
         edition === "blueprint"
-          ? path.join(repoRoot, "assets/dev")
+          ? path.join(repoRoot, FORK_IDENTITY.assetsDir, "dev")
           : path.join(repoRoot, "assets/editions", edition);
       const sourcePath = path.join(sourceDir, `${edition}-${icon.source}`);
       if (!(yield* fs.exists(sourcePath))) {
