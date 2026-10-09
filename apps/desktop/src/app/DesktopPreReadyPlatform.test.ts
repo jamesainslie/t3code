@@ -44,6 +44,8 @@ vi.mock("electron", () => ({
 
 vi.mock("node:fs", () => ({
   readFileSync: () => "{}",
+  // Fork: a fresh machine, so the base directory resolves to the Lathe default.
+  existsSync: () => false,
   mkdirSync: mkdirSyncMock,
   writeFileSync: writeFileSyncMock,
   copyFileSync: copyFileSyncMock,
