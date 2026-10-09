@@ -90,12 +90,12 @@ describe("brand-assets", () => {
       BRAND_ASSET_PATHS.nightlyIconComposerProject,
       BRAND_ASSET_PATHS.productionIconComposerProject,
     ]).toEqual([
-      "assets/dev/app-icon.icon",
-      "assets/nightly/app-icon.icon",
-      "assets/prod/app-icon.icon",
+      "assets/lathe/dev/app-icon.icon",
+      "assets/lathe/nightly/app-icon.icon",
+      "assets/lathe/prod/app-icon.icon",
     ]);
-    expect(BRAND_ASSET_PATHS.developmentDesktopIconPng).toMatch(/^assets\/dev\/blueprint-/);
-    expect(BRAND_ASSET_PATHS.nightlyMacIconPng).toMatch(/^assets\/nightly\/nightly-/);
-    expect(BRAND_ASSET_PATHS.productionMacIconPng).toMatch(/^assets\/prod\/black-/);
+    expect(BRAND_ASSET_PATHS.developmentDesktopIconPng).toMatch(/^assets\/lathe\/dev\/blueprint-/);
+    expect(BRAND_ASSET_PATHS.nightlyMacIconPng).toMatch(/^assets\/lathe\/nightly\/nightly-/);
+    expect(BRAND_ASSET_PATHS.productionMacIconPng).toMatch(/^assets\/lathe\/prod\/black-/);
   });
 });
