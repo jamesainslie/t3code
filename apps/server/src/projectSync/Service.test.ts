@@ -22,11 +22,8 @@ import { ServerConfig } from "../config.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
-import {
-  OrchestrationV2EventSinkLayerLive,
-  ProjectServiceLayerLive,
-} from "../orchestration-v2/runtimeLayer.ts";
-import { makeSqlitePersistenceLive } from "../persistence/Layers/Sqlite.ts";
+import * as RuntimeLayer from "../orchestration-v2/runtimeLayer.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import { ProjectService } from "../project/ProjectService.ts";
@@ -53,7 +50,9 @@ const environmentLayer = (home: string) =>
       resolvePath: () => Effect.succeed(null),
     }),
   ).pipe(
-    Layer.provideMerge(makeSqlitePersistenceLive(NodePath.join(home, "userdata/statev2.sqlite"))),
+    Layer.provideMerge(
+      SqlitePersistence.layerFromPath(NodePath.join(home, "userdata/statev2.sqlite")),
+    ),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), home)),
     Layer.provideMerge(NodeServices.layer),
   );
@@ -62,8 +61,8 @@ const runtimeLayer = (home: string) =>
   ProjectSyncService.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ProjectServiceLayerLive,
-        OrchestrationV2EventSinkLayerLive,
+        RuntimeLayer.layerProjectService,
+        RuntimeLayer.layerEventSink,
         ProjectStore.layer,
         ProjectionStore.layer,
       ),

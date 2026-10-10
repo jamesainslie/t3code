@@ -14,7 +14,7 @@ import {
   updateRule,
   validateOwnerPattern,
   type GitHubAccountOption,
-} from "./gitHubAccountSettings.logic";
+} from "./gitHubAccountRules.logic";
 import { searchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsRow, SettingsSection } from "./settingsLayout";

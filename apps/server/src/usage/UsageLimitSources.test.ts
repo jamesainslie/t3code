@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { describe, expect, it } from "@effect/vitest";
 import { DEFAULT_SERVER_SETTINGS, UsageLimitSourceId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -7,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
@@ -75,6 +76,7 @@ function harness(
   const layer = UsageLimitSources.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        NodeCrypto.layer,
         Layer.succeed(HttpClient.HttpClient, http),
         Layer.succeed(
           ServerSecretStore.ServerSecretStore,

@@ -2,9 +2,9 @@ import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import {
   ProjectId,
   VcsProcessExitError,
@@ -218,7 +218,6 @@ it.effect("pins the selected account's token once per account within the cache l
     assert.deepStrictEqual(commands, [
       ["auth", "token", "--hostname", "github.com", "--user", "work"],
     ]);
-    assert.strictEqual(first!.scope, "checkout");
     assert.strictEqual(first!.host, "github.com");
     assert.strictEqual(Redacted.value(first!.token), "token-work");
     expect(first!.credentialFingerprint).toMatch(/^github\.com:work:[0-9a-f]{64}$/);

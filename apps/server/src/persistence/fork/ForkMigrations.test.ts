@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest, runMigrations } from "../Migrations.ts";
 import UpstreamAutoSettleDisabledAt from "../Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
@@ -113,9 +113,10 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           first.moved.map(([id]) => id),
           LEGACY_FORK_ROWS.map(([id]) => id),
         );
+        // Every upstream migration after 054, the last one the v1 fork build applied.
         assert.deepStrictEqual(
           first.upstream.map(([id]) => id),
-          [55, 56],
+          migrationManifest.filter(([id]) => id > 54).map(([id]) => id),
         );
         // Only fork migrations newer than the v1 fork build run.
         assert.deepStrictEqual(first.fork, [[6, "ProjectSyncRecords"]]);

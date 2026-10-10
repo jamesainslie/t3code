@@ -33,7 +33,7 @@ import {
 import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 import { NavigationContainer, NavigationIndependentTree } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createV5StackNavigator as createNativeStackNavigator } from "../../native/createV5StackNavigator";
 import { ScrollView, useWindowDimensions, View } from "react-native";
 import { useMobileNavigationTheme } from "../../lib/useMobileNavigationTheme";
 import { NativeHeaderToolbar } from "../../native/StackHeader";

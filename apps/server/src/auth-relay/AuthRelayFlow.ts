@@ -18,7 +18,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-import type { ProviderAuthController } from "../provider/Services/ProviderAuthService.ts";
+import type { ProviderAuthController } from "../provider/ProviderAuthService.ts";
 import { AuthRelayError } from "./AuthRelayError.ts";
 import {
   CALLBACK_FORWARDING_FAILED_MESSAGE,

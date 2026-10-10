@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -7,10 +7,10 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
+import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
 import {
   browserLaunchWrapperScript,
   makeBrowserLaunchSocket,
@@ -72,7 +72,7 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
   // The wrapper is a POSIX shell script; the Windows .cmd wrapper is exercised by hand.
   it.effect("delivers a launched URL to the registered terminal and stays silent", () =>
     Effect.gen(function* () {
-      const platform = yield* HostProcessPlatform;
+      const platform = yield* HostProcess.Platform;
       if (platform === "win32") return;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -111,7 +111,7 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
 
   it.effect("prints the URL to the terminal when no relay is listening", () =>
     Effect.gen(function* () {
-      const platform = yield* HostProcessPlatform;
+      const platform = yield* HostProcess.Platform;
       if (platform === "win32") return;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;

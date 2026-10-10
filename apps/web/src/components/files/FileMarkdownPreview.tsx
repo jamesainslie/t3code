@@ -15,7 +15,7 @@ import {
   splitMarkdownDocument,
   type MarkdownDocumentSection,
 } from "~/markdown-document";
-import { resolvePathLinkTarget } from "~/terminal-links";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 
 type TaskListChange = (input: { readonly markerOffset: number; readonly checked: boolean }) => void;
 

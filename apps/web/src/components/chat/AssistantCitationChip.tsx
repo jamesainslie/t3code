@@ -1,9 +1,14 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { Citation } from "@t3tools/contracts";
-import { isDocumentCitation, serializeCitation } from "@t3tools/shared/assistantCitations";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon, PencilIcon, QuoteIcon } from "lucide-react";
 import {
+  assistantCitationLabel,
+  isDocumentCitation,
+  serializeCitation,
+} from "@t3tools/shared/assistantCitations";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ArrowUpRightIcon, FileTextIcon, PencilIcon, QuoteIcon } from "lucide-react";
+import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
@@ -20,13 +25,16 @@ import {
 } from "../../lib/assistantCitationNavigation";
 import { cn } from "~/lib/utils";
 import { ContextChip, ContextChipAction, ContextChipLabel } from "../ContextChip";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { ContextChipPopover } from "../contextChipParts";
+import { Button } from "../ui/button";
+import { Popover, PopoverClose, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
 import { AssistantCitationCommentEditor } from "./AssistantCitationCommentEditor";
 import { resolveAssistantCitationCommentDismissal } from "./assistantCitationCommentDismissal";
 import { observeAssistantCitationCommentSource } from "./AssistantCitationSource";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import { useRightPanelStore } from "../../rightPanelStore";
+import { observeResize } from "~/lib/observeResize";
 
 export function AssistantCitationChip({
   citation,
@@ -97,67 +105,98 @@ export function AssistantCitationChip({
         },
       }
     : undefined;
-  const preview = (citation.comment?.trim() || citation.text).replace(/\s+/g, " ");
-  const label = preview.length > 64 ? `${preview.slice(0, 64)}…` : preview;
-  const sourceContent = (
+  const label = assistantCitationLabel(citation);
+  // A document quote opens its file at the quoted lines; an assistant quote
+  // scrolls to its message (fork).
+  const assistantCitation = isDocumentCitation(citation) ? null : citation;
+  const sourceLinkProps = assistantCitation && {
+    to: "/$environmentId/$threadId" as const,
+    params: {
+      environmentId: assistantCitation.environmentId,
+      threadId: assistantCitation.threadId,
+    },
+    hash: assistantCitationHash(assistantCitation),
+    "data-markdown-copy": serializeCitation(assistantCitation),
+    resetScroll: false,
+    onClick: (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      void navigate(assistantCitationNavigation(assistantCitation));
+    },
+  };
+  const openDocumentSource = () => {
+    if (!isDocumentCitation(citation)) return;
+    useRightPanelStore
+      .getState()
+      .openFile(
+        scopeThreadRef(citation.environmentId, citation.threadId),
+        citation.filePath,
+        citation.startLine,
+      );
+  };
+  const SourceIcon = assistantCitation ? QuoteIcon : FileTextIcon;
+  const composerSourceContent = (
     <>
-      {isDocumentCitation(citation) ? (
-        <FileTextIcon aria-hidden="true" />
-      ) : (
-        <QuoteIcon aria-hidden="true" />
-      )}
+      <SourceIcon aria-hidden="true" />
       <ContextChipLabel className="max-w-[16em]">{label}</ContextChipLabel>
     </>
   );
-  const sourceLinkClassName = cn(
-    "inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline focus-visible:outline-2 focus-visible:outline-foreground",
-    !composer && "hover:bg-(--context-chip-accent)/17",
-  );
-  // A document quote opens its file at the quoted lines; an assistant quote scrolls to its message.
-  const sourceLink = isDocumentCitation(citation) ? (
-    <button
-      type="button"
-      className={cn(sourceLinkClassName, "cursor-pointer")}
-      aria-label={`View quoted text in ${citation.filePath}: ${label}`}
-      data-markdown-copy={serializeCitation(citation)}
-      onClick={() =>
-        useRightPanelStore
-          .getState()
-          .openFile(
-            scopeThreadRef(citation.environmentId, citation.threadId),
-            citation.filePath,
-            citation.startLine,
-          )
-      }
-    >
-      {sourceContent}
-    </button>
-  ) : (
+  const composerSourceLinkClassName =
+    "inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline focus-visible:outline-2 focus-visible:outline-foreground";
+  const composerSourceLink = sourceLinkProps ? (
     <Link
-      to="/$environmentId/$threadId"
-      params={{ environmentId: citation.environmentId, threadId: citation.threadId }}
-      hash={assistantCitationHash(citation)}
-      data-markdown-copy={serializeCitation(citation)}
-      resetScroll={false}
-      onClick={(event: ReactMouseEvent<HTMLAnchorElement>) => {
-        if (
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        ) {
-          return;
-        }
-        event.preventDefault();
-        void navigate(assistantCitationNavigation(citation));
-      }}
-      className={sourceLinkClassName}
+      {...sourceLinkProps}
+      className={composerSourceLinkClassName}
       aria-label={`View cited assistant text: ${label}`}
     >
-      {sourceContent}
+      {composerSourceContent}
     </Link>
+  ) : (
+    <button
+      type="button"
+      className={cn(composerSourceLinkClassName, "cursor-pointer")}
+      aria-label={
+        isDocumentCitation(citation) ? `View quoted text in ${citation.filePath}: ${label}` : label
+      }
+      data-markdown-copy={serializeCitation(citation)}
+      onClick={openDocumentSource}
+    >
+      {composerSourceContent}
+    </button>
   );
+  if (!composer) {
+    return (
+      <ContextChipPopover
+        kind="citation"
+        icon={<SourceIcon />}
+        label={label}
+        accessibleLabel={
+          isDocumentCitation(citation)
+            ? `Quoted text in ${citation.filePath}: ${label}`
+            : `Quoted assistant text: ${label}`
+        }
+        copyMarkdown={serializeCitation(citation)}
+      >
+        <div className="flex max-h-[calc(var(--available-height)_-_1rem_-_2px)] flex-col items-start gap-3 p-1 text-sm">
+          <AssistantCitationQuote citation={citation} />
+          <PopoverClose
+            render={
+              sourceLinkProps ? (
+                <Button variant="outline" size="sm" render={<Link {...sourceLinkProps} />} />
+              ) : (
+                <Button variant="outline" size="sm" onClick={openDocumentSource} />
+              )
+            }
+          >
+            <ArrowUpRightIcon aria-hidden="true" />
+            Go to source
+          </PopoverClose>
+        </div>
+      </ContextChipPopover>
+    );
+  }
   return (
     <ContextChip
       kind="citation"
@@ -165,14 +204,7 @@ export function AssistantCitationChip({
       data-assistant-citation-chip="true"
       data-markdown-copy={serializeCitation(citation)}
     >
-      {composer ? (
-        sourceLink
-      ) : (
-        <Tooltip>
-          <TooltipTrigger render={sourceLink} />
-          <TooltipPopup side="top">View source</TooltipPopup>
-        </Tooltip>
-      )}
+      {composerSourceLink}
       {commentEditor ? (
         <Popover
           open={commentEditor.open}
@@ -256,5 +288,37 @@ export function AssistantCitationChip({
         </Popover>
       ) : null}
     </ContextChip>
+  );
+}
+
+function AssistantCitationQuote({ citation }: { citation: Citation }) {
+  const [fade, setFade] = useState({ top: false, bottom: false });
+  const updateFade = useCallback((element: HTMLElement) => {
+    const top = element.scrollTop > 1;
+    const bottom = element.scrollHeight - element.clientHeight - element.scrollTop > 1;
+    setFade((current) =>
+      current.top === top && current.bottom === bottom ? current : { top, bottom },
+    );
+  }, []);
+  // Stable so a fade update during resize delivery does not resubscribe the element.
+  const observeFade = useCallback(
+    (element: HTMLDivElement | null) =>
+      element ? observeResize(element, () => updateFade(element)) : undefined,
+    [updateFade],
+  );
+  return (
+    <div
+      ref={observeFade}
+      onScroll={(event) => updateFade(event.currentTarget)}
+      className={cn(
+        "max-h-64 min-h-0 space-y-3 self-stretch overflow-y-auto whitespace-pre-wrap wrap-break-word",
+        getVirtualizedScrollFadeClassName(fade),
+      )}
+    >
+      <blockquote className="border-l-2 border-border pl-3 text-muted-foreground">
+        {citation.text}
+      </blockquote>
+      {citation.comment ? <p>{citation.comment}</p> : null}
+    </div>
   );
 }

@@ -2,16 +2,16 @@ import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
-import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import * as EventSink from "../EventSink.ts";
 import * as EventStore from "../EventStore.ts";
 import * as LegacyV1ThreadImporter from "../legacy/LegacyV1ThreadImporter.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
 import { aroundLegacyImport, rewriteThreadContextRecords } from "./ForkLegacyImport.ts";
 
-const databaseLayer = SqlitePersistenceMemory;
+const databaseLayer = SqlitePersistence.layerMemory;
 const storesProvided = Layer.mergeAll(
   databaseLayer,
   EventStore.layer.pipe(Layer.provideMerge(databaseLayer)),

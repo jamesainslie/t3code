@@ -6,7 +6,7 @@ import {
   type ProjectSyncRequest,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { annotateEnvironmentRequest, requireEnvironmentScope } from "../auth/http.ts";
 import { ProjectSyncService } from "./Service.ts";
 

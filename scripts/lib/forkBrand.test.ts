@@ -251,7 +251,7 @@ describe("exceptions", () => {
   });
 
   it("keeps Codex's clientInfo and rebrands the rest of CodexProvider.ts", () => {
-    const file = "apps/server/src/provider/Layers/CodexProvider.ts";
+    const file = "apps/server/src/provider/CodexProvider.ts";
     const source = readRepoFile(file);
     const result = rebrandSource(source, moduleId(file));
     expect(result.code).toMatch(/clientInfo: \{\s*name: "T3 Code",\s*title: "T3 Code",/);

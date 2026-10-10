@@ -14,7 +14,7 @@ import {
   type AuthRelayFlow,
   type PendingAuthorization,
 } from "../auth-relay/AuthRelayFlow.ts";
-import type { AcpSessionRuntime, AcpSessionRuntimeStartResult } from "./acp/AcpSessionRuntime.ts";
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import { parseAntigravityAuthorizationUrl } from "./antigravityAuthSupport.ts";
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
 
@@ -25,19 +25,19 @@ const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
 export type AntigravityAuth = AuthRelayFlow;
 
 export type AntigravityAuthRuntime = Pick<
-  AcpSessionRuntime["Service"],
+  AcpSessionRuntime.AcpSessionRuntime["Service"],
   "initialize" | "start" | "request"
 >;
 
 export interface AntigravityAuthOptions<
-  Runtime extends AntigravityAuthRuntime = AcpSessionRuntime["Service"],
+  Runtime extends AntigravityAuthRuntime = AcpSessionRuntime.AcpSessionRuntime["Service"],
 > {
   readonly instanceId: ProviderInstanceId;
   readonly makeRuntime: (input: {
     readonly onAuthorizationUrl?: (url: string) => Effect.Effect<void, AcpErrors.AcpError>;
   }) => Effect.Effect<Runtime, AcpErrors.AcpError | ProviderSetupError, Scope.Scope>;
   readonly onAuthenticated: (
-    result: AcpSessionRuntimeStartResult,
+    result: AcpSessionRuntime.AcpSessionRuntimeStartResult,
     runtime: Runtime,
   ) => Effect.Effect<void>;
   readonly onSignedOut: Effect.Effect<void>;

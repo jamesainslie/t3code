@@ -18,13 +18,13 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 import {
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
-} from "../provider/providerUsageLimits.ts";
+} from "@t3tools/provider-core/server/usageLimits";
 
 const Runway = Schema.Struct({
   kind: Schema.Literals(["at", "idle", "beyondHorizon", "resetsFirst", "unknown", "disabled"]),

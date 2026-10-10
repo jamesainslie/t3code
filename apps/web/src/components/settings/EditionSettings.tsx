@@ -133,7 +133,7 @@ function EditionCard({
     <button
       aria-pressed={isActive}
       className={cn(
-        "flex cursor-pointer flex-col overflow-hidden rounded-xl border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "flex cursor-pointer flex-col overflow-hidden rounded-xl border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         isActive
           ? "border-transparent bg-accent/30"
           : "border-border/70 bg-card/60 hover:bg-accent/10",

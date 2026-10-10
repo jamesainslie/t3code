@@ -1,7 +1,7 @@
 import { ProjectSyncRecord } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 const decodeRecord = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSyncRecord));
 const encodeRecord = Schema.encodeSync(Schema.fromJsonString(ProjectSyncRecord));

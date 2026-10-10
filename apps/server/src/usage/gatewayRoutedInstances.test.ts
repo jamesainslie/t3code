@@ -14,14 +14,13 @@ describe("gatewayRoutedInstanceIds", () => {
     expect([...gatewayRoutedInstanceIds(DEFAULT_SERVER_SETTINGS)]).toEqual([]);
   });
 
-  it("reads the default Claude instance from its legacy settings", () => {
+  it("reads the default Claude instance from its instance entry", () => {
     const settings = {
       ...DEFAULT_SERVER_SETTINGS,
-      providers: {
-        ...DEFAULT_SERVER_SETTINGS.providers,
-        claudeAgent: {
-          ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
-          gatewayRoutedModels: true,
+      providerInstances: {
+        [ProviderInstanceId.make("claudeAgent")]: {
+          driver: claudeAgent,
+          config: { gatewayRoutedModels: true },
         },
       },
     };

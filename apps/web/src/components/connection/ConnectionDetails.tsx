@@ -6,7 +6,7 @@ import {
 } from "@t3tools/client-runtime/connection";
 import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as Option from "effect/Option";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { environmentCatalog } from "~/connection/catalog";

@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as DocumentComments from "./DocumentComments.ts";
 
 const THREAD_ID = ThreadId.make("thread-1");
@@ -32,7 +32,7 @@ const TestLayer = DocumentComments.layer.pipe(
         ),
     }),
   ),
-  Layer.provideMerge(Layer.fresh(SqlitePersistenceMemory)),
+  Layer.provideMerge(Layer.fresh(SqlitePersistence.layerMemory)),
 );
 
 describe("DocumentComments", () => {

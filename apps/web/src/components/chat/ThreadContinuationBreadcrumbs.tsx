@@ -19,7 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 const WIDE_CLASS = "hidden shrink @3xl/header-actions:flex";
 const COMPACT_CLASS = "@3xl/header-actions:hidden";
 const LINK_CLASS =
-  "inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 const HISTORY_LABEL = "Thread history links";
 // Archived threads leave the client shell, so this is the usual label for an
 // archived source. The route cannot open a thread without a shell, so it stays

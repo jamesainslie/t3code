@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { parseSync } from "vite-plus";
 
 import { brandTextSites, FORK_BRAND_EXCEPTIONS, FORK_BRAND_TOKEN } from "./lib/forkBrand.ts";

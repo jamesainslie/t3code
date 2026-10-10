@@ -28,7 +28,7 @@ import * as Fiber from "effect/Fiber";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 
 /** How often a device login is re-read while the user approves it. */
 const POLL_EVERY = Duration.seconds(3);

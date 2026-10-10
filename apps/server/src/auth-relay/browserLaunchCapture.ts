@@ -1,13 +1,13 @@
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
+import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
 import { AuthRelayError } from "./AuthRelayError.ts";
 
 /**
@@ -67,7 +67,7 @@ export const buildBrowserLaunchCommand = Effect.fn("buildBrowserLaunchCommand")(
   readonly runtimeExecutablePath?: string;
   readonly platform?: NodeJS.Platform;
 }): Effect.fn.Return<BrowserLaunchCommand, AuthRelayError, FileSystem.FileSystem | Path.Path> {
-  const platform = input.platform ?? (yield* HostProcessPlatform);
+  const platform = input.platform ?? (yield* HostProcess.Platform);
   // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
   const runtimeExecutablePath =
     input.runtimeExecutablePath ??

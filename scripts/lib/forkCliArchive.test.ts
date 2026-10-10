@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import {
   forkArchiveExecutableName,
@@ -33,7 +33,7 @@ const run = Effect.fn("test.run")(function* (command: string, args: ReadonlyArra
   return { stdout, stderr, exitCode };
 });
 
-const windowsHost = HostProcessPlatform.defaultValue() === "win32";
+const windowsHost = HostProcess.Platform.defaultValue() === "win32";
 
 it.layer(NodeServices.layer)("writeForkCliExecutableAlias", (it) => {
   it("names the archive executable lathe", () => {

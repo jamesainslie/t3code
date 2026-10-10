@@ -42,25 +42,20 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as CheckpointService from "./CheckpointService.ts";
 import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
-import * as IdAllocator from "./IdAllocator.ts";
-import {
-  ProviderAdapterEventStreamError,
-  ProviderAdapterSessionReleasedError,
-  ProviderAdapterTurnStartError,
-  type ProviderAdapterV2Error,
-  type ProviderAdapterV2Event,
-  type ProviderAdapterV2SessionRuntime,
-} from "./ProviderAdapter.ts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
+import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RunFinalizationService from "./RunFinalizationService.ts";
 
 const driver = ProviderDriverKind.make("codex");
 
-const RunExecutionTestLayer = RunExecutionService.layer.pipe(
+const layerRunExecutionTest = RunExecutionService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
+      McpAppModelContext.layerEmpty,
       Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
       Layer.mock(EventSink.EventSinkV2)({}),
       IdAllocator.layer,
@@ -93,7 +88,7 @@ it.effect("routes shared-runtime events only to their owning root run", () =>
       providerThreadId: ProviderThreadId.make("provider-thread:shared-runtime:second"),
     };
     const firstTurnId = ProviderTurnId.make("provider-turn:shared-runtime:first");
-    const turnEvent: ProviderAdapterV2Event = {
+    const turnEvent: ProviderAdapter.ProviderAdapterV2Event = {
       type: "provider_turn.updated",
       driver,
       threadId: first.threadId,
@@ -109,7 +104,7 @@ it.effect("routes shared-runtime events only to their owning root run", () =>
         completedAt: null,
       },
     };
-    const messageEvent: ProviderAdapterV2Event = {
+    const messageEvent: ProviderAdapter.ProviderAdapterV2Event = {
       type: "message.updated",
       driver,
       message: {
@@ -127,7 +122,7 @@ it.effect("routes shared-runtime events only to their owning root run", () =>
         updatedAt: now,
       },
     };
-    const terminalEvent: ProviderAdapterV2Event = {
+    const terminalEvent: ProviderAdapter.ProviderAdapterV2Event = {
       type: "turn.terminal",
       driver,
       providerThreadId: first.providerThreadId,
@@ -179,7 +174,7 @@ it("leaves a child thread created after the root turn ended to the run that is l
     attemptId: RunAttemptId.make("attempt:late-child"),
     providerThreadId: ProviderThreadId.make("provider-thread:late-child"),
   };
-  const childCreated = (childThreadId: ThreadId): ProviderAdapterV2Event =>
+  const childCreated = (childThreadId: ThreadId): ProviderAdapter.ProviderAdapterV2Event =>
     ({
       type: "app_thread.created",
       driver,
@@ -191,7 +186,7 @@ it("leaves a child thread created after the root turn ended to the run that is l
           rootThreadId: threadId,
         },
       },
-    }) as ProviderAdapterV2Event;
+    }) as ProviderAdapter.ProviderAdapterV2Event;
   const earlyChild = ThreadId.make("thread:late-child:early");
   const lateChild = ThreadId.make("thread:late-child:late");
 
@@ -244,7 +239,7 @@ it("does not route a superseded attempt through a reused provider thread", () =>
     ...oldAttempt,
     attemptId: RunAttemptId.make("attempt:shared-runtime:restart:new"),
   };
-  const oldTurnEvent: ProviderAdapterV2Event = {
+  const oldTurnEvent: ProviderAdapter.ProviderAdapterV2Event = {
     type: "provider_turn.updated",
     driver,
     threadId,
@@ -297,33 +292,33 @@ it("routes only exact same-thread background items inherited from settled runs",
       type: "subagent",
       status: "running",
     },
-  } as Extract<ProviderAdapterV2Event, { type: "turn_item.updated" }>;
+  } as Extract<ProviderAdapter.ProviderAdapterV2Event, { type: "turn_item.updated" }>;
   const unrelatedRunItem = {
     ...inheritedRunning,
     turnItem: {
       ...inheritedRunning.turnItem,
       runId: RunId.make("run:inherited-background-routing:unrelated"),
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
   const unlistedPriorItem = {
     ...inheritedRunning,
     turnItem: {
       ...inheritedRunning.turnItem,
       id: TurnItemId.make("turn-item:inherited-background-routing:unrelated"),
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
   const unrelatedThreadItem = {
     ...inheritedRunning,
     turnItem: { ...inheritedRunning.turnItem, threadId: otherThreadId },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
   const ordinaryItem = {
     ...inheritedRunning,
     turnItem: { ...inheritedRunning.turnItem, type: "reasoning" as const },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
   const inheritedTerminal = {
     ...inheritedRunning,
     turnItem: { ...inheritedRunning.turnItem, status: "completed" as const },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
 
   const [runningAccepted, afterRunning] = RunExecutionService.routeProviderEvent(
     inheritedRunning,
@@ -513,7 +508,7 @@ it("does not carry interrupted or still-running child ownership into later attem
       startedAt: null,
       completedAt: null,
     },
-  } satisfies ProviderAdapterV2Event;
+  } satisfies ProviderAdapter.ProviderAdapterV2Event;
 
   assert.isFalse(RunExecutionService.routeProviderEvent(lateChildNode, identity, state)[0]);
 });
@@ -548,7 +543,7 @@ it.effect("rechecks run ownership immediately before calling the provider", () =
     const session = {
       events: Stream.never,
       startTurn: () => Ref.update(providerStarts, (count) => count + 1),
-    } as unknown as ProviderAdapterV2SessionRuntime;
+    } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime;
 
     yield* runExecution.startRootRun({
       commandId: CommandId.make("command:run-execution-start-guard"),
@@ -589,7 +584,92 @@ it.effect("rechecks run ownership immediately before calling the provider", () =
 
     assert.equal(yield* Ref.get(guardCalls), 2);
     assert.equal(yield* Ref.get(providerStarts), 0);
-  }).pipe(Effect.provide(RunExecutionTestLayer)),
+  }).pipe(Effect.provide(layerRunExecutionTest)),
+);
+
+it.effect("passes the thread's MCP app context to the provider under a safe key", () =>
+  Effect.gen(function* () {
+    const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
+    const started = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+    const threadId = ThreadId.make("thread:run-execution-app-context");
+    const providerInstanceId = ProviderInstanceId.make("codex");
+    const attemptId = RunAttemptId.make("attempt:run-execution-app-context");
+    const session = {
+      events: Stream.never,
+      startTurn: (input: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+        Deferred.succeed(started, input),
+    } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime;
+
+    yield* runExecution.startRootRun({
+      commandId: CommandId.make("command:run-execution-app-context"),
+      appThread: { id: threadId } as OrchestrationV2AppThread,
+      providerSessionId: ProviderSessionId.make("session:run-execution-app-context"),
+      session,
+      run: {
+        id: RunId.make("run:run-execution-app-context"),
+        threadId,
+        ordinal: 1,
+        providerInstanceId,
+      } as OrchestrationV2Run,
+      rootNode: {
+        id: NodeId.make("node:run-execution-app-context"),
+      } as OrchestrationV2ExecutionNode,
+      checkpointScope: {
+        id: CheckpointScopeId.make("checkpoint-scope:run-execution-app-context"),
+      } as OrchestrationV2CheckpointScope,
+      providerThread: {
+        id: ProviderThreadId.make("provider-thread:run-execution-app-context"),
+        driver,
+      } as OrchestrationV2ProviderThread,
+      attempt: { id: attemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+      attemptId,
+      providerTurnOrdinal: 1,
+      message: {
+        messageId: MessageId.make("message:run-execution-app-context"),
+        text: "What is on my list?",
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+      },
+      modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+      runtimePolicy: { runtimeMode: "full-access", interactionMode: "default", cwd: process.cwd() },
+    });
+
+    const input = yield* Deferred.await(started);
+    // Item ids carry colons, and server names are free text; neither reaches the key.
+    assert.deepEqual(input.appContext, [
+      { key: "mcp_app_turn-item_provider_codex_native-item_call-1", text: "2 overdue" },
+    ]);
+  }).pipe(
+    Effect.provide(
+      RunExecutionService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(McpAppModelContext.McpAppModelContext)({
+              forThread: () =>
+                Effect.succeed([
+                  {
+                    itemId: "turn-item:provider:codex:native-item:call-1",
+                    server: "my tools>",
+                    tool: "list",
+                    text: "2 overdue",
+                  },
+                ]),
+            }),
+            Layer.mock(CheckpointService.CheckpointServiceV2)({
+              captureBaseline: () => Effect.void,
+            }),
+            Layer.mock(EventSink.EventSinkV2)({}),
+            IdAllocator.layer,
+            Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
+              ingestNormalized: () => Effect.succeed([]),
+            }),
+            ServerSettings.layerTest(),
+          ),
+        ),
+      ),
+    ),
+  ),
 );
 
 it.effect("fails the run when its ownership check cannot be read before calling the provider", () =>
@@ -601,9 +681,10 @@ it.effect("fails the run when its ownership check cannot be read before calling 
     const runId = RunId.make("run:run-execution-start-guard-read");
     const attemptId = RunAttemptId.make("attempt:run-execution-start-guard-read");
     const providerInstanceId = ProviderInstanceId.make("codex");
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
           Layer.mock(EventSink.EventSinkV2)({
             writeIfRunCurrent: (input) =>
@@ -629,7 +710,7 @@ it.effect("fails the run when its ownership check cannot be read before calling 
         session: {
           events: Stream.never,
           startTurn: () => Ref.update(providerStarts, (count) => count + 1),
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: { id: runId, threadId, ordinal: 1, providerInstanceId } as OrchestrationV2Run,
         rootNode: {
           id: NodeId.make("node:run-execution-start-guard-read"),
@@ -687,7 +768,7 @@ it.effect("fails the run when its ownership check cannot be read before calling 
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     assert.equal(yield* Ref.get(guardCalls), 2);
     assert.equal(yield* Ref.get(providerStarts), 0);
@@ -734,7 +815,7 @@ it.effect(
               Effect.sync(() => {
                 calls.push("compact");
               }),
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: RunId.make(`run:compact-routing:${index}`),
             threadId,
@@ -779,7 +860,7 @@ it.effect(
         calls,
         cases.map((testCase) => testCase.expected),
       );
-    }).pipe(Effect.provide(RunExecutionTestLayer)),
+    }).pipe(Effect.provide(layerRunExecutionTest)),
 );
 
 it.effect("refreshes MCP credential liveness before calling the provider", () =>
@@ -801,7 +882,7 @@ it.effect("refreshes MCP credential liveness before calling the provider", () =>
         session: {
           events: Stream.never,
           startTurn: () => Ref.update(order, (entries) => [...entries, "start-turn"]),
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: RunId.make("run:run-execution-mcp-liveness"),
           threadId,
@@ -850,7 +931,7 @@ it.effect("refreshes MCP credential liveness before calling the provider", () =>
       .pipe(Effect.ensuring(Effect.sync(() => touchActiveMcpThread.mockRestore())));
 
     assert.deepEqual(yield* Ref.get(order), [`touch:${threadId}`, "start-turn"]);
-  }).pipe(Effect.provide(RunExecutionTestLayer)),
+  }).pipe(Effect.provide(layerRunExecutionTest)),
 );
 
 it.effect("starts the provider when checkpoint baseline capture fails", () =>
@@ -874,9 +955,10 @@ it.effect("starts the provider when checkpoint baseline capture fails", () =>
         effects: ReadonlyArray<PendingOrchestrationEffectV2>;
       }>
     >([]);
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({
             captureBaseline: () =>
               Effect.fail(
@@ -912,7 +994,7 @@ it.effect("starts the provider when checkpoint baseline capture fails", () =>
         session: {
           events: Stream.never,
           startTurn: () => Ref.update(providerStarts, (count) => count + 1),
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: runId,
           threadId,
@@ -951,7 +1033,7 @@ it.effect("starts the provider when checkpoint baseline capture fails", () =>
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     assert.equal(yield* Ref.get(providerStarts), 1);
 
@@ -991,9 +1073,10 @@ it.effect.each(["failure", "interruption", "stale-attempt", "start-guard"] as co
       const refreshes = yield* Ref.make(0);
       const guardedWrites = yield* Ref.make(0);
       const writes = yield* Ref.make<ReadonlyArray<ReadonlyArray<OrchestrationV2DomainEvent>>>([]);
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () =>
                 scenario === "start-guard" ? Effect.void : Effect.die("not reached"),
@@ -1048,7 +1131,7 @@ it.effect.each(["failure", "interruption", "stale-attempt", "start-guard"] as co
           session: {
             events: Stream.never,
             startTurn: () => Ref.update(providerStarts, (count) => count + 1),
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: runId,
             threadId,
@@ -1093,7 +1176,7 @@ it.effect.each(["failure", "interruption", "stale-attempt", "start-guard"] as co
             },
           },
         });
-      }).pipe(Effect.provide(testLayer), Effect.exit);
+      }).pipe(Effect.provide(layerTest), Effect.exit);
 
       assert.equal(yield* Ref.get(providerStarts), 0);
       const events = (yield* Ref.get(writes)).flat();
@@ -1161,9 +1244,10 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
     const subagentNodeId = NodeId.make("node:run-execution-late-child:subagent");
     const childMessageIngested = yield* Deferred.make<void>();
     const order = yield* Ref.make<ReadonlyArray<string>>([]);
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
           Layer.mock(EventSink.EventSinkV2)({
             write: () => Effect.succeed([]),
@@ -1198,7 +1282,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
         ),
       ),
     );
-    const events: ReadonlyArray<ProviderAdapterV2Event> = [
+    const events: ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event> = [
       {
         type: "app_thread.created",
         driver,
@@ -1210,7 +1294,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
             rootThreadId: threadId,
           },
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "provider_thread.updated",
         driver,
@@ -1218,7 +1302,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           id: childProviderThreadId,
           appThreadId: childThreadId,
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "subagent.updated",
         driver,
@@ -1228,7 +1312,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           runId,
           status: "running",
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "provider_turn.updated",
         driver,
@@ -1240,7 +1324,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           runAttemptId: null,
           status: "running",
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "turn.terminal",
         driver,
@@ -1263,7 +1347,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           text: "Hello.",
           streaming: false,
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "provider_turn.updated",
         driver,
@@ -1275,7 +1359,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           runAttemptId: null,
           status: "completed",
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
       {
         type: "subagent.updated",
         driver,
@@ -1285,7 +1369,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           runId,
           status: "completed",
         },
-      } as ProviderAdapterV2Event,
+      } as ProviderAdapter.ProviderAdapterV2Event,
     ];
 
     yield* Effect.gen(function* () {
@@ -1297,7 +1381,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
         session: {
           events: Stream.fromIterable(events),
           startTurn: () => Effect.void,
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: runId,
           threadId,
@@ -1338,7 +1422,7 @@ it.effect("keeps ingesting owned child events after the root turn terminalizes",
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     const observed = yield* Deferred.await(childMessageIngested).pipe(
       Effect.timeoutOption("2 seconds"),
@@ -1586,9 +1670,10 @@ it.effect(
         }>
       >([]);
       const ingestionDone = yield* Deferred.make<void>();
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () => Effect.void,
             }),
@@ -1697,7 +1782,7 @@ it.effect(
                     ],
                     updatedAt: now,
                   },
-                } as ProviderAdapterV2Event,
+                } as ProviderAdapter.ProviderAdapterV2Event,
                 rootTerminalEvent(ids, "completed"),
                 {
                   type: "provider_thread.updated",
@@ -1708,12 +1793,12 @@ it.effect(
                     pendingBackgroundTasks: [],
                     updatedAt: now,
                   },
-                } as ProviderAdapterV2Event,
+                } as ProviderAdapter.ProviderAdapterV2Event,
               ]),
               close: Deferred.succeed(ingestionDone, undefined),
             }),
             startTurn: () => Effect.void,
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: ids.runId,
             threadId: ids.threadId,
@@ -1751,7 +1836,7 @@ it.effect(
             },
           },
         });
-      }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.provide(layerTest));
 
       const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
       assert.isTrue(Option.isSome(closed), "event subscription did not release");
@@ -1803,9 +1888,10 @@ it.effect("drops late root provider-thread writes from a superseded attempt", ()
         readonly committed: boolean;
       }>
     >([]);
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
           Layer.mock(EventSink.EventSinkV2)({
             write: () => Effect.succeed([]),
@@ -1908,7 +1994,7 @@ it.effect("drops late root provider-thread writes from a superseded attempt", ()
                   ],
                   updatedAt: now,
                 },
-              } as ProviderAdapterV2Event,
+              } as ProviderAdapter.ProviderAdapterV2Event,
               rootTerminalEvent(ids, "completed"),
               // Late snapshot after a replacement attempt claimed the same
               // run ordinal. Without attempt gating this would clobber it.
@@ -1924,12 +2010,12 @@ it.effect("drops late root provider-thread writes from a superseded attempt", ()
                   ],
                   updatedAt: now,
                 },
-              } as ProviderAdapterV2Event,
+              } as ProviderAdapter.ProviderAdapterV2Event,
             ]),
             close: Deferred.succeed(ingestionDone, undefined),
           }),
           startTurn: () => Effect.void,
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: ids.runId,
           threadId: ids.threadId,
@@ -1967,7 +2053,7 @@ it.effect("drops late root provider-thread writes from a superseded attempt", ()
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
     assert.isTrue(
@@ -2007,9 +2093,10 @@ it.effect(
       // Probe stays true forever; open background items must pin the stream
       // past ownership-loss so late turn_item completions still land.
       const ingestionDone = yield* Deferred.make<void>();
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () => Effect.void,
             }),
@@ -2104,7 +2191,7 @@ it.effect(
                     ],
                     updatedAt: now,
                   },
-                } as ProviderAdapterV2Event,
+                } as ProviderAdapter.ProviderAdapterV2Event,
                 // Late completion still writable (turn_item writes are not
                 // ownership-gated); stream must stay open for it.
                 backgroundTurnItemEvent(ids, "command_execution", "completed", 2),
@@ -2112,7 +2199,7 @@ it.effect(
               close: Deferred.succeed(ingestionDone, undefined),
             }),
             startTurn: () => Effect.void,
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: ids.runId,
             threadId: ids.threadId,
@@ -2150,7 +2237,7 @@ it.effect(
             },
           },
         });
-      }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.provide(layerTest));
 
       const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
       assert.isTrue(
@@ -2178,9 +2265,10 @@ it.effect(
       const observed = yield* Ref.make<ReadonlyArray<string>>([]);
       const ingestionDone = yield* Deferred.make<void>();
       const scopedProbeArgs = yield* Ref.make<ReadonlyArray<ProviderThreadId>>([]);
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () => Effect.void,
             }),
@@ -2277,12 +2365,12 @@ it.effect(
                     ],
                     updatedAt: now,
                   },
-                } as ProviderAdapterV2Event,
+                } as ProviderAdapter.ProviderAdapterV2Event,
               ]),
               close: Deferred.succeed(ingestionDone, undefined),
             }),
             startTurn: () => Effect.void,
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: ids.runId,
             threadId: ids.threadId,
@@ -2320,7 +2408,7 @@ it.effect(
             },
           },
         });
-      }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.provide(layerTest));
 
       const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
       assert.isTrue(Option.isSome(closed), "event subscription did not release");
@@ -2345,11 +2433,12 @@ it.effect(
       );
       const providerInstanceId = ProviderInstanceId.make("codex");
       const written = yield* Ref.make<ReadonlyArray<OrchestrationV2DomainEvent>>([]);
-      const ingested = yield* Ref.make<ReadonlyArray<ProviderAdapterV2Event>>([]);
+      const ingested = yield* Ref.make<ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>>([]);
       const ingestionDone = yield* Deferred.make<void>();
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () => Effect.void,
             }),
@@ -2514,11 +2603,11 @@ it.effect(
                     completedAt: runningChildNode.startedAt,
                   },
                 },
-              ] satisfies ReadonlyArray<ProviderAdapterV2Event>),
+              ] satisfies ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>),
               close: Deferred.succeed(ingestionDone, undefined),
             }),
             startTurn: () => Effect.void,
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: ids.runId,
             threadId: ids.threadId,
@@ -2560,7 +2649,7 @@ it.effect(
             },
           },
         });
-      }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.provide(layerTest));
 
       const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
       assert.isTrue(Option.isSome(closed), "event ingestion fiber did not finish");
@@ -2720,9 +2809,10 @@ it.effect(
       const providerInstanceId = ProviderInstanceId.make("codex");
       const written = yield* Ref.make<ReadonlyArray<OrchestrationV2DomainEvent>>([]);
       const ingestionDone = yield* Deferred.make<void>();
-      const testLayer = RunExecutionService.layer.pipe(
+      const layerTest = RunExecutionService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
             Layer.mock(CheckpointService.CheckpointServiceV2)({
               captureBaseline: () => Effect.void,
             }),
@@ -2844,11 +2934,11 @@ it.effect(
                   },
                 },
                 rootTerminalEvent(ids, "interrupted"),
-              ] satisfies ReadonlyArray<ProviderAdapterV2Event>),
+              ] satisfies ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>),
               close: Deferred.succeed(ingestionDone, undefined),
             }),
             startTurn: () => Effect.void,
-          } as unknown as ProviderAdapterV2SessionRuntime,
+          } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
           run: {
             id: ids.runId,
             threadId: ids.threadId,
@@ -2890,7 +2980,7 @@ it.effect(
             },
           },
         });
-      }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.provide(layerTest));
 
       const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
       assert.isTrue(Option.isSome(closed), "event ingestion fiber did not finish");
@@ -3244,9 +3334,27 @@ it.effect("omits run_interrupt_result when superseded attempt request is already
   }),
 );
 
+it.effect("does not overwrite Stop when ownership changes after the finalization read", () =>
+  Effect.gen(function* () {
+    const { written, observed, submittedEffects, committedEffects } =
+      yield* captureRootRunTermination({
+        key: "stop-wins-finalization-gap",
+        shouldFinalizeRun: () => Effect.succeed(true),
+        rejectTerminalWrite: true,
+      });
+    assert.deepEqual(written, []);
+    assert.deepEqual(observed, []);
+    assert.deepEqual(
+      submittedEffects.map((effect) => effect.request.type),
+      ["checkpoint.capture"],
+    );
+    assert.deepEqual(committedEffects, []);
+  }),
+);
+
 it.effect("emits run_interrupt_result when hard-stop finalizes the active attempt", () =>
   Effect.gen(function* () {
-    const { written, observed } = yield* captureRootRunTermination({
+    const { written, observed, committedEffects } = yield* captureRootRunTermination({
       key: "hard-stop",
       shouldFinalizeRun: () => Effect.succeed(true),
     });
@@ -3255,6 +3363,10 @@ it.effect("emits run_interrupt_result when hard-stop finalizes the active attemp
       ["run_interrupt_result"],
     );
     assert.deepEqual(observed, ["run:interrupted", "pull-requests-refreshed"]);
+    assert.deepEqual(
+      committedEffects.map((effect) => effect.request.type),
+      ["checkpoint.capture"],
+    );
   }),
 );
 
@@ -3321,7 +3433,7 @@ it.effect("refreshes pull requests after a provider stream exits with an error",
       shouldFinalizeRun: () => Effect.succeed(true),
       events: () =>
         Stream.fail(
-          new ProviderAdapterEventStreamError({
+          new ProviderAdapter.ProviderAdapterEventStreamError({
             driver,
             providerSessionId: ProviderSessionId.make("session:exited"),
             cause: "provider process exited",
@@ -3347,7 +3459,7 @@ it.effect("cancels the run when T3 closes its provider session on purpose", () =
         Stream.concat(
           Stream.make(backgroundTurnItemEvent(ids, "dynamic_tool", "running", 1)),
           Stream.fail(
-            new ProviderAdapterSessionReleasedError({
+            new ProviderAdapter.ProviderAdapterSessionReleasedError({
               driver,
               providerSessionId: ProviderSessionId.make("session:released"),
               detail: "Workspace changed.",
@@ -3390,7 +3502,7 @@ it.effect("ends the run's open tool calls when its provider stream fails", () =>
             ),
           ),
           Stream.fail(
-            new ProviderAdapterEventStreamError({
+            new ProviderAdapter.ProviderAdapterEventStreamError({
               driver,
               providerSessionId: ProviderSessionId.make("session:exited"),
               cause: "provider process exited",
@@ -3419,7 +3531,7 @@ it.effect("refreshes pull requests only once when startup failure closes its eve
         Deferred.await(ingestionStarted).pipe(
           Effect.andThen(
             Effect.fail(
-              new ProviderAdapterTurnStartError({
+              new ProviderAdapter.ProviderAdapterTurnStartError({
                 driver,
                 threadId: input.threadId,
                 providerThreadId: input.providerThread.id,
@@ -3452,12 +3564,16 @@ it.effect("keeps completed runs completed when pull request refresh fails", () =
 function captureRootRunTermination(input: {
   readonly key: string;
   readonly shouldFinalizeRun: () => Effect.Effect<boolean, ProjectionStore.ProjectionStoreV2Error>;
+  readonly rejectTerminalWrite?: boolean;
   readonly hasUnpairedRunInterruptRequest?: () => Effect.Effect<boolean, never>;
   readonly seedOpenSubagent?: boolean;
   readonly events?: (
     ids: BackgroundScenarioIds,
-  ) => Stream.Stream<ProviderAdapterV2Event, ProviderAdapterV2Error>;
-  readonly startTurn?: ProviderAdapterV2SessionRuntime["startTurn"];
+  ) => Stream.Stream<
+    ProviderAdapter.ProviderAdapterV2Event,
+    ProviderAdapter.ProviderAdapterV2Error
+  >;
+  readonly startTurn?: ProviderAdapter.ProviderAdapterV2SessionRuntime["startTurn"];
   readonly refreshAfterTurn?: Effect.Effect<void>;
 }) {
   return Effect.gen(function* () {
@@ -3472,6 +3588,8 @@ function captureRootRunTermination(input: {
     });
     const writtenItems = yield* Ref.make<ReadonlyArray<OrchestrationV2TurnItem>>([]);
     const observed = yield* Ref.make<ReadonlyArray<string>>([]);
+    const submittedEffects = yield* Ref.make<ReadonlyArray<PendingOrchestrationEffectV2>>([]);
+    const committedEffects = yield* Ref.make<ReadonlyArray<PendingOrchestrationEffectV2>>([]);
     const ingestionDone = yield* Deferred.make<void>();
     const captureTurnItem = (payload: OrchestrationV2TurnItem) =>
       Ref.update(writtenItems, (current) => [...current, payload]);
@@ -3486,9 +3604,10 @@ function captureRootRunTermination(input: {
           }
         }
       });
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
           Layer.mock(EventSink.EventSinkV2)({
             write: (payload) =>
@@ -3500,11 +3619,24 @@ function captureRootRunTermination(input: {
                 }
                 return [];
               }),
-            writeWithEffects: (payload) => captureFinalEvents(payload.events).pipe(Effect.as([])),
+            writeWithEffects: (payload) =>
+              Effect.gen(function* () {
+                yield* Ref.update(submittedEffects, (current) => [...current, ...payload.effects]);
+                yield* Ref.update(committedEffects, (current) => [...current, ...payload.effects]);
+                yield* captureFinalEvents(payload.events);
+                return [];
+              }),
             writeIfRunCurrent: (payload) =>
-              captureFinalEvents(payload.events).pipe(
-                Effect.as({ committed: true, storedEvents: [] }),
-              ),
+              Effect.gen(function* () {
+                const effects = payload.effects ?? [];
+                yield* Ref.update(submittedEffects, (current) => [...current, ...effects]);
+                if (input.rejectTerminalWrite === true) {
+                  return { committed: false, storedEvents: [] };
+                }
+                yield* Ref.update(committedEffects, (current) => [...current, ...effects]);
+                yield* captureFinalEvents(payload.events);
+                return { committed: true, storedEvents: [] };
+              }),
           }),
           IdAllocator.layer,
           Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
@@ -3556,11 +3688,11 @@ function captureRootRunTermination(input: {
                     ]
                   : []),
                 rootTerminalEvent(ids, "interrupted"),
-              ] satisfies ReadonlyArray<ProviderAdapterV2Event>),
+              ] satisfies ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>),
             close: Deferred.succeed(ingestionDone, undefined),
           }),
           startTurn: input.startTurn ?? (() => Effect.void),
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: ids.runId,
           threadId: ids.threadId,
@@ -3610,10 +3742,15 @@ function captureRootRunTermination(input: {
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     yield* Deferred.await(ingestionDone);
-    return { written: yield* Ref.get(writtenItems), observed: yield* Ref.get(observed) };
+    return {
+      written: yield* Ref.get(writtenItems),
+      observed: yield* Ref.get(observed),
+      submittedEffects: yield* Ref.get(submittedEffects),
+      committedEffects: yield* Ref.get(committedEffects),
+    };
   });
 }
 
@@ -3645,7 +3782,9 @@ function backgroundScenarioIds(key: string): BackgroundScenarioIds {
   };
 }
 
-function childThreadCreatedEvent(ids: BackgroundScenarioIds): ProviderAdapterV2Event {
+function childThreadCreatedEvent(
+  ids: BackgroundScenarioIds,
+): ProviderAdapter.ProviderAdapterV2Event {
   return {
     type: "app_thread.created",
     driver,
@@ -3657,14 +3796,14 @@ function childThreadCreatedEvent(ids: BackgroundScenarioIds): ProviderAdapterV2E
         rootThreadId: ids.threadId,
       },
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
 }
 
 function childBackgroundTurnItemEvent(
   ids: BackgroundScenarioIds,
   status: "running" | "completed" | "idle",
   ordinal: number,
-): ProviderAdapterV2Event {
+): ProviderAdapter.ProviderAdapterV2Event {
   return {
     type: "turn_item.updated",
     driver,
@@ -3677,7 +3816,7 @@ function childBackgroundTurnItemEvent(
       type: "command_execution",
       status,
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
 }
 
 function backgroundTurnItemEvent(
@@ -3686,7 +3825,7 @@ function backgroundTurnItemEvent(
   status: "running" | "completed" | "idle",
   ordinal: number,
   itemId?: TurnItemId,
-): ProviderAdapterV2Event {
+): ProviderAdapter.ProviderAdapterV2Event {
   return {
     type: "turn_item.updated",
     driver,
@@ -3699,7 +3838,7 @@ function backgroundTurnItemEvent(
       type,
       status,
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
 }
 
 function backgroundTurnItemEventForRun(
@@ -3708,7 +3847,7 @@ function backgroundTurnItemEventForRun(
   type: "command_execution" | "dynamic_tool" | "subagent",
   status: "running" | "completed" | "idle",
   ordinal: number,
-): ProviderAdapterV2Event {
+): ProviderAdapter.ProviderAdapterV2Event {
   const event = backgroundTurnItemEvent(ids, type, status, ordinal);
   if (event.type !== "turn_item.updated") {
     return event;
@@ -3719,7 +3858,7 @@ function backgroundTurnItemEventForRun(
 function subagentEvent(
   ids: BackgroundScenarioIds,
   status: "running" | "completed" | "idle",
-): ProviderAdapterV2Event {
+): ProviderAdapter.ProviderAdapterV2Event {
   return {
     type: "subagent.updated",
     driver,
@@ -3729,7 +3868,7 @@ function subagentEvent(
       runId: ids.runId,
       status,
     },
-  } as ProviderAdapterV2Event;
+  } as ProviderAdapter.ProviderAdapterV2Event;
 }
 
 function makeRunOwnedSubagentFixture(input: {
@@ -3906,7 +4045,7 @@ function makeRunOwnedSubagentChildNodeFixture(input: {
 function rootTerminalEvent(
   ids: BackgroundScenarioIds,
   status: "completed" | "interrupted" | "cancelled" | "failed",
-): ProviderAdapterV2Event {
+): ProviderAdapter.ProviderAdapterV2Event {
   const common = {
     type: "turn.terminal" as const,
     driver,
@@ -3932,7 +4071,7 @@ function rootTerminalEvent(
 
 function runBackgroundItemScenario(
   key: string,
-  makeEvents: (ids: BackgroundScenarioIds) => ReadonlyArray<ProviderAdapterV2Event>,
+  makeEvents: (ids: BackgroundScenarioIds) => ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>,
   options?: {
     readonly keepEventStreamOpen?: boolean;
     readonly loadInheritedBackgroundTurnItems?: () => Effect.Effect<
@@ -3946,9 +4085,10 @@ function runBackgroundItemScenario(
     const providerInstanceId = ProviderInstanceId.make("codex");
     const observed = yield* Ref.make<ReadonlyArray<string>>([]);
     const ingestionDone = yield* Deferred.make<void>();
-    const testLayer = RunExecutionService.layer.pipe(
+    const layerTest = RunExecutionService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          McpAppModelContext.layerEmpty,
           Layer.mock(CheckpointService.CheckpointServiceV2)({ captureBaseline: () => Effect.void }),
           Layer.mock(EventSink.EventSinkV2)({
             write: () => Effect.succeed([]),
@@ -4010,7 +4150,7 @@ function runBackgroundItemScenario(
             };
           }),
           startTurn: () => Effect.void,
-        } as unknown as ProviderAdapterV2SessionRuntime,
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
         run: {
           id: ids.runId,
           threadId: ids.threadId,
@@ -4056,7 +4196,7 @@ function runBackgroundItemScenario(
           },
         },
       });
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
 
     const closed = yield* Deferred.await(ingestionDone).pipe(Effect.timeoutOption("2 seconds"));
     assert.isTrue(Option.isSome(closed), "event ingestion fiber did not finish");

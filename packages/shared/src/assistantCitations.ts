@@ -186,6 +186,16 @@ export function parseDocumentCitationHref(href: string): DocumentCitation | null
   }
 }
 
+/** Visible chip text: the comment, else the quoted text, collapsed and capped. */
+export function assistantCitationLabel(citation: Citation): string {
+  const preview = (citation.comment?.trim() || citation.text).replace(/\s+/g, " ");
+  return preview.length > 64 ? `${preview.slice(0, 64)}…` : preview;
+}
+
+export function serializeAssistantCitation(citation: AssistantCitation): string {
+  return `[Assistant quote](${formatAssistantCitationHref(citation)})`;
+}
+
 export function parseCitationHref(href: string): Citation | null {
   return href.startsWith(DOCUMENT_CITATION_HREF_PREFIX)
     ? parseDocumentCitationHref(href)

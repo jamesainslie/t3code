@@ -3,7 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -160,7 +160,7 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
 > {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = input.platform ?? (yield* HostProcessPlatform);
+  const platform = input.platform ?? (yield* HostProcess.Platform);
   // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
   const runtimeExecutablePath =
     input.runtimeExecutablePath ??

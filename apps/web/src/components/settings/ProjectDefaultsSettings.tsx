@@ -25,7 +25,7 @@ import { resolveEnvModeLabel, WORKTREE_SUBMODULES_LABELS } from "../BranchToolba
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
 import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
-import { accountOptions, inheritedAccountLabel } from "./gitHubAccountSettings.logic";
+import { accountOptions, inheritedAccountLabel } from "./gitHubAccountRules.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
@@ -109,6 +109,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const mixedThreadHistory = useScopedSettingsMixed(["agentThreadHistoryAccess"]);
   const mixedRecentTurns = useScopedSettingsMixed(["agentThreadHistoryRecentTurns"]);
   const mixedAutoPull = useScopedSettingsMixed(["defaultAutoPull"]);
+  const mixedAgentCredits = useScopedSettingsMixed(["removeAgentCreditsOnMerge"]);
   const mixedMergeMethod = useScopedSettingsMixed(["pullRequestMergeMethod"]);
   const modelSource = useScopedSettingSource(["defaultModelSelection"]);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
@@ -480,6 +481,32 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 mixed={mixedAutoPull}
                 checked={mixedAutoPull ? false : settings.defaultAutoPull}
                 onCheckedChange={(enabled) => updateSettings({ defaultAutoPull: enabled })}
+              />
+            }
+          />
+          <SettingsRow
+            serverScoped
+            settingKeys={["removeAgentCreditsOnMerge"]}
+            mixed={mixedAgentCredits}
+            {...searchableSetting("remove-agent-credits-on-merge")}
+            description="Remove recognized agent credit lines from GitHub merge and squash messages, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits."
+            resetAction={
+              settings.removeAgentCreditsOnMerge ? (
+                <SettingResetButton
+                  label="agent credit removal"
+                  tooltip="Keep agent credits"
+                  onClick={() => updateSettings({ removeAgentCreditsOnMerge: false })}
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                aria-label="Remove agent credits when merging"
+                mixed={mixedAgentCredits}
+                checked={mixedAgentCredits ? false : settings.removeAgentCreditsOnMerge}
+                onCheckedChange={(enabled) =>
+                  updateSettings({ removeAgentCreditsOnMerge: enabled })
+                }
               />
             }
           />

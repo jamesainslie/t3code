@@ -6,12 +6,11 @@
  */
 import type { ProviderInstanceId, ServerSettings } from "@t3tools/contracts";
 
-import { deriveProviderInstanceConfigMap } from "../provider/Layers/ProviderInstanceRegistryHydration.ts";
+import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
 
 /**
- * Claude instances whose `gatewayRoutedModels` switch is on, whether the
- * instance was added or is the default one still configured through the
- * legacy `providers.claudeAgent` settings.
+ * Claude instances whose `gatewayRoutedModels` switch is on, the default
+ * instance included once its `providerInstances` entry sets it.
  */
 export function gatewayRoutedInstanceIds(
   settings: ServerSettings,
