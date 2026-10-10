@@ -284,6 +284,10 @@ jobs:
       - name: Build JS bundle
         run: vp run build:desktop
 
+      # Every published artifact is packaged from this bundle, so a leak stops the release here.
+      - name: Check JS bundle for upstream branding
+        run: node scripts/brand-leak-check.ts apps/web/dist apps/server/dist apps/desktop/dist-electron
+
       # Two paths under apps/ so the artifact root is apps/; consumers download
       # into `apps` to restore both at their original locations.
       - name: Upload JS bundle
