@@ -232,6 +232,9 @@ jobs:
       - name: Test web
         run: vp run --filter @t3tools/web test
 
+      - name: Install Chromium for server browser integration tests
+        run: node apps/server/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
+
       - name: Test server
         run: vp run --filter t3 test
 
