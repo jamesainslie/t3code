@@ -15,3 +15,10 @@ export const forkWindowsShimPaths = (
   join: (directory: string, name: string) => string,
 ): ReadonlyArray<string> =>
   directories.flatMap((directory) => FORK_WINDOWS_SHIM_NAMES.map((name) => join(directory, name)));
+
+/**
+ * Whether a `/proc/<pid>/cgroup` listing puts the process inside the fork's
+ * systemd user unit, which keeps its pre-rename name `t3code-fork.service`.
+ */
+export const isForkBootServiceCgroup = (cgroup: string): boolean =>
+  cgroup.includes(`/${FORK_IDENTITY.bootService.systemdName}.service`);
