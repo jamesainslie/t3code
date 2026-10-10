@@ -9,15 +9,16 @@ import type {
 } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
+import { FORK_IDENTITY } from "./forkIdentity.ts";
 import { detectSourceControlProviderFromRemoteUrl } from "./sourceControl.ts";
 
-export const WORKTREE_BRANCH_PREFIX = "t3code";
-// Canonical form is `t3code/<8 hex>`. Older mobile builds generated `t3code/<uuid>`
+export const WORKTREE_BRANCH_PREFIX = FORK_IDENTITY.worktreeBranchPrefix;
+// Canonical form is `lathe/<8 hex>` (`t3code/` before the rename). Older mobile builds generated `t3code/<uuid>`
 // via Crypto.randomUUID() (always RFC 4122 v4), so the matcher also accepts exactly
 // that shape — version nibble `4`, variant nibble `[89ab]` — to keep those threads
 // eligible for branch regeneration without loosening beyond what was ever generated.
 const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(
-  `^${WORKTREE_BRANCH_PREFIX}\\/(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$`,
+  `^(?:${WORKTREE_BRANCH_PREFIX}|${FORK_IDENTITY.legacyWorktreeBranchPrefix})\\/(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$`,
 );
 
 /**

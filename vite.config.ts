@@ -63,7 +63,7 @@ export default defineConfig({
     environment: "node",
     exclude: [
       "**/.repos/**",
-      "**/.t3/**",
+      "**/.{t3,lathe,t3f}/**",
       "**/node_modules/**",
       "**/dist/**",
       "**/dist-electron/**",

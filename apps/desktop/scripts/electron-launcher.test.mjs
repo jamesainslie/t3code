@@ -2,7 +2,8 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { assert, describe, it } from "vite-plus/test";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { afterEach, assert, describe, it, vi } from "vite-plus/test";
 
 import {
   makeDevelopmentEnvironmentScript,
@@ -153,5 +154,44 @@ describe("electron development launcher", () => {
     assert.equal(development.generatedIconPath, "/runtime/icon-dev.icns");
     assert.match(production.sourceIconPath, /assets[\\/]lathe[\\/]prod[\\/]black-macos-1024\.png$/);
     assert.equal(production.generatedIconPath, "/runtime/icon-prod.icns");
+  });
+});
+
+// Fork: the launcher mirrors FORK_IDENTITY by hand because it cannot import
+// TypeScript. Upstream's identity would share macOS permission records and URL
+// schemes with upstream's own dev builds.
+describe("electron launcher fork identity", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  const loadLauncher = async (devServerUrl) => {
+    vi.stubEnv("VITE_DEV_SERVER_URL", devServerUrl);
+    vi.resetModules();
+    return import("./electron-launcher.mjs");
+  };
+
+  it("brands development bundles with the fork's dev identity", async () => {
+    const launcher = await loadLauncher("http://127.0.0.1:5733");
+    const values = launcher.resolveMacBundleInfoPlistStrings("Launcher");
+
+    assert.equal(values.CFBundleDisplayName, `${FORK_IDENTITY.productBaseName} (Dev)`);
+    assert.match(
+      values.CFBundleIdentifier,
+      new RegExp(`^${FORK_IDENTITY.desktop.development.appId.replaceAll(".", "\\.")}\\.[a-z0-9]+$`),
+    );
+    assert.include(
+      launcher.makeDevelopmentEnvironmentScript({}),
+      `export T3CODE_DESKTOP_APP_USER_MODEL_ID='${values.CFBundleIdentifier}'`,
+    );
+  });
+
+  it("brands production bundles with the fork's production identity", async () => {
+    const launcher = await loadLauncher("");
+    const values = launcher.resolveMacBundleInfoPlistStrings("Launcher");
+
+    assert.equal(values.CFBundleDisplayName, `${FORK_IDENTITY.productBaseName} (Alpha)`);
+    assert.equal(values.CFBundleIdentifier, FORK_IDENTITY.desktop.production.appId);
   });
 });

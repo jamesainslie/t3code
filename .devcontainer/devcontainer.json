@@ -61,7 +61,7 @@
         // burns CPU and file handles.
         "files.watcherExclude": {
           "**/.repos/**": true,
-          "**/.t3/**": true
+          "**/.{t3,lathe,t3f}/**": true
         },
         "search.exclude": {
           "**/.repos": true

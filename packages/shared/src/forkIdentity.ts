@@ -21,6 +21,14 @@ export const FORK_IDENTITY = Object.freeze({
    * place while `baseDirName` is absent; see `forkBaseDir.ts`.
    */
   legacyBaseDirName: ".t3f",
+  /**
+   * Prefix of temporary worktree branches (`lathe/<8 hex>`). Threads from before
+   * the Lathe rename hold `legacyWorktreeBranchPrefix`, which stays temporary so
+   * their branches are still renamed. Also the default `branchNamePrefix`, which
+   * packages/contracts mirrors as a literal because it cannot import this package.
+   */
+  worktreeBranchPrefix: "lathe",
+  legacyWorktreeBranchPrefix: "t3code",
   /** Repository directory holding the fork's icon sets, in place of upstream's `assets`. */
   assetsDir: "assets/lathe",
   defaultPort: 4773,
@@ -78,7 +86,7 @@ export type ForkDesktopIds = Readonly<
 export const forkDesktopIds = (isDevelopment: boolean): ForkDesktopIds =>
   isDevelopment ? FORK_IDENTITY.desktop.development : FORK_IDENTITY.desktop.production;
 
-/** `@jamesainslie/t3code@<version or dist-tag>` for npm and npx invocations. */
+/** `@jamesainslie/lathe@<version or dist-tag>` for npm and npx invocations. */
 export const forkPackageSpec = (versionOrTag: string): string =>
   `${FORK_IDENTITY.npmPackageName}@${versionOrTag}`;
 
@@ -88,6 +96,6 @@ export const forkDesktopSchemes = [
   FORK_IDENTITY.desktop.development.scheme,
 ] as const;
 
-/** `@jamesainslie/t3code-<platformKey>`: the executable package the launcher installs for one platform. */
+/** `@jamesainslie/lathe-<platformKey>`: the executable package the launcher installs for one platform. */
 export const forkPlatformPackageName = (platformKey: string): string =>
   `${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}${platformKey}`;

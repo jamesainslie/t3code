@@ -20,3 +20,11 @@ export const forkBaseDirName = (parent: string): string =>
   NodeFS.existsSync(NodePath.join(parent, FORK_IDENTITY.legacyBaseDirName))
     ? FORK_IDENTITY.legacyBaseDirName
     : FORK_IDENTITY.baseDirName;
+
+/**
+ * The same rule as a POSIX shell expression for `$HOME`, for scripts that
+ * resolve the base directory on another host (SSH remotes, WSL distros). It
+ * expands to the directory's absolute path. Evaluate it inside double quotes,
+ * and before anything creates `$HOME/.lathe`, or a pre-rename `.t3f` loses.
+ */
+export const FORK_HOME_SHELL = `$(if [ ! -e "$HOME/${FORK_IDENTITY.baseDirName}" ] && [ -d "$HOME/${FORK_IDENTITY.legacyBaseDirName}" ]; then printf %s "$HOME/${FORK_IDENTITY.legacyBaseDirName}"; else printf %s "$HOME/${FORK_IDENTITY.baseDirName}"; fi)`;

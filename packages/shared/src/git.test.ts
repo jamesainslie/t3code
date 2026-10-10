@@ -211,6 +211,26 @@ describe("isTemporaryWorktreeBranch", () => {
     expect(isTemporaryWorktreeBranch("main")).toBe(false);
     expect(isTemporaryWorktreeBranch(`${WORKTREE_BRANCH_PREFIX}/deadbeef-extra`)).toBe(false);
   });
+
+  // Fork: new temporary branches are `lathe/<8 hex>`; threads created before
+  // the Lathe rename still hold `t3code/<8 hex>` and must keep regenerating.
+  it("names new temporary branches under the fork's lathe/ prefix", () => {
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef")).toBe("lathe/deadbeef");
+  });
+
+  it.each(["lathe/deadbeef", "t3code/deadbeef", "t3code/f4ae4e0e-f971-4d48-b4f2-9cf0aa54ab12"])(
+    "keeps treating %s as temporary",
+    (refName) => {
+      expect(isTemporaryWorktreeBranch(refName)).toBe(true);
+    },
+  );
+
+  it.each(["t3f/deadbeef", "feature/deadbeef", "lathe/add-search", "xlathe/deadbeef"])(
+    "does not treat %s as temporary",
+    (refName) => {
+      expect(isTemporaryWorktreeBranch(refName)).toBe(false);
+    },
+  );
 });
 
 describe("applyGitStatusStreamEvent", () => {

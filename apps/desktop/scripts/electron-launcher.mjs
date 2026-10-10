@@ -1,4 +1,4 @@
-// This file mostly exists because we want dev mode to say "T3 Code (Dev)" instead of "electron"
+// This file mostly exists because we want dev mode to say "Lathe (Dev)" instead of "electron"
 
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
@@ -15,11 +15,11 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment ? "Lathe (Dev)" : "Lathe (Alpha)"; // Fork: FORK_IDENTITY.productBaseName
 const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+  ? `us.ainslies.t3code.dev.${devBundleIdSuffix || "local"}` // Fork: FORK_IDENTITY.desktop.development.appId
+  : "us.ainslies.t3code"; // Fork: FORK_IDENTITY.desktop.production.appId
+const APP_PROTOCOL_SCHEMES = isDevelopment ? ["lathe-dev"] : ["lathe"]; // Fork: FORK_IDENTITY.desktop.*.scheme
 const LAUNCHER_VERSION = 19;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
