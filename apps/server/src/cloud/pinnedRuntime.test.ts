@@ -21,7 +21,9 @@ import {
 // and unpacks it with tar. The fake client serves both files; the fake runner
 // stands in for tar and drops the executable where extraction would.
 const version = "1.2.3";
-const archiveName = `t3-${version}-linux-x64.tar.gz`;
+// Fork: releases publish each archive as lathe-* and, for older readers, t3-*.
+const archiveName = `lathe-${version}-linux-x64.tar.gz`;
+const legacyArchiveName = `t3-${version}-linux-x64.tar.gz`;
 const archiveBytes = new TextEncoder().encode("not really a tarball");
 const archiveHex = (bytes: Uint8Array) =>
   Effect.promise(() => crypto.subtle.digest("SHA-256", bytes)).pipe(
@@ -30,7 +32,7 @@ const archiveHex = (bytes: Uint8Array) =>
     ),
   );
 const validChecksums = archiveHex(archiveBytes).pipe(
-  Effect.map((hex) => `${hex}  ${archiveName}\n`),
+  Effect.map((hex) => `${hex}  ${legacyArchiveName}\n${hex}  ${archiveName}\n`),
 );
 const releaseHttpClient = (checksums: string, requests: string[] = []) =>
   HttpClient.make((request) => {
@@ -38,7 +40,13 @@ const releaseHttpClient = (checksums: string, requests: string[] = []) =>
     const body = request.url.endsWith("/SHA256SUMS") ? checksums : archiveBytes;
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body)));
   });
-const extractingRunner = (fs: FileSystem.FileSystem, path: Path.Path, commands: string[] = []) =>
+// Fork: an archive from before the Lathe rename holds only `t3`.
+const extractingRunner = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  commands: string[] = [],
+  executables: ReadonlyArray<string> = ["lathe", "t3"],
+) =>
   ProcessRunner.ProcessRunner.of({
     run: (input) =>
       Effect.gen(function* () {
@@ -48,7 +56,9 @@ const extractingRunner = (fs: FileSystem.FileSystem, path: Path.Path, commands: 
         if (input.command !== "tar" || stagingDir === undefined) {
           return yield* Effect.die(`unexpected command ${input.command}`);
         }
-        yield* fs.writeFileString(path.join(stagingDir, "t3"), "#!/bin/sh\n").pipe(Effect.orDie);
+        for (const name of executables) {
+          yield* fs.writeFileString(path.join(stagingDir, name), "#!/bin/sh\n").pipe(Effect.orDie);
+        }
         return {
           stdout: "",
           stderr: "",
@@ -86,7 +96,7 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
             Effect.orDie,
           ),
       });
-      assert.equal(paths.entryPath, path.join(paths.versionDir, "t3"));
+      assert.equal(paths.entryPath, path.join(paths.versionDir, "lathe"));
       assert.deepEqual(pinnedRuntimeCommand(paths), { command: paths.entryPath, args: [] });
       assert.deepEqual(requests, [
         `https://releases.example/download/v${version}/SHA256SUMS`,
@@ -95,6 +105,68 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       assert.deepEqual(commands, ["tar"]);
       assert.equal(yield* fs.readFileString(paths.sentinelPath), `${version}\n`);
       assert.isFalse(yield* fs.exists(path.join(paths.versionDir, "t3-runtime-archive")));
+    }),
+  );
+
+  // Fork: `update --allow-downgrade` and remote self-update can install a
+  // release published before the Lathe rename, which only has t3-* assets.
+  it.effect("installs a pre-rename release and runs its t3 executable", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pinned-archive-legacy-" });
+      const requests: string[] = [];
+      const validated: string[] = [];
+      const hex = yield* archiveHex(archiveBytes);
+      const paths = yield* ensurePinnedRuntimeInstalled({
+        baseDir,
+        version,
+        fs,
+        path,
+        platform: "linux",
+        arch: "x64",
+        httpClient: releaseHttpClient(`${hex}  ${legacyArchiveName}\n`, requests),
+        releaseBaseUrl: "https://releases.example/download",
+        runner: extractingRunner(fs, path, [], ["t3"]),
+        validate: (staging) =>
+          Effect.sync(() => {
+            validated.push(path.basename(staging.entryPath));
+          }),
+      });
+      assert.equal(paths.entryPath, path.join(paths.versionDir, "t3"));
+      assert.deepEqual(validated, ["t3"]);
+      assert.deepEqual(requests, [
+        `https://releases.example/download/v${version}/SHA256SUMS`,
+        `https://releases.example/download/v${version}/${legacyArchiveName}`,
+      ]);
+      // A later lookup of the same runtime, as the boot service and service
+      // launcher make, still finds the pre-rename executable.
+      assert.deepEqual(pinnedRuntimePaths(path, baseDir, version, "linux"), paths);
+    }),
+  );
+
+  it.effect("prefers lathe in a runtime that holds both names", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pinned-paths-" });
+      const versionDir = pinnedRuntimePaths(path, baseDir, version, "linux").versionDir;
+      // Not unpacked yet: the executable a current archive will provide.
+      assert.equal(
+        pinnedRuntimePaths(path, baseDir, version, "linux").entryPath,
+        path.join(versionDir, "lathe"),
+      );
+      yield* fs.makeDirectory(versionDir, { recursive: true });
+      yield* fs.writeFileString(path.join(versionDir, "t3"), "");
+      assert.equal(
+        pinnedRuntimePaths(path, baseDir, version, "linux").entryPath,
+        path.join(versionDir, "t3"),
+      );
+      yield* fs.writeFileString(path.join(versionDir, "lathe"), "");
+      assert.equal(
+        pinnedRuntimePaths(path, baseDir, version, "linux").entryPath,
+        path.join(versionDir, "lathe"),
+      );
     }),
   );
 

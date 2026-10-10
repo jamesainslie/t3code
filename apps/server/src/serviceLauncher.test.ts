@@ -78,15 +78,17 @@ it("rejects contradictory service state", () => {
 
 // A pinned runtime is an executable at <versionDir>/t3. The tests stand one up
 // as a Node shebang script so the launcher spawns it the way it spawns the
-// real single-executable, IPC channel included.
+// real single-executable, IPC channel included. Fork: runtimes unpacked after
+// the Lathe rename hold it as `lathe`.
 const writeFakeRuntime = (
   fs: FileSystem.FileSystem,
   path: Path.Path,
   versionDir: string,
   childSource: string,
+  executableName = "t3",
 ) =>
   Effect.gen(function* () {
-    const entryPath = path.join(versionDir, "t3");
+    const entryPath = path.join(versionDir, executableName);
     yield* fs.makeDirectory(versionDir, { recursive: true });
     yield* fs.writeFileString(entryPath, `#!${process.execPath}\n${childSource}`);
     yield* fs.chmod(entryPath, 0o755);
@@ -155,6 +157,32 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
       yield* fs.writeFileString(restartPending, "1.0.0\n");
       yield* run();
       assert.isFalse(yield* fs.exists(restartPending));
+    }),
+  );
+
+  // Fork: the launcher refuses a runtime whose executable it cannot find, so
+  // a clean start and stop proves which name it ran. `t3` is a directory here,
+  // which the launcher would reject as a missing runtime.
+  it.effect("runs the lathe executable of a runtime unpacked after the rename", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-lathe-" });
+      const statePath = path.join(root, "runtime", "service-state.json");
+      const versionDir = path.join(root, "runtime", "versions", "1.0.0");
+      yield* writeFakeRuntime(fs, path, versionDir, "setInterval(() => {}, 1_000);\n", "lathe");
+      yield* fs.makeDirectory(path.join(versionDir, "t3"));
+      yield* Effect.promise(() =>
+        writeServiceState(statePath, {
+          protocol: SERVICE_LAUNCHER_PROTOCOL,
+          activeVersion: "1.0.0",
+        }),
+      );
+
+      const launcher = new Launcher(root, yield* Effect.promise(() => readServiceState(statePath)));
+      const running = launcher.run();
+      yield* Effect.promise(() => launcher.stop("SIGTERM"));
+      yield* Effect.promise(() => running);
     }),
   );
 

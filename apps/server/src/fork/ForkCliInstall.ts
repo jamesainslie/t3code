@@ -1,7 +1,22 @@
+// @effect-diagnostics nodeBuiltinImport:off - synchronous so pinnedRuntimePaths can swap one line.
 /**
  * Fork-only names the CLI uses to find what the fork's installers put on disk.
  */
+import * as NodeFS from "node:fs";
+
+import { forkCliExecutablePath } from "@t3tools/shared/forkCliArtifacts";
 import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+
+/**
+ * The executable of the pinned runtime unpacked in `versionDir`: `lathe`, or
+ * `t3` in a runtime unpacked from a release before the Lathe rename. See
+ * packages/shared/src/forkCliArtifacts.ts.
+ */
+export const forkRuntimeExecutablePath = (
+  join: (dir: string, name: string) => string,
+  versionDir: string,
+  platform: NodeJS.Platform,
+): string => forkCliExecutablePath(versionDir, platform, join, NodeFS.existsSync);
 
 /**
  * Windows `.cmd` launchers the fork's install.ps1 writes, newest first: `lathe.cmd`
