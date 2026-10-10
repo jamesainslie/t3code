@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -85,6 +86,13 @@ describe("FORK_IDENTITY", () => {
     expect(FORK_IDENTITY.legacyBaseDirName).not.toBe(UPSTREAM.baseDirName);
     expect(FORK_IDENTITY.defaultPort).toBeGreaterThanOrEqual(1024);
     expect(FORK_IDENTITY.defaultPort).toBeLessThanOrEqual(65535);
+  });
+});
+
+describe("worktreeBranchPrefix", () => {
+  // packages/contracts cannot import this package, so it repeats the value.
+  it("is the default branch name prefix the settings contract declares", () => {
+    expect(DEFAULT_SERVER_SETTINGS.branchNamePrefix).toBe(FORK_IDENTITY.worktreeBranchPrefix);
   });
 });
 

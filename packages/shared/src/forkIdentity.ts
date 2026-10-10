@@ -21,6 +21,14 @@ export const FORK_IDENTITY = Object.freeze({
    * place while `baseDirName` is absent; see `forkBaseDir.ts`.
    */
   legacyBaseDirName: ".t3f",
+  /**
+   * Prefix of temporary worktree branches (`lathe/<8 hex>`). Threads from before
+   * the Lathe rename hold `legacyWorktreeBranchPrefix`, which stays temporary so
+   * their branches are still renamed. Also the default `branchNamePrefix`, which
+   * packages/contracts mirrors as a literal because it cannot import this package.
+   */
+  worktreeBranchPrefix: "lathe",
+  legacyWorktreeBranchPrefix: "t3code",
   /** Repository directory holding the fork's icon sets, in place of upstream's `assets`. */
   assetsDir: "assets/lathe",
   defaultPort: 4773,
