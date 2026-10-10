@@ -20,7 +20,7 @@ import { parseSync } from "vite-plus";
 import { brandTextSites, FORK_BRAND_EXCEPTIONS, FORK_BRAND_TOKEN } from "./lib/forkBrand.ts";
 
 /**
- * The start of upstream's T3 wordmark outline (apps/web/src/components/T3Wordmark.tsx), its T
+ * The start of upstream's T3 wordmark outline (its `T3Wordmark.tsx`, removed in the fork), its T
  * crossbar. Drawn beside a separate "Code" it says "T3 Code" without the string ever appearing.
  */
 export const T3_WORDMARK_OUTLINE = "M33.4509 93V47.56";
