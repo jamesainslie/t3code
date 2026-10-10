@@ -32,6 +32,11 @@ export const FORK_IDENTITY = Object.freeze({
   /** Repository directory holding the fork's icon sets, in place of upstream's `assets`. */
   assetsDir: "assets/lathe",
   defaultPort: 4773,
+  /**
+   * Upstream's usage telemetry posts to T3 Tools' PostHog project. Lathe sends
+   * none unless `T3CODE_TELEMETRY_ENABLED=true` opts in.
+   */
+  telemetryEnabledByDefault: false,
   productBaseName: "Lathe",
   /** The fork's copyright holder, shown in the desktop About window. */
   author: "James Ainslie",
