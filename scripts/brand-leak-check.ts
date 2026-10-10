@@ -19,6 +19,12 @@ import { parseSync } from "vite-plus";
 
 import { brandTextSites, FORK_BRAND_EXCEPTIONS, FORK_BRAND_TOKEN } from "./lib/forkBrand.ts";
 
+/**
+ * The start of upstream's T3 wordmark outline (its `T3Wordmark.tsx`, removed in the fork), its T
+ * crossbar. Drawn beside a separate "Code" it says "T3 Code" without the string ever appearing.
+ */
+export const T3_WORDMARK_OUTLINE = "M33.4509 93V47.56";
+
 export interface BrandLeakAllowlist {
   /** Text that may surround the token, matched at the token's position. */
   readonly phrases: ReadonlyArray<string>;
@@ -50,7 +56,7 @@ export class BrandLeaksFoundError extends Schema.TaggedError<BrandLeaksFoundErro
     const lines = this.leaks.map(
       (leak) => `  ${leak.file}:${leak.line}:${leak.column}  ${leak.context}`,
     );
-    return `Built output still says "${FORK_BRAND_TOKEN}" in ${this.leaks.length} place(s):\n${lines.join("\n")}\nRebrand it, or add an exception with a reason in scripts/lib/forkBrand.ts.`;
+    return `Built output still says "${FORK_BRAND_TOKEN}" or draws the T3 wordmark in ${this.leaks.length} place(s):\n${lines.join("\n")}\nRebrand it, or add an exception with a reason in scripts/lib/forkBrand.ts.`;
   }
 }
 
@@ -166,6 +172,19 @@ export const findBrandLeaksInText = (
   return leaks;
 };
 
+/** Every T3 wordmark outline in `text`. Nothing excuses one: the fork draws the Lathe caret. */
+export const findWordmarkLeaksInText = (text: string): Array<Omit<BrandLeak, "file">> => {
+  const leaks: Array<Omit<BrandLeak, "file">> = [];
+  for (
+    let at = text.indexOf(T3_WORDMARK_OUTLINE);
+    at !== -1;
+    at = text.indexOf(T3_WORDMARK_OUTLINE, at + 1)
+  ) {
+    leaks.push({ ...lineAndColumn(text, at), context: "T3 wordmark outline" });
+  }
+  return leaks;
+};
+
 const isBinary = (bytes: Uint8Array) => bytes.subarray(0, 8192).includes(0);
 
 /**
@@ -212,7 +231,10 @@ export const checkBrandLeaks = Effect.fn("checkBrandLeaks")(function* (
       if (isBinary(bytes)) continue;
       scanned += 1;
       const text = withoutComments(decoder.decode(bytes), file);
-      for (const leak of findBrandLeaksInText(text, allowlist)) {
+      for (const leak of [
+        ...findBrandLeaksInText(text, allowlist),
+        ...findWordmarkLeaksInText(text),
+      ]) {
         leaks.push({ file, ...leak });
       }
     }

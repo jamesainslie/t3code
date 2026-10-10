@@ -61,6 +61,24 @@ describe("edition art", () => {
     for (const reference of referencedIds(svg)) expect(ids).toContain(reference);
   });
 
+  it("paints the Lathe strip only in the brand palette", () => {
+    // BRAND.md: violet-black grounds, steel and white, and ember as the one accent.
+    const brand = new Set([
+      "#231C2B",
+      "#16111C",
+      "#FF5A1F",
+      "#AEB4BE",
+      "#F4F4F6",
+      "#FFFFFF",
+      "#000",
+    ]);
+    const colours = [
+      ...editionStripSvg("lathe").matchAll(/(?:fill|stop-color|stroke)="(#[0-9A-Fa-f]+)"/g),
+    ];
+    expect(colours.length).toBeGreaterThan(0);
+    for (const [, colour] of colours) expect(brand).toContain(colour!.toUpperCase());
+  });
+
   it("writes boot log glyphs from the pixel font", () => {
     // The amber strip's first line starts with B, whose top row is two lit cells.
     expect(editionStripSvg("amber")).toContain('d="M0 0h1.7v0.85h-1.7z');

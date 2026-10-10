@@ -113,7 +113,7 @@ import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, RootContent } from "mdast";
-import { T3Wordmark } from "../T3Wordmark";
+import { LatheMark as T3Wordmark } from "../LatheWordmark";
 import { ThreadContextChip } from "../ThreadContextChip";
 import {
   AlarmClockIcon,

@@ -43,6 +43,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -2719,9 +2720,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
 ) {
+  const year = DateTime.getPartUtc(yield* DateTime.now, "year");
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
+    // Without it electron-builder derives "Copyright © <year> <author>" for the About window.
+    copyright: `Copyright © ${year} ${FORK_IDENTITY.author}. ${FORK_IDENTITY.productBaseName} is a fork of T3 Code by T3 Tools.`,
     artifactName: FORK_IDENTITY.artifactBaseName + "-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -3759,7 +3763,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     description: "T3 Code desktop build",
     // Required by the .deb control file.
     homepage: FORK_IDENTITY.repositoryUrl,
-    author: "T3 Tools",
+    author: FORK_IDENTITY.author,
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,

@@ -594,6 +594,23 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ]);
   });
 
+  it.effect("credits the fork in the copyright the About window shows", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      // electron-builder otherwise derives "Copyright © <year> T3 Tools" from the author.
+      assert.match(String(config.copyright), /^Copyright © \d{4} James Ainslie\. /);
+      assert.include(String(config.copyright), "a fork of T3 Code by T3 Tools");
+    }),
+  );
+
   it.effect("applies platform-specific packaging to the build config", () =>
     Effect.gen(function* () {
       const mac = yield* createBuildConfig(

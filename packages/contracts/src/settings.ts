@@ -204,9 +204,10 @@ export const Edition = Schema.Literals([
   "trace",
   "amber",
   "glitch",
+  "lathe",
 ]);
 export type Edition = typeof Edition.Type;
-export const DEFAULT_EDITION: Edition = "tartan";
+export const DEFAULT_EDITION: Edition = "lathe";
 
 export const SnapShotKeyChord = KeybindingShortcut.check(
   Schema.makeFilter(

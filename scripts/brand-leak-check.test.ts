@@ -92,6 +92,18 @@ describe("checkBrandLeaks", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("fails on the T3 wordmark drawn as an outline", () =>
+    Effect.gen(function* () {
+      // The sidebar once drew "T3" as this path beside a separate "Code", which no string search sees.
+      const root = yield* writeFixture({
+        "client/assets/index.js": `const w=e("path",{d:"M33.4509 93V47.56H15.5309V37H64.3309V47.56Z"});`,
+      });
+      const { message } = yield* checkBrandLeaks([root]).pipe(Effect.flip);
+      assert.include(message, "client/assets/index.js:1:");
+      assert.include(message, "T3 wordmark");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("passes output that holds only allowlisted strings", () =>
     Effect.gen(function* () {
       const root = yield* writeFixture({

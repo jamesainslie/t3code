@@ -7,6 +7,7 @@
 // fonts.
 
 export const GENERATED_EDITIONS = [
+  "lathe",
   "rain",
   "horizon",
   "night-city",
@@ -466,6 +467,28 @@ function glitchArt({ ids, width, withScrim, seed = 19 }: ArtOptions) {
   return `<defs><pattern id="${dither}" width="16" height="16" patternUnits="userSpaceOnUse">${noise}</pattern></defs><rect width="${width}" height="96" fill="#0c0d12"/>${blocks}<rect width="${width}" height="96" fill="url(#${dither})"/>${bands}${lines}${withScrim ? scrim(ids, "#000", width) : ""}`;
 }
 
+/**
+ * Turned steel in the brand's AlTiN violet-black: the fine feed marks a finishing pass leaves
+ * and the sheen of a round bar. No tool and no ember, so the wordmark's caret is the one mark.
+ */
+function latheArt({ ids, width, withScrim, seed = 29 }: ArtOptions) {
+  const random = rng(seed);
+  const shade = ids("cy");
+  // Feed marks: the near-vertical grooves each turn leaves, in three strengths.
+  const strengths = [0.03, 0.05, 0.07];
+  const feed = strengths.map(() => "");
+  for (let x = 0.5; x < width + 1; x += 1.3) {
+    feed[Math.floor(random() * strengths.length)] += `M${n(x)} 0l-0.7 96`;
+  }
+  const marks = feed
+    .map(
+      (d, index) =>
+        `<path d="${d}" stroke="#AEB4BE" stroke-width="0.3" opacity="${strengths[index]}"/>`,
+    )
+    .join("");
+  return `<defs><linearGradient id="${shade}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#000" stop-opacity="0.5"/><stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.05"/><stop offset="0.38" stop-color="#FFFFFF" stop-opacity="0.09"/><stop offset="0.52" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></linearGradient></defs><rect width="${width}" height="96" fill="#231C2B"/>${marks}<rect width="${width}" height="96" fill="url(#${shade})"/>${withScrim ? scrim(ids, "#000", width) : ""}`;
+}
+
 type TartanColour = "blue" | "black" | "red" | "white";
 
 /** The Ainslie tartan, as `ForkTartanArt.tsx` weaves it, with fixed pigments for icons. */
@@ -512,6 +535,7 @@ function tartanArt({ ids, width }: ArtOptions) {
 }
 
 const STRIP_ART: Record<GeneratedEdition, (options: ArtOptions) => string> = {
+  lathe: latheArt,
   rain: rainArt,
   horizon: horizonArt,
   "night-city": nightCityArt,
@@ -559,6 +583,9 @@ function iconBody(edition: IconEdition, ids: Ids) {
   const glowFilter = (deviation: number) =>
     `<filter id="${glow}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${deviation}"/></filter>`;
   switch (edition) {
+    case "lathe":
+      // The prod tile: violet-black turned steel under a steel caret.
+      return `${iconWindow(latheArt, ids, 20)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#AEB4BE"/>${tip(mark)}`;
     case "tartan":
       return `${iconWindow(tartanArt, ids, 30)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#fff"/>${tip(mark)}`;
     case "rain":
