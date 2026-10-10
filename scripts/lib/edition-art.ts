@@ -477,11 +477,12 @@ function latheArt({
   width,
   withScrim,
   seed = 29,
-  tool = 300,
+  tool = 170,
 }: ArtOptions & { tool?: number }) {
   const random = rng(seed);
   const [shade, heat] = [ids("cy"), ids("ht")];
-  const tipY = 78;
+  // High enough to clear the sidebar header fade, which starts about two thirds down.
+  const tipY = 50;
   // Feed marks: the near-vertical grooves each turn leaves, fine where finished, coarse beyond.
   const feed = (from: number, to: number, step: number, strengths: readonly number[]) => {
     const paths = strengths.map(() => "");
@@ -502,7 +503,7 @@ function latheArt({
   for (let i = 0; i <= 900; i++) {
     const t = i / 900;
     const cx = tool + 3 + t * 130;
-    const cy = tipY - 3 - 50 * t ** 0.75;
+    const cy = tipY - 3 - 38 * t ** 0.75;
     const r = 1.2 + 6 * Math.sin(Math.PI * t * 0.95);
     const angle = t * 16 * 2 * Math.PI;
     points.push(`${n(cx + r * 0.85 * Math.cos(angle))} ${n(cy + r * Math.sin(angle))}`);
@@ -518,7 +519,7 @@ function latheArt({
     const y = tipY + Math.sin(angle) * start;
     sparks += `<path d="M${n(x)} ${n(y)}l${n(Math.cos(angle) * length)} ${n(Math.sin(angle) * length)}" opacity="${n(0.9 * (1 - start / 16))}"/>`;
   }
-  const scale = 0.75;
+  const scale = 0.6;
   const caret = `translate(${n(tool - 71.15 * scale)} ${n(tipY - 101.3 * scale)}) scale(${scale})`;
   return `<defs><linearGradient id="${shade}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#000" stop-opacity="0.5"/><stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.05"/><stop offset="0.38" stop-color="#FFFFFF" stop-opacity="0.09"/><stop offset="0.52" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></linearGradient><radialGradient id="${heat}" cx="${tool}" cy="${tipY}" r="18" gradientUnits="userSpaceOnUse"><stop stop-color="#FF5A1F" stop-opacity="0.45"/><stop offset="1" stop-color="#FF5A1F" stop-opacity="0"/></radialGradient></defs><rect width="${tool}" height="96" fill="#231C2B"/><rect x="${tool}" width="${width - tool}" height="96" fill="#16111C"/>${finished}${rough}<rect width="${width}" height="96" fill="url(#${shade})"/><path d="M${tool} 0V96" stroke="#000" stroke-width="1.2" opacity="0.35"/><path d="M${tool + 0.8} 0V96" stroke="#FFFFFF" stroke-width="0.3" opacity="0.08"/><rect x="${tool - 18}" y="${tipY - 18}" width="36" height="36" fill="url(#${heat})"/>${chip}<g stroke="#FF5A1F" stroke-width="0.45" stroke-linecap="round">${sparks}</g><path d="${LATHE_CARET_PATH}" transform="${caret}" fill="#AEB4BE"/><path d="${LATHE_CARET_TIP_PATH}" transform="${caret}" fill="#FF5A1F"/>${withScrim ? scrim(ids, "#000", width) : ""}`;
 }
@@ -619,7 +620,7 @@ function iconBody(edition: IconEdition, ids: Ids) {
   switch (edition) {
     case "lathe":
       // The prod tile: violet-black, a steel caret. The window is finished stock, left of the tool.
-      return `${iconWindow(latheArt, ids, 100)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#AEB4BE"/>${tip(mark)}`;
+      return `${iconWindow(latheArt, ids, 20)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#AEB4BE"/>${tip(mark)}`;
     case "tartan":
       return `${iconWindow(tartanArt, ids, 30)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#fff"/>${tip(mark)}`;
     case "rain":

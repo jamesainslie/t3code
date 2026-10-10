@@ -47,7 +47,7 @@ export const EDITIONS: ReadonlyArray<EditionDefinition> = [
     description: "Turned steel, one ember",
     accent: "#FF5A1F",
     iconUrl: latheIcon,
-    strip: { url: latheStrip, buttonOffset: 252, ground: "#16111C" },
+    strip: { url: latheStrip, buttonOffset: 122, ground: "#16111C" },
   },
   {
     id: "tartan",
