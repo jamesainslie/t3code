@@ -33,6 +33,8 @@ export const FORK_IDENTITY = Object.freeze({
   assetsDir: "assets/lathe",
   defaultPort: 4773,
   productBaseName: "Lathe",
+  /** The fork's copyright holder, shown in the desktop About window. */
+  author: "James Ainslie",
   artifactBaseName: "Lathe",
   appId: "us.ainslies.t3code",
   repositoryUrl: "https://github.com/jamesainslie/t3code",

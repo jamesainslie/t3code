@@ -44,7 +44,7 @@ import { ProviderInstanceIcon, providerTextColorClassName } from "./ProviderInst
 import { cn } from "~/lib/utils";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { Button, InlineButton } from "../ui/button";
-import { T3Wordmark } from "../T3Wordmark";
+import { LatheMark as T3Wordmark } from "../LatheWordmark";
 
 const LIFECYCLE_TYPES = new Set<OrchestrationV2TurnItem["type"]>([
   "run_interrupt_request",

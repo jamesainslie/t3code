@@ -646,9 +646,9 @@ describe("ClientSettings environment identification", () => {
 });
 
 describe("ClientSettings edition", () => {
-  it("defaults to the tartan with the app icon and accent following it", () => {
+  it("defaults to the Lathe edition with the app icon and accent following it", () => {
     const decoded = decodeClientSettings({});
-    expect(decoded.edition).toBe("tartan");
+    expect(decoded.edition).toBe("lathe");
     expect(decoded.editionAppIcon).toBe(true);
     expect(decoded.editionAccent).toBe(true);
   });
@@ -666,7 +666,7 @@ describe("ClientSettings edition", () => {
   it("falls back to the default for an edition this build does not know", () => {
     // A newer build may have saved an edition this one lacks; the rest of the file must still load.
     const decoded = decodeClientSettings({ edition: "retired-edition", syntaxTheme: "graphite" });
-    expect(decoded.edition).toBe("tartan");
+    expect(decoded.edition).toBe("lathe");
     expect(decoded.syntaxTheme).toBe("graphite");
   });
 

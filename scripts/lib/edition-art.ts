@@ -7,6 +7,7 @@
 // fonts.
 
 export const GENERATED_EDITIONS = [
+  "lathe",
   "rain",
   "horizon",
   "night-city",
@@ -466,6 +467,62 @@ function glitchArt({ ids, width, withScrim, seed = 19 }: ArtOptions) {
   return `<defs><pattern id="${dither}" width="16" height="16" patternUnits="userSpaceOnUse">${noise}</pattern></defs><rect width="${width}" height="96" fill="#0c0d12"/>${blocks}<rect width="${width}" height="96" fill="url(#${dither})"/>${bands}${lines}${withScrim ? scrim(ids, "#000", width) : ""}`;
 }
 
+/**
+ * A bar being turned, in the brand's AlTiN violet-black. Finished stock runs left of the tool,
+ * rough stock right of it; the caret cuts at `tool` and a chip curls off its ember tip. Ember
+ * stays at the tip, the hot end of the chip and a few sparks (BRAND.md: a few percent at most).
+ */
+function latheArt({
+  ids,
+  width,
+  withScrim,
+  seed = 29,
+  tool = 300,
+}: ArtOptions & { tool?: number }) {
+  const random = rng(seed);
+  const [shade, heat] = [ids("cy"), ids("ht")];
+  const tipY = 78;
+  // Feed marks: the near-vertical grooves each turn leaves, fine where finished, coarse beyond.
+  const feed = (from: number, to: number, step: number, strengths: readonly number[]) => {
+    const paths = strengths.map(() => "");
+    for (let x = from; x < to; x += step) {
+      paths[Math.floor(random() * strengths.length)] += `M${n(x)} 0l-0.7 96`;
+    }
+    return paths
+      .map(
+        (d, index) =>
+          `<path d="${d}" stroke="#AEB4BE" stroke-width="0.3" opacity="${strengths[index]}"/>`,
+      )
+      .join("");
+  };
+  const finished = feed(0.5, tool, 1.3, [0.03, 0.05, 0.07]);
+  const rough = feed(tool + 1, width + 1, 2.6, [0.05, 0.09, 0.14]);
+  // The chip: a helix that leaves the tip hot and cools as it curls up and away.
+  const points: string[] = [];
+  for (let i = 0; i <= 900; i++) {
+    const t = i / 900;
+    const cx = tool + 3 + t * 130;
+    const cy = tipY - 3 - 50 * t ** 0.75;
+    const r = 1.2 + 6 * Math.sin(Math.PI * t * 0.95);
+    const angle = t * 16 * 2 * Math.PI;
+    points.push(`${n(cx + r * 0.85 * Math.cos(angle))} ${n(cy + r * Math.sin(angle))}`);
+  }
+  const hot = points.slice(0, 70);
+  const chip = `<path d="M${points.join("L")}" fill="none" stroke="#AEB4BE" stroke-width="0.6" opacity="0.5"/><path d="M${points.join("L")}" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.3" transform="translate(-0.3 -0.3)"/><path d="M${hot.join("L")}" fill="none" stroke="#FF5A1F" stroke-width="0.9" opacity="0.85"/>`;
+  let sparks = "";
+  for (let i = 0; i < 26; i++) {
+    const angle = -0.15 + random() * 1.05;
+    const start = 1 + random() * 14;
+    const length = 1.5 + random() * 6;
+    const x = tool + Math.cos(angle) * start;
+    const y = tipY + Math.sin(angle) * start;
+    sparks += `<path d="M${n(x)} ${n(y)}l${n(Math.cos(angle) * length)} ${n(Math.sin(angle) * length)}" opacity="${n(0.9 * (1 - start / 16))}"/>`;
+  }
+  const scale = 0.75;
+  const caret = `translate(${n(tool - 71.15 * scale)} ${n(tipY - 101.3 * scale)}) scale(${scale})`;
+  return `<defs><linearGradient id="${shade}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#000" stop-opacity="0.5"/><stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.05"/><stop offset="0.38" stop-color="#FFFFFF" stop-opacity="0.09"/><stop offset="0.52" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></linearGradient><radialGradient id="${heat}" cx="${tool}" cy="${tipY}" r="18" gradientUnits="userSpaceOnUse"><stop stop-color="#FF5A1F" stop-opacity="0.45"/><stop offset="1" stop-color="#FF5A1F" stop-opacity="0"/></radialGradient></defs><rect width="${tool}" height="96" fill="#231C2B"/><rect x="${tool}" width="${width - tool}" height="96" fill="#16111C"/>${finished}${rough}<rect width="${width}" height="96" fill="url(#${shade})"/><path d="M${tool} 0V96" stroke="#000" stroke-width="1.2" opacity="0.35"/><path d="M${tool + 0.8} 0V96" stroke="#FFFFFF" stroke-width="0.3" opacity="0.08"/><rect x="${tool - 18}" y="${tipY - 18}" width="36" height="36" fill="url(#${heat})"/>${chip}<g stroke="#FF5A1F" stroke-width="0.45" stroke-linecap="round">${sparks}</g><path d="${LATHE_CARET_PATH}" transform="${caret}" fill="#AEB4BE"/><path d="${LATHE_CARET_TIP_PATH}" transform="${caret}" fill="#FF5A1F"/>${withScrim ? scrim(ids, "#000", width) : ""}`;
+}
+
 type TartanColour = "blue" | "black" | "red" | "white";
 
 /** The Ainslie tartan, as `ForkTartanArt.tsx` weaves it, with fixed pigments for icons. */
@@ -512,6 +569,7 @@ function tartanArt({ ids, width }: ArtOptions) {
 }
 
 const STRIP_ART: Record<GeneratedEdition, (options: ArtOptions) => string> = {
+  lathe: latheArt,
   rain: rainArt,
   horizon: horizonArt,
   "night-city": nightCityArt,
@@ -559,6 +617,9 @@ function iconBody(edition: IconEdition, ids: Ids) {
   const glowFilter = (deviation: number) =>
     `<filter id="${glow}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${deviation}"/></filter>`;
   switch (edition) {
+    case "lathe":
+      // The prod tile: violet-black, a steel caret. The window is finished stock, left of the tool.
+      return `${iconWindow(latheArt, ids, 100)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#AEB4BE"/>${tip(mark)}`;
     case "tartan":
       return `${iconWindow(tartanArt, ids, 30)}<path d="${LATHE_CARET_PATH}" transform="${mark}" fill="#fff"/>${tip(mark)}`;
     case "rain":

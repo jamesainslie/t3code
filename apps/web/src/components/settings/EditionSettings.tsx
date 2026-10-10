@@ -5,7 +5,7 @@ import { EDITIONS, getEdition, type EditionDefinition } from "../../editions/edi
 import { previewEdition } from "../../editions/editionPreview";
 import { cn } from "../../lib/utils";
 import { StageBackdropArt } from "../SidebarStageBackdrop";
-import { T3Wordmark } from "../T3Wordmark";
+import { LatheWordmark } from "../LatheWordmark";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
@@ -151,9 +151,8 @@ function EditionCard({
         <span className="absolute inset-x-0 top-0 block h-16">
           <StageBackdropArt edition={edition.id} />
         </span>
-        <span className="absolute inset-y-0 left-2.5 flex items-center gap-1 text-xs font-medium text-white">
-          <T3Wordmark className="h-[1cap] w-auto shrink-0" />
-          <span className="text-white/70">Code</span>
+        <span className="absolute inset-y-0 left-2.5 flex items-center text-xs text-white">
+          <LatheWordmark caretClassName="text-white/70" className="h-[2cap] w-auto shrink-0" />
         </span>
       </span>
       <span className="flex min-w-0 items-center gap-2 px-2.5 py-2">

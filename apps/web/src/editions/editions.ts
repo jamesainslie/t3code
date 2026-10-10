@@ -7,6 +7,8 @@ import glitchIcon from "../assets/editions/glitch-icon.png?url";
 import glitchStrip from "../assets/editions/glitch.svg?url";
 import horizonIcon from "../assets/editions/horizon-icon.png?url";
 import horizonStrip from "../assets/editions/horizon.svg?url";
+import latheIcon from "../assets/editions/lathe-icon.png?url";
+import latheStrip from "../assets/editions/lathe.svg?url";
 import nightCityIcon from "../assets/editions/night-city-icon.png?url";
 import nightCityStrip from "../assets/editions/night-city.svg?url";
 import rainIcon from "../assets/editions/rain-icon.png?url";
@@ -39,6 +41,14 @@ export interface EditionDefinition {
 
 /** Every edition in gallery order. The contract owns the ids; this owns their presentation. */
 export const EDITIONS: ReadonlyArray<EditionDefinition> = [
+  {
+    id: "lathe",
+    label: "Lathe",
+    description: "Turned steel, one ember",
+    accent: "#FF5A1F",
+    iconUrl: latheIcon,
+    strip: { url: latheStrip, buttonOffset: 252, ground: "#16111C" },
+  },
   {
     id: "tartan",
     label: "Ainslie Tartan",
