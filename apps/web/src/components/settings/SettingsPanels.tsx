@@ -3676,7 +3676,7 @@ export function GeneralSettingsPanel() {
         <AboutEditionRow />
         <SettingsRow
           {...searchableSetting("privacy-policy")}
-          description="How we handle your data, including the anonymous usage data T3 Code collects."
+          description="Lathe sends no usage data. T3 Connect and the other T3 services it uses follow T3 Tools' privacy policy."
           control={
             <Button
               render={<a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer noopener" />}
