@@ -2,6 +2,9 @@
 import { describe, it } from "@effect/vitest";
 import { afterAll, expect } from "vite-plus/test";
 import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -11,7 +14,9 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
+import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
 import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import {
   buildWslRuntimeInstallScript,
@@ -189,7 +194,7 @@ describe("WSL runtime cache", () => {
       "b".repeat(64),
     );
 
-    expect(script).toContain(`runtime_parent="$HOME/${FORK_IDENTITY.baseDirName}/wsl-runtime"`);
+    expect(script).toContain(`runtime_parent="${FORK_HOME_SHELL}/wsl-runtime"`);
     expect(script).toContain('  [ -f "$ready_marker" ] &&');
     expect(script).toContain('    runtime_entry_runs "$runtime_root" &&');
     expect(script).toContain("if runtime_is_ready; then");
@@ -410,12 +415,44 @@ describe("WSL runtime cache", () => {
     // Readiness is a presence check, so a tree whose pty.node is present but
     // unloadable stays ready forever unless the probe can revoke the marker.
     expect(script).toContain(
-      `rm -f "$HOME/${FORK_IDENTITY.baseDirName}/wsl-runtime/1.2.3_x64/.t3code-wsl-runtime-ready"`,
+      `rm -f "${FORK_HOME_SHELL}/wsl-runtime/1.2.3_x64/.t3code-wsl-runtime-ready"`,
     );
     // Deleting the tree here would pull it out from under any backend still
     // running from it; the next install moves an unready root aside instead.
     expect(script).not.toContain("rm -rf");
   });
+
+  // Fork: needs only a POSIX sh, so it runs where the flock-dependent executed
+  // suite below skips.
+  it.skipIf(HostProcessPlatform.defaultValue() === "win32")(
+    "invalidates the cache of an install still using the pre-rename base directory",
+    () => {
+      const home = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "wsl-legacy-home-"));
+      try {
+        const marker = NodePath.join(
+          home,
+          FORK_IDENTITY.legacyBaseDirName,
+          "wsl-runtime",
+          "1.2.3_x64",
+          ".t3code-wsl-runtime-ready",
+        );
+        NodeFS.mkdirSync(NodePath.dirname(marker), { recursive: true });
+        NodeFS.writeFileSync(marker, "ready");
+
+        const result = NodeChildProcess.spawnSync("sh", ["-s"], {
+          input: buildWslRuntimeInvalidateScript("1.2.3/x64"),
+          encoding: "utf8",
+          env: { ...process.env, HOME: home },
+        });
+
+        expect(result.status, result.stderr).toBe(0);
+        expect(NodeFS.existsSync(marker)).toBe(false);
+        expect(NodeFS.existsSync(NodePath.join(home, FORK_IDENTITY.baseDirName))).toBe(false);
+      } finally {
+        NodeFS.rmSync(home, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 // Reading the generated script proves what it says, not what it does. A cache
@@ -555,6 +592,24 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
 
     expect(warm.status, warm.stderr).toBe(0);
     expect(parseWslRuntimeRoot(warm.stdout)).toBe(fixture.runtimeRoot);
+  });
+
+  // Fork: creating `~/.lathe/wsl-runtime` before the WSL server resolves its
+  // base directory would flip an install still using `~/.t3f` to an empty one.
+  it("installs into a pre-rename base directory that is still in use", () => {
+    const fixture = createFixture();
+    const legacyHome = `${fixture.work}/home/${FORK_IDENTITY.legacyBaseDirName}`;
+    expect(runShell(`set -eu\nmkdir -p ${sh(legacyHome)}`).status).toBe(0);
+
+    const result = fixture.install();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(parseWslRuntimeRoot(result.stdout)).toBe(
+      `${legacyHome}/wsl-runtime/${fixture.runtimeId}`,
+    );
+    expect(
+      runShell(`test ! -e ${sh(`${fixture.work}/home/${FORK_IDENTITY.baseDirName}`)}`).status,
+    ).toBe(0);
   });
 
   it("reinstalls a cache whose executable was truncated", () => {
