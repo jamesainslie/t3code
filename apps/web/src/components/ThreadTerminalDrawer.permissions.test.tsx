@@ -41,6 +41,9 @@ vi.mock("../state/server", () => ({
 }));
 vi.mock("../state/preview", () => ({ previewEnvironment: { open: "open" } }));
 vi.mock("../state/terminal", () => ({ terminalEnvironment: { resize: "resize", write: "write" } }));
+vi.mock("./terminal/TerminalBrowserLaunchBanner", () => ({
+  TerminalBrowserLaunchBanner: () => null,
+}));
 vi.mock("../state/use-atom-command", () => ({
   useAtomCommand: (command: string) => (command === "resize" ? state.resize : state.otherCommand),
 }));
