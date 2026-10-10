@@ -18,6 +18,7 @@ import {
   isExternalCliDependency,
   shouldBundleCliDependency,
 } from "../../scripts/lib/cli-external-packages.ts";
+import { forkBrandPlugin } from "../../scripts/lib/forkBrand.ts";
 
 export { shouldBundleCliDependency };
 
@@ -82,6 +83,7 @@ export default mergeConfig(
       outDir: packExecutable ? "dist-exe" : "dist",
       sourcemap: !packExecutable,
       clean: true,
+      plugins: [forkBrandPlugin()],
       ...(packExecutable
         ? {
             exe: {
