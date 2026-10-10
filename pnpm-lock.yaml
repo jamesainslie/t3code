@@ -1099,18 +1099,9 @@ importers:
       effect:
         specifier: 4.0.2
         version: 4.0.2(patch_hash=ec61ee307eaec3e17f757e0e6a16296ea4b7a8c3188df0c6ec5e66301fd78688)
-      mdast-util-directive:
-        specifier: ^3.1.0
-        version: 3.1.0
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
-      micromark-extension-directive:
-        specifier: ^4.0.0
-        version: 4.0.0
-      micromark-util-character:
-        specifier: ^2.1.1
-        version: 2.1.1
       remark-parse:
         specifier: ^11.0.0
         version: 11.0.0
