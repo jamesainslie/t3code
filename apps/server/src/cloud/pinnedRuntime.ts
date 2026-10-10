@@ -11,13 +11,14 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 
 import {
   CLI_RELEASE_CHECKSUMS_FILE,
-  cliArchiveFileName,
   cliArchivePlatformKey,
   cliArchiveTarCommand,
   cliReleaseDownloadBaseUrl,
   parseChecksums,
 } from "@t3tools/shared/cliRelease";
+import { forkCliArchiveFileNameIn } from "@t3tools/shared/forkCliArtifacts";
 
+import { forkRuntimeExecutablePath } from "../fork/ForkCliInstall.ts";
 import * as ProcessRunner from "../processRunner.ts";
 
 /**
@@ -65,7 +66,7 @@ export function pinnedRuntimePaths(
   const versionDir = path.join(pinnedRuntimeVersionsDir(path, baseDir), version);
   return {
     versionDir,
-    entryPath: path.join(versionDir, platform === "win32" ? "t3.exe" : "t3"),
+    entryPath: forkRuntimeExecutablePath(path.join, versionDir, platform),
     sentinelPath: path.join(versionDir, ".install-complete"),
   };
 }
@@ -194,7 +195,6 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
   }
   const httpClient = input.httpClient;
   const baseUrl = cliReleaseDownloadBaseUrl(input.version, input.releaseBaseUrl);
-  const fileName = cliArchiveFileName(input.version, platformKey);
 
   input.onProgress?.({ stage: "download", received: 0, total: undefined });
   const checksums = parseChecksums(
@@ -206,6 +206,7 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
       ),
     ),
   );
+  const fileName = forkCliArchiveFileNameIn(checksums, input.version, platformKey);
   const expected = checksums.get(fileName);
   if (expected === undefined) {
     return yield* new PinnedRuntimeInstallError({
@@ -321,14 +322,18 @@ const installPinnedRuntime = Effect.fn("cloud.pinned_runtime.ensure_installed")(
           }),
       ),
     );
-  const stagingPaths: PinnedRuntimePaths = {
-    versionDir: stagingDir,
-    entryPath: input.path.join(stagingDir, input.path.relative(paths.versionDir, paths.entryPath)),
-    sentinelPath: input.path.join(stagingDir, ".install-complete"),
-  };
+  // Fork: the executable's name depends on the release (`t3` before the Lathe
+  // rename), so paths are resolved again once an archive is unpacked.
+  const currentPaths = () =>
+    pinnedRuntimePaths(input.path, input.baseDir, input.version, input.platform);
 
   return yield* Effect.gen(function* () {
     yield* installFromArchive(input, stagingDir);
+    const stagingPaths: PinnedRuntimePaths = {
+      versionDir: stagingDir,
+      entryPath: forkRuntimeExecutablePath(input.path.join, stagingDir, input.platform),
+      sentinelPath: input.path.join(stagingDir, ".install-complete"),
+    };
 
     input.onProgress?.({ stage: "validate" });
     yield* input.validate(stagingPaths);
@@ -344,7 +349,7 @@ const installPinnedRuntime = Effect.fn("cloud.pinned_runtime.ensure_installed")(
       Effect.as(true),
       Effect.catch((cause) =>
         Effect.all([
-          fs.exists(paths.entryPath),
+          fs.exists(currentPaths().entryPath),
           fs.readFileString(paths.sentinelPath).pipe(Effect.option),
         ]).pipe(
           Effect.mapError(
@@ -369,8 +374,8 @@ const installPinnedRuntime = Effect.fn("cloud.pinned_runtime.ensure_installed")(
         ),
       ),
     );
-    if (!published) yield* input.validate(paths);
-    return paths;
+    if (!published) yield* input.validate(currentPaths());
+    return currentPaths();
   }).pipe(
     Effect.ensuring(fs.remove(stagingDir, { recursive: true, force: true }).pipe(Effect.ignore)),
   );

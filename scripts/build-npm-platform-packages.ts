@@ -11,7 +11,7 @@
  *
  *   @t3code/t3-<platformKey>/      archive contents flattened + package.json
  *   @t3code/t3-<platformKey>.tgz   the same tree as an npm tarball
- *   t3/                             launcher: package.json, bin/t3.js, README.md
+ *   t3/                             launcher: package.json, bin/lathe.js, README.md
  *   t3.tgz                          the launcher as an npm tarball
  *
  * The tarballs are what gets published. `npm publish <dir>` always drops
@@ -20,6 +20,12 @@
  * not), whereas `npm publish <tarball>` uploads the bytes as given.
  */
 import { FORK_IDENTITY, forkPlatformPackageName } from "@t3tools/shared/forkIdentity";
+import {
+  forkCliArchiveFileNames,
+  forkCliExecutableJs,
+  forkCliExecutableNames,
+  FORK_NPM_LAUNCHER_SCRIPTS,
+} from "@t3tools/shared/forkCliArtifacts";
 import { legacyCliLauncherScript } from "@t3tools/shared/legacyCliLauncher";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -32,11 +38,7 @@ import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import {
-  CLI_ARCHIVE_PLATFORM_KEYS,
-  cliArchiveFileName,
-  type CliArchivePlatformKey,
-} from "@t3tools/shared/cliRelease";
+import { CLI_ARCHIVE_PLATFORM_KEYS, type CliArchivePlatformKey } from "@t3tools/shared/cliRelease";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import { isCommandAvailable } from "@t3tools/shared/shell";
@@ -113,7 +115,14 @@ export function npmPlatformPackageManifest(
     repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
     os: [os],
     cpu: [cpu],
-    files: ["t3", "t3.exe", "*.mjs", "client", "resource-monitor", "node_modules"],
+    files: [
+      FORK_IDENTITY.cliBin,
+      `${FORK_IDENTITY.cliBin}.exe`,
+      "*.mjs",
+      "client",
+      "resource-monitor",
+      "node_modules",
+    ],
     preferUnplugged: true,
     dependencies: Object.fromEntries(bundleDependencies.map((name) => [name, bundled[name]])),
     bundleDependencies,
@@ -169,7 +178,7 @@ export function npmPlatformPackageReadme(platformKey: CliArchivePlatformKey): st
   ].join("\n");
 }
 
-/** package.json for the `t3` launcher. No engines: bin/t3.js is trivial CJS. */
+/** package.json for the `t3` launcher. No engines: bin/lathe.js is trivial CJS. */
 export function npmLauncherPackageManifest(
   version: string,
   platformKeys: ReadonlyArray<CliArchivePlatformKey>,
@@ -180,7 +189,7 @@ export function npmLauncherPackageManifest(
     description: "T3 Code CLI. Installs the self-contained executable for this platform.",
     license: serverPackageJson.license,
     repository: { ...serverPackageJson.repository, url: FORK_IDENTITY.repositoryUrl },
-    bin: { [FORK_IDENTITY.cliBin]: "./bin/t3.js" },
+    bin: { [FORK_IDENTITY.cliBin]: `./${FORK_NPM_LAUNCHER_SCRIPTS[0]}` },
     files: ["bin", "dist"],
     optionalDependencies: Object.fromEntries(
       platformKeys.map((key) => [npmPlatformPackageName(key), version]),
@@ -219,7 +228,7 @@ try {
   process.exit(1);
 }
 
-const executable = join(packageDir, process.platform === "win32" ? "t3.exe" : "t3");
+const executable = ${forkCliExecutableJs("packageDir")};
 let result = spawnSync(executable, process.argv.slice(2), { stdio: "inherit" });
 if (result.error) {
   // A host whose libc cannot load the executable (NixOS, musl) reports ENOENT
@@ -343,8 +352,14 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
   const extractDir = path.join(scratch, "extract");
   yield* fs.makeDirectory(extractDir);
   const contentDir = yield* extractArchive(input.archive, extractDir);
-  const executableName = input.key.startsWith("win32") ? "t3.exe" : "t3";
+  const [executableName, ...aliases] = forkCliExecutableNames(input.key.split("-")[0] ?? "") as [
+    string,
+    ...string[],
+  ];
   const executable = path.join(contentDir, executableName);
+  // The registry refuses the archive's `t3` symlink, and every reader of a
+  // platform package is the launcher published beside it, so only `lathe` ships.
+  for (const alias of aliases) yield* fs.remove(path.join(contentDir, alias), { force: true });
   if (!(yield* fs.exists(executable))) {
     return yield* new NpmPackagesArchiveLayoutError({
       archive: path.basename(input.archive),
@@ -352,7 +367,7 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
     });
   }
   // The tarball carries the on-disk mode, so the bit must be set before packing.
-  if (executableName === "t3") {
+  if (!input.key.startsWith("win32")) {
     yield* fs.chmod(executable, 0o755);
   }
   const bundled = yield* readBundledPackages(path.join(contentDir, "node_modules"));
@@ -376,7 +391,7 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
   return output;
 }, Effect.scoped);
 
-/** Writes the launcher package (package.json, bin/t3.js, README) and its tarball. */
+/** Writes the launcher package (package.json, bin/lathe.js, README) and its tarball. */
 const stageLauncherPackage = Effect.fn("stageLauncherPackage")(function* (input: {
   readonly outputDir: string;
   readonly version: string;
@@ -394,7 +409,7 @@ const stageLauncherPackage = Effect.fn("stageLauncherPackage")(function* (input:
     path.join(stageDir, "package.json"),
     `${yield* encodePackageJson(npmLauncherPackageManifest(input.version, input.platformKeys))}\n`,
   );
-  const launcherScript = path.join(stageDir, "bin/t3.js");
+  const launcherScript = path.join(stageDir, FORK_NPM_LAUNCHER_SCRIPTS[0] as string);
   yield* fs.writeFileString(launcherScript, NPM_LAUNCHER_SCRIPT);
   yield* fs.chmod(launcherScript, 0o755);
   // Older service updaters and launchers run this exact path with Node.
@@ -425,10 +440,10 @@ export const buildNpmPlatformPackages = Effect.fn("buildNpmPlatformPackages")(fu
 
   const present = yield* fs.readDirectory(input.archivesDir);
   const archives = CLI_ARCHIVE_PLATFORM_KEYS.flatMap((key) => {
-    const fileName = cliArchiveFileName(input.version, key);
-    return present.includes(fileName)
-      ? [{ key, archive: path.join(input.archivesDir, fileName) }]
-      : [];
+    const fileName = forkCliArchiveFileNames(input.version, key).find((name) =>
+      present.includes(name),
+    );
+    return fileName !== undefined ? [{ key, archive: path.join(input.archivesDir, fileName) }] : [];
   });
   const missing = CLI_ARCHIVE_PLATFORM_KEYS.filter(
     (key) => !archives.some((entry) => entry.key === key),

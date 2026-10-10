@@ -10,6 +10,7 @@ import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
+import { forkCliExecutablePath } from "@t3tools/shared/forkCliArtifacts";
 import type {
   PendingServiceUpdate,
   ServiceLauncherChildMessage,
@@ -48,11 +49,15 @@ interface ManagedChild {
 // built-ins only.
 const runtimePaths = (baseDir: string, version: string) => {
   const versionDir = NodePath.join(baseDir, "runtime", "versions", version);
-  // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher has no Effect runtime.
-  const executableName = process.platform === "win32" ? "t3.exe" : "t3";
   return {
     versionDir,
-    entryPath: NodePath.join(versionDir, executableName),
+    entryPath: forkCliExecutablePath(
+      versionDir,
+      // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher has no Effect runtime.
+      process.platform,
+      NodePath.join,
+      NodeFS.existsSync,
+    ),
     sentinelPath: NodePath.join(versionDir, ".install-complete"),
   };
 };

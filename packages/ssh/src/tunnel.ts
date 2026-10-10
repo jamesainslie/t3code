@@ -8,6 +8,7 @@ import {
 } from "@t3tools/shared/httpReadiness";
 import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
 import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
+import { forkCliArchiveShell, forkCliExecutableShell } from "@t3tools/shared/forkCliArtifacts";
 import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as NetService from "@t3tools/shared/Net";
@@ -457,7 +458,7 @@ fi
 T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
 T3_RUNTIME_DIR="${FORK_HOME_SHELL}/runtime/versions/$T3_ARCHIVE_VERSION"
 t3_runtime_ready() {
-  [ -x "$T3_RUNTIME_DIR/t3" ] && [ "$(cat "$T3_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$T3_ARCHIVE_VERSION" ]
+  [ -x "${forkCliExecutableShell("$T3_RUNTIME_DIR")}" ] && [ "$(cat "$T3_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$T3_ARCHIVE_VERSION" ]
 }
 if ! t3_runtime_ready; then
   mkdir -p "${FORK_HOME_SHELL}/runtime/versions"
@@ -510,16 +511,16 @@ if ! t3_runtime_ready; then
     x86_64 | amd64) T3_ARCH="x64" ;;
     *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
   esac
-  T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"
   T3_STAGING="$(mktemp -d "${FORK_HOME_SHELL}/runtime/versions/.staging-XXXXXX")"
   trap 'rm -rf "$T3_STAGING" "$T3_LOCK"' EXIT
   t3_fetch() {
     if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
     elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
-    else printf 'Remote host needs curl or wget to download %s.\\n' "$T3_ARCHIVE" >&2; exit 1
+    else printf 'Remote host needs curl or wget to download %s.\\n' "$1" >&2; exit 1
     fi
   }
   t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
+  T3_ARCHIVE="${forkCliArchiveShell("$T3_STAGING/SHA256SUMS", "$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz")}"
   t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
   T3_EXPECTED="$(grep " \\*\\{0,1\\}$T3_ARCHIVE$" "$T3_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -536,7 +537,7 @@ if ! t3_runtime_ready; then
   # would exec a broken install instead of retrying. The executable is
   # preferred; a host whose libc cannot load it (NixOS, musl) runs the same
   # bundle with its own Node instead, recorded so later launches skip the probe.
-  if "$T3_STAGING/t3" --version >/dev/null 2>&1; then
+  if "${forkCliExecutableShell("$T3_STAGING")}" --version >/dev/null 2>&1; then
     printf 'exe\\n' > "$T3_STAGING/.launcher"
   elif ensure_remote_node_path && node "$T3_STAGING/bin.mjs" --version >/dev/null 2>&1; then
     printf 'node\\n' > "$T3_STAGING/.launcher"
@@ -555,7 +556,7 @@ if [ "$(cat "$T3_RUNTIME_DIR/.launcher" 2>/dev/null)" = "node" ]; then
   ensure_remote_node_path || true
   exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"
 fi
-exec "$T3_RUNTIME_DIR/t3" "$@"
+exec "${forkCliExecutableShell("$T3_RUNTIME_DIR")}" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu

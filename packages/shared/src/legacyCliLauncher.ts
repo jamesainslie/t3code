@@ -10,17 +10,18 @@
  * Remove it once no supported release predates the executable (after the
  * first stable release that ships it).
  */
+import { forkCliExecutableJs } from "./forkCliArtifacts.ts";
 import { FORK_IDENTITY } from "./forkIdentity.ts";
 
 export function legacyCliLauncherScript(): string {
   return `import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const executableName = process.platform === "win32" ? "t3.exe" : "t3";
 const packageDir = dirname(require.resolve("${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}" + process.platform + "-" + process.arch + "/package.json"));
-const executable = join(packageDir, executableName);
+const executable = ${forkCliExecutableJs("packageDir")};
 const args = process.argv.slice(2);
 const ipc = process.send !== undefined;
 const stdio = ipc ? ["inherit", "inherit", "inherit", "ipc"] : "inherit";

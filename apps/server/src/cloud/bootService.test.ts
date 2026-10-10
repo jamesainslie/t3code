@@ -507,7 +507,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         protocol: SERVICE_LAUNCHER_PROTOCOL,
         activeVersion: "1.2.4",
       });
-      expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+      // Fork: units written after the Lathe rename run the `lathe` executable.
+      expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/lathe");
       expect(
         commands.filter(
           (command) => command.startsWith("systemctl ") && !command.includes("show-environment"),

@@ -207,7 +207,7 @@ describe("WSL runtime cache", () => {
     expect(script).toContain('mv -T "$runtime_root" "$runtime_stale"');
     expect(script).toContain('mktemp -d "$runtime_parent/.1.2.3-x64.tmp.XXXXXX"');
     // The release archive wraps everything in one `t3-<version>-linux-x64/`
-    // directory; stripping it puts the executable at `$runtime_root/t3`.
+    // directory; stripping it puts the executable at `$runtime_root/lathe`.
     expect(script).toContain(
       "tar -xzf '/mnt/c/Program Files/T3 Code/wsl-runtime.tar.gz' -C \"$runtime_tmp\" --strip-components=1",
     );
@@ -291,7 +291,9 @@ describe("WSL runtime cache", () => {
     // The same proof the SSH runner and CLI installers use: executable, and
     // `--version` exits 0. That is what decides arch and loadability, so no
     // separate native probe is needed.
-    expect(script).toContain('  [ -x "$1/t3" ] && "$1/t3" --version >/dev/null 2>&1');
+    // Fork: the bundled archive comes from the same release, so it always
+    // holds `lathe`.
+    expect(script).toContain('  [ -x "$1/lathe" ] && "$1/lathe" --version >/dev/null 2>&1');
 
     // Readiness gates the short-circuit, so a cache whose executable broke
     // reinstalls from the archive instead of being reused forever.
@@ -313,7 +315,7 @@ describe("WSL runtime cache", () => {
       "b".repeat(64),
     );
 
-    expect(script).toContain(`  sha256sum "$1/t3" 2>/dev/null | cut -d ' ' -f 1`);
+    expect(script).toContain(`  sha256sum "$1/lathe" 2>/dev/null | cut -d ' ' -f 1`);
     expect(script).toContain(
       '    [ "$recorded_entry_digest" = "$(runtime_server_entry_digest "$runtime_root")" ]',
     );
@@ -476,8 +478,9 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         // holds the executable and its native addons.
         'stage="$work/stage/t3-0.0.0-linux-x64"',
         'mkdir -p "$stage/node_modules/node-pty/build/Release" "$work/home"',
-        `printf '%s' ${sh(SERVER_ENTRY_SOURCE)} > "$stage/t3"`,
-        'chmod +x "$stage/t3"',
+        `printf '%s' ${sh(SERVER_ENTRY_SOURCE)} > "$stage/lathe"`,
+        'chmod +x "$stage/lathe"',
+        'ln -s lathe "$stage/t3"',
         `printf '%s' 'pty-native-payload' > "$stage/node_modules/node-pty/build/Release/pty.node"`,
         `tar -czf "$work/wsl-runtime.tar.gz" -C "$work/stage" t3-0.0.0-linux-x64`,
         `printf 'work:%s\\n' "$work"`,
@@ -506,7 +509,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
       runtimeId,
       runtimeParent: `${work}/home/${FORK_IDENTITY.baseDirName}/wsl-runtime`,
       runtimeRoot: `${work}/home/${FORK_IDENTITY.baseDirName}/wsl-runtime/${runtimeId}`,
-      serverEntry: `${work}/home/${FORK_IDENTITY.baseDirName}/wsl-runtime/${runtimeId}/t3`,
+      serverEntry: `${work}/home/${FORK_IDENTITY.baseDirName}/wsl-runtime/${runtimeId}/lathe`,
       installScript,
       install: (archive?: string, sha?: string) => runShell(installScript(archive, sha)),
     };

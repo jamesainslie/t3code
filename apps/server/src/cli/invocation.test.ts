@@ -173,7 +173,12 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
     }),
   );
 
-  it.effect("proves the native executable belongs to the npm launcher", () =>
+  // Fork: installs from before the Lathe rename hold bin/t3.js and a `t3`
+  // executable; current ones bin/lathe.js and `lathe`.
+  it.effect.each([
+    ["bin/lathe.js", "lathe"],
+    ["bin/t3.js", "t3"],
+  ] as const)("proves the native executable belongs to the npm launcher (%s)", ([script, name]) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -181,9 +186,9 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       // Fork: the fork's launcher, platform package, and bin names.
       const prefix = path.join(root, "tools");
       const packageRoot = path.join(prefix, "lib/node_modules", FORK_IDENTITY.npmPackageName);
-      const launcher = path.join(packageRoot, "bin/t3.js");
+      const launcher = path.join(packageRoot, script);
       const platformPackage = forkPlatformPackageName("linux-x64");
-      const entry = path.join(packageRoot, "node_modules", platformPackage, "t3");
+      const entry = path.join(packageRoot, "node_modules", platformPackage, name);
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
       yield* fs.makeDirectory(path.join(prefix, "bin"));
@@ -191,7 +196,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.writeFileString(entry, "");
       yield* fs.writeFileString(
         path.join(packageRoot, "package.json"),
-        `{"name":"${FORK_IDENTITY.npmPackageName}","version":"0.0.45","bin":{"${FORK_IDENTITY.cliBin}":"./bin/t3.js"},"optionalDependencies":{"${platformPackage}":"0.0.45"}}`,
+        `{"name":"${FORK_IDENTITY.npmPackageName}","version":"0.0.45","bin":{"${FORK_IDENTITY.cliBin}":"./${script}"},"optionalDependencies":{"${platformPackage}":"0.0.45"}}`,
       );
       yield* fs.symlink(launcher, path.join(prefix, "bin", FORK_IDENTITY.cliBin));
       const resolve = resolveServerInstallation.pipe(

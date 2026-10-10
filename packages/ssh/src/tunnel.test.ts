@@ -109,9 +109,16 @@ describe("ssh tunnel scripts", () => {
       "T3_RELEASE_BASE_URL='https://github.com/jamesainslie/t3code/releases/download'",
     );
     assert.include(script, '/runtime/versions/$T3_ARCHIVE_VERSION"');
-    assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
+    // Fork: the archive name comes from SHA256SUMS (lathe-* first, t3-* for
+    // releases before the rename) and the executable from the runtime
+    // directory (lathe first, t3 for runtimes an older runner unpacked).
+    assert.include(script, "for name in lathe t3; do");
+    assert.include(script, "-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz");
     assert.include(script, "SHA256SUMS");
-    assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
+    assert.include(
+      script,
+      'exec "$(if [ -x "$T3_RUNTIME_DIR/lathe" ]; then printf %s "$T3_RUNTIME_DIR/lathe"; else printf %s "$T3_RUNTIME_DIR/t3"; fi)" "$@"',
+    );
     // A host that cannot load the executable records the fallback once and
     // runs the bundled script with its own Node on every later launch.
     assert.include(script, 'node "$T3_STAGING/bin.mjs" --version');
@@ -122,7 +129,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, `*"$T3_ARCHIVE_VERSION"*) exec lathe "$@" ;;`);
     assert.isBelow(script.indexOf('exec lathe "$@"'), script.indexOf("T3_RUNTIME_DIR="));
     assert.isBelow(
-      script.indexOf('"$T3_STAGING/t3" --version'),
+      script.indexOf('else printf %s "$T3_STAGING/t3"; fi)" --version'),
       script.indexOf('node "$T3_STAGING/bin.mjs" --version'),
     );
     assert.notInclude(script, "npx");
@@ -145,7 +152,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(script, "-mmin");
     assert.equal(script.split("if ! t3_runtime_ready; then").length - 1, 2);
     assert.isBelow(
-      script.indexOf('"$T3_STAGING/t3" --version'),
+      script.indexOf('else printf %s "$T3_STAGING/t3"; fi)" --version'),
       script.indexOf('> "$T3_STAGING/.install-complete"'),
     );
     // Node discovery runs in the node-script branch, and in the archive path
@@ -904,21 +911,40 @@ describe("archive runner script", () => {
 
   // A fake "executable" that answers --version, packed the way the release
   // workflow packs the real archive: one top-level directory named after the
-  // stem, checksummed in SHA256SUMS.
-  const makeMirror = Effect.fn("makeMirror")(function* (root: string) {
+  // stem, checksummed in SHA256SUMS. Fork: a current release publishes the
+  // archive as lathe-* and t3-*, holding `lathe` and `t3`; a release from
+  // before the rename has only t3-* holding only `t3`. Each executable names
+  // itself, and the current release's t3-* asset is a pre-rename archive, so
+  // the output shows which asset and which executable the runner chose.
+  const makeMirror = Effect.fn("makeMirror")(function* (
+    root: string,
+    release_: "current" | "pre-rename" = "current",
+  ) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const platform = hostPlatform === "darwin" ? "darwin" : "linux";
     const arch = hostArch === "arm64" ? "arm64" : "x64";
     const stem = `t3-${archiveVersion}-${platform}-${arch}`;
     const stage = `${root}/stage/${stem}`;
+    const legacyStage = `${root}/legacy-stage/${stem}`;
     const release = `${root}/mirror/v${archiveVersion}`;
+    const asset = `${platform}-${arch}.tar.gz`;
+    const sums = (names: ReadonlyArray<string>) =>
+      `cd '${release}' && (sha256sum ${names.join(" ")} 2>/dev/null || shasum -a 256 ${names.join(" ")}) > SHA256SUMS`;
     const script = [
       "set -eu",
-      `mkdir -p '${stage}' '${release}'`,
-      `printf '#!/bin/sh\\necho t3 v${archiveVersion}\\n' > '${stage}/t3'`,
-      `chmod +x '${stage}/t3'`,
-      `tar -czf '${release}/${stem}.tar.gz' -C '${root}/stage' '${stem}'`,
-      `cd '${release}' && (sha256sum '${stem}.tar.gz' 2>/dev/null || shasum -a 256 '${stem}.tar.gz') > SHA256SUMS`,
+      `mkdir -p '${stage}' '${legacyStage}' '${release}'`,
+      `printf '#!/bin/sh\\necho t3 v${archiveVersion}\\n' > '${legacyStage}/t3'`,
+      `chmod +x '${legacyStage}/t3'`,
+      `tar -czf '${release}/t3-${archiveVersion}-${asset}' -C '${root}/legacy-stage' '${stem}'`,
+      ...(release_ === "current"
+        ? [
+            `printf '#!/bin/sh\\necho lathe v${archiveVersion}\\n' > '${stage}/lathe'`,
+            `printf '#!/bin/sh\\necho alias t3 v${archiveVersion}\\n' > '${stage}/t3'`,
+            `chmod +x '${stage}/lathe' '${stage}/t3'`,
+            `tar -czf '${release}/lathe-${archiveVersion}-${asset}' -C '${root}/stage' '${stem}'`,
+            sums([`'t3-${archiveVersion}-${asset}'`, `'lathe-${archiveVersion}-${asset}'`]),
+          ]
+        : [sums([`'t3-${archiveVersion}-${asset}'`])]),
     ].join("\n");
     const child = yield* spawner.spawn(ChildProcess.make("sh", ["-c", script]));
     assert.equal(Number(yield* child.exitCode), 0);
@@ -946,7 +972,7 @@ describe("archive runner script", () => {
         );
         for (const result of results) {
           assert.equal(result.exitCode, 0, result.stderr);
-          assert.include(result.stdout, `t3 v${archiveVersion}`);
+          assert.include(result.stdout, `lathe v${archiveVersion}`);
         }
         const versionsDir = `${home}/.lathe/runtime/versions`;
         assert.deepEqual(yield* fs.readDirectory(versionsDir), [archiveVersion]);
@@ -969,6 +995,62 @@ describe("archive runner script", () => {
         const afterUnowned = yield* runRunner(home, runner);
         assert.equal(afterUnowned.exitCode, 0, afterUnowned.stderr);
         assert.isFalse(yield* fs.exists(lock));
+      }).pipe(Effect.provide(NodeServices.layer)),
+    60_000,
+  );
+
+  // Fork: a remote reached by this release installs from a release published
+  // before the Lathe rename, which only has t3-* assets holding `t3`.
+  it.effect.skipIf(windowsHost)(
+    "installs and runs a release published before the rename",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const releaseBaseUrl = yield* makeMirror(root, "pre-rename");
+        const runner = `${root}/run-t3.sh`;
+        yield* fs.writeFileString(
+          runner,
+          SshTunnel.buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+        );
+        const home = `${root}/home`;
+        yield* fs.makeDirectory(home, { recursive: true });
+
+        const result = yield* runRunner(home, runner);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.equal(result.stdout.trim(), `t3 v${archiveVersion}`);
+        assert.isFalse(yield* fs.exists(`${home}/.lathe/runtime/versions/${archiveVersion}/lathe`));
+      }).pipe(Effect.provide(NodeServices.layer)),
+    60_000,
+  );
+
+  // Fork: a runtime an older runner unpacked holds only `t3`; it is complete,
+  // so it runs as it is with nothing downloaded.
+  it.effect.skipIf(windowsHost)(
+    "runs a runtime an older runner unpacked without reinstalling it",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const runner = `${root}/run-t3.sh`;
+        yield* fs.writeFileString(
+          runner,
+          SshTunnel.buildRemoteT3RunnerScript({
+            archiveVersion,
+            releaseBaseUrl: `file://${root}/no-mirror`,
+          }),
+        );
+        const home = `${root}/home`;
+        const runtime = `${home}/.lathe/runtime/versions/${archiveVersion}`;
+        yield* fs.makeDirectory(runtime, { recursive: true });
+        yield* fs.writeFileString(`${runtime}/t3`, `#!/bin/sh\necho old t3 v${archiveVersion}\n`);
+        yield* fs.chmod(`${runtime}/t3`, 0o755);
+        yield* fs.writeFileString(`${runtime}/.launcher`, "exe\n");
+        yield* fs.writeFileString(`${runtime}/.install-complete`, `${archiveVersion}\n`);
+
+        const result = yield* runRunner(home, runner);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.equal(result.stdout.trim(), `old t3 v${archiveVersion}`);
       }).pipe(Effect.provide(NodeServices.layer)),
     60_000,
   );

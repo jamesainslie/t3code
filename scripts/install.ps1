@@ -160,8 +160,15 @@ if ($version -match '-preview\.') {
   }
 }
 
+# The directory inside every archive keeps upstream's t3-* stem until phase 2
+# of packages/shared/src/forkCliArtifacts.ts.
 $stem = "t3-$version-win32-$arch"
-$archive = "$stem.zip"
+# The executable is lathe.exe; a runtime unpacked from a release before the
+# Lathe rename holds only t3.exe (forkCliExecutablePath).
+function Get-CliExecutable($dir) {
+  $lathe = Join-Path $dir "lathe.exe"
+  if (Test-Path $lathe) { $lathe } else { Join-Path $dir "t3.exe" }
+}
 $versionsDir = Join-Path $t3Home "runtime\versions"
 $targetDir = Join-Path $versionsDir $version
 $marker = Join-Path $targetDir ".install-complete"
@@ -185,6 +192,14 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
       }
       throw
     }
+    # Releases since the Lathe rename publish lathe-*, older ones only t3-*
+    # (forkCliArchiveFileNameIn).
+    $sums = Get-Content (Join-Path $staging "SHA256SUMS")
+    $archive = "lathe-$version-win32-$arch.zip"
+    foreach ($name in @("lathe", "t3")) {
+      $candidate = "$name-$version-win32-$arch.zip"
+      if ($sums | Where-Object { $_ -match "\s\*?$([regex]::Escape($candidate))$" }) { $archive = $candidate; break }
+    }
     Fetch "$baseUrl/v$version/$archive" (Join-Path $staging $archive) -progress
 
     Step "Verifying the download..."
@@ -206,7 +221,7 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
     Get-ChildItem (Join-Path $staging $stem) | Move-Item -Destination $staging
     Remove-Item (Join-Path $staging $stem), (Join-Path $staging $archive), (Join-Path $staging "SHA256SUMS") -Recurse -Force
 
-    & (Join-Path $staging "t3.exe") --version | Out-Null
+    & (Get-CliExecutable $staging) --version | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail "the downloaded executable does not run" }
     Set-Content -Path (Join-Path $staging ".install-complete") -Value $version -NoNewline
 
@@ -223,7 +238,7 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 $shim = Join-Path $binDir "lathe.cmd"
 # UTF-8 without a BOM: cmd.exe reads the shim as-is, and ASCII would corrupt
 # non-ASCII characters in the user's home path.
-[System.IO.File]::WriteAllText($shim, "@echo off`r`n`"$(Join-Path $targetDir 't3.exe')`" %*", (New-Object System.Text.UTF8Encoding $false))
+[System.IO.File]::WriteAllText($shim, "@echo off`r`n`"$(Get-CliExecutable $targetDir)`" %*", (New-Object System.Text.UTF8Encoding $false))
 if ($interactive) { [Console]::Error.Write("`r$esc[2K") }
 [Console]::Error.WriteLine("  ${green}Installed Lathe $version$reset`n")
 if (($env:PATH -split ";") -notcontains $binDir) {

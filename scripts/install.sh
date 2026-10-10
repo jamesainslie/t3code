@@ -183,8 +183,12 @@ case "$version" in
     ;;
 esac
 
-stem="t3-${version}-${platform}-${arch}"
-archive="${stem}.tar.gz"
+# The executable is `lathe`; a runtime unpacked from a release before the
+# Lathe rename holds only `t3`. Same rule as forkCliExecutableShell in
+# packages/shared/src/forkCliArtifacts.ts.
+cli_executable() {
+  if [ -x "$1/lathe" ]; then printf %s "$1/lathe"; else printf %s "$1/t3"; fi
+}
 versions_dir="${t3_home}/runtime/versions"
 target_dir="${versions_dir}/${version}"
 
@@ -208,6 +212,15 @@ else
   elif [ "$fetch_status" -ne 0 ]; then
     fail "could not download the release checksums"
   fi
+  # Releases since the Lathe rename publish lathe-*, older ones only t3-*.
+  # Same rule as forkCliArchiveShell in packages/shared/src/forkCliArtifacts.ts.
+  archive="lathe-${version}-${platform}-${arch}.tar.gz"
+  for name in lathe t3; do
+    if grep -q " \*\{0,1\}${name}-${version}-${platform}-${arch}.tar.gz\$" "${staging}/SHA256SUMS"; then
+      archive="${name}-${version}-${platform}-${arch}.tar.gz"
+      break
+    fi
+  done
   download "${base_url}/v${version}/${archive}" "${staging}/${archive}"
 
   step "Verifying the download..."
@@ -219,7 +232,7 @@ else
   step "Extracting Lathe..."
   tar -xzf "${staging}/${archive}" -C "$staging" --strip-components=1
   rm -f "${staging}/${archive}" "${staging}/SHA256SUMS"
-  "${staging}/t3" --version >/dev/null || fail "the downloaded executable does not run"
+  "$(cli_executable "$staging")" --version >/dev/null || fail "the downloaded executable does not run"
   printf '%s\n' "$version" > "${staging}/.install-complete"
 
   rm -rf "$target_dir"
@@ -229,7 +242,7 @@ fi
 
 step "Setting up the lathe command..."
 mkdir -p "$bin_dir"
-ln -sfn "${target_dir}/t3" "${bin_dir}/lathe"
+ln -sfn "$(cli_executable "$target_dir")" "${bin_dir}/lathe"
 if "$interactive"; then printf '\r\033[2K' >&2; fi
 printf '  %sInstalled Lathe %s%s\n\n' "$green" "$version" "$reset" >&2
 case ":${PATH}:" in
