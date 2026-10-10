@@ -2,6 +2,8 @@ import type { ProviderDriverKind, ProviderReplayTranscript } from "@t3tools/cont
 
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 
+import { appendForkRuntimeInstructions } from "./ForkReplayRuntimeInstructions.ts";
+
 /** Adds current runtime context to legacy prompt expectations, keeping outbound matching exact. */
 export function materializeReplayTranscriptRuntimeInstructions(
   transcript: ProviderReplayTranscript,
@@ -15,6 +17,7 @@ export function materializeReplayTranscriptRuntimeInstructions(
         : runtime.driver === "acpRegistry"
           ? "acpRegistry"
           : undefined;
+  if (runtime.driver === "muse") return appendForkRuntimeInstructions(transcript);
   if (harness === undefined) return transcript;
   const instructions = buildRuntimeInstructions({ harness, model: runtime.model });
 
