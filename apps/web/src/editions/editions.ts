@@ -44,10 +44,10 @@ export const EDITIONS: ReadonlyArray<EditionDefinition> = [
   {
     id: "lathe",
     label: "Lathe",
-    description: "Turned steel, one ember",
+    description: "Turned steel in violet-black",
     accent: "#FF5A1F",
     iconUrl: latheIcon,
-    strip: { url: latheStrip, buttonOffset: 122, ground: "#16111C" },
+    strip: { url: latheStrip, buttonOffset: 96, ground: "#231C2B" },
   },
   {
     id: "tartan",
