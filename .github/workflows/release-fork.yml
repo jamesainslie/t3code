@@ -501,19 +501,11 @@ jobs:
 
       # Installers, pinned runtimes, and remote ssh runtimes verify archives
       # against this file, so it is written from the bytes that get uploaded.
+      # Each lathe-* archive is also uploaded as t3-* for readers from before
+      # the rename (packages/shared/src/forkCliArtifacts.ts); the *.tar.gz and
+      # *.zip globs below pick up both names.
       - name: Write CLI archive checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd release-assets
-          shopt -s nullglob
-          archives=(t3-*.tar.gz t3-*.zip)
-          if [[ ${#archives[@]} -eq 0 ]]; then
-            echo "No CLI archives were produced." >&2
-            exit 1
-          fi
-          sha256sum "${archives[@]}" > SHA256SUMS
-          cat SHA256SUMS
+        run: node scripts/fork-cli-release-assets.ts --dir release-assets --version "${{ needs.preflight.outputs.version }}"
 
       # electron-updater reads one manifest per platform and channel and picks
       # the file entry whose name carries the running arch, so the per-arch

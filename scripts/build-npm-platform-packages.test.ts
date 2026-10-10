@@ -44,7 +44,11 @@ const run = Effect.fn("test.run")(function* (
   return { stdout, stderr, exitCode };
 });
 
-/** A tar.gz laid out like build-cli-archive.ts writes, with a stub `t3` that echoes its args. */
+/**
+ * A tar.gz laid out like build-cli-archive.ts writes, with a stub `lathe` that
+ * echoes its args and the `t3` symlink to it that readers from before the
+ * rename run.
+ */
 const makeFakeArchives = Effect.fn("test.makeFakeArchives")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -73,16 +77,18 @@ const makeFakeArchives = Effect.fn("test.makeFakeArchives")(function* () {
     );
     yield* fs.writeFileString(path.join(contentDir, "client/index.html"), "<html></html>\n");
     yield* fs.writeFileString(
-      path.join(contentDir, "t3"),
+      path.join(contentDir, "lathe"),
       `#!/bin/sh\necho "stub ${key} $*"\nexit 7\n`,
     );
-    yield* fs.chmod(path.join(contentDir, "t3"), 0o755);
+    yield* fs.chmod(path.join(contentDir, "lathe"), 0o755);
+    yield* fs.symlink("lathe", path.join(contentDir, "t3"));
     yield* fs.writeFileString(
       path.join(contentDir, "bin.mjs"),
       `console.log("script ${key} " + process.argv.slice(2).join(" "));\nprocess.exit(9);\n`,
     );
     yield* fs.writeFileString(path.join(contentDir, "claude-history-worker.mjs"), "");
-    const exit = yield* run("tar", ["-czf", path.join(archivesDir, `${stem}.tar.gz`), stem], {
+    const archive = path.join(archivesDir, `lathe-${VERSION}-${key}.tar.gz`);
+    const exit = yield* run("tar", ["-czf", archive, stem], {
       cwd: stage,
     });
     assert.equal(exit.exitCode, 0, exit.stderr);
@@ -141,8 +147,8 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       assert.deepStrictEqual(linuxManifest.os, ["linux"]);
       assert.deepStrictEqual(linuxManifest.cpu, ["x64"]);
       assert.deepStrictEqual(linuxManifest.files, [
-        "t3",
-        "t3.exe",
+        "lathe",
+        "lathe.exe",
         "*.mjs",
         "client",
         "resource-monitor",
@@ -165,7 +171,10 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         "# @jamesainslie/lathe-linux-x64",
       );
       assert.isTrue(yield* fs.exists(path.join(linuxDir, "node_modules/node-pty")));
-      assert.equal(Number((yield* fs.stat(path.join(linuxDir, "t3"))).mode) & 0o111, 0o111);
+      assert.equal(Number((yield* fs.stat(path.join(linuxDir, "lathe"))).mode) & 0o111, 0o111);
+      // The registry refuses links, and nothing older than this launcher reads
+      // the package, so the archive's `t3` alias stays out of it.
+      assert.isFalse(yield* fs.exists(path.join(linuxDir, "t3")));
 
       const darwinManifest = yield* decodeManifest(
         yield* fs.readFileString(
@@ -181,14 +190,15 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       );
       assert.equal(launcherManifest.name, "@jamesainslie/lathe");
       assert.equal(launcherManifest.version, VERSION);
-      assert.deepStrictEqual(launcherManifest.bin, { lathe: "./bin/t3.js" });
+      assert.deepStrictEqual(launcherManifest.bin, { lathe: "./bin/lathe.js" });
       assert.deepStrictEqual(launcherManifest.files, ["bin", "dist"]);
       assert.deepStrictEqual(launcherManifest.optionalDependencies, {
         "@jamesainslie/lathe-darwin-arm64": VERSION,
         "@jamesainslie/lathe-linux-x64": VERSION,
       });
       assert.isUndefined(launcherManifest.engines);
-      assert.isTrue(yield* fs.exists(path.join(launcherDir, "bin/t3.js")));
+      assert.isTrue(yield* fs.exists(path.join(launcherDir, "bin/lathe.js")));
+      assert.isFalse(yield* fs.exists(path.join(launcherDir, "bin/t3.js")));
 
       // The scratch dirs must not be left behind next to the packages.
       const outputEntries = yield* fs.readDirectory(fixture.outputDir);
@@ -207,7 +217,11 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       assert.isTrue(lines.some((line) => line.endsWith(" package/node_modules/node-pty/")));
       assert.isTrue(lines.some((line) => line.endsWith(" package/package.json")));
       assert.isTrue(
-        lines.some((line) => /^-rwxr-xr-x .* package\/t3$/.test(line)),
+        lines.some((line) => /^-rwxr-xr-x .* package\/lathe$/.test(line)),
+        listing.stdout,
+      );
+      assert.isFalse(
+        lines.some((line) => line.startsWith("l")),
         listing.stdout,
       );
 
@@ -217,10 +231,14 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
       const hostArch = yield* HostProcessArchitecture;
       const env = { ...process.env, NODE_PATH: fixture.outputDir } as Record<string, string>;
       if (KEYS.some((key) => key === `${hostPlatform}-${hostArch}`)) {
-        const passthrough = yield* run(process.execPath, ["bin/t3.js", "serve", "--port", "1234"], {
-          cwd: launcherDir,
-          env,
-        });
+        const passthrough = yield* run(
+          process.execPath,
+          ["bin/lathe.js", "serve", "--port", "1234"],
+          {
+            cwd: launcherDir,
+            env,
+          },
+        );
         assert.equal(
           passthrough.stdout.trim(),
           `stub ${hostPlatform}-${hostArch} serve --port 1234`,
@@ -243,10 +261,10 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         // does; the launcher must then run the bundled script under this Node.
         const stub = path.join(
           fixture.outputDir,
-          `@jamesainslie/lathe-${hostPlatform}-${hostArch}/t3`,
+          `@jamesainslie/lathe-${hostPlatform}-${hostArch}/lathe`,
         );
         yield* fs.chmod(stub, 0o644);
-        const scripted = yield* run(process.execPath, ["bin/t3.js", "serve", "--port", "1234"], {
+        const scripted = yield* run(process.execPath, ["bin/lathe.js", "serve", "--port", "1234"], {
           cwd: launcherDir,
           env,
         });
@@ -276,7 +294,7 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         assert.equal(legacy.exitCode, 7);
       }
 
-      const unsupported = yield* run(process.execPath, ["bin/t3.js", "--version"], {
+      const unsupported = yield* run(process.execPath, ["bin/lathe.js", "--version"], {
         cwd: launcherDir,
         env: { ...env, NODE_PATH: path.join(fixture.root, "nowhere") },
       });

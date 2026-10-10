@@ -11,6 +11,10 @@ import {
   HostProcessPlatform,
 } from "@t3tools/shared/hostProcess";
 import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
+import {
+  forkCliExecutableNames,
+  FORK_NPM_LAUNCHER_SCRIPTS,
+} from "@t3tools/shared/forkCliArtifacts";
 
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -57,7 +61,7 @@ const decodeInstallManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(I
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // `<prefix>/lib/node_modules/<launcher>/` holding the launcher script or a platform executable.
 const GLOBAL_INSTALL_ENTRY = new RegExp(
-  `^(.*)/lib/node_modules/${escapeRegExp(FORK_IDENTITY.npmPackageName)}/(?:dist/bin\\.mjs|bin/t3\\.js|node_modules/${escapeRegExp(FORK_IDENTITY.npm.platformPackageScope)}/${escapeRegExp(FORK_IDENTITY.npm.platformPackagePrefix)}[^/]+/t3)$`,
+  `^(.*)/lib/node_modules/${escapeRegExp(FORK_IDENTITY.npmPackageName)}/(?:dist/bin\\.mjs|${FORK_NPM_LAUNCHER_SCRIPTS.map(escapeRegExp).join("|")}|node_modules/${escapeRegExp(FORK_IDENTITY.npm.platformPackageScope)}/${escapeRegExp(FORK_IDENTITY.npm.platformPackagePrefix)}[^/]+/(?:${forkCliExecutableNames("linux").map(escapeRegExp).join("|")}))$`,
 );
 
 /** Prove the running package and its global bin belong together before suggesting an update. */
@@ -100,7 +104,9 @@ export const resolveServerInstallation = Effect.gen(function* () {
       .readFileString(path.join(path.dirname(entry), "package.json"))
       .pipe(Effect.flatMap(decodeInstallManifest));
     if (
-      manifest.bin[FORK_IDENTITY.cliBin] !== "./bin/t3.js" ||
+      !FORK_NPM_LAUNCHER_SCRIPTS.some(
+        (script) => manifest.bin?.[FORK_IDENTITY.cliBin] === `./${script}`,
+      ) ||
       manifest.optionalDependencies?.[nativeManifest.name] !== nativeManifest.version ||
       nativeManifest.version !== manifest.version
     )

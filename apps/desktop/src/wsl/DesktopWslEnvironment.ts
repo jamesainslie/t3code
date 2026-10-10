@@ -11,6 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
 import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
@@ -306,7 +307,7 @@ export const buildWslRuntimeInstallScript = (
     // use: the file is executable and `t3 --version` exits 0. That covers the
     // truncated-binary and wrong-arch cases without a separate native probe.
     "runtime_entry_runs() {",
-    '  [ -x "$1/t3" ] && "$1/t3" --version >/dev/null 2>&1',
+    `  [ -x "$1/${FORK_IDENTITY.cliBin}" ] && "$1/${FORK_IDENTITY.cliBin}" --version >/dev/null 2>&1`,
     "}",
     // Hashing the entry is what tells a working cache from one whose `t3` was
     // swapped or half-written after install: the file is still there and may
@@ -315,7 +316,7 @@ export const buildWslRuntimeInstallScript = (
     // milliseconds inside the distro, once per launch, against a cold
     // reinstall of a few hundred megabytes.
     "runtime_server_entry_digest() {",
-    `  sha256sum "$1/t3" 2>/dev/null | cut -d ' ' -f 1`,
+    `  sha256sum "$1/${FORK_IDENTITY.cliBin}" 2>/dev/null | cut -d ' ' -f 1`,
     "}",
     "runtime_is_ready() {",
     '  [ -f "$ready_marker" ] &&',
@@ -383,7 +384,7 @@ export const buildWslRuntimeInstallScript = (
     'cleanup_runtime_install() { rm -rf "$runtime_tmp"; }',
     "trap cleanup_runtime_install EXIT",
     // The release archive has one top-level `t3-<version>-linux-<arch>/`
-    // directory; strip it so the executable lands at `$runtime_root/t3`.
+    // directory; strip it so the executable lands at `$runtime_root/lathe`.
     `tar -xzf ${shellQuote(linuxArchivePath)} -C "$runtime_tmp" --strip-components=1`,
     // Never write the ready marker over a tree whose executable does not run.
     // Failing here drops out to the mounted-tree fallback, which is
@@ -552,7 +553,7 @@ NODE`;
 export const buildWslRuntimeProbeScript = (linuxAppRoot: string) =>
   [
     `bash -lc ${shellQuote(`${buildWslNodeEnvPreamble()}${RESOLVED_PATH_LINE}`)} 2>/dev/null || ${RESOLVED_PATH_LINE}`,
-    `${shellQuote(`${linuxAppRoot}/t3`)} --version >/dev/null 2>&1`,
+    `${shellQuote(`${linuxAppRoot}/${FORK_IDENTITY.cliBin}`)} --version >/dev/null 2>&1`,
   ].join("\n");
 
 const TOOLCHAIN_CHECK_SCRIPT = [
@@ -695,7 +696,7 @@ const probeWslRuntimeImpl = (
       const trimmedTail = probe.stderr.trim().slice(-500);
       return {
         ok: false,
-        reason: `${linuxAppRoot}/t3 --version failed (exit ${probe.exitCode})${trimmedTail ? `: ${trimmedTail}` : ""}`,
+        reason: `${linuxAppRoot}/${FORK_IDENTITY.cliBin} --version failed (exit ${probe.exitCode})${trimmedTail ? `: ${trimmedTail}` : ""}`,
       } as const;
     }
     const resolvedPath = parseResolvedPath(probe.stdout);

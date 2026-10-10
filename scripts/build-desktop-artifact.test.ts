@@ -110,6 +110,7 @@ const makeLinuxCliArchiveFixture = Effect.fn("test.makeLinuxCliArchiveFixture")(
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const contentRoot = path.join(input.root, "content");
   const members = [
+    `${input.stem}/lathe`,
     `${input.stem}/t3`,
     `${input.stem}/client/index.html`,
     `${input.stem}/node_modules/node-pty/package.json`,
@@ -176,7 +177,7 @@ const WINDOWS_PAYLOAD_FIXTURE_VERSION = "1.2.3";
 const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(function* (input: {
   readonly copyUnpackedNatives: boolean;
   readonly serverEntrySource?: string;
-  readonly wslRuntime?: "valid" | "loose-server-tree" | "missing-pty" | "bad-digest";
+  readonly wslRuntime?: "valid" | "loose-server-tree" | "missing-pty" | "bad-digest" | "pre-rename";
   readonly targetArch?: "x64" | "arm64";
   readonly ptyPrebuildArch?: "x64" | "arm64";
 }) {
@@ -224,7 +225,7 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
           yield* makeLinuxCliArchiveFixture({
             root: path.join(tempDir, "wsl-runtime"),
             stem: "apps",
-            omitMembers: ["apps/t3", "apps/client/index.html"],
+            omitMembers: ["apps/lathe", "apps/t3", "apps/client/index.html"],
             extraMembers: ["apps/server/dist/bin.mjs", "node_modules/node-pty/package.json"],
           })
         : yield* makeLinuxCliArchiveFixture({
@@ -232,7 +233,9 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
             stem,
             ...(input.wslRuntime === "missing-pty" || input.ptyPrebuildArch !== undefined
               ? { omitMembers: [`${stem}/node_modules/node-pty/build/Release/pty.node`] }
-              : {}),
+              : input.wslRuntime === "pre-rename"
+                ? { omitMembers: [`${stem}/lathe`] }
+                : {}),
             ...(input.ptyPrebuildArch !== undefined
               ? {
                   extraMembers: [
@@ -1388,6 +1391,32 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
         assert.instanceOf(error, WindowsPackagedPayloadValidationError);
         assert.equal(error.reason, "wsl-runtime-invalid");
+      }),
+    ),
+  );
+
+  // Fork: the WSL scripts run `lathe`, so an archive from before the rename,
+  // holding only `t3`, must not be embedded.
+  it.effect("rejects an embedded archive without the lathe executable", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeWindowsPayloadFixture({
+          copyUnpackedNatives: true,
+          wslRuntime: "pre-rename",
+        });
+        const error = yield* validateWindowsPackagedPayload({
+          stageDistDir: fixture.stageDistDir,
+          appExecutableName: fixture.appExecutableName,
+          targetArch: "x64",
+          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+          expectWslRuntime: true,
+        }).pipe(Effect.flip);
+
+        assert.instanceOf(error, WindowsPackagedPayloadValidationError);
+        assert.equal(error.reason, "wsl-runtime-invalid");
+        assert.deepStrictEqual(error.missingFiles, [
+          `${wslRuntimeArchiveStem(WINDOWS_PAYLOAD_FIXTURE_VERSION, "x64")}/lathe`,
+        ]);
       }),
     ),
   );

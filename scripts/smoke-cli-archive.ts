@@ -23,6 +23,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import * as NetService from "@t3tools/shared/Net";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { forkCliExecutableNames } from "@t3tools/shared/forkCliArtifacts";
 import { windowsSystemTar } from "./build-cli-archive.ts";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 
@@ -107,9 +108,12 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
     });
   }
   const contentDir = path.join(scratch, root);
-  const executable = path.join(contentDir, platform === "win32" ? "t3.exe" : "t3");
+  const [executable, ...aliases] = forkCliExecutableNames(platform).map((name) =>
+    path.join(contentDir, name),
+  ) as [string, ...string[]];
   for (const required of [
     executable,
+    ...aliases,
     path.join(contentDir, "bin.mjs"),
     path.join(contentDir, "claude-history-worker.mjs"),
     path.join(contentDir, "client/index.html"),

@@ -9,7 +9,9 @@
  * Layout inside the archive (a single top-level directory named after the
  * archive stem):
  *
- *   t3 | t3.exe          the single-executable
+ *   lathe | lathe.exe    the single-executable
+ *   t3 | t3.exe          the same executable under upstream's name, for readers
+ *                        from before the fork's rename (see forkCliArtifacts.ts)
  *   *.mjs                the same server bundle as a script (bin.mjs, its worker,
  *                        and shared chunks) for hosts whose libc cannot run the
  *                        executable (NixOS, musl); the runner then uses the host Node
@@ -44,6 +46,11 @@ import {
   STAGE_INSTALL_ARGS,
 } from "./build-desktop-artifact.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
+import {
+  forkArchiveExecutableName,
+  forkArchiveFileName,
+  writeForkCliExecutableAlias,
+} from "./lib/forkCliArchive.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -107,7 +114,7 @@ export function cliArchiveStem(version: string, platform: BuildPlatform, arch: B
 export function cliArchiveFileName(version: string, platform: BuildPlatform, arch: BuildArch) {
   // gzip rather than xz: GNU tar needs an external xz binary for -J, which
   // minimal hosts lack, while every tar (and Node's zlib) handles gzip alone.
-  return `${cliArchiveStem(version, platform, arch)}.${platform === "win" ? "zip" : "tar.gz"}`;
+  return forkArchiveFileName(version, cliArchivePlatformKey(platform, arch));
 }
 
 /** The bsdtar Windows ships in System32; resolves regardless of which tar is first on PATH. */
@@ -512,7 +519,10 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   yield* fs.makeDirectory(contentDir, { recursive: true });
 
   yield* Effect.log(`[cli-archive] Staging ${stem}...`);
-  yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
+  yield* fs.copyFile(
+    builtExecutable,
+    path.join(contentDir, forkArchiveExecutableName(input.platform)),
+  );
   // The bundle resolves `client/`, `resource-monitor/`, its worker, and the
   // chunks the bundler splits out beside itself, so every module of the build
   // sits at the archive root next to the executable. Sourcemaps stay behind.
@@ -530,7 +540,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
     version: input.version,
   });
 
-  const executablePath = path.join(contentDir, executableName);
+  const executablePath = path.join(contentDir, forkArchiveExecutableName(input.platform));
   if (input.platform === "mac") {
     yield* signMacArchiveContents({ repoRoot, contentDir, executablePath });
   } else if (input.platform === "win") {
@@ -539,6 +549,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   if (input.platform !== "win") {
     yield* fs.chmod(executablePath, 0o755);
   }
+  yield* writeForkCliExecutableAlias(contentDir, input.platform);
 
   yield* fs.makeDirectory(input.outputDir, { recursive: true });
   const archivePath = path.join(
