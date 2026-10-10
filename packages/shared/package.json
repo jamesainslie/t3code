@@ -395,6 +395,10 @@
       "types": "./src/forkBaseDir.ts",
       "import": "./src/forkBaseDir.ts"
     },
+    "./forkCliArtifacts": {
+      "types": "./src/forkCliArtifacts.ts",
+      "import": "./src/forkCliArtifacts.ts"
+    },
     "./cliRelease": {
       "types": "./src/cliRelease.ts",
       "import": "./src/cliRelease.ts"
