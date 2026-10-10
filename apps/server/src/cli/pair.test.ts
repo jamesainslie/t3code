@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -229,8 +230,8 @@ describe("t3 pair", () => {
         typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
       );
       assert.include(rendered, "No running T3 Code server found.");
-      assert.include(rendered, "npx t3 serve");
-      assert.include(rendered, "npx t3 connect");
+      assert.include(rendered, `npx ${FORK_IDENTITY.npmPackageName} serve`);
+      assert.include(rendered, `npx ${FORK_IDENTITY.npmPackageName} connect`);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
