@@ -3,7 +3,7 @@
  * is clicked, and also whenever an account's login panel is requested (by a
  * row's login control or the "needs login" notification).
  */
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 /** The account whose login panel the card shows, or null. */
 export const proxyLoginPanelAtom = Atom.make<string | null>(null).pipe(

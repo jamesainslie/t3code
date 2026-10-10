@@ -1,3 +1,4 @@
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- the credential fingerprint is a synchronous hash, as elsewhere in the server.
 import * as NodeCrypto from "node:crypto";
 
 import * as Cache from "effect/Cache";
@@ -8,16 +9,20 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { pullRequestHostOf, type ProjectId } from "@t3tools/contracts";
 import { resolveGitHubAccount } from "@t3tools/shared/gitHubAccountRouting";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import * as GitHubApi from "@t3tools/source-control-github/server/GitHubApi";
 
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import type { PinnedGitHubCredentialValue } from "./GitHubCli.ts";
+
+export type PinnedGitHubCredentialValue = NonNullable<
+  Context.Service.Shape<typeof GitHubApi.PinnedGitHubCredential>
+>;
 
 /** How long a cwd keeps mapping to the same project before the projection is read again. */
 const PROJECT_INDEX_TTL = Duration.seconds(30);
@@ -179,7 +184,6 @@ export const make = Effect.gen(function* () {
       host: selected.host,
       token: Redacted.make(token),
       credentialFingerprint: `${selected.host}:${selected.login}:${NodeCrypto.createHash("sha256").update(token).digest("hex")}`,
-      scope: "checkout",
     };
     if (tokenCache.size >= TOKEN_CACHE_MAX_ENTRIES) {
       tokenCache.delete(tokenCache.keys().next().value!);

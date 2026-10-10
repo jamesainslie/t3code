@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { FORK_HOME_SHELL, forkBaseDirName } from "./forkBaseDir.ts";
 import { FORK_IDENTITY } from "./forkIdentity.ts";
-import { HostProcessPlatform } from "./hostProcess.ts";
+import * as HostProcess from "./HostProcess.ts";
 
 const parents: string[] = [];
 const makeParent = (...existing: string[]) => {
@@ -48,7 +48,7 @@ const evaluateShell = (home: string) =>
 
 // Remote hosts (SSH, WSL) resolve the base directory in their own shell, so
 // the expression must agree with forkBaseDirName on every layout.
-describe.skipIf(HostProcessPlatform.defaultValue() === "win32")("FORK_HOME_SHELL", () => {
+describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("FORK_HOME_SHELL", () => {
   it.each<readonly [string, ReadonlyArray<string>]>([
     ["a fresh home", []],
     ["a home with only the pre-rename directory", [FORK_IDENTITY.legacyBaseDirName]],

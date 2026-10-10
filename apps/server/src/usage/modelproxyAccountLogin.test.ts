@@ -3,7 +3,7 @@ import { UsageLimitSourceId, type UsageLimitSourceAccountLogin } from "@t3tools/
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { makeModelproxyAccountLogin } from "./modelproxyAccountLogin.ts";
 

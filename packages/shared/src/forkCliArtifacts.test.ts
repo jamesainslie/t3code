@@ -15,7 +15,7 @@ import {
   forkCliExecutableShell,
   FORK_NPM_LAUNCHER_SCRIPTS,
 } from "./forkCliArtifacts.ts";
-import { HostProcessPlatform } from "./hostProcess.ts";
+import * as HostProcess from "./HostProcess.ts";
 
 const dirs: string[] = [];
 const makeDir = (...executables: string[]) => {
@@ -111,7 +111,7 @@ const sh = (script: string, cwd: string) =>
 
 // The SSH runner and install scripts resolve names in a remote shell, so each
 // expression must agree with its TypeScript counterpart on every layout.
-describe.skipIf(HostProcessPlatform.defaultValue() === "win32")("shell rules", () => {
+describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("shell rules", () => {
   it.each<readonly [string, ReadonlyArray<string>]>([
     ["both names", ["lathe", "t3"]],
     ["only the pre-rename name", ["t3"]],

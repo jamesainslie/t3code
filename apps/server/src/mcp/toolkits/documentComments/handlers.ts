@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as DocumentComments from "../../../fork/DocumentComments.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
 import {
   type DocumentCommentEntry,
   DocumentCommentListFailedError,
@@ -53,8 +54,9 @@ const make = Effect.gen(function* () {
     return { threadId: scope.threadId, comments };
   });
 
-  return DocumentCommentsToolkit.of({
-    list_document_comments: (input) =>
+  // Comments belong to the calling thread: listing reads them, resolving acts as that thread.
+  return {
+    list_document_comments: McpToolAccess.readsAsCaller((input) =>
       threadComments(DocumentCommentListFailedError).pipe(
         Effect.map(({ comments }) => ({
           comments: comments
@@ -66,7 +68,8 @@ const make = Effect.gen(function* () {
             .map(entryOf),
         })),
       ),
-    resolve_document_comment: (input) =>
+    ),
+    resolve_document_comment: McpToolAccess.actsAsCaller((input) =>
       Effect.gen(function* () {
         const { threadId, comments } = yield* threadComments(DocumentCommentResolveFailedError);
         const comment = comments.find((candidate) => candidate.id === input.commentId);
@@ -86,7 +89,7 @@ const make = Effect.gen(function* () {
           .pipe(
             Effect.map(() => true),
             // The only rejection here is an unknown id: the user deleted it meanwhile.
-            Effect.catchTag("ThreadDocumentCommentsError", () => Effect.succeed(false)),
+            Effect.catchTags({ ThreadDocumentCommentsError: () => Effect.succeed(false) }),
           );
         if (!resolved) {
           return yield* new DocumentCommentNotFoundError({ commentId: comment.id });
@@ -97,7 +100,8 @@ const make = Effect.gen(function* () {
           alreadyResolved: comment.status === "resolved",
         };
       }),
-  });
+    ),
+  } satisfies McpToolAccess.Handlers<typeof DocumentCommentsToolkit.tools>;
 });
 
-export const DocumentCommentsToolkitHandlersLive = DocumentCommentsToolkit.toLayer(make);
+export const layer = McpToolAccess.toLayer(DocumentCommentsToolkit, make);

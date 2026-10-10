@@ -1,21 +1,25 @@
 import {
   McpCapabilityUnavailableError,
+  OrchestratorMcpFailure,
   THREAD_DOCUMENT_COMMENT_MAX_BODY_LENGTH,
   ThreadDocumentCommentId,
   ThreadDocumentCommentStatus,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import * as Tool from "effect/unstable/ai/Tool";
-import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as Tool from "effect/ai/Tool";
+import * as Toolkit from "effect/ai/Toolkit";
 
 import * as DocumentComments from "../../../fork/DocumentComments.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,
   Orchestrator.OrchestratorV2,
+  // The access gate reads the calling thread through it.
+  ThreadManagementService.ThreadManagementService,
   DocumentComments.DocumentComments,
 ];
 
@@ -84,6 +88,7 @@ export class DocumentCommentResolveFailedError extends Schema.TaggedError<Docume
 }
 
 export const DocumentCommentToolError = Schema.Union([
+  OrchestratorMcpFailure,
   McpCapabilityUnavailableError,
   DocumentCommentThreadNotFoundError,
   DocumentCommentNotFoundError,

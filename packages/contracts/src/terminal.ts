@@ -97,6 +97,8 @@ export const TerminalBrowserLaunchCancelInput = Schema.Struct({
   captureId: TerminalBrowserLaunchCaptureIdSchema,
 });
 export type TerminalBrowserLaunchCancelInput = typeof TerminalBrowserLaunchCancelInput.Type;
+export const TerminalObserveInput = TerminalSessionInput;
+export type TerminalObserveInput = Schema.Codec.Encoded<typeof TerminalObserveInput>;
 
 export const TerminalWriteInput = Schema.Struct({
   ...TerminalSessionInput.fields,

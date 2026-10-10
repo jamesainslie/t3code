@@ -16,6 +16,7 @@ import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
 import { buildThreadDigest, recentStart, toTurnDetail } from "./digest.ts";
 import { renderThreadDigest, renderThreadMatches, renderTurnDetails } from "./render.ts";
 import { canReadThread, canSearchThreads, collectReferencedThreadIds } from "./scope.ts";
@@ -156,8 +157,9 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return ThreadHistoryToolkit.of({
-    read_thread: (input) =>
+  // History is read-only: every tool reads what the caller's settings let it see.
+  return {
+    read_thread: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const caller = yield* loadCaller();
         const target = yield* loadTarget(caller, input.threadId);
@@ -181,7 +183,8 @@ const make = Effect.gen(function* () {
         });
         return renderThreadDigest(digest);
       }),
-    read_thread_turns: (input) =>
+    ),
+    read_thread_turns: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const caller = yield* loadCaller();
         const target = yield* loadTarget(caller, input.threadId);
@@ -199,7 +202,8 @@ const make = Effect.gen(function* () {
           start,
         );
       }),
-    find_threads: (input) =>
+    ),
+    find_threads: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         // Search needs only the caller's id and project, so its shell is enough.
         const scope = yield* requireThreadHistory;
@@ -236,7 +240,8 @@ const make = Effect.gen(function* () {
         }
         return renderThreadMatches(results);
       }),
-  });
+    ),
+  } satisfies McpToolAccess.Handlers<typeof ThreadHistoryToolkit.tools>;
 });
 
-export const ThreadHistoryToolkitHandlersLive = ThreadHistoryToolkit.toLayer(make);
+export const layer = McpToolAccess.toLayer(ThreadHistoryToolkit, make);

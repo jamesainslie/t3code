@@ -71,13 +71,13 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
   },
   {
     kind: "property",
-    file: "apps/server/src/provider/Layers/CodexProvider.ts",
+    file: "apps/server/src/provider/CodexProvider.ts",
     property: "clientInfo.name",
     reason: "Codex app-server client identity that OpenAI sees; the fork reports as upstream.",
   },
   {
     kind: "property",
-    file: "apps/server/src/provider/Layers/CodexProvider.ts",
+    file: "apps/server/src/provider/CodexProvider.ts",
     property: "clientInfo.title",
     reason: "Codex app-server client identity that OpenAI sees; the fork reports as upstream.",
   },
@@ -106,13 +106,13 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
   {
     kind: "verbatim",
     value: `const T3_CODE_OAUTH_REFERRER = "t3code"`,
-    file: "apps/server/src/provider/acp/GrokAcpSupport.ts",
+    file: "packages/provider-grok/src/server/acpSupport.ts",
     reason: "Grok OAuth referrer registered with xAI for upstream.",
   },
   {
     kind: "verbatim",
     value: `clientInfo: { name: "t3-code", version: "0.0.0" }`,
-    file: "apps/server/src/orchestration-v2/Adapters/AcpAdapterV2.ts",
+    file: "packages/provider-acp/src/server/adapter.ts",
     reason: "ACP client identity that agents see.",
   },
   {

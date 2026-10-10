@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
   CodeIcon,
@@ -16,6 +16,7 @@ import { mermaidRepairPrompt } from "@t3tools/client-runtime/mermaid";
 import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTrigger } from "../ui/dialog";
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { MarkdownFindContext, useFindRevealRef } from "./markdownFindContext";
 
 type DiagramTheme = "dark" | "light";
 
@@ -197,6 +198,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     error?: string;
   } | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const searching = use(MarkdownFindContext);
+  const revealSource = useCallback(() => setShowSource(true), []);
+  const sourceRevealRef = useFindRevealRef(revealSource);
   const [copiedSource, setCopiedSource] = useState<string | null>(null);
   const copied = copiedSource === source;
   const [copyError, setCopyError] = useState(false);
@@ -246,7 +250,11 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       className="my-3 overflow-hidden rounded-xl border border-border bg-card"
       data-mermaid-diagram=""
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-1.5">
+      {/* Find counts only the source, so the chrome must not highlight either. */}
+      <div
+        data-thread-find-ignore
+        className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-1.5"
+      >
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           <NetworkIcon className="size-3.5" />
           Mermaid
@@ -297,12 +305,12 @@ export const MermaidDiagram = memo(function MermaidDiagram({
         </div>
       </div>
       {copyError && (
-        <p role="status" className="px-4 py-2 text-xs text-destructive">
+        <p data-thread-find-ignore role="status" className="px-4 py-2 text-xs text-destructive">
           Could not copy. You can select the source below.
         </p>
       )}
       {error ? (
-        <div className="space-y-3 p-4">
+        <div data-thread-find-ignore className="space-y-3 p-4">
           <p className="text-sm font-medium">Couldn’t render this diagram</p>
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">Error details</summary>
@@ -332,6 +340,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
         </div>
       ) : !svg && !showSource ? (
         <div
+          data-thread-find-ignore
           role="status"
           className="flex min-h-32 items-center justify-center p-6 text-xs text-muted-foreground"
         >
@@ -348,6 +357,12 @@ export const MermaidDiagram = memo(function MermaidDiagram({
           src={imageSource}
           alt="Mermaid diagram"
         />
+      ) : null}
+      {/* While find is open the source stays searchable; a selected match here shows it. */}
+      {searching && !(showSource || error || copyError) ? (
+        <pre ref={sourceRevealRef} hidden>
+          {source}
+        </pre>
       ) : null}
     </div>
   );

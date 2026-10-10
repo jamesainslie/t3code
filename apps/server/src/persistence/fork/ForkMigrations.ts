@@ -13,8 +13,8 @@
  * `state.sqlite` first, and the original stays untouched for the v1 build.
  */
 import * as Effect from "effect/Effect";
-import * as Migrator from "effect/unstable/sql/Migrator";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as Migrator from "effect/sql/Migrator";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest } from "../Migrations.ts";
 import UpstreamActiveOrderKey from "../Migrations/049_ProjectionThreadsActiveOrderKey.ts";

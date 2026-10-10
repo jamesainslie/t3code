@@ -26,7 +26,7 @@ import {
 } from "@t3tools/shared/threadContextReference";
 import * as Schema from "effect/Schema";
 import { useEffect } from "react";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 import { writeFileAtomically } from "../lib/atomic-file";
 import { createComposerContextHistory, referencedComposerContext } from "../lib/composerContext";

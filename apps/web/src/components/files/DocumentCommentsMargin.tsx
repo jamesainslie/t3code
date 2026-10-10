@@ -10,6 +10,7 @@ import {
 import { useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import { resolveAssistantCitationRange } from "~/lib/assistantTextSelection";
+import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -102,10 +103,7 @@ export function DocumentCommentsMargin({
   // Async content (Shiki, KaTeX, Mermaid, images) and pane resizes move passages.
   useEffect(() => {
     if (!container || !source) return;
-    const observer = new ResizeObserver(relayout);
-    observer.observe(container);
-    observer.observe(source);
-    return () => observer.disconnect();
+    return observeResize([container, source], relayout);
   }, [container, source]);
 
   // Measuring the rendered passages is the external system this syncs with.

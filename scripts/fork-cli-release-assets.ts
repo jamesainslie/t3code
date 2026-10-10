@@ -5,6 +5,7 @@
  * as `t3-<version>-<platform>` for readers from before the rename, and
  * SHA256SUMS lists both names. See packages/shared/src/forkCliArtifacts.ts.
  */
+// @effect-diagnostics-next-line nodeBuiltinImport:off - streams release archives through sha256, which Effect Crypto does not do.
 import * as NodeCrypto from "node:crypto";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -16,7 +17,7 @@ import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 
 import { CLI_ARCHIVE_PLATFORM_KEYS, CLI_RELEASE_CHECKSUMS_FILE } from "@t3tools/shared/cliRelease";
 import { forkCliArchiveFileNames } from "@t3tools/shared/forkCliArtifacts";

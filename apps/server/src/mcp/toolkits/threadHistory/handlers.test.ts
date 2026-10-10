@@ -27,7 +27,8 @@ import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import { ThreadHistoryToolkitHandlersLive } from "./handlers.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
+import * as ThreadHistoryHandlers from "./handlers.ts";
 import {
   assistantMessage,
   at,
@@ -195,7 +196,11 @@ const makeHarness = Effect.fn("makeThreadHistoryToolkitHarness")(function* (
     Layer.mock(ServerSettingsService)({ getSettings: Ref.get(settings) }),
   );
   const toolkit = yield* ThreadHistoryToolkit.pipe(
-    Effect.provide(ThreadHistoryToolkitHandlersLive.pipe(Layer.provide(dependencies))),
+    Effect.provide(
+      McpToolAccess.HandlersLayer.layer(ThreadHistoryHandlers.layer).pipe(
+        Layer.provide(dependencies),
+      ),
+    ),
   );
   const call = <Name extends keyof typeof ThreadHistoryToolkit.tools>(
     name: Name,

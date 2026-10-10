@@ -3,12 +3,12 @@ import type { V2TurnStartParams__AdditionalContextEntry } from "effect-codex-app
 import {
   buildRuntimeInstructions,
   type ThreadHistoryInstructionMode,
-} from "./RuntimeInstructions.ts";
+} from "@t3tools/provider-core/server/runtimeInstructions";
 
 import {
   T3_CODE_BROWSER_TOOL_INSTRUCTIONS,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
-} from "./T3OrchestrationInstructions.ts";
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 
 const T3_CODE_DEVICE_TOOL_INSTRUCTIONS = `## T3 Code devices
 

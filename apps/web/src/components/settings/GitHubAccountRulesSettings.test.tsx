@@ -117,7 +117,7 @@ function discovery(logins: ReadonlyArray<string>): SourceControlDiscoveryResult 
           detail: Option.none(),
           accounts: logins.map((login, index) => ({
             host: "github.com",
-            login,
+            account: login,
             active: index === 0,
             authenticated: true,
           })),

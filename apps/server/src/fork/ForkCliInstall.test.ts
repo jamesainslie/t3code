@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import { findWindowsShim } from "../cli/update.ts";
 import { isForkBootServiceCgroup } from "./ForkCliInstall.ts";
@@ -23,7 +23,7 @@ it.layer(NodeServices.layer)("fork CLI install", (it) => {
         yield* fs.writeFileString(shim, `@echo off\r\n"${executable}" %*`);
 
         const found = yield* findWindowsShim(executable).pipe(
-          Effect.provideService(HostProcessEnvironment, {
+          Effect.provideService(HostProcess.Environment, {
             T3CODE_INSTALL_BIN_DIR: path.join(root, "bin"),
           }),
         );

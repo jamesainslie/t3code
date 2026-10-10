@@ -12,11 +12,11 @@ import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
 import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import {
   buildWslRuntimeInstallScript,
@@ -426,7 +426,7 @@ describe("WSL runtime cache", () => {
 
   // Fork: needs only a POSIX sh, so it runs where the flock-dependent executed
   // suite below skips.
-  it.skipIf(HostProcessPlatform.defaultValue() === "win32")(
+  it.skipIf(HostProcess.Platform.defaultValue() === "win32")(
     "invalidates the cache of an install still using the pre-rename base directory",
     () => {
       const home = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "wsl-legacy-home-"));

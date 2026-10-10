@@ -12,12 +12,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import type { Tool } from "effect/unstable/ai";
+import type { Tool } from "effect/ai";
 
 import * as DocumentComments from "../../../fork/DocumentComments.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import { DocumentCommentsToolkitHandlersLive } from "./handlers.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
+import * as McpToolAccessTestkit from "../../McpToolAccess.testkit.ts";
+import * as DocumentCommentsHandlers from "./handlers.ts";
 import { DocumentCommentsToolkit } from "./tools.ts";
 
 const THREAD_ID = ThreadId.make("thread-1");
@@ -76,6 +78,7 @@ const makeHarness = Effect.fn("makeDocumentCommentsToolkitHarness")(function* (
   const shell = options.thread === undefined ? thread : options.thread;
   const comments = options.comments ?? [];
   const dependencies = Layer.mergeAll(
+    McpToolAccessTestkit.liveThreadsLayer,
     Layer.mock(Orchestrator.OrchestratorV2)({
       getThreadShell: (threadId) => Effect.succeed(threadId === THREAD_ID ? shell : null),
     }),
@@ -90,7 +93,11 @@ const makeHarness = Effect.fn("makeDocumentCommentsToolkitHarness")(function* (
     }),
   );
   const toolkit = yield* DocumentCommentsToolkit.pipe(
-    Effect.provide(DocumentCommentsToolkitHandlersLive.pipe(Layer.provide(dependencies))),
+    Effect.provide(
+      McpToolAccess.HandlersLayer.layer(DocumentCommentsHandlers.layer).pipe(
+        Layer.provide(dependencies),
+      ),
+    ),
   );
   const call = <Name extends keyof typeof DocumentCommentsToolkit.tools>(
     name: Name,
