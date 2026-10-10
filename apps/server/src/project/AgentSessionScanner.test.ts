@@ -840,6 +840,29 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
+    // Fork: sandboxes of another Lathe install, or of one still on its
+    // pre-rename base directory, live under these instead of `.t3`.
+    it.effect.each([".lathe", ".t3f"])("excludes fork worktree sandboxes under %s", (baseDir) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const claudeHomePath = yield* makeTempDir("t3code-claude-home-");
+        const codexHomePath = yield* makeTempDir("t3code-codex-home-");
+        const fileSystem = yield* FileSystem.FileSystem;
+
+        const worktreeCwd = path.join(claudeHomePath, baseDir, "worktrees", "t3code", "wt-1");
+        yield* fileSystem.makeDirectory(worktreeCwd, { recursive: true });
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-slug", "a.jsonl"),
+          contents: claudeSessionLine(worktreeCwd),
+          mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
+        });
+
+        const result = yield* runScan({ claudeHomePath, codexHomePath });
+
+        expect(result.candidates).toEqual([]);
+      }),
+    );
+
     it.effect("excludes Codex scratch directories and Downloads", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
