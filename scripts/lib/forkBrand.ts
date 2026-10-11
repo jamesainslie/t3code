@@ -15,26 +15,93 @@ import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
 import { parseSync, type Plugin } from "vite-plus";
 import type { PackUserConfig } from "vite-plus/pack";
 
-/** The upstream product name. A module without it is never parsed. */
+/** The upstream product name. */
 export const FORK_BRAND_TOKEN = "T3 Code";
 
+/**
+ * Text that may need rebranding: the product name, or "T3"/"t3" outside an
+ * identifier such as `T3CODE_HOME` or `@t3tools`. A module without it is never parsed.
+ */
+export const FORK_BRAND_PREFILTER = /T3(?![\w$])|(?<![\w$./@#-])t3(?![\w$/@:-])|npx t3/;
+
 export interface BrandSubstitution {
-  readonly from: string;
+  /** Literal text, or a sticky RegExp matched at each position. */
+  readonly from: string | RegExp;
   readonly to: string;
+  /**
+   * A bare product word ("T3", "t3"). Only rewritten in prose: never in a
+   * literal without whitespace, such as `"t3."` or `"t3#build"`, which is a value
+   * rather than text, and never in plain-text files such as JSON, where a key or
+   * a `--filter t3` can look like prose.
+   */
+  readonly word?: true;
 }
 
-const byLongestKey = (entries: ReadonlyArray<BrandSubstitution>) =>
-  entries.toSorted((a, b) => b.from.length - a.from.length);
+/**
+ * Matches "T3" as the product's short name in prose: between whitespace, quotes,
+ * brackets or sentence punctuation. Never inside `T3CODE`, `T3.Env`, `T3-code.`,
+ * a path, a `|t3|` keyword list or code embedded in a string.
+ */
+const BARE_PRODUCT_NAME =
+  /(?<![^\s"'`([“‘])T3(?=$|['’]s\b|[\s.,;!?)\]”-])(?!-[Cc]ode\b|\.\w|\s+Code\b)/y;
+/** Matches "t3" as the CLI's name in prose, so never `t3code`, `t3-code`, `t3.json`, `t3:` or `refs/t3`. */
+const BARE_CLI_NAME = /(?<![^\s"'`([“‘])t3(?=$|[\s.,;!?)\]”"'`])(?!\.\w)/y;
 
-/** Every replacement, longest key first so a longer phrase wins over the bare name. */
-export const FORK_BRAND_SUBSTITUTIONS: ReadonlyArray<BrandSubstitution> = byLongestKey([
+/** Every replacement. At each position the longest match wins; ties go to the earlier entry. */
+export const FORK_BRAND_SUBSTITUTIONS: ReadonlyArray<BrandSubstitution> = [
   // The README of a project folder the app creates links the product name to its site.
   {
     from: `[${FORK_BRAND_TOKEN}](https://t3.codes)`,
     to: `[${FORK_IDENTITY.productBaseName}](${FORK_IDENTITY.repositoryUrl})`,
   },
+  // The Codex sign-in page draws the name as `<strong>T3</strong> Code`.
+  { from: /T3(?=<\/strong> Code)/y, to: FORK_IDENTITY.productBaseName },
+  { from: /(?<=<strong>T3<\/strong>) Code/y, to: "" },
   { from: FORK_BRAND_TOKEN, to: FORK_IDENTITY.productBaseName },
-]);
+  // `npx t3` runs upstream's package, so it must name the fork's.
+  { from: /npx t3(?![\w-])/y, to: `npx ${FORK_IDENTITY.npmPackageName}` },
+  { from: BARE_PRODUCT_NAME, to: FORK_IDENTITY.productBaseName, word: true },
+  { from: BARE_CLI_NAME, to: FORK_IDENTITY.cliBin, word: true },
+];
+
+/** The substitutions safe on plain text such as JSON, HTML and Markdown: every non-word rule. */
+export const FORK_BRAND_PHRASE_SUBSTITUTIONS: ReadonlyArray<BrandSubstitution> =
+  FORK_BRAND_SUBSTITUTIONS.filter((substitution) => substitution.word !== true);
+
+const FORK_REPOSITORY_SLUG = new URL(FORK_IDENTITY.repositoryUrl).pathname.slice(1);
+
+/** Where triage reads the newest playbook. It is upstream's, rebranded; see `forkTriagePlaybook`. */
+export const FORK_TRIAGE_PLAYBOOK_PATH = ".github/triage/LATHE-PLAYBOOK.md";
+export const FORK_TRIAGE_PLAYBOOK_URL = `https://raw.githubusercontent.com/${FORK_REPOSITORY_SLUG}/main/${FORK_TRIAGE_PLAYBOOK_PATH}`;
+
+/**
+ * Triage clones the source at the installed build's commit, searches issues and
+ * files new ones, and follows a newer playbook when it finds one. A fork build's
+ * commits exist only in the fork, and a fork user's bug belongs in its tracker.
+ */
+const FORK_TRIAGE_SUBSTITUTIONS: ReadonlyArray<BrandSubstitution> = [
+  {
+    from: "https://raw.githubusercontent.com/pingdotgg/t3code/main/.github/triage/PLAYBOOK.md",
+    to: FORK_TRIAGE_PLAYBOOK_URL,
+  },
+  { from: "https://github.com/pingdotgg/t3code", to: FORK_IDENTITY.repositoryUrl },
+  { from: "pingdotgg/t3code", to: FORK_REPOSITORY_SLUG },
+];
+
+/** Extra substitutions for one repo-relative file, tried with the general ones. */
+export const FORK_FILE_SUBSTITUTIONS: Readonly<Record<string, ReadonlyArray<BrandSubstitution>>> = {
+  "apps/server/src/cli/triagePrompt.ts": FORK_TRIAGE_SUBSTITUTIONS,
+};
+
+/**
+ * The fork's copy of upstream's `.github/triage/PLAYBOOK.md`, as the rebranded
+ * `TRIAGE_PLAYBOOK` reads. Regenerate `FORK_TRIAGE_PLAYBOOK_PATH` with
+ * `node scripts/write-fork-triage-playbook.ts` after a sync changes upstream's.
+ */
+export const forkTriagePlaybook = (upstreamPlaybook: string): string =>
+  rebrandText(upstreamPlaybook, {
+    substitutions: [...FORK_TRIAGE_SUBSTITUTIONS, ...FORK_BRAND_SUBSTITUTIONS],
+  }).text;
 
 export type ForkBrandException =
   /** A file left untouched. */
@@ -65,9 +132,9 @@ export type ForkBrandException =
 export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
   {
     kind: "file",
-    file: "apps/server/src/cli/triagePrompt.ts",
+    file: "packages/contracts/src/relay.ts",
     reason:
-      "The triage playbook sends users to upstream's issue tracker and must stay byte-identical to upstream.",
+      "Schema of upstream's T3 Connect relay API, a service the fork uses unchanged; its docs name upstream's environments.",
   },
   {
     kind: "property",
@@ -89,12 +156,6 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
   },
   {
     kind: "phrase",
-    phrase: "T3 Code SnapShots",
-    reason:
-      "Name of the GNOME extension in apps/desktop/gnome-extension/metadata.json, which the UI must match.",
-  },
-  {
-    kind: "phrase",
     phrase: "T3 Code Relay API",
     reason: "Title of upstream's T3 Connect relay API, a service the fork uses unchanged.",
   },
@@ -102,6 +163,54 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
     kind: "phrase",
     phrase: "fork of T3 Code",
     reason: "Attribution of the fork to upstream, which must keep upstream's name.",
+  },
+  { kind: "phrase", phrase: "T3 Connect", reason: "Upstream's tunnel service, used as-is." },
+  {
+    kind: "phrase",
+    phrase: "T3 relay",
+    reason: "The relay client and service behind T3 Connect, which are upstream's.",
+  },
+  {
+    kind: "phrase",
+    phrase: "T3 services",
+    reason: "Upstream's hosted services, such as T3 Connect, which the fork uses unchanged.",
+  },
+  { kind: "phrase", phrase: "T3 Tools", reason: "Upstream's company, named in attribution." },
+  { kind: "phrase", phrase: "T3 Chat", reason: "A separate T3 product; the name of its theme." },
+  {
+    kind: "phrase",
+    phrase: "-Namespace T3 ",
+    reason: "A PowerShell type namespace that the same script then calls as [T3.Env].",
+  },
+  {
+    kind: "phrase",
+    phrase: "synced from T3 Code",
+    reason: "Project sync imports history from an upstream install, which this names.",
+  },
+  {
+    kind: "phrase",
+    phrase: "From T3 Code",
+    reason: "Project sync imports history from an upstream install, which this names.",
+  },
+  {
+    kind: "phrase",
+    phrase: "another T3 Code install",
+    reason: "Project sync imports from an upstream install, which this names.",
+  },
+  {
+    kind: "phrase",
+    phrase: "T3 Code home",
+    reason: "Project sync reads an upstream install's home directory, which this names.",
+  },
+  {
+    kind: "phrase",
+    phrase: "t3 checkpoint ref=",
+    reason: "Message of hidden checkpoint commits, shared with upstream installs.",
+  },
+  {
+    kind: "phrase",
+    phrase: "t3 or t3/",
+    reason: "A branch-prefix example whose produced name, t3/add-search, keeps the same prefix.",
   },
   {
     kind: "verbatim",
@@ -121,7 +230,6 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
     file: "apps/server/src/provider/Drivers/AntigravityDriver.ts",
     reason: "Antigravity client identity that the agent sees.",
   },
-  { kind: "verbatim", value: "T3 Connect", reason: "Upstream's tunnel service, used as-is." },
   { kind: "verbatim", value: "https://app.t3.codes", reason: "Upstream's hosted app origin." },
   {
     kind: "verbatim",
@@ -149,7 +257,11 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
     value: "https://t3.codes/schema/t3.json",
     reason: "Schema URL of the shared t3.json format.",
   },
-  { kind: "verbatim", value: "pingdotgg/t3code", reason: "Upstream repository slug." },
+  {
+    kind: "verbatim",
+    value: "pingdotgg/t3code",
+    reason: "Upstream repository slug, as in the model manifest URL; only triage rewrites it.",
+  },
   { kind: "verbatim", value: "jamesainslie/t3code", reason: "The fork's repository slug." },
 ];
 
@@ -157,10 +269,16 @@ const PROTECTED_PHRASES = FORK_BRAND_EXCEPTIONS.flatMap((exception) =>
   exception.kind === "phrase" ? [exception.phrase] : [],
 );
 
-for (const { to } of FORK_BRAND_SUBSTITUTIONS) {
+for (const { from, to } of [
+  ...FORK_BRAND_SUBSTITUTIONS,
+  ...Object.values(FORK_FILE_SUBSTITUTIONS).flat(),
+]) {
   // A replacement lands inside quotes, templates and JSX text unescaped.
   if (/["'`\\$<>{}&\r\n]/.test(to)) {
     throw new Error(`Fork brand replacement ${JSON.stringify(to)} needs escaping in source.`);
+  }
+  if (typeof from !== "string" && !from.sticky) {
+    throw new Error(`Fork brand pattern ${from} must be sticky (the y flag).`);
   }
 }
 
@@ -205,14 +323,27 @@ interface TextRebrandOptions {
   readonly protectedPhrases?: ReadonlyArray<string>;
 }
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A phrase's pattern, matching any whitespace run where the phrase has a space: JSX text wraps. */
+const phrasePattern = (phrase: string) =>
+  new RegExp(phrase.split(" ").map(escapeRegExp).join("\\s+"), "g");
+
 const protectedRanges = (text: string, phrases: ReadonlyArray<string>) => {
   const ranges: Array<readonly [number, number]> = [];
   for (const phrase of phrases) {
-    for (let at = text.indexOf(phrase); at !== -1; at = text.indexOf(phrase, at + 1)) {
-      ranges.push([at, at + phrase.length]);
+    for (const match of text.matchAll(phrasePattern(phrase))) {
+      ranges.push([match.index, match.index + match[0].length]);
     }
   }
   return ranges;
+};
+
+/** Length of `from` matched at `index` of `text`, or -1. */
+const matchLength = (from: string | RegExp, text: string, index: number) => {
+  if (typeof from === "string") return text.startsWith(from, index) ? from.length : -1;
+  from.lastIndex = index;
+  return from.exec(text)?.[0].length ?? -1;
 };
 
 const planTextReplacements = (
@@ -223,19 +354,25 @@ const planTextReplacements = (
     protectedPhrases = PROTECTED_PHRASES,
   }: TextRebrandOptions = {},
 ): Array<Replacement> => {
-  const ordered = byLongestKey(substitutions);
   const kept = protectedRanges(text, protectedPhrases);
+  const prose = /\s/.test(text.trim());
   const replacements: Array<Replacement> = [];
   let index = 0;
   while (index < text.length) {
-    const match = ordered.find(({ from }) => text.startsWith(from, index));
-    const end = match ? index + match.from.length : index;
+    let match: { readonly length: number; readonly to: string } | undefined;
+    for (const { from, to, word } of substitutions) {
+      if (word && !prose) continue;
+      const length = matchLength(from, text, index);
+      if (length < 0 || (match !== undefined && length <= match.length)) continue;
+      match = { length, to };
+    }
+    const end = match ? index + match.length : index;
     if (!match || kept.some(([start, stop]) => index < stop && end > start)) {
       index += 1;
       continue;
     }
     replacements.push({ start: offset + index, end: offset + end, text: match.to });
-    index = end;
+    index = Math.max(end, index + 1);
   }
   return replacements;
 };
@@ -250,13 +387,23 @@ const applyReplacements = (code: string, replacements: ReadonlyArray<Replacement
   return output + code.slice(cursor);
 };
 
-/** Rebrands plain text such as HTML, keeping protected phrases. */
+/**
+ * Rebrands text as one string literal reads it, keeping protected phrases. For
+ * a whole file such as HTML or JSON use `rebrandPlainText`.
+ */
 export const rebrandText = (text: string, options?: TextRebrandOptions) => {
   const substitutions = options?.substitutions ?? FORK_BRAND_SUBSTITUTIONS;
-  if (!substitutions.some(({ from }) => text.includes(from))) return { text, replacements: 0 };
-  const replacements = planTextReplacements(text, 0, options);
+  const mayMatch =
+    FORK_BRAND_PREFILTER.test(text) ||
+    substitutions.some(({ from }) => typeof from === "string" && text.includes(from));
+  if (!mayMatch) return { text, replacements: 0 };
+  const replacements = planTextReplacements(text, 0, { ...options, substitutions });
   return { text: applyReplacements(text, replacements), replacements: replacements.length };
 };
+
+/** Rebrands a whole plain-text file (HTML, JSON, SVG, Markdown) with the phrase rules only. */
+export const rebrandPlainText = (text: string) =>
+  rebrandText(text, { substitutions: FORK_BRAND_PHRASE_SUBSTITUTIONS });
 
 interface AstNode {
   readonly type: string;
@@ -344,6 +491,8 @@ const textRange = (code: string, node: AstNode): readonly [number, number] | und
   if (node.type === "TemplateElement") {
     const raw = (node.value as { raw?: unknown } | undefined)?.raw;
     if (typeof raw !== "string") return undefined;
+    // The parser spans a JavaScript quasi without its delimiters and a TypeScript one with them.
+    if (code.slice(node.start, node.end) === raw) return [node.start, node.end];
     const start = node.start + 1;
     const end = code.startsWith("${", node.end - 2) ? node.end - 2 : node.end - 1;
     return code.slice(start, end) === raw ? [start, end] : undefined;
@@ -469,14 +618,34 @@ const buildSourceMap = (
   };
 };
 
-/** The text of every literal, quasi and JSX text in a module that holds the token. */
-export const brandTextSites = (code: string, id: string): Array<string> => {
-  if (!code.includes(FORK_BRAND_TOKEN)) return [];
-  const parsed = parseSync(stripQuery(id), code, { lang: languageOf(id), sourceType: "module" });
+/**
+ * The range of every literal, quasi and JSX text in a module that may need
+ * rebranding. Empty for a module that does not parse.
+ */
+export const brandTextRanges = (
+  code: string,
+  id: string,
+  lang: "js" | "jsx" | "ts" | "tsx" = languageOf(id),
+): Array<readonly [number, number]> => {
+  if (!FORK_BRAND_PREFILTER.test(code)) return [];
+  const parsed = parseSync(stripQuery(id), code, { lang, sourceType: "module" });
+  if (parsed.errors.length > 0) return [];
   return collectTextSites(code, parsed.program)
-    .map((site) => code.slice(site.start, site.end))
-    .filter((text) => text.includes(FORK_BRAND_TOKEN));
+    .filter((site) => FORK_BRAND_PREFILTER.test(code.slice(site.start, site.end)))
+    .map((site) => [site.start, site.end] as const);
 };
+
+/** The text of every literal, quasi and JSX text in a module that may need rebranding. */
+export const brandTextSites = (code: string, id: string): Array<string> =>
+  brandTextRanges(code, id).map(([start, end]) => code.slice(start, end));
+
+/** Where the brand layer would rewrite one literal's text, positioned from `offset`. */
+export const planRebrand = (
+  text: string,
+  offset = 0,
+  options?: TextRebrandOptions,
+): ReadonlyArray<{ readonly start: number; readonly end: number }> =>
+  planTextReplacements(text, offset, options);
 
 export interface RebrandResult {
   readonly code: string;
@@ -484,20 +653,24 @@ export interface RebrandResult {
   readonly replacements: number;
 }
 
-const languageOf = (id: string) => {
+function languageOf(id: string) {
   const extension = NodePath.extname(stripQuery(id));
   return extension === ".tsx" ? "tsx" : extension === ".ts" ? "ts" : "jsx";
-};
+}
 
 /**
  * Rebrands one module. Pure: the result depends only on `code` and `id`. A
- * module without the token, in an excepted file, or that does not parse comes
- * back unchanged with a null map.
+ * module with nothing to rebrand, in an excepted file, or that does not parse
+ * comes back unchanged with a null map.
  */
 export const rebrandSource = (code: string, id: string): RebrandResult => {
   const unchanged = { code, map: null, replacements: 0 };
-  if (!code.includes(FORK_BRAND_TOKEN)) return unchanged;
+  if (!FORK_BRAND_PREFILTER.test(code)) return unchanged;
   const relative = repoRelativePath(id);
+  const substitutions = [
+    ...(relative === undefined ? [] : (FORK_FILE_SUBSTITUTIONS[relative] ?? [])),
+    ...FORK_BRAND_SUBSTITUTIONS,
+  ];
   const exceptions = FORK_BRAND_EXCEPTIONS.filter(
     (exception) =>
       (exception.kind === "file" || exception.kind === "property") && exception.file === relative,
@@ -514,9 +687,10 @@ export const rebrandSource = (code: string, id: string): RebrandResult => {
     exception.kind === "property" ? [exception.property] : [],
   );
   const replacements = collectTextSites(code, parsed.program)
-    .filter((site) => code.slice(site.start, site.end).includes(FORK_BRAND_TOKEN))
     .filter((site) => !keptProperties.some((property) => endsWithPath(site.keyPath, property)))
-    .flatMap((site) => planTextReplacements(code.slice(site.start, site.end), site.start))
+    .flatMap((site) =>
+      planTextReplacements(code.slice(site.start, site.end), site.start, { substitutions }),
+    )
     .toSorted((a, b) => a.start - b.start);
   if (replacements.length === 0) return unchanged;
   return {
@@ -544,7 +718,8 @@ export const forkBrandPlugin = (): Plugin => ({
   transform: {
     filter: {
       id: { include: [BRANDABLE_ID_FILTER], exclude: [/[\\/]node_modules[\\/]/] },
-      code: { include: FORK_BRAND_TOKEN },
+      // A coarse filter the bundler can run natively; rebrandSource applies FORK_BRAND_PREFILTER.
+      code: { include: /T3|t3/ },
     },
     handler(code, id) {
       if (!isBrandableModule(id)) return null;
@@ -554,7 +729,7 @@ export const forkBrandPlugin = (): Plugin => ({
   },
   transformIndexHtml: {
     order: "pre",
-    handler: (html) => rebrandText(html).text,
+    handler: (html) => rebrandPlainText(html).text,
   },
 });
 

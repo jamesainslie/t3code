@@ -17,7 +17,14 @@ import * as Schema from "effect/Schema";
 import { Argument, Command } from "effect/cli";
 import { parseSync } from "vite-plus";
 
-import { brandTextSites, FORK_BRAND_EXCEPTIONS, FORK_BRAND_TOKEN } from "./lib/forkBrand.ts";
+import {
+  brandTextRanges,
+  brandTextSites,
+  FORK_BRAND_EXCEPTIONS,
+  FORK_BRAND_SUBSTITUTIONS,
+  FORK_BRAND_TOKEN,
+  planRebrand,
+} from "./lib/forkBrand.ts";
 
 /**
  * The start of upstream's T3 wordmark outline (its `T3Wordmark.tsx`, removed in the fork), its T
@@ -30,7 +37,17 @@ export interface BrandLeakAllowlist {
   readonly phrases: ReadonlyArray<string>;
   /** Object key paths whose string value may be exactly the token. */
   readonly propertyPaths: ReadonlyArray<ReadonlyArray<string>>;
+  /** Text that may surround a product word in a literal, with the word's offset in it. */
+  readonly literalPhrases: ReadonlyArray<{ readonly text: string; readonly at: number }>;
 }
+
+/**
+ * The rules a bundle literal is checked against beyond the token, which the
+ * whole-text scan already finds: product words, `npx t3` and the split wordmark.
+ */
+const LITERAL_LEAK_RULES = FORK_BRAND_SUBSTITUTIONS.filter(
+  ({ from }) => typeof from !== "string" || !from.includes(FORK_BRAND_TOKEN),
+);
 
 export interface BrandLeak {
   readonly file: string;
@@ -75,10 +92,29 @@ const SNIPPET_REACH = 40;
 const MIN_SNIPPET_CONTEXT = 8;
 
 /**
- * The text around each token in an excepted file's literals, as it appears in
- * an unminified bundle. A snippet without enough context to be specific is
- * dropped, so it cannot excuse unrelated leaks.
+ * The text around `[at, matchEnd)` in `text`, as it appears in an unminified
+ * bundle, with the match's offset in it. A snippet without enough context to be
+ * specific is dropped, so it cannot excuse unrelated leaks.
  */
+const snippetAround = (text: string, at: number, matchEnd: number) => {
+  let start = at;
+  while (start > 0 && at - start < SNIPPET_REACH && !SNIPPET_BOUNDARY.test(text[start - 1]!)) {
+    start -= 1;
+  }
+  let end = matchEnd;
+  while (
+    end < text.length &&
+    end - matchEnd < SNIPPET_REACH &&
+    !SNIPPET_BOUNDARY.test(text[end]!)
+  ) {
+    end += 1;
+  }
+  return end - start - (matchEnd - at) >= MIN_SNIPPET_CONTEXT
+    ? { text: text.slice(start, end), at: at - start }
+    : undefined;
+};
+
+/** The text around each token in an excepted file's literals. */
 const tokenSnippets = (text: string): Array<string> => {
   const snippets: Array<string> = [];
   for (
@@ -86,25 +122,17 @@ const tokenSnippets = (text: string): Array<string> => {
     at !== -1;
     at = text.indexOf(FORK_BRAND_TOKEN, at + 1)
   ) {
-    let start = at;
-    while (start > 0 && at - start < SNIPPET_REACH && !SNIPPET_BOUNDARY.test(text[start - 1]!)) {
-      start -= 1;
-    }
-    const tokenEnd = at + FORK_BRAND_TOKEN.length;
-    let end = tokenEnd;
-    while (
-      end < text.length &&
-      end - tokenEnd < SNIPPET_REACH &&
-      !SNIPPET_BOUNDARY.test(text[end]!)
-    ) {
-      end += 1;
-    }
-    if (end - start - FORK_BRAND_TOKEN.length >= MIN_SNIPPET_CONTEXT) {
-      snippets.push(text.slice(start, end));
-    }
+    const snippet = snippetAround(text, at, at + FORK_BRAND_TOKEN.length);
+    if (snippet) snippets.push(snippet.text);
   }
   return snippets;
 };
+
+/** The text around each product word the brand layer would rewrite in an excepted literal. */
+const literalSnippets = (text: string) =>
+  planRebrand(text, 0, { substitutions: LITERAL_LEAK_RULES, protectedPhrases: [] }).flatMap(
+    ({ start, end }) => snippetAround(text, start, end) ?? [],
+  );
 
 /** Builds the allowlist from the brand layer's exceptions, reading excepted files from the repo. */
 export const loadBrandLeakAllowlist = Effect.gen(function* () {
@@ -113,16 +141,18 @@ export const loadBrandLeakAllowlist = Effect.gen(function* () {
   const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
   const phrases: Array<string> = [];
   const propertyPaths: Array<ReadonlyArray<string>> = [];
+  const literalPhrases: Array<{ readonly text: string; readonly at: number }> = [];
   for (const exception of FORK_BRAND_EXCEPTIONS) {
     if (exception.kind === "phrase") phrases.push(exception.phrase);
     if (exception.kind === "property") propertyPaths.push(exception.property.split("."));
     if (exception.kind === "file") {
       const file = path.join(repoRoot, exception.file);
-      const code = yield* fs.readFileString(file);
-      phrases.push(...brandTextSites(code, file).flatMap(tokenSnippets));
+      const sites = brandTextSites(yield* fs.readFileString(file), file);
+      phrases.push(...sites.flatMap(tokenSnippets));
+      literalPhrases.push(...sites.flatMap(literalSnippets));
     }
   }
-  return { phrases, propertyPaths } satisfies BrandLeakAllowlist;
+  return { phrases, propertyPaths, literalPhrases } satisfies BrandLeakAllowlist;
 });
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -172,6 +202,33 @@ export const findBrandLeaksInText = (
   return leaks;
 };
 
+/**
+ * Every product word, `npx t3` or split wordmark that the brand layer would
+ * still rewrite in a JavaScript bundle's string literals. Identifiers, keys and
+ * comments are not literals, so a minified `T3` variable never counts.
+ */
+export const findLiteralBrandLeaks = (
+  code: string,
+  file: string,
+  allowlist: BrandLeakAllowlist,
+): Array<Omit<BrandLeak, "file">> => {
+  const leaks: Array<Omit<BrandLeak, "file">> = [];
+  for (const [start, end] of brandTextRanges(code, file, "js")) {
+    const planned = planRebrand(code.slice(start, end), start, {
+      substitutions: LITERAL_LEAK_RULES,
+    });
+    for (const { start: at } of planned) {
+      const covered = allowlist.literalPhrases.some((phrase) =>
+        code.startsWith(phrase.text, at - phrase.at),
+      );
+      if (covered) continue;
+      const context = code.slice(Math.max(0, at - 60), at + 60).replace(/\s+/g, " ");
+      leaks.push({ ...lineAndColumn(code, at), context });
+    }
+  }
+  return leaks;
+};
+
 /** Every T3 wordmark outline in `text`. Nothing excuses one: the fork draws the Lathe caret. */
 export const findWordmarkLeaksInText = (text: string): Array<Omit<BrandLeak, "file">> => {
   const leaks: Array<Omit<BrandLeak, "file">> = [];
@@ -192,8 +249,10 @@ const isBinary = (bytes: Uint8Array) => bytes.subarray(0, 8192).includes(0);
  * bundles keep upstream's comments, which the brand layer leaves alone and no
  * user reads. A file that does not parse is scanned whole.
  */
+const JAVASCRIPT_FILE = /\.[cm]?js$/;
+
 export const withoutComments = (code: string, file: string): string => {
-  if (!/\.[cm]?js$/.test(file) || !code.includes(FORK_BRAND_TOKEN)) return code;
+  if (!JAVASCRIPT_FILE.test(file) || !code.includes(FORK_BRAND_TOKEN)) return code;
   const parsed = parseSync(file, code, { lang: "js" });
   if (parsed.errors.length > 0) return code;
   let output = "";
@@ -230,10 +289,12 @@ export const checkBrandLeaks = Effect.fn("checkBrandLeaks")(function* (
       const bytes = yield* fs.readFile(file);
       if (isBinary(bytes)) continue;
       scanned += 1;
-      const text = withoutComments(decoder.decode(bytes), file);
+      const raw = decoder.decode(bytes);
+      const text = withoutComments(raw, file);
       for (const leak of [
         ...findBrandLeaksInText(text, allowlist),
         ...findWordmarkLeaksInText(text),
+        ...(JAVASCRIPT_FILE.test(file) ? findLiteralBrandLeaks(raw, file, allowlist) : []),
       ]) {
         leaks.push({ file, ...leak });
       }

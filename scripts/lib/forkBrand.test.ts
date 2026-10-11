@@ -9,6 +9,9 @@ import {
   FORK_BRAND_EXCEPTIONS,
   FORK_BRAND_SUBSTITUTIONS,
   FORK_BRAND_TOKEN,
+  FORK_TRIAGE_PLAYBOOK_PATH,
+  FORK_TRIAGE_PLAYBOOK_URL,
+  forkTriagePlaybook,
   isBrandableModule,
   rebrandSource,
   rebrandText,
@@ -81,6 +84,14 @@ describe("rebrandSource", () => {
     expect(result.code).toBe(
       `const m = \`Restart ${brand} on \${host.label}. ${brand} reconnects \${T3Code}.\`;\n`,
     );
+  });
+
+  it("rewrites template quasis in JavaScript modules, which the parser spans without delimiters", () => {
+    const result = rebrandSource(
+      "export const m = `Restart T3 Code on ${host}.`;\n",
+      moduleId("apps/desktop/scripts/example.mjs"),
+    );
+    expect(result.code).toBe(`export const m = \`Restart ${brand} on \${host}.\`;\n`);
   });
 
   it("rewrites JSX text and JSX attribute strings", () => {
@@ -174,10 +185,8 @@ describe("rebrandSource", () => {
 });
 
 describe("substitutions", () => {
-  it("lists longer keys first so a longer phrase wins over the bare name", () => {
-    const lengths = FORK_BRAND_SUBSTITUTIONS.map((entry) => entry.from.length);
-    expect(lengths).toEqual([...lengths].toSorted((a, b) => b - a));
-    expect(FORK_BRAND_SUBSTITUTIONS.at(-1)).toEqual({ from: FORK_BRAND_TOKEN, to: brand });
+  it("replaces the upstream product name with the fork's", () => {
+    expect(FORK_BRAND_SUBSTITUTIONS).toContainEqual({ from: FORK_BRAND_TOKEN, to: brand });
   });
 
   it("applies the longest matching key at each position", () => {
@@ -195,6 +204,126 @@ describe("substitutions", () => {
     );
     expect(result.code).toContain(`Created in [${brand}](${FORK_IDENTITY.repositoryUrl}).`);
   });
+
+  it("redraws the Codex sign-in page's split wordmark as the fork's name", () => {
+    const result = rebrandSource(
+      'const page = `<div class="brand"><strong>T3</strong> Code</div>`;\n',
+      serverModule,
+    );
+    expect(result.code).toBe(
+      `const page = \`<div class="brand"><strong>${brand}</strong></div>\`;\n`,
+    );
+  });
+});
+
+const cli = FORK_IDENTITY.cliBin;
+const npxPackage = FORK_IDENTITY.npmPackageName;
+const rebrandsTo = (text: string) => rebrandText(text).text;
+
+describe("product words", () => {
+  it("rewrites the bare T3 product name in prose", () => {
+    expect(rebrandsTo("T3 needs your SSH password to connect to ")).toBe(
+      `${brand} needs your SSH password to connect to `,
+    );
+    expect(rebrandsTo("This host is ready for T3's browser.")).toBe(
+      `This host is ready for ${brand}'s browser.`,
+    );
+    expect(rebrandsTo("Delegate one task to a T3-owned child of a T3 thread.")).toBe(
+      `Delegate one task to a ${brand}-owned child of a ${brand} thread.`,
+    );
+    expect(rebrandsTo("Restart T3")).toBe(`Restart ${brand}`);
+  });
+
+  it("points npx at the fork's package, so the command runs the fork", () => {
+    expect(rebrandsTo("npx t3 pair")).toBe(`npx ${npxPackage} pair`);
+    expect(rebrandsTo("sudo npx t3 browser setup")).toBe(`sudo npx ${npxPackage} browser setup`);
+    expect(rebrandsTo("npx t3@nightly")).toBe(`npx ${npxPackage}@nightly`);
+  });
+
+  it("names the fork's CLI where the text names upstream's", () => {
+    expect(rebrandsTo("Run `t3 connect link` to enable T3 Connect.")).toBe(
+      `Run \`${cli} connect link\` to enable T3 Connect.`,
+    );
+    expect(rebrandsTo("t3 is uninstalled. Thanks for trying T3 Code.")).toBe(
+      `${cli} is uninstalled. Thanks for trying ${brand}.`,
+    );
+    expect(rebrandsTo("Could not rewrite the t3 launcher at ")).toBe(
+      `Could not rewrite the ${cli} launcher at `,
+    );
+    expect(rebrandsTo('Use "t3 --help" for commands.')).toBe(`Use "${cli} --help" for commands.`);
+  });
+
+  it("keeps upstream's services, company and sibling products", () => {
+    const kept = [
+      "Link an environment to make it available through T3 Connect.",
+      "T3 Connect and the other T3 services it uses follow T3 Tools' privacy policy.",
+      "The T3 relay client is required for T3 Connect.",
+      "T3 Chat",
+      "Lathe is a fork of T3 Code by T3 Tools.",
+    ];
+    for (const text of kept) expect(rebrandsTo(text), text).toBe(text);
+  });
+
+  it("leaves identifiers, paths and code that only look like the name", () => {
+    const kept = [
+      "T3CODE_HOME",
+      "$env:T3_SET",
+      "Add-Type -Namespace T3 -Name Env; [void][T3.Env]::SendMessageTimeout()",
+      "T3-code.preview_click",
+      "refs/t3/checkpoints",
+      "t3code:themes:v1",
+      "t3-code",
+      "t3.json",
+      "@t3tools/contracts",
+      "https://app.t3.codes",
+      "profile t3-chrome-headless-shell /**/chrome flags=(unconfined) {",
+      "lathe/add-search",
+      "t3 checkpoint ref=refs/t3/checkpoints/1",
+      "For example, t3 or t3/ produces t3/add-search. Leave empty for no prefix.",
+    ];
+    for (const text of kept) expect(rebrandsTo(text), text).toBe(text);
+  });
+
+  it("leaves a literal without whitespace, which is a value rather than prose", () => {
+    const kept = ["T3", "\n            T3\n          ", "t3", "t3.", "t3#build", "T3:"];
+    for (const text of kept) expect(rebrandsTo(text), text).toBe(text);
+    expect(rebrandsTo("Run the t3#build task")).toBe("Run the t3#build task");
+  });
+
+  it("keeps a protected phrase that JSX text wraps across lines", () => {
+    const text =
+      "T3 Connect and the other T3 services it uses follow T3\n            Tools' policy.";
+    expect(rebrandsTo(text)).toBe(text);
+    expect(rebrandsTo("available through T3\n          Connect.")).toBe(
+      "available through T3\n          Connect.",
+    );
+  });
+
+  it("keeps copy that names upstream T3 Code as the source of synced history", () => {
+    const kept = [
+      "Read-only conversation synced from T3 Code",
+      "From T3 Code",
+      "Sync from another T3 Code install",
+      "Path to the T3 Code home, such as ~/.t3",
+    ];
+    for (const text of kept) expect(rebrandsTo(text), text).toBe(text);
+  });
+
+  it("rewrites product words in source the same way, and parses only modules that need it", () => {
+    const result = rebrandSource(
+      "const a = `Stop t3 on ${host}, then restart t3.`;\nconst b = <p>T3 could not ask for approval here.</p>;\n",
+      webModule,
+    );
+    expect(result.code).toBe(
+      `const a = \`Stop ${cli} on \${host}, then restart ${cli}.\`;\nconst b = <p>${brand} could not ask for approval here.</p>;\n`,
+    );
+    const untouched = `import { x } from "@t3tools/contracts";\nconst T3 = 1;\nconst key = "t3code:x";\n`;
+    expect(rebrandSource(untouched, webModule)).toEqual({
+      code: untouched,
+      map: null,
+      replacements: 0,
+    });
+  });
 });
 
 describe("exceptions", () => {
@@ -211,12 +340,10 @@ describe("exceptions", () => {
     }
   });
 
-  it("keeps verbatim identifiers out of the substitution keys", () => {
+  it("keeps verbatim identifiers out of every substitution", () => {
     for (const exception of FORK_BRAND_EXCEPTIONS) {
       if (exception.kind !== "verbatim") continue;
-      for (const { from } of FORK_BRAND_SUBSTITUTIONS) {
-        expect(exception.value.includes(from), `${exception.value} contains ${from}`).toBe(false);
-      }
+      expect(rebrandText(exception.value).text, exception.value).toBe(exception.value);
     }
   });
 
@@ -237,12 +364,25 @@ describe("exceptions", () => {
 
   it("keeps a protected phrase while rewriting the rest of the literal", () => {
     const result = rebrandSource(
-      `const m = "Enable T3 Code SnapShots in GNOME Extensions, then restart T3 Code.";\n`,
+      `const m = "The T3 Code Relay API is down; restart T3 Code.";\n`,
       webModule,
     );
-    expect(result.code).toBe(
-      `const m = "Enable T3 Code SnapShots in GNOME Extensions, then restart ${brand}.";\n`,
+    expect(result.code).toBe(`const m = "The T3 Code Relay API is down; restart ${brand}.";\n`);
+  });
+
+  it("names the GNOME extension as its staged metadata does", () => {
+    const result = rebrandSource(
+      `const m = "Enable T3 Code SnapShots in GNOME Extensions.";\n`,
+      webModule,
     );
+    expect(result.code).toBe(`const m = "Enable ${brand} SnapShots in GNOME Extensions.";\n`);
+  });
+
+  it("leaves the relay API contract, which describes upstream's service", () => {
+    const file = "packages/contracts/src/relay.ts";
+    const source = readRepoFile(file);
+    expect(source).toContain("T3 environment");
+    expect(rebrandSource(source, moduleId(file)).code).toBe(source);
   });
 
   it("keeps the attribution to upstream", () => {
@@ -275,13 +415,29 @@ describe("exceptions", () => {
     );
   });
 
-  it("leaves the triage playbook byte-identical to upstream", () => {
+  it("sends triage to the fork's source, issue tracker and playbook", () => {
     const file = "apps/server/src/cli/triagePrompt.ts";
-    const source = readRepoFile(file);
-    expect(source).toContain(FORK_BRAND_TOKEN);
-    const result = rebrandSource(source, moduleId(file));
-    expect(result.code).toBe(source);
-    expect(result.map).toBeNull();
+    const code = rebrandSource(readRepoFile(file), moduleId(file)).code;
+    expect(code).toContain(`# ${brand} triage playbook`);
+    expect(code).toContain(
+      `You are a support engineer for ${brand} (${FORK_IDENTITY.repositoryUrl})`,
+    );
+    expect(code).toContain(`${FORK_IDENTITY.repositoryUrl}/issues/new`);
+    expect(code).toContain(FORK_TRIAGE_PLAYBOOK_URL);
+    expect(code).toContain(`\\\`npx ${npxPackage} serve\\\``);
+    expect(code).toContain(`\\\`${cli} triage\\\``);
+    expect(code).not.toContain("pingdotgg");
+    expect(code).not.toContain(FORK_BRAND_TOKEN);
+  });
+
+  it("keeps the fork's triage playbook in step with upstream's", () => {
+    const upstream = readRepoFile(".github/triage/PLAYBOOK.md");
+    expect(readRepoFile(FORK_TRIAGE_PLAYBOOK_PATH)).toBe(forkTriagePlaybook(upstream));
+  });
+
+  it("keeps the triage repository rewrite inside triage", () => {
+    const source = `const manifest = "https://raw.githubusercontent.com/pingdotgg/t3code/main/apps/server/src/provider/model-manifest.json";\n`;
+    expect(rebrandSource(source, serverModule).code).toBe(source);
   });
 
   it("finds the verbatim vendor identities where the exceptions say they live", () => {
