@@ -1,5 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import { beforeEach, vi } from "vite-plus/test";
 
 const { autoUpdaterMock } = vi.hoisted(() => ({
@@ -12,6 +15,7 @@ const { autoUpdaterMock } = vi.hoisted(() => ({
     disableDifferentialDownload: false,
     fullChangelog: false,
     checkForUpdates: vi.fn(() => Promise.resolve(null)),
+    checkForUpdatesPromise: null as Promise<null> | null,
     downloadUpdate: vi.fn(() => Promise.resolve([])),
     on: vi.fn(),
     quitAndInstall: vi.fn(),
@@ -37,6 +41,7 @@ describe("ElectronUpdater", () => {
     autoUpdaterMock.fullChangelog = false;
     autoUpdaterMock.checkForUpdates.mockClear();
     autoUpdaterMock.checkForUpdates.mockImplementation(() => Promise.resolve(null));
+    autoUpdaterMock.checkForUpdatesPromise = null;
     autoUpdaterMock.downloadUpdate.mockClear();
     autoUpdaterMock.downloadUpdate.mockImplementation(() => Promise.resolve([]));
     autoUpdaterMock.on.mockClear();
@@ -75,6 +80,29 @@ describe("ElectronUpdater", () => {
       assert.strictEqual(error.cause, cause);
       assert.equal(error.message, "Electron updater failed to check for updates on channel beta.");
       assert.notInclude(error.message, cause.message);
+    }).pipe(Effect.provide(ElectronUpdater.layer)),
+  );
+
+  it.effect("abandons a stalled update check so the next check starts fresh", () =>
+    Effect.gen(function* () {
+      // electron-updater hands every caller the in-flight check until it settles.
+      autoUpdaterMock.checkForUpdates.mockImplementation(
+        () => autoUpdaterMock.checkForUpdatesPromise ?? Promise.resolve(null),
+      );
+      autoUpdaterMock.checkForUpdatesPromise = new Promise<null>(() => {});
+      const updater = yield* ElectronUpdater.ElectronUpdater;
+      autoUpdaterMock.channel = "nightly";
+
+      const stalledCheck = yield* updater.checkForUpdates.pipe(Effect.flip, Effect.forkChild);
+      yield* TestClock.adjust(Duration.minutes(1));
+      const error = yield* Fiber.join(stalledCheck);
+
+      assert.instanceOf(error, ElectronUpdater.ElectronUpdaterCheckForUpdatesError);
+      assert.equal(error.channel, "nightly");
+      assert.isNull(autoUpdaterMock.checkForUpdatesPromise);
+
+      yield* updater.checkForUpdates;
+      assert.equal(autoUpdaterMock.checkForUpdates.mock.calls.length, 2);
     }).pipe(Effect.provide(ElectronUpdater.layer)),
   );
 
