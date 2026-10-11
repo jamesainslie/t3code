@@ -145,6 +145,9 @@ a shortcut.
 outside the terminal, the preview, and the model picker; change it in
 **Settings → Keybindings**.
 
+`thread.snoozeHour` snoozes the focused thread for one hour, the same as **Snooze → In 1 hour**
+in the thread menu. Pressing it on a snoozed thread wakes it. It has no default shortcut.
+
 `thread.undo` (`mod+z` by default) reverses the actions shown in the notice at the
 bottom of the sidebar, such as unpin, settle, snooze, archive, or discarding a
 draft. Consecutive

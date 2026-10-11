@@ -98,6 +98,7 @@ import {
   dependencyWaitLabel,
   effectiveBlocked,
   effectiveSnoozed,
+  resolveSnoozePresets,
   threadUnblockedAt,
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
@@ -1637,6 +1638,7 @@ export default function ChatView(props: ChatViewProps) {
     settleThread,
     pinThread,
     confirmAndUnpinThread,
+    snoozeThread,
     addThreadDependency,
     removeThreadDependency,
     releaseThreadDependencies,
@@ -8310,6 +8312,31 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
+      if (command === "thread.snoozeHour") {
+        if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsSnooze) return;
+        if (activeThreadSnoozed) {
+          void handleUnsnoozeActiveThread();
+          return;
+        }
+        const preset = resolveSnoozePresets(new Date()).find(({ id }) => id === "hour");
+        if (!preset) return;
+        void snoozeThread(activeThreadRef, preset.snoozedUntil).then((result) => {
+          if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to snooze thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        });
+        return;
+      }
+
       if (command === "terminal.toggle") {
         if (!terminalUiState.terminalOpen && !canReadTerminal && !canOperateTerminal) return;
         event.preventDefault();
@@ -8574,14 +8601,18 @@ export default function ChatView(props: ChatViewProps) {
     keybindings,
     scriptKeybindings,
     handleUnsettleActiveThread,
+    handleUnsnoozeActiveThread,
+    activeThreadSnoozed,
     isServerThread,
     serverConfig?.threadFind,
     onInterrupt,
     onToggleDiff,
     pinThread,
     settleThread,
+    snoozeThread,
     supportsPinning,
     supportsSettlement,
+    supportsSnooze,
     confirmAndUnpinThread,
     copyActiveThreadReference,
     getShortcutContext,

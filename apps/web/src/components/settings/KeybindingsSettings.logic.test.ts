@@ -284,6 +284,7 @@ describe("KeybindingsSettings.logic", () => {
     expect(commandLabel("commandPalette.toggle")).toBe("Command Palette: Toggle");
     expect(commandLabel("themeEditor.toggle")).toBe("Theme Editor: Toggle");
     expect(commandLabel("view.reopenClosed")).toBe("Reopen Closed Tab");
+    expect(commandLabel("thread.snoozeHour")).toBe("Thread: Snooze for 1 Hour or Wake");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
 
@@ -326,13 +327,13 @@ describe("KeybindingsSettings.logic", () => {
         "rightPanel.toggleMaximized",
         "composer.cycleHost",
         "thread.stop",
+        "thread.snoozeHour",
         "usage.open",
         "script.setup-db.run",
       ]),
     );
-    // Fork: Escape stops a run by default, so only composer.cycleHost is unbound.
-    for (const command of ["composer.cycleHost"]) {
-      expect(DEFAULT_RESOLVED_KEYBINDINGS.some((binding) => binding.command === command)).toBe(
+    // Fork: Escape stops a run by default, so thread.stop is bound.
+    for (const command of ["thread.snoozeHour", "composer.cycleHost"]) {      expect(DEFAULT_RESOLVED_KEYBINDINGS.some((binding) => binding.command === command)).toBe(
         false,
       );
     }
