@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -9,6 +10,10 @@ import { autoUpdater } from "electron-updater";
 type AutoUpdater = typeof autoUpdater;
 
 export type ElectronUpdaterFeedUrl = Parameters<AutoUpdater["setFeedURL"]>[0];
+
+// Electron's net requests never emit "socket", so electron-updater's own request
+// timeout never arms and a stalled feed request would hang the check forever.
+const CHECK_FOR_UPDATES_TIMEOUT = Duration.minutes(1);
 
 export class ElectronUpdaterCheckForUpdatesError extends Schema.TaggedError<ElectronUpdaterCheckForUpdatesError>()(
   "ElectronUpdaterCheckForUpdatesError",
@@ -128,7 +133,24 @@ export const make = ElectronUpdater.of({
     return Effect.tryPromise({
       try: () => autoUpdater.checkForUpdates(),
       catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
-    }).pipe(Effect.asVoid);
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: CHECK_FOR_UPDATES_TIMEOUT,
+        orElse: () =>
+          Effect.suspend(() => {
+            // electron-updater returns its in-flight check to every later caller, so
+            // a stalled one has to be dropped for the next check to send a new request.
+            Reflect.set(autoUpdater, "checkForUpdatesPromise", null);
+            return Effect.fail(
+              new ElectronUpdaterCheckForUpdatesError({
+                channel,
+                cause: new Error("Update check timed out."),
+              }),
+            );
+          }),
+      }),
+      Effect.asVoid,
+    );
   }),
   downloadUpdate: Effect.suspend(() => {
     const channel = autoUpdater.channel;
