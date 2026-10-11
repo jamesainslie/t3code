@@ -1,5 +1,9 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
-import type { GitHubAccountRules, SourceControlDiscoveryResult } from "@t3tools/contracts";
+import {
+  SourceControlProviderKind,
+  type GitHubAccountRules,
+  type SourceControlDiscoveryResult,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { act, StrictMode, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
@@ -104,7 +108,7 @@ function discovery(logins: ReadonlyArray<string>): SourceControlDiscoveryResult 
     versionControlSystems: [],
     sourceControlProviders: [
       {
-        kind: "github",
+        kind: SourceControlProviderKind.make("github"),
         label: "GitHub",
         status: "available",
         version: Option.none(),

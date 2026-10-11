@@ -10,7 +10,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
-import { pullRequestHostOf, type ProjectId } from "@t3tools/contracts";
+import { pullRequestHostOf, SourceControlProviderKind, type ProjectId } from "@t3tools/contracts";
 import { resolveGitHubAccount } from "@t3tools/shared/gitHubAccountRouting";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as GitHubApi from "@t3tools/source-control-github/server/GitHubApi";
@@ -115,7 +115,7 @@ export const make = Effect.gen(function* () {
     }
     const settings = yield* serverSettings.getSettings.pipe(Effect.option);
     if (settings._tag === "None") return null;
-    const host = pullRequestHostOf(identity, "github");
+    const host = pullRequestHostOf(identity, SourceControlProviderKind.make("github"));
     const [addressedOwner, addressedName] = input.repository?.split("/") ?? [];
     const borrowed =
       addressedOwner !== undefined &&
