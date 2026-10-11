@@ -32,6 +32,7 @@ import {
   type WebAssetBrand,
 } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
+import { rebrandStagedFiles } from "./lib/forkBrandPackaging.ts";
 import { GENERATED_EDITIONS } from "./lib/edition-art.ts";
 import {
   findInlinedExternalPackages,
@@ -3797,6 +3798,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* Effect.log("[desktop-artifact] Staging release app...");
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
+  yield* rebrandStagedFiles([stageResourcesDir]);
   if (options.platform === "linux") {
     const extensionDir = path.join(stageAppDir, "apps/desktop/gnome-extension");
     yield* fs.makeDirectory(extensionDir, { recursive: true });
@@ -3806,6 +3808,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         path.join(extensionDir, file),
       );
     }
+    yield* rebrandStagedFiles([extensionDir]);
   }
   if (options.platform === "mac" && options.target === "dmg") {
     yield* stageDesktopDmgBackground(
@@ -3961,6 +3964,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
+  yield* rebrandStagedFiles([path.join(stageAppDir, "package.json")]);
   const stageWorkspaceConfig = createStageWorkspaceConfig({
     platform: options.platform,
     arch: options.arch,

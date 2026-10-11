@@ -78,7 +78,7 @@ it("discovers sync from All machines and previews only the chosen destination", 
     view = create(<Settings />);
   });
   expect(view.root.findAllByType("h3").map((heading) => heading.children.join(""))).toContain(
-    "Sync from another T3 install",
+    "Sync from another T3 Code install",
   );
   expect(sync.execute).not.toHaveBeenCalled();
   await act(() => {

@@ -8,7 +8,7 @@
 import * as NodeModule from "node:module";
 import * as NodeURL from "node:url";
 
-import { FORK_BRAND_TOKEN, isBrandableModule, rebrandSource } from "./forkBrand.ts";
+import { FORK_BRAND_PREFILTER, isBrandableModule, rebrandSource } from "./forkBrand.ts";
 
 const decoder = new TextDecoder();
 
@@ -22,7 +22,7 @@ NodeModule.registerHooks({
     if (!isBrandableModule(path)) return loaded;
     const source =
       typeof loaded.source === "string" ? loaded.source : decoder.decode(loaded.source);
-    if (!source.includes(FORK_BRAND_TOKEN)) return loaded;
+    if (!FORK_BRAND_PREFILTER.test(source)) return loaded;
     const result = rebrandSource(source, path);
     return result.map === null ? loaded : { ...loaded, source: result.code };
   },

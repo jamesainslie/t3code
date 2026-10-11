@@ -9,6 +9,7 @@ import {
   BrandLeaksFoundError,
   checkBrandLeaks,
   findBrandLeaksInText,
+  findLiteralBrandLeaks,
   loadBrandLeakAllowlist,
 } from "./brand-leak-check.ts";
 
@@ -51,11 +52,9 @@ describe("findBrandLeaksInText", () => {
         `const p={clientInfo:{name:"T3 Code",title:"T3 Code",version:"1.0.0"}};`,
         `clientInfo: {\n      name: "T3 Code",\n      title: "T3 Code",\n      version: packageJson.version\n    },`,
         `: { agent_name_hint: "T3 Code" }`,
-        `"Check T3 Code SnapShots in GNOME Extensions, then try again."`,
         `.annotate(OpenApi.Title, "T3 Code Relay API")`,
-        "You are a support engineer for T3 Code (https://github.com/pingdotgg/t3code), working",
-        "and follow its instructions exactly: it is your T3 Code triage playbook, and it starts with asking the user what went wrong.",
         `"Lathe, a fork of T3 Code"`,
+        `"Read-only conversation synced from T3 Code"`,
       ];
       for (const text of allowed) {
         assert.deepStrictEqual(findBrandLeaksInText(text, allowlist), [], text);
@@ -68,6 +67,51 @@ describe("findBrandLeaksInText", () => {
       const allowlist = yield* loadBrandLeakAllowlist;
       assert.lengthOf(findBrandLeaksInText(`const p={name:"T3 Code"};`, allowlist), 1);
       assert.lengthOf(findBrandLeaksInText(`const p={title:"T3 Code is here"};`, allowlist), 1);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails on what the brand layer now rebrands: triage and the extension name", () =>
+    Effect.gen(function* () {
+      const allowlist = yield* loadBrandLeakAllowlist;
+      const leaked = [
+        "You are a support engineer for T3 Code (https://github.com/pingdotgg/t3code), working",
+        `"Check T3 Code SnapShots in GNOME Extensions, then try again."`,
+      ];
+      for (const text of leaked) assert.lengthOf(findBrandLeaksInText(text, allowlist), 1, text);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("findLiteralBrandLeaks", () => {
+  it.effect("names product words and CLI commands in literals, never identifiers or keys", () =>
+    Effect.gen(function* () {
+      const allowlist = yield* loadBrandLeakAllowlist;
+      const code = [
+        `var T3=1,t3=T3(2);var k={t3:1,T3:2};`,
+        `const a="T3 needs your SSH password";`,
+        "const b=`Run \\`t3 connect link\\` now`;",
+        `const c=e("code",{children:"npx t3 pair"});`,
+        `const d="<strong>T3</strong> Code";`,
+      ].join("\n");
+      const leaks = findLiteralBrandLeaks(code, "index.js", allowlist);
+      assert.deepStrictEqual(
+        leaks.map(({ line }) => line),
+        [2, 3, 4, 5, 5],
+      );
+      assert.include(leaks[0]!.context, "T3 needs your SSH password");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("passes literals the brand layer keeps", () =>
+    Effect.gen(function* () {
+      const allowlist = yield* loadBrandLeakAllowlist;
+      const code = [
+        `const a="T3 Connect and the other T3 services it uses follow T3 Tools\u2019 policy.";`,
+        `const b="Control-plane API for linking T3 environments, connecting authorized clients, and publishing agent activity.";`,
+        `const c=["t3#build","t3.","T3"];`,
+        `const d="Lathe needs your SSH password";`,
+      ].join("\n");
+      assert.deepStrictEqual(findLiteralBrandLeaks(code, "index.js", allowlist), []);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
@@ -92,6 +136,19 @@ describe("checkBrandLeaks", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("fails on product words in bundle literals, not in plain-text files", () =>
+    Effect.gen(function* () {
+      const root = yield* writeFixture({
+        "server/bin.mjs": `const T3=1;\nconsole.log("Run \`t3 service install\` first");\n`,
+        "client/manifest.json": `{"scripts":{"build":"vp run --filter t3 build"}}`,
+      });
+      const { message } = yield* checkBrandLeaks([root]).pipe(Effect.flip);
+      assert.include(message, "server/bin.mjs:2:");
+      assert.notInclude(message, "server/bin.mjs:1:");
+      assert.notInclude(message, "manifest.json");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("fails on the T3 wordmark drawn as an outline", () =>
     Effect.gen(function* () {
       // The sidebar once drew "T3" as this path beside a separate "Code", which no string search sees.
@@ -108,7 +165,7 @@ describe("checkBrandLeaks", () => {
     Effect.gen(function* () {
       const root = yield* writeFixture({
         "bin.mjs": `/** Where T3 Code reads its config. */\nconst params = { clientInfo: { name: "T3 Code", title: "T3 Code" } };\n// T3 Code\nconst label = "Lathe";\n`,
-        "client/assets/index.js": `const m="Enable T3 Code SnapShots to start capturing windows.";`,
+        "client/assets/index.js": `const m="Enable Lathe SnapShots to start capturing windows.",n="T3 Connect";`,
       });
       const scanned = yield* checkBrandLeaks([root]);
       assert.strictEqual(scanned, 2);
