@@ -22,14 +22,14 @@ function ProjectSyncSection() {
     return <ProjectSyncSettings key={syncEnvironmentId} environmentId={syncEnvironmentId} />;
   return (
     <section
-      aria-label="Sync from another T3 install"
+      aria-label="Sync from another T3 Code install"
       className="space-y-3 rounded-lg border border-border/60 p-4"
     >
       <div>
-        <h3 className="text-sm font-medium">Sync from another T3 install</h3>
+        <h3 className="text-sm font-medium">Sync from another T3 Code install</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Choose the machine running your fork. Projects and conversation history are imported from
-          another T3 install on that machine.
+          Choose the machine to import into. Projects and conversation history are imported from
+          another T3 Code install on that machine.
         </p>
       </div>
       <label className="flex flex-col items-start gap-1 text-xs text-muted-foreground">

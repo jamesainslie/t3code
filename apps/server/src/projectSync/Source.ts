@@ -430,7 +430,7 @@ export async function readSyncSource(sourceHome: string): Promise<SyncSource> {
         ? NodePath.join(NodeOS.homedir(), sourceHome.slice(2))
         : sourceHome;
   if (!NodePath.isAbsolute(expandedHome))
-    throw new Error("Choose an absolute T3 home path on this environment's machine.");
+    throw new Error("Choose the absolute path of a T3 Code home on this environment's machine.");
   const home = await NodeFSP.realpath(expandedHome);
   const filename = await sourceDatabasePath(home);
   const version = NodePath.basename(filename) === "statev2.sqlite" ? 2 : 1;

@@ -39,13 +39,13 @@ export function ProjectSyncSettings({ environmentId }: { environmentId: Environm
   return (
     <section
       className="space-y-3 rounded-lg border border-border/60 p-4"
-      aria-label="Sync from another T3 install"
+      aria-label="Sync from another T3 Code install"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-medium">Sync from another T3 install</h3>
+          <h3 className="text-sm font-medium">Sync from another T3 Code install</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bring projects and conversation history into this fork. Your main install stays
+            Bring projects and conversation history into this install. The source install stays
             unchanged.
           </p>
         </div>
@@ -82,12 +82,12 @@ export function ProjectSyncSettings({ environmentId }: { environmentId: Environm
         <>
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-48 flex-1 text-xs text-muted-foreground">
-              Source T3 home on this environment’s machine
+              Source T3 Code home on this environment’s machine
               <Input
                 className="mt-1"
                 value={sourceHome}
                 onChange={(event) => setSource(event.target.value)}
-                placeholder="Path to the main T3 home"
+                placeholder="Path to the T3 Code home, such as ~/.t3"
                 disabled={pending}
               />
             </label>

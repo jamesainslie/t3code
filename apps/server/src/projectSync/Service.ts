@@ -259,7 +259,7 @@ export class ProjectSyncService extends Context.Service<
         const destination = yield* attempt(() => NodeFSP.realpath(config.baseDir));
         if (source.sourceHome === destination)
           return yield* new ProjectSyncError({
-            message: "The source must be a different T3 install.",
+            message: "The source must be another T3 Code install.",
           });
         const [from, to] = yield* attempt(async () =>
           Promise.all([
