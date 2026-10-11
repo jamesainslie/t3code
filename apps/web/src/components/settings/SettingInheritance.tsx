@@ -49,9 +49,11 @@ function formatValue(key: ScopedSettingKey, value: unknown): string {
           ? "Automatic"
           : key === "sourceControlWriterModelSelection"
             ? "Text generation model"
-            : key === "defaultThreadEnvMode" || key === "worktreeSubmodules"
-              ? "Inherit"
-              : "Not set";
+            : key === "reviewGuideModelSelection"
+              ? "Source control writer model"
+              : key === "defaultThreadEnvMode" || key === "worktreeSubmodules"
+                ? "Inherit"
+                : "Not set";
   }
   if (typeof value === "boolean") return value ? "On" : "Off";
   if (typeof value === "number") {

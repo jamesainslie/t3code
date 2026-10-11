@@ -24,6 +24,7 @@ import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as RuntimeLayer from "../orchestration-v2/runtimeLayer.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import { ProjectService } from "../project/ProjectService.ts";
@@ -53,6 +54,7 @@ const environmentLayer = (home: string) =>
     Layer.provideMerge(
       SqlitePersistence.layerFromPath(NodePath.join(home, "userdata/statev2.sqlite")),
     ),
+    Layer.provideMerge(ServerSettings.layerTest()),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), home)),
     Layer.provideMerge(NodeServices.layer),
   );

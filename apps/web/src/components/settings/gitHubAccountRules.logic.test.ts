@@ -1,4 +1,8 @@
-import type { GitHubAccountRule, SourceControlDiscoveryResult } from "@t3tools/contracts";
+import {
+  SourceControlProviderKind,
+  type GitHubAccountRule,
+  type SourceControlDiscoveryResult,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -25,7 +29,7 @@ const discovery = (
   versionControlSystems: [],
   sourceControlProviders: [
     {
-      kind: "github",
+      kind: SourceControlProviderKind.make("github"),
       label: "GitHub",
       status: "available",
       version: Option.none(),

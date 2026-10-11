@@ -234,7 +234,7 @@ export function planScopedSettingsPatch(
   patch: ScopedSettingsPatch,
 ) {
   const clientPatch = Object.fromEntries(
-    Object.entries(patch).filter(([key]) => CLIENT_KEYS.has(key)),
+    Object.entries(patch).filter(([key]) => CLIENT_KEYS.has(key) && !SERVER_KEYS.has(key)),
   ) as ClientSettingsPatch;
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const serverPatch = Object.fromEntries(
