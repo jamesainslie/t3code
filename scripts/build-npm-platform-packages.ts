@@ -27,6 +27,7 @@ import {
   FORK_NPM_LAUNCHER_SCRIPTS,
 } from "@t3tools/shared/forkCliArtifacts";
 import { legacyCliLauncherScript } from "@t3tools/shared/legacyCliLauncher";
+import { rebrandStagedFiles } from "./lib/forkBrandPackaging.ts";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -379,6 +380,9 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
     path.join(contentDir, "README.md"),
     npmPlatformPackageReadme(input.key),
   );
+  yield* rebrandStagedFiles(
+    ["package.json", "README.md"].map((name) => path.join(contentDir, name)),
+  );
   // npm tarballs root everything under `package/`.
   yield* fs.rename(contentDir, path.join(scratch, "package"));
   const name = npmPlatformPackageName(input.key);
@@ -420,6 +424,7 @@ const stageLauncherPackage = Effect.fn("stageLauncherPackage")(function* (input:
   if (yield* fs.exists(readme)) {
     yield* fs.copyFile(readme, path.join(stageDir, "README.md"));
   }
+  yield* rebrandStagedFiles(["package.json", "README.md"].map((name) => path.join(stageDir, name)));
   const output: NpmPackageOutput = {
     name: NPM_LAUNCHER_PACKAGE_NAME,
     packageDir: path.join(input.outputDir, NPM_LAUNCHER_PACKAGE_NAME),
