@@ -333,7 +333,8 @@ describe("KeybindingsSettings.logic", () => {
       ]),
     );
     // Fork: Escape stops a run by default, so thread.stop is bound.
-    for (const command of ["thread.snoozeHour", "composer.cycleHost"]) {      expect(DEFAULT_RESOLVED_KEYBINDINGS.some((binding) => binding.command === command)).toBe(
+    for (const command of ["thread.snoozeHour", "composer.cycleHost"]) {
+      expect(DEFAULT_RESOLVED_KEYBINDINGS.some((binding) => binding.command === command)).toBe(
         false,
       );
     }
