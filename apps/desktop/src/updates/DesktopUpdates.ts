@@ -32,7 +32,9 @@ import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import { applyForkUpdaterCacheDir } from "./DesktopForkUpdaterCacheDir.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
+import { updaterErrorContext } from "./updaterErrorContext.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
 import {
   createInitialDesktopUpdateState,
@@ -443,6 +445,7 @@ export const make = Effect.gen(function* () {
             yield* logUpdaterError(error.message, {
               errorTag: error._tag,
               channel: error.channel,
+              ...updaterErrorContext(error.cause),
             });
             return true;
           }),
@@ -486,6 +489,7 @@ export const make = Effect.gen(function* () {
             yield* logUpdaterError(error.message, {
               errorTag: error._tag,
               channel: error.channel,
+              ...updaterErrorContext(error.cause),
             });
             return { accepted: true, completed: false };
           },
@@ -508,6 +512,7 @@ export const make = Effect.gen(function* () {
           yield* logUpdaterError(error.message, {
             errorTag: error._tag,
             action: error.action,
+            ...updaterErrorContext(Cause.squash(cause)),
           });
           return { accepted: true, completed: false };
         });
@@ -656,6 +661,7 @@ export const make = Effect.gen(function* () {
                 yield* logUpdaterError(error.message, {
                   errorTag: error._tag,
                   channel: error.channel,
+                  ...updaterErrorContext(error.cause),
                   isSilent: error.isSilent,
                   isForceRunAfter: error.isForceRunAfter,
                 });
@@ -674,6 +680,7 @@ export const make = Effect.gen(function* () {
               yield* logUpdaterError(error.message, {
                 errorTag: error._tag,
                 action: error.action,
+                ...updaterErrorContext(Cause.squash(cause)),
               });
               return { accepted: true, completed: false, failed: true };
             }),
@@ -713,6 +720,7 @@ export const make = Effect.gen(function* () {
         return logUpdaterError(error.message, {
           errorTag: error._tag,
           poller: error.poller,
+          ...updaterErrorContext(Cause.squash(cause)),
         });
       }),
       Effect.forkScoped,
@@ -728,6 +736,7 @@ export const make = Effect.gen(function* () {
         return logUpdaterError(error.message, {
           errorTag: error._tag,
           poller: error.poller,
+          ...updaterErrorContext(Cause.squash(cause)),
         });
       }),
       Effect.forkScoped,
@@ -812,6 +821,7 @@ export const make = Effect.gen(function* () {
       yield* logUpdaterError(error.message, {
         errorTag: error._tag,
         operation: error.operation,
+        ...updaterErrorContext(error.cause),
       });
       return;
     }
@@ -832,6 +842,7 @@ export const make = Effect.gen(function* () {
     yield* logUpdaterError(error.message, {
       errorTag: error._tag,
       operation: error.operation,
+      ...updaterErrorContext(error.cause),
     });
   });
 
@@ -929,6 +940,13 @@ export const make = Effect.gen(function* () {
         return;
       }
       yield* Ref.set(updaterConfiguredRef, true);
+      yield* applyForkUpdaterCacheDir({
+        fileSystem,
+        path: environment.path,
+        appUpdateYmlPath: environment.appUpdateYmlPath,
+        overridePath: environment.path.join(environment.stateDir, "lathe-app-update.yml"),
+        setUpdateConfigPath: electronUpdater.setUpdateConfigPath,
+      });
 
       yield* electronUpdater.setAutoDownload(false);
       yield* electronUpdater.setAutoInstallOnAppQuit(false);
