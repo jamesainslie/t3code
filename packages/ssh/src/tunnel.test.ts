@@ -302,6 +302,10 @@ describe("ssh tunnel scripts", () => {
       SshTunnel.buildRemoteStopScript(stateKey),
       'rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"',
     );
+    // Graceful shutdown takes several seconds; both scripts wait it out
+    // instead of booting a replacement or failing the stop after 2 seconds.
+    assert.include(SshTunnel.buildRemoteStopScript(stateKey), "STOP_WAIT_SECONDS=15\n");
+    assert.include(launch, '[ "$WAIT_COUNT" -lt $((15 * 10)) ]');
     assert.include(
       launch,
       'DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"',
@@ -703,6 +707,135 @@ describe("ssh tunnel scripts", () => {
         );
       }),
   );
+
+  describe("dead tunnels", () => {
+    const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+
+    /** Records each ssh step in order; tunnels exit on kill or when the test says so. */
+    const recordingLayer = (input: { readonly isHealthy: () => boolean }) => {
+      const events: Array<string> = [];
+      const tunnelExits: Array<Deferred.Deferred<ChildProcessSpawner.ExitCode>> = [];
+      const tunnelCloses: Array<Deferred.Deferred<void>> = [];
+      const spawner = ChildProcessSpawner.make((command) =>
+        Effect.gen(function* () {
+          const args = commandArgs(command);
+          if (args.includes("-G")) return makeSuccessfulProcess("");
+          if (args.includes("-N")) {
+            events.push("tunnel");
+            const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+            const closed = yield* Deferred.make<void>();
+            tunnelExits.push(exited);
+            tunnelCloses.push(closed);
+            return ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(123),
+              stdout: Stream.empty,
+              stderr: Stream.empty,
+              all: Stream.empty,
+              exitCode: Deferred.await(exited),
+              isRunning: Effect.map(Deferred.isDone(exited), (done) => !done),
+              kill: () =>
+                Effect.sync(() => events.push("tunnel.kill")).pipe(
+                  Effect.andThen(Deferred.succeed(exited, ChildProcessSpawner.ExitCode(143))),
+                  Effect.andThen(Deferred.succeed(closed, undefined)),
+                ),
+              stdin: Sink.drain,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            });
+          }
+          if (args.includes("--")) {
+            events.push("launch");
+            return makeSuccessfulProcess('{"remotePort":3773,"serverKind":"managed"}\n');
+          }
+          events.push("stop");
+          return makeSuccessfulProcess('{"stopped":true}\n');
+        }),
+      );
+      const http = HttpClient.make((request) =>
+        Effect.sync(() => {
+          events.push("http");
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response("", { status: input.isHealthy() ? 200 : 503 }),
+          );
+        }),
+      );
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, http),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshAuth.SshPasswordPrompt.disabledLayer,
+        SshTunnel.SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+      );
+      return { events, tunnelExits, tunnelCloses, layer };
+    };
+
+    it.effect("closes a stale tunnel without stopping the remote server it reconnects to", () => {
+      let broken = false;
+      const count = (event: string) => events.filter((entry) => entry === event).length;
+      // A broken first tunnel stops answering, as when a network drop leaves the
+      // ssh child alive; the replacement tunnel answers.
+      const { events, layer } = recordingLayer({
+        isHealthy: () => !broken || count("tunnel") === 2,
+      });
+      return Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        yield* manager.ensureEnvironment(target);
+        broken = true;
+        const reconnect = yield* Effect.forkChild(manager.ensureEnvironment(target));
+        yield* TestClock.adjust(Duration.seconds(3));
+        yield* Fiber.join(reconnect);
+
+        assert.equal(count("stop"), 0);
+        assert.equal(count("tunnel.kill"), 1);
+        assert.equal(count("launch"), 2);
+        assert.equal(count("tunnel"), 2);
+      }).pipe(
+        Effect.provide(layer),
+        Effect.scoped,
+        // Shutting the manager down still stops the server it owns, exactly once.
+        Effect.andThen(
+          Effect.sync(() => {
+            assert.equal(count("stop"), 1);
+            assert.equal(count("tunnel.kill"), 2);
+          }),
+        ),
+      );
+    });
+
+    it.effect("forgets a tunnel whose ssh process exits so the next ensure starts fresh", () => {
+      const { events, tunnelExits, tunnelCloses, layer } = recordingLayer({
+        isHealthy: () => true,
+      });
+      return Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        yield* manager.ensureEnvironment(target);
+        const [firstExit] = tunnelExits;
+        const [firstClosed] = tunnelCloses;
+        if (firstExit === undefined || firstClosed === undefined) {
+          return yield* Effect.die(new Error("The first ensure spawned no tunnel."));
+        }
+        events.length = 0;
+
+        // Fails with a timeout, rather than hanging, if nothing prunes the entry.
+        const pruned = yield* Effect.forkChild(
+          Deferred.await(firstClosed).pipe(Effect.timeout(Duration.seconds(1))),
+        );
+        yield* Deferred.succeed(firstExit, ChildProcessSpawner.ExitCode(255));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* Fiber.join(pruned);
+        // Pruning closes the dead entry but never stops the remote server.
+        assert.deepEqual(events, ["tunnel.kill"]);
+        events.length = 0;
+
+        yield* manager.ensureEnvironment(target);
+
+        assert.deepEqual(events, ["launch", "tunnel", "http"]);
+      }).pipe(Effect.provide(layer), Effect.scoped);
+    });
+  });
 });
 
 describe("ssh environment output", () => {

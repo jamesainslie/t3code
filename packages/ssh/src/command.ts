@@ -16,6 +16,7 @@ import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
 import { SshOutputObserver, type SshOutputSource } from "./output.ts";
 
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
+const SSH_COMMAND_KILL_GRACE_MS = 2_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
 
 /**
@@ -40,6 +41,8 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly timeoutMs?: number;
+  /** An owned multiplexing socket to run through; without one the command connects directly. */
+  readonly controlPath?: string;
   /**
    * Report this command's output to the `SshOutputObserver` as it arrives. stderr only unless
    * `stdout` is set; never set it for a command whose stdout carries a credential.
@@ -108,15 +111,25 @@ export const buildSshHostSpecEffect = (
       }),
   });
 
+/**
+ * Options every ssh invocation starts with. Multiplexing is pinned here so a
+ * `ControlMaster` in ~/.ssh/config cannot route commands through a stale user
+ * master: never create a master, and use `controlPath` only when the caller
+ * owns that socket.
+ */
 export function baseSshArgs(
   target: DesktopSshEnvironmentTarget,
-  input?: { readonly batchMode?: "yes" | "no" },
+  input?: { readonly batchMode?: "yes" | "no"; readonly controlPath?: string },
 ): string[] {
   return [
     "-o",
     `BatchMode=${input?.batchMode ?? "no"}`,
     "-o",
     "ConnectTimeout=10",
+    "-o",
+    "ControlMaster=no",
+    "-o",
+    `ControlPath=${input?.controlPath ?? "none"}`,
     ...(target.port !== null ? ["-p", String(target.port)] : []),
   ];
 }
@@ -216,6 +229,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   const args = [
     ...baseSshArgs(target, {
       batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
+      ...(input.controlPath === undefined ? {} : { controlPath: input.controlPath }),
     }),
     ...(input.preHostArgs ?? []),
     hostSpec,
@@ -234,6 +248,9 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
       ChildProcess.make(sshCommand, args, {
         env: environment,
         extendEnv: true,
+        // A timeout closes the command scope; an ssh that ignores SIGTERM must
+        // not hold that close, and the caller's lock, open indefinitely.
+        forceKillAfter: SSH_COMMAND_KILL_GRACE_MS,
         stdin: {
           stream: stdinStream(input.stdin),
           endOnDone: true,

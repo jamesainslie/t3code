@@ -68,6 +68,10 @@ const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
 const REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS = 900_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
+// A stopping server reconciles its state before it exits, which took 5-11s in
+// every observed restart. Launch and stop both wait this long so a replacement
+// never boots over a server that is still shutting down.
+const REMOTE_SERVER_STOP_WAIT_SECONDS = 15;
 
 export interface RemoteT3RunnerOptions {
   /**
@@ -585,8 +589,8 @@ RUNNER_CHANGED=0
 if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
   RUNNER_CHANGED=1
 fi
+chmod 700 "$RUNNER_NEXT"
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
-chmod 700 "$RUNNER_FILE"
 T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
 if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   # The archive ships the helpers below inside the executable; the remote
@@ -618,7 +622,7 @@ NODE
 wait_for_pid_exit() {
   PID_TO_WAIT="$1"
   WAIT_COUNT=0
-  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt 20 ]; do
+  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt $((@@T3_SERVER_STOP_WAIT_SECONDS@@ * 10)) ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
@@ -659,7 +663,26 @@ if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
   DEFAULT_RUNTIME_PID="\${DEFAULT_RUNTIME_INFO%% *}"
   DEFAULT_REMOTE_PORT="\${DEFAULT_RUNTIME_INFO#* }"
 fi
-if [ -n "$DEFAULT_REMOTE_PORT" ]; then
+# The managed server runs with --base-dir "$DEFAULT_SERVER_HOME", so it writes
+# the default runtime file itself. Only a different process there is external;
+# our own server falls through to the managed branch below, which reuses it or
+# restarts it when the runner changed.
+DEFAULT_RUNTIME_OWNED=0
+if [ -n "$DEFAULT_REMOTE_PORT" ] && [ "$REMOTE_MANAGED" = "managed" ]; then
+  if [ -n "$REMOTE_PID" ] && [ "$REMOTE_PID" = "$DEFAULT_RUNTIME_PID" ]; then
+    DEFAULT_RUNTIME_OWNED=1
+  elif [ -z "$REMOTE_PID" ] && [ "$REMOTE_PORT" = "$DEFAULT_REMOTE_PORT" ]; then
+    DEFAULT_RUNTIME_OWNED=1
+    REMOTE_PID="$DEFAULT_RUNTIME_PID"
+    printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
+  fi
+fi
+if [ "$DEFAULT_RUNTIME_OWNED" -eq 1 ]; then
+  if [ "$REMOTE_PORT" != "$DEFAULT_REMOTE_PORT" ]; then
+    REMOTE_PORT="$DEFAULT_REMOTE_PORT"
+    printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
+  fi
+elif [ -n "$DEFAULT_REMOTE_PORT" ]; then
   REMOTE_PORT="$DEFAULT_REMOTE_PORT"
   if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
     if [ "$REMOTE_MANAGED" = "managed" ]; then
@@ -746,11 +769,21 @@ const REMOTE_PAIRING_SCRIPT = `set -eu
 STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@T3_STATE_KEY@@"
 DEFAULT_SERVER_HOME="${FORK_HOME_SHELL}"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
+RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
 mkdir -p "$STATE_DIR"
-cat >"$RUNNER_FILE" <<'SH'
+cleanup_runner_next() {
+  rm -f "$RUNNER_NEXT"
+}
+trap cleanup_runner_next EXIT
+cat >"$RUNNER_NEXT" <<'SH'
 @@T3_RUNNER_SCRIPT@@
 SH
-chmod 700 "$RUNNER_FILE"
+# A launch may be running the current runner, so replace it only by rename and
+# only when it differs; the launch compares these same bytes to detect changes.
+if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
+  chmod 700 "$RUNNER_NEXT"
+  mv "$RUNNER_NEXT" "$RUNNER_FILE"
+fi
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
 "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
 `;
@@ -760,17 +793,18 @@ STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@T3_STATE_KEY@@"
 PID_FILE="$STATE_DIR/pid"
 PORT_FILE="$STATE_DIR/port"
 MANAGED_FILE="$STATE_DIR/managed"
+STOP_WAIT_SECONDS=@@T3_SERVER_STOP_WAIT_SECONDS@@
 REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
 REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
 if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
   kill "$REMOTE_PID" 2>/dev/null || true
   WAIT_COUNT=0
-  while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt 20 ]; do
+  while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt $((STOP_WAIT_SECONDS * 10)) ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
   if kill -0 "$REMOTE_PID" 2>/dev/null; then
-    printf 'Remote T3 server with PID %s did not stop within 2 seconds. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
+    printf 'Remote T3 server with PID %s did not stop within %s seconds. Its ownership files were kept.\\n' "$REMOTE_PID" "$STOP_WAIT_SECONDS" >&2
     exit 1
   fi
 fi
@@ -858,6 +892,7 @@ export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
     T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    T3_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
   });
 }
 
@@ -871,6 +906,7 @@ export function buildRemotePairingScript(stateKey: string, input?: RemoteT3Runne
 export function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
     T3_STATE_KEY: stateKey,
+    T3_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
   });
 }
 
@@ -1170,10 +1206,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     }),
     "-o",
     "ExitOnForwardFailure=yes",
-    "-o",
-    "ControlMaster=no",
-    "-o",
-    "ControlPath=none",
+    // baseSshArgs pins ControlMaster and ControlPath.
     "-o",
     "ControlPersist=no",
     "-o",
@@ -1636,6 +1669,30 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         });
       }).pipe(Effect.ignore),
     );
+    // A tunnel whose ssh exits on its own leaves the map, so the next ensure
+    // creates one instead of probing a dead port. The entry is gone before its
+    // scope closes, so the finalizer skips the remote stop. Forked after the
+    // finalizer so a normal close interrupts this watcher before the kill.
+    yield* tunnelEntry.process.exitCode.pipe(
+      Effect.ignore,
+      Effect.andThen(
+        Effect.gen(function* () {
+          if (tunnels.get(tunnelEntry.key) !== tunnelEntry) {
+            return;
+          }
+          tunnels.delete(tunnelEntry.key);
+          yield* Effect.logInfo("ssh.environment.tunnel.exited", {
+            ...sshTargetLogFields(tunnelEntry.target),
+            key: tunnelEntry.key,
+            localPort: tunnelEntry.localPort,
+            remotePort: tunnelEntry.remotePort,
+          });
+          // Closing the scope interrupts this fiber, so it runs on its own.
+          yield* closeTunnelEntry(tunnelEntry).pipe(Effect.forkIn(managerScope));
+        }),
+      ),
+      Effect.forkIn(entryScope),
+    );
     yield* Effect.logDebug("ssh.environment.tunnel.create.succeeded", {
       ...sshTargetLogFields(input.resolvedTarget),
       key: input.key,
@@ -1678,7 +1735,12 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         remotePort: entry.remotePort,
         cause: readinessExit.cause,
       });
-      yield* closeTunnelEntry(entry);
+      // Only the tunnel is stale. Leaving the map first makes the finalizer skip
+      // the remote stop, so the launch below can reuse the running server.
+      yield* Effect.gen(function* () {
+        tunnels.delete(key);
+        yield* closeTunnelEntry(entry);
+      }).pipe(Effect.uninterruptible);
     }
 
     return yield* createTunnelEntry({
