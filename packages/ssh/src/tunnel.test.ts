@@ -5,6 +5,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -475,6 +476,34 @@ describe("ssh tunnel scripts", () => {
     return Effect.gen(function* () {
       const result = yield* SshTunnel.issueRemotePairingToken(target, undefined, ARCHIVE);
       assert.equal(result.credential, "LCL4R2TPHDKQ");
+    }).pipe(Effect.provide(layerProcess));
+  });
+
+  // Pairing always follows a launch in the same ensure, so the runtime is
+  // already installed and the default command budget applies.
+  it.effect("gives pairing the default command timeout even for archive runners", () => {
+    const target = { alias: "devbox", hostname: "devbox", username: null, port: null } as const;
+    const spawner = ChildProcessSpawner.make(() =>
+      Effect.succeed(makeRunningProcess(() => undefined)),
+    );
+    const layerProcess = Layer.merge(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+    return Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(
+        Effect.result(SshTunnel.issueRemotePairingToken(target, undefined, ARCHIVE)),
+      );
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.seconds(60));
+      const exit = fiber.pollUnsafe();
+
+      assert.isDefined(exit);
+      if (exit !== undefined && Exit.isSuccess(exit) && Result.isFailure(exit.value)) {
+        assert.equal(exit.value.failure.message, "SSH command timed out after 60000ms.");
+      } else {
+        assert.fail("Pairing did not time out at 60s.");
+      }
     }).pipe(Effect.provide(layerProcess));
   });
 

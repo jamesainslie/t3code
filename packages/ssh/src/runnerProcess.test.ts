@@ -357,7 +357,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
       text
         .split("\n")
         .filter((line) => line.length > 0)
-        .map(decodeServerEvent),
+        .map((line) => decodeServerEvent(line)),
     );
     // Launched servers outlive the launch shell, so stop each one the fake logged.
     yield* Effect.addFinalizer(() =>

@@ -115,11 +115,16 @@ export const buildSshHostSpecEffect = (
  * Options every ssh invocation starts with. Multiplexing is pinned here so a
  * `ControlMaster` in ~/.ssh/config cannot route commands through a stale user
  * master: never create a master, and use `controlPath` only when the caller
- * owns that socket.
+ * owns that socket. Only the owned master itself passes `controlMaster: "yes"`;
+ * ssh keeps the first value of an option, so it cannot be overridden later.
  */
 export function baseSshArgs(
   target: DesktopSshEnvironmentTarget,
-  input?: { readonly batchMode?: "yes" | "no"; readonly controlPath?: string },
+  input?: {
+    readonly batchMode?: "yes" | "no";
+    readonly controlPath?: string;
+    readonly controlMaster?: "yes" | "no";
+  },
 ): string[] {
   return [
     "-o",
@@ -127,7 +132,7 @@ export function baseSshArgs(
     "-o",
     "ConnectTimeout=10",
     "-o",
-    "ControlMaster=no",
+    `ControlMaster=${input?.controlMaster ?? "no"}`,
     "-o",
     `ControlPath=${input?.controlPath ?? "none"}`,
     ...(target.port !== null ? ["-p", String(target.port)] : []),

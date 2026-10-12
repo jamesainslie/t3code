@@ -28,6 +28,7 @@ import { HttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as SshAuth from "./auth.ts";
+import * as ControlMaster from "./controlMaster.ts";
 import {
   baseSshArgs,
   buildSshHostSpecEffect,
@@ -91,6 +92,16 @@ export interface RemoteT3RunnerOptions {
 
 export interface SshEnvironmentManagerOptions {
   readonly resolveCliRunner?: Effect.Effect<RemoteT3RunnerOptions>;
+  /**
+   * Where the manager keeps its owned ssh ControlMaster sockets, normally
+   * `<base dir>/ssh`. Without one every command connects directly.
+   */
+  readonly controlSocketDirectory?: string;
+}
+
+/** Auth for a one-shot command, plus the owned master socket to run it through. */
+interface RemoteCommandOptions extends SshAuth.SshAuthOptions {
+  readonly controlPath?: string;
 }
 
 interface SshTunnelEntry {
@@ -153,6 +164,12 @@ interface SshAuthOperationInput<T> {
     authOptions: SshAuth.SshAuthOptions,
   ) => Effect.Effect<T, SshEnvironmentEffectError, SshEnvironmentEffectContext>;
 }
+
+type RunOneShot = <T>(
+  operation: (
+    options: RemoteCommandOptions,
+  ) => Effect.Effect<T, SshEnvironmentEffectError, SshEnvironmentEffectContext>,
+) => Effect.Effect<T, SshEnvironmentEffectError, SshEnvironmentEffectContext>;
 
 interface SshAuthAttemptInput<T> extends SshAuthOperationInput<T> {
   readonly promptCount: number;
@@ -919,7 +936,7 @@ function buildRemoteLogTailScript(stateKey: string): string {
 export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemoteServer")(
   function* (
     target: DesktopSshEnvironmentTarget,
-    input?: SshAuth.SshAuthOptions,
+    input?: RemoteCommandOptions,
     runner?: RemoteT3RunnerOptions,
   ): Effect.fn.Return<
     { readonly remotePort: number; readonly remoteServerKind: "external" | "managed" | null },
@@ -943,6 +960,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
       ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
       ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+      ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
     });
     if (!getLastNonEmptyOutputLine(result.stdout)) {
       return yield* new SshLaunchError({
@@ -981,7 +999,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
 
 export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingToken")(function* (
   target: DesktopSshEnvironmentTarget,
-  input?: SshAuth.SshAuthOptions,
+  input?: RemoteCommandOptions,
   runner?: RemoteT3RunnerOptions,
 ): Effect.fn.Return<
   {
@@ -998,12 +1016,12 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
   const result = yield* runSshCommand(target, {
     remoteCommandArgs: ["sh", "-s"],
     stdin: buildRemotePairingScript(stateKey, runner),
-    // Pairing may be the first command on a cold remote, so it can install
-    // the archive on the way.
-    ...(isNodeScriptRunner(runner) ? {} : { timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS }),
+    // Pairing runs after the launch under the same target lock, so the runtime
+    // is installed and the default timeout applies.
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
   });
   if (!getLastNonEmptyOutputLine(result.stdout)) {
     return yield* new SshPairingError({
@@ -1038,7 +1056,7 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
 
 const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
   target: DesktopSshEnvironmentTarget,
-  input?: SshAuth.SshAuthOptions,
+  input?: RemoteCommandOptions,
 ): Effect.fn.Return<
   void,
   SshCommandError | SshInvalidTargetError,
@@ -1055,6 +1073,7 @@ const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
   });
   yield* Effect.logInfo("ssh.remoteServer.stop.succeeded", {
     ...sshTargetLogFields(target),
@@ -1064,7 +1083,7 @@ const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
 
 const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(function* (
   target: DesktopSshEnvironmentTarget,
-  input?: SshAuth.SshAuthOptions,
+  input?: RemoteCommandOptions,
 ): Effect.fn.Return<
   string,
   SshCommandError | SshInvalidTargetError,
@@ -1078,6 +1097,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
   });
   return result.stdout.trim();
 });
@@ -1399,6 +1419,11 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const tunnels = new Map<string, SshTunnelEntry>();
   const targetLocks = yield* KeyedLock.make<string>();
   const authSecrets = new Map<string, string>();
+  // Made before the tunnel finalizer below so masters outlive the remote stops
+  // that run when tunnels close at shutdown.
+  const controlMasters = yield* ControlMaster.make({
+    directory: options.controlSocketDirectory,
+  });
 
   // Keep one lock per target so reconnect cannot reuse a server while stop is pending.
   const withTargetLock = Effect.fn("ssh/tunnel.withTargetLock")(function* <A, E, R>(
@@ -1551,33 +1576,97 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     });
   });
 
+  /**
+   * Runs a target's one-shot commands through its owned master, resolving the
+   * master once per locked section. `"reuse"` never starts a master. A command
+   * that reports a broken mux replaces the master and runs once more.
+   */
+  const makeOneShotRunner = (
+    key: string,
+    target: DesktopSshEnvironmentTarget,
+    mode: "acquire" | "reuse",
+  ): RunOneShot => {
+    let controlPath: string | null | undefined;
+    const lookup: Effect.Effect<
+      string | null,
+      SshEnvironmentEffectError,
+      SshEnvironmentEffectContext
+    > =
+      mode === "acquire"
+        ? controlMasters.acquire({
+            key,
+            target,
+            authenticate: (start) => runWithSshAuth({ key, target, operation: start }),
+          })
+        : controlMasters.reuse(key, target);
+    const resolveControlPath = Effect.suspend(
+      (): Effect.Effect<string | null, SshEnvironmentEffectError, SshEnvironmentEffectContext> =>
+        controlPath !== undefined
+          ? Effect.succeed(controlPath)
+          : lookup.pipe(
+              Effect.tap((resolved) =>
+                Effect.sync(() => {
+                  controlPath = resolved;
+                }),
+              ),
+            ),
+    );
+    return (operation) =>
+      Effect.gen(function* () {
+        const attempt = (socketPath: string | null) =>
+          runWithSshAuth({
+            key,
+            target,
+            operation: (authOptions) =>
+              operation(
+                socketPath === null ? authOptions : { ...authOptions, controlPath: socketPath },
+              ),
+          });
+        const socketPath = yield* resolveControlPath;
+        return yield* attempt(socketPath).pipe(
+          Effect.catchIf(
+            (error) => socketPath !== null && ControlMaster.isMuxFailure(error),
+            (error) =>
+              Effect.gen(function* () {
+                yield* Effect.logWarning("ssh.controlMaster.muxFailure", {
+                  ...sshTargetLogFields(target),
+                  key,
+                  cause: error,
+                });
+                yield* controlMasters.close(key);
+                controlPath = undefined;
+                return yield* attempt(yield* resolveControlPath);
+              }),
+          ),
+        );
+      });
+  };
+
   const createTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry.create")(function* (input: {
     readonly key: string;
     readonly resolvedTarget: DesktopSshEnvironmentTarget;
     readonly runner?: RemoteT3RunnerOptions;
+    readonly runOneShot: RunOneShot;
   }): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     yield* Effect.logDebug("ssh.environment.tunnel.create.start", {
       ...sshTargetLogFields(input.resolvedTarget),
       ...sshRunnerLogFields(input.runner),
       key: input.key,
     });
-    const remoteLaunch = yield* runWithSshAuth({
-      key: input.key,
-      target: input.resolvedTarget,
-      operation: (authOptions) =>
-        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
-          // A launch that reached the host but hung or answered nonsense leaves its reason in
-          // the server log; the read reports it through the output observer. A failure to
-          // connect at all has nothing to read, and the launch script tails the log itself
-          // when the server exits early.
-          Effect.tapError((error) =>
-            error._tag === "SshLaunchError" ||
-            (error._tag === "SshCommandError" && error.timedOut === true)
-              ? readRemoteServerLogTail(input.resolvedTarget, authOptions).pipe(Effect.ignore)
-              : Effect.void,
-          ),
+    const remoteLaunch = yield* input.runOneShot((authOptions) =>
+      launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
+        // A launch that reached the host but hung or answered nonsense leaves its reason in
+        // the server log; the read reports it through the output observer. A failure to
+        // connect at all has nothing to read, and the launch script tails the log itself
+        // when the server exits early.
+        Effect.tapError((error) =>
+          error._tag === "SshLaunchError" ||
+          (error._tag === "SshCommandError" && error.timedOut === true)
+            ? readRemoteServerLogTail(input.resolvedTarget, authOptions).pipe(Effect.ignore)
+            : Effect.void,
         ),
-    });
+      ),
+    );
     const remotePort = remoteLaunch.remotePort;
     yield* Effect.logDebug("ssh.environment.remotePort.ready", {
       ...sshTargetLogFields(input.resolvedTarget),
@@ -1705,6 +1794,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const ensureTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry")(function* (
     key: string,
     resolvedTarget: DesktopSshEnvironmentTarget,
+    runOneShot: RunOneShot,
     runner?: RemoteT3RunnerOptions,
   ): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     const entry = tunnels.get(key) ?? null;
@@ -1746,6 +1836,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     return yield* createTunnelEntry({
       key,
       resolvedTarget,
+      runOneShot,
       ...(runner === undefined ? {} : { runner }),
     }).pipe(
       Effect.tapError((cause) =>
@@ -1791,15 +1882,13 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     return yield* withTargetLock(
       key,
       Effect.gen(function* () {
-        const entry = yield* ensureTunnelEntry(key, resolvedTarget, runner);
+        const runOneShot = makeOneShotRunner(key, resolvedTarget, "acquire");
+        const entry = yield* ensureTunnelEntry(key, resolvedTarget, runOneShot, runner);
 
         const pairingResult = requestOptions?.issuePairingToken
-          ? yield* runWithSshAuth({
-              key,
-              target: entry.target,
-              operation: (authOptions) =>
-                issueRemotePairingToken(entry.target, authOptions, runner),
-            })
+          ? yield* runOneShot((authOptions) =>
+              issueRemotePairingToken(entry.target, authOptions, runner),
+            )
           : null;
         const pairingToken = pairingResult?.credential ?? null;
 
@@ -1850,11 +1939,14 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
             yield* closeTunnelEntry(entry);
           }).pipe(Effect.uninterruptible);
         }
-        yield* runWithSshAuth({
+        // The stop rides a healthy master if there is one, then the master goes too.
+        yield* makeOneShotRunner(
           key,
-          target: resolvedTarget,
-          operation: (authOptions) => stopRemoteServer(resolvedTarget, authOptions),
-        });
+          resolvedTarget,
+          "reuse",
+        )((authOptions) => stopRemoteServer(resolvedTarget, authOptions)).pipe(
+          Effect.ensuring(controlMasters.close(key)),
+        );
         yield* Effect.logInfo("ssh.environment.disconnect.succeeded", {
           ...sshTargetLogFields(resolvedTarget),
           key,
