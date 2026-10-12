@@ -12,10 +12,12 @@ import type { ConnectionAttemptError } from "../connection/model.ts";
 
 export interface PreparedSshEnvironment {
   readonly bootstrap: DesktopSshEnvironmentBootstrap;
-  readonly bearerToken: string;
+  /** A new bearer session, or null when the caller did not ask to pair. */
+  readonly bearerToken: string | null;
 }
 
 export interface ProvisionedSshEnvironment extends PreparedSshEnvironment {
+  readonly bearerToken: string;
   readonly environmentId: EnvironmentId;
   readonly label: string;
 }
@@ -66,10 +68,15 @@ export class SshEnvironmentGateway extends Context.Service<
       target: DesktopSshEnvironmentTarget,
       expectedEnvironmentId?: EnvironmentId,
     ) => Effect.Effect<ProvisionedSshEnvironment, ConnectionAttemptError>;
+    /**
+     * Starts or reuses the remote server and its tunnel. It pairs only with
+     * `issuePairingToken`; a caller holding a bearer skips that remote call.
+     */
     readonly prepare: (input: {
       readonly connectionId: string;
       readonly expectedEnvironmentId: EnvironmentId;
       readonly target: DesktopSshEnvironmentTarget;
+      readonly issuePairingToken: boolean;
     }) => Effect.Effect<PreparedSshEnvironment, ConnectionAttemptError>;
     readonly disconnect: (
       target: DesktopSshEnvironmentTarget,

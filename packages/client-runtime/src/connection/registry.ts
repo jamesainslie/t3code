@@ -867,15 +867,31 @@ export const make = Effect.gen(function* () {
     return yield* withLeaseLock(environmentId, removeLocked(environmentId));
   });
 
+  // The resolver keeps the route's bearer for reconnects; a torn-down backend
+  // pairs again on its next connection.
   const disconnectSsh = (environmentId: EnvironmentId, profile: SshConnectionProfile) =>
-    ssh.disconnect(profile.target).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("Could not disconnect the managed SSH environment.", {
-          environmentId,
-          error,
-        }),
-      ),
-      Effect.ignore,
+    Effect.all(
+      [
+        ssh.disconnect(profile.target).pipe(
+          Effect.tapError((error) =>
+            Effect.logWarning("Could not disconnect the managed SSH environment.", {
+              environmentId,
+              error,
+            }),
+          ),
+          Effect.ignore,
+        ),
+        credentials.remove(profile.connectionId).pipe(
+          Effect.tapError((error) =>
+            Effect.logWarning("Could not clear the SSH bearer credential.", {
+              environmentId,
+              error,
+            }),
+          ),
+          Effect.ignore,
+        ),
+      ],
+      { discard: true },
     );
 
   // Plain HTTP routes are unusable from an HTTPS page, which blocks mixed content.

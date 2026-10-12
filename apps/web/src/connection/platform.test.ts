@@ -18,6 +18,7 @@ import {
   isRejectedBootstrapCredentialError,
   isRejectedSecondaryBootstrap,
   nextRejectedSecondaryBootstrap,
+  prepareDesktopSshEnvironment,
   primaryRegistrationToRetainAfterTopologyRead,
   provisionDesktopSshEnvironment,
   readPrimaryEnvironmentTargetResult,
@@ -38,13 +39,16 @@ function makeBridge(
   options?: { readonly failDescriptor?: boolean },
 ): DesktopBridge {
   return {
-    ensureSshEnvironment: async (target: DesktopSshEnvironmentTarget) => {
-      calls.push("ensure");
+    ensureSshEnvironment: async (
+      target: DesktopSshEnvironmentTarget,
+      ensureOptions?: { issuePairingToken?: boolean },
+    ) => {
+      calls.push(ensureOptions?.issuePairingToken === true ? "ensure+pair" : "ensure");
       return {
         target,
         httpBaseUrl: "http://127.0.0.1:3201/",
         wsBaseUrl: "ws://127.0.0.1:3201/",
-        pairingToken: "pairing-token",
+        pairingToken: ensureOptions?.issuePairingToken === true ? "pairing-token" : null,
       };
     },
     fetchSshEnvironmentDescriptor: async () => {
@@ -86,7 +90,7 @@ describe("desktop SSH pairing", () => {
       const provisioned = yield* provisionDesktopSshEnvironment(makeBridge(calls), TARGET);
 
       expect(provisioned.environmentId).toBe(EnvironmentId.make("environment-ssh"));
-      expect(calls).toEqual(["ensure", "descriptor", "token"]);
+      expect(calls).toEqual(["ensure+pair", "descriptor", "token"]);
     }),
   );
 
@@ -101,7 +105,7 @@ describe("desktop SSH pairing", () => {
       ).pipe(Effect.flip);
 
       expect(error).toMatchObject({ reason: "configuration" });
-      expect(calls).toEqual(["ensure", "descriptor"]);
+      expect(calls).toEqual(["ensure+pair", "descriptor"]);
     }),
   );
 
@@ -114,7 +118,35 @@ describe("desktop SSH pairing", () => {
         TARGET,
       ).pipe(Effect.flip);
 
-      expect(calls).toEqual(["ensure", "descriptor"]);
+      expect(calls).toEqual(["ensure+pair", "descriptor"]);
+    }),
+  );
+
+  it.effect("reconnects without pairing when the caller already holds a bearer", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+
+      const prepared = yield* prepareDesktopSshEnvironment(makeBridge(calls), {
+        target: TARGET,
+        issuePairingToken: false,
+      });
+
+      expect(prepared.bearerToken).toBeNull();
+      expect(calls).toEqual(["ensure"]);
+    }),
+  );
+
+  it.effect("pairs and exchanges the credential when asked to", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+
+      const prepared = yield* prepareDesktopSshEnvironment(makeBridge(calls), {
+        target: TARGET,
+        issuePairingToken: true,
+      });
+
+      expect(prepared.bearerToken).toBe("bearer-token");
+      expect(calls).toEqual(["ensure+pair", "token"]);
     }),
   );
 });

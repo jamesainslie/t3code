@@ -33,6 +33,7 @@ import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 import {
   connectionRouteId,
+  connectionRouteKind,
   connectionRoutes,
   entryWithRoutes,
   type ReportedEndpoint,
@@ -42,6 +43,22 @@ const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 300_000;
 const CONNECTION_ESTABLISHMENT_TIMEOUT = "15 seconds";
 const establishmentTimeout = Duration.fromInputUnsafe(CONNECTION_ESTABLISHMENT_TIMEOUT);
+// A cold SSH route launches the remote server and its tunnel before it can
+// answer, which takes 17-27 seconds in practice.
+const SSH_CONNECTION_ESTABLISHMENT_TIMEOUT = "60 seconds";
+const sshEstablishmentTimeout = Duration.fromInputUnsafe(SSH_CONNECTION_ESTABLISHMENT_TIMEOUT);
+
+/** Each route may use its full setup time before the next is tried. */
+function establishmentBudget(routes: ReadonlyArray<ConnectionRoute>) {
+  return routes.reduce(
+    (total, route) =>
+      Duration.sum(
+        total,
+        connectionRouteKind(route) === "ssh" ? sshEstablishmentTimeout : establishmentTimeout,
+      ),
+    Duration.zero,
+  );
+}
 const CONNECTION_PROBE_TIMEOUT = "15 seconds";
 // Mobile resumes, explicit retries, and offline events want a fast answer:
 // the user is waiting, or the network may be gone.
@@ -732,10 +749,9 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
           resetRetry,
         })),
       ),
-      // Each route may use the full setup time before the next is tried.
-      Effect.sleep(
-        Duration.times(establishmentTimeout, connectionRoutes(yield* Ref.get(currentEntry)).length),
-      ).pipe(Effect.as<EstablishmentEvent>({ _tag: "TimedOut" })),
+      Effect.sleep(establishmentBudget(connectionRoutes(yield* Ref.get(currentEntry)))).pipe(
+        Effect.as<EstablishmentEvent>({ _tag: "TimedOut" }),
+      ),
     ]);
 
     if (establishment._tag === "Interrupted") {

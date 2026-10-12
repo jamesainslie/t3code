@@ -1137,6 +1137,29 @@ describe("EnvironmentRegistry", () => {
     }),
   );
 
+  it.effect("switching an SSH environment off forgets its stored bearer", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness(
+        [SSH_CONNECTION],
+        [SSH_PROFILE],
+        [[SSH_CONNECTION.connectionId, new BearerConnectionCredential({ token: "ssh-bearer" })]],
+      );
+
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.start;
+        yield* registry.setEnabled(SSH_CONNECTION.environmentId, false);
+
+        expect((yield* Ref.get(harness.storedCredentials)).has(SSH_CONNECTION.connectionId)).toBe(
+          false,
+        );
+        expect((yield* Ref.get(harness.storedProfiles)).has(SSH_CONNECTION.connectionId)).toBe(
+          true,
+        );
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
   it.effect("does not connect a persisted environment that was switched off", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness([RELAY_TARGET], [], [], {

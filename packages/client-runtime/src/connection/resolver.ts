@@ -199,8 +199,17 @@ const makeRelayBroker = Effect.fn("clientRuntime.connection.broker.makeRelay")(f
   );
 });
 
+/** The host no longer accepts the bearer, so pairing again can recover. */
+function isRejectedBearer(error: ConnectionAttemptError): boolean {
+  return (
+    error._tag === "ConnectionBlockedError" &&
+    (error.reason === "authentication" || error.reason === "permission")
+  );
+}
+
 const makeSshBroker = Effect.fn("clientRuntime.connection.broker.makeSsh")(function* () {
   const profiles = yield* ConnectionProfileStore.ConnectionProfileStore;
+  const credentials = yield* ConnectionCredentialStore.ConnectionCredentialStore;
   const ssh = yield* ClientCapabilities.SshEnvironmentGateway;
   const remote = yield* RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization;
 
@@ -223,32 +232,84 @@ const makeSshBroker = Effect.fn("clientRuntime.connection.broker.makeSsh")(funct
         actual: profile.environmentId,
       });
     }
-    const prepared = yield* ssh.prepare({
-      connectionId: target.connectionId,
-      expectedEnvironmentId: target.environmentId,
-      target: profile.target,
+    const credentialId = credentialConnectionId(target.connectionId);
+
+    // Starts or reuses the remote server, then saves the address it landed on.
+    const launch = Effect.fnUntraced(function* (issuePairingToken: boolean) {
+      const prepared = yield* ssh.prepare({
+        connectionId: target.connectionId,
+        expectedEnvironmentId: target.environmentId,
+        target: profile.target,
+        issuePairingToken,
+      });
+      const preparedProfile = new SshConnectionProfile({
+        connectionId: profile.connectionId,
+        environmentId: profile.environmentId,
+        label: profile.label,
+        target: prepared.bootstrap.target,
+      });
+      if (
+        gitHubRoutingConnectionKey(entry) !==
+        gitHubRoutingConnectionKey({ ...entry, profile: Option.some(preparedProfile) })
+      ) {
+        const permissions = yield* GitHubRoutingPermissions;
+        yield* permissions.forget(target.environmentId);
+      }
+      yield* profiles.put(preparedProfile);
+      return prepared;
     });
-    const preparedProfile = new SshConnectionProfile({
-      connectionId: profile.connectionId,
-      environmentId: profile.environmentId,
-      label: profile.label,
-      target: prepared.bootstrap.target,
+    const authorize = (prepared: ClientCapabilities.PreparedSshEnvironment, bearerToken: string) =>
+      remote.authorizeBearer({
+        expectedEnvironmentId: target.environmentId,
+        httpBaseUrl: prepared.bootstrap.httpBaseUrl,
+        wsBaseUrl: prepared.bootstrap.wsBaseUrl,
+        bearerToken,
+        connectionMethod: "ssh",
+      });
+    // Pairing mints a new 30-day session on the host, so its bearer is kept
+    // for later reconnects instead of pairing on every one.
+    const pairAndAuthorize = Effect.fnUntraced(function* () {
+      const prepared = yield* launch(true);
+      if (prepared.bearerToken === null) {
+        return yield* new ConnectionBlockedError({
+          reason: "authentication",
+          detail: "The SSH environment did not issue a pairing credential.",
+        });
+      }
+      yield* credentials
+        .put(credentialId, new BearerConnectionCredential({ token: prepared.bearerToken }))
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("Could not store the SSH bearer credential.", {
+              environmentId: target.environmentId,
+              error,
+            }),
+          ),
+        );
+      return yield* authorize(prepared, prepared.bearerToken);
     });
-    if (
-      gitHubRoutingConnectionKey(entry) !==
-      gitHubRoutingConnectionKey({ ...entry, profile: Option.some(preparedProfile) })
-    ) {
-      const permissions = yield* GitHubRoutingPermissions;
-      yield* permissions.forget(target.environmentId);
-    }
-    yield* profiles.put(preparedProfile);
-    const authorized = yield* remote.authorizeBearer({
-      expectedEnvironmentId: target.environmentId,
-      httpBaseUrl: prepared.bootstrap.httpBaseUrl,
-      wsBaseUrl: prepared.bootstrap.wsBaseUrl,
-      bearerToken: prepared.bearerToken,
-      connectionMethod: "ssh",
-    });
+
+    // An unreadable store only costs a pairing.
+    const stored = yield* credentials.get(credentialId).pipe(
+      Effect.map(Option.filter(isBearerCredential)),
+      Effect.orElseSucceed(() => Option.none<BearerConnectionCredential>()),
+    );
+    const authorized = Option.isNone(stored)
+      ? yield* pairAndAuthorize()
+      : yield* launch(false).pipe(
+          Effect.flatMap((prepared) =>
+            authorize(prepared, stored.value.token).pipe(
+              // A dead stored bearer is recoverable here; letting it reach the
+              // supervisor would park the environment as blocked. Launch
+              // failures, such as a cancelled SSH password prompt, still do.
+              Effect.catchIf(isRejectedBearer, () =>
+                credentials
+                  .remove(credentialId)
+                  .pipe(Effect.ignore, Effect.andThen(pairAndAuthorize())),
+              ),
+            ),
+          ),
+        );
     return {
       environmentId: authorized.environmentId,
       label: authorized.label,

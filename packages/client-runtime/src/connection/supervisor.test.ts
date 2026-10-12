@@ -22,13 +22,14 @@ import { fetchEnvironmentSessionState } from "../state/session.ts";
 import type { ConnectionCatalogEntry, ConnectionRoute } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
-import { BearerConnectionProfile } from "./catalog.ts";
+import { BearerConnectionProfile, SshConnectionProfile } from "./catalog.ts";
 import {
   BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
+  SshConnectionTarget,
   type ConnectionAttemptError,
   type ConnectionTarget,
   type NetworkStatus,
@@ -546,6 +547,48 @@ describe("EnvironmentSupervisor", () => {
           message: "Test environment did not respond during connection setup.",
         },
       });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("gives an SSH route time to start its remote server before timing out", () =>
+    Effect.gen(function* () {
+      const sshTarget = new SshConnectionTarget({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        connectionId: "ssh:devbox",
+      });
+      const sshEntry: ConnectionCatalogEntry = {
+        target: sshTarget,
+        profile: Option.some(
+          new SshConnectionProfile({
+            connectionId: sshTarget.connectionId,
+            environmentId: TARGET.environmentId,
+            label: TARGET.label,
+            target: { alias: "devbox", hostname: "devbox", username: null, port: null },
+          }),
+        ),
+        enabled: true,
+      };
+      const harness = yield* makeHarness({
+        prepare: (_attempt, target) =>
+          Effect.sleep("40 seconds").pipe(Effect.as(preparedFor(target))),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(sshEntry, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connecting" && state.stage === "preparing",
+      );
+      yield* TestClock.adjust("40 seconds");
+      const connected = yield* eventuallyState(
+        supervisor.state,
+        (state) => state.phase === "connected",
+      );
+
+      expect(connected).toMatchObject({ attempt: 1, lastFailure: null });
+      expect(yield* Ref.get(harness.prepareCount)).toBe(1);
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
