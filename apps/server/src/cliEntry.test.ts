@@ -9,7 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestConsole from "effect/testing/TestConsole";
 import { CliOutput, Command } from "effect/cli";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { it } from "@effect/vitest";
+import { afterEach, describe, expect, vi } from "vite-plus/test";
 
 import packageJson from "../package.json" with { type: "json" };
 import { cli } from "./binCli.ts";
@@ -31,19 +32,23 @@ afterEach(() => {
 });
 
 describe("runCliEntry", () => {
-  it("prints --version exactly as the full CLI does, without loading it", async () => {
-    const fullCli = fullCliMustNotLoad();
-    const stdout = captureStdout();
+  it.effect("prints --version exactly as the full CLI does, without loading it", () =>
+    Effect.gen(function* () {
+      const fullCli = fullCliMustNotLoad();
+      const stdout = captureStdout();
 
-    await runCliEntry(["--version"], {
-      loaders: { ...cliEntryLoaders, fullCli },
-      stdoutIsTty: false,
-    });
-    const fastOutput = stdoutText(stdout);
-    vi.restoreAllMocks();
+      yield* Effect.promise(() =>
+        runCliEntry(["--version"], {
+          loaders: { ...cliEntryLoaders, fullCli },
+          stdoutIsTty: false,
+        }),
+      );
+      const fastOutput = stdoutText(stdout);
+      vi.restoreAllMocks();
 
-    const logged = await Effect.runPromise(
-      Command.runWith(cli, { version: packageJson.version })(["--version"]).pipe(
+      const logged = yield* Command.runWith(cli, { version: packageJson.version })([
+        "--version",
+      ]).pipe(
         Effect.andThen(TestConsole.logLines),
         Effect.provide(
           Layer.mergeAll(
@@ -54,13 +59,13 @@ describe("runCliEntry", () => {
             CliOutput.layer(CliOutput.defaultFormatter({ colors: false })),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(fullCli).not.toHaveBeenCalled();
-    expect(fastOutput).toBe(`${logged.join("\n")}\n`);
-    expect(fastOutput).toMatch(/^lathe v\d/);
-  });
+      expect(fullCli).not.toHaveBeenCalled();
+      expect(fastOutput).toBe(`${logged.join("\n")}\n`);
+      expect(fastOutput).toMatch(/^lathe v\d/);
+    }),
+  );
 
   // A terminal gets effect/cli's colored output, which only the full CLI renders.
   it("leaves --version on a TTY to the full CLI", async () => {
@@ -96,37 +101,37 @@ describe("runCliEntry", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it("matches the full CLI's runtime-port output and exit code", async () => {
-    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-cli-entry-test-"));
-    const runtimeFile = NodePath.join(dir, "runtime.json");
-    NodeFS.writeFileSync(
-      runtimeFile,
-      JSON.stringify({ pid: process.pid, port: 4773, origin: "http://localhost:4773" }),
-    );
-    const runFull = (args: ReadonlyArray<string>) =>
-      Effect.runPromise(
+  it.effect("matches the full CLI's runtime-port output and exit code", () =>
+    Effect.gen(function* () {
+      const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-cli-entry-test-"));
+      const runtimeFile = NodePath.join(dir, "runtime.json");
+      NodeFS.writeFileSync(
+        runtimeFile,
+        JSON.stringify({ pid: process.pid, port: 4773, origin: "http://localhost:4773" }),
+      );
+      const runFull = (args: ReadonlyArray<string>) =>
         Command.runWith(cli, { version: packageJson.version })(args).pipe(
           Effect.provide(Layer.mergeAll(NodeServices.layer, NetService.layer, TestConsole.layer)),
-        ),
-      );
+        );
 
-    for (const file of [runtimeFile, NodePath.join(dir, "absent.json")]) {
-      const args = ["__ssh-helper", "runtime-port", file];
-      const fast = captureStdout();
-      await runCliEntry(args, { stdoutIsTty: false });
-      const fastResult = { stdout: stdoutText(fast), exitCode: process.exitCode };
-      vi.restoreAllMocks();
-      process.exitCode = undefined;
+      for (const file of [runtimeFile, NodePath.join(dir, "absent.json")]) {
+        const args = ["__ssh-helper", "runtime-port", file];
+        const fast = captureStdout();
+        yield* Effect.promise(() => runCliEntry(args, { stdoutIsTty: false }));
+        const fastResult = { stdout: stdoutText(fast), exitCode: process.exitCode };
+        vi.restoreAllMocks();
+        process.exitCode = undefined;
 
-      const full = captureStdout();
-      await runFull(args);
-      const fullResult = { stdout: stdoutText(full), exitCode: process.exitCode };
-      vi.restoreAllMocks();
-      process.exitCode = undefined;
+        const full = captureStdout();
+        yield* runFull(args);
+        const fullResult = { stdout: stdoutText(full), exitCode: process.exitCode };
+        vi.restoreAllMocks();
+        process.exitCode = undefined;
 
-      expect(fastResult).toEqual(fullResult);
-    }
-  });
+        expect(fastResult).toEqual(fullResult);
+      }
+    }),
+  );
 
   it("exits 1 with no output for a bad runtime file", async () => {
     const fullCli = fullCliMustNotLoad();
