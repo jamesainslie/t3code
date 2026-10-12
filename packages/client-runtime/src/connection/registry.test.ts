@@ -229,12 +229,21 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
               return next;
             });
             return;
-          case "SshConnectionRegistration":
+          case "SshConnectionRegistration": {
             yield* Ref.update(storedProfiles, (current) => {
               const next = new Map(current);
               next.set(registration.profile.connectionId, registration.profile);
               return next;
             });
+            const credential = registration.credential;
+            if (credential !== undefined) {
+              yield* Ref.update(storedCredentials, (current) => {
+                const next = new Map(current);
+                next.set(registration.target.connectionId, credential);
+                return next;
+              });
+            }
+          }
         }
       }),
     setRoutes: (environmentId, routes) =>
@@ -1131,6 +1140,29 @@ describe("EnvironmentRegistry", () => {
 
         expect(yield* Ref.get(harness.disconnectedSshTargets)).toEqual([SSH_TARGET]);
         expect(hasRoutes(yield* Ref.get(harness.storedTargets), SSH_CONNECTION.environmentId)).toBe(
+          true,
+        );
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
+  it.effect("switching an SSH environment off forgets its stored bearer", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness(
+        [SSH_CONNECTION],
+        [SSH_PROFILE],
+        [[SSH_CONNECTION.connectionId, new BearerConnectionCredential({ token: "ssh-bearer" })]],
+      );
+
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.start;
+        yield* registry.setEnabled(SSH_CONNECTION.environmentId, false);
+
+        expect((yield* Ref.get(harness.storedCredentials)).has(SSH_CONNECTION.connectionId)).toBe(
+          false,
+        );
+        expect((yield* Ref.get(harness.storedProfiles)).has(SSH_CONNECTION.connectionId)).toBe(
           true,
         );
       }).pipe(Effect.provide(harness.layer));

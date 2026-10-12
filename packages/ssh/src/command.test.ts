@@ -1,7 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -16,7 +18,9 @@ import {
   parseSshResolveOutput,
   redactSshOutput,
   remoteStateKey,
+  resolveSshTarget,
   runSshCommand,
+  type SshMultiplex,
 } from "./command.ts";
 import { SshCommandError } from "./errors.ts";
 import { SshOutputObserver, type SshOutputChunk } from "./output.ts";
@@ -40,6 +44,21 @@ const makeFailedProcess = (input: { readonly stdout: string; readonly stderr?: s
     unref: Effect.succeed(Effect.void),
   });
 };
+
+const makeExitedProcess = (stdout: string) =>
+  ChildProcessSpawner.makeHandle({
+    pid: ChildProcessSpawner.ProcessId(123),
+    stdout: Stream.make(encoder.encode(stdout)),
+    stderr: Stream.empty,
+    all: Stream.empty,
+    exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+    isRunning: Effect.succeed(false),
+    kill: () => Effect.void,
+    stdin: Sink.drain,
+    getInputFd: () => Sink.drain,
+    getOutputFd: () => Stream.empty,
+    unref: Effect.succeed(Effect.void),
+  });
 
 const makeNeverFinishingProcess = (stderr: Stream.Stream<Uint8Array> = Stream.empty) => {
   let finish: ((exitCode: ChildProcessSpawner.ExitCode) => void) | null = null;
@@ -100,6 +119,149 @@ describe("ssh command", () => {
       );
     }),
   );
+
+  // ssh keeps the first value of an option, so a pin ahead of the host wins
+  // over ~/.ssh/config. Without one the user's config still applies.
+  it.effect("pins multiplexing only when the caller chooses it", () =>
+    Effect.sync(() => {
+      const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+      const controlOptions = (multiplex?: SshMultiplex) =>
+        baseSshArgs(target, multiplex === undefined ? {} : { multiplex }).filter((arg) =>
+          arg.startsWith("Control"),
+        );
+
+      assert.deepEqual(controlOptions(), []);
+      assert.deepEqual(controlOptions({ mode: "direct" }), [
+        "ControlMaster=no",
+        "ControlPath=none",
+      ]);
+      assert.deepEqual(controlOptions({ mode: "client", socketPath: "/t3/ssh/a.sock" }), [
+        "ControlMaster=no",
+        "ControlPath=/t3/ssh/a.sock",
+      ]);
+      assert.deepEqual(controlOptions({ mode: "master", socketPath: "/t3/ssh/a.sock" }), [
+        "ControlMaster=yes",
+        "ControlPath=/t3/ssh/a.sock",
+      ]);
+    }),
+  );
+
+  it.effect("puts a chosen multiplexing pin ahead of the host and leaves the rest alone", () => {
+    const spawned: Array<ReadonlyArray<string>> = [];
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.sync(() => {
+        spawned.push(command._tag === "StandardCommand" ? command.args : []);
+        return makeExitedProcess("hostname devbox.example.com\n");
+      }),
+    );
+    const layerProcess = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+    const controlOptions = (args: ReadonlyArray<string> | undefined, host: string) => {
+      assert.isDefined(args);
+      const hostIndex = args?.indexOf(host) ?? -1;
+      assert.isAbove(hostIndex, 0);
+      return args?.slice(0, hostIndex).filter((arg) => arg.startsWith("Control")) ?? [];
+    };
+
+    return Effect.gen(function* () {
+      yield* runSshCommand(
+        { alias: "devbox", hostname: "devbox.example.com", username: "julius", port: 2222 },
+        { remoteCommandArgs: ["sh", "-s"] },
+      );
+      yield* resolveSshTarget("devbox");
+      yield* resolveSshTarget("devbox", { multiplex: { mode: "direct" } });
+      yield* runSshCommand(
+        { alias: "devbox", hostname: "devbox.example.com", username: null, port: null },
+        { multiplex: { mode: "client", socketPath: "/home/julius/.t3/ssh/711bc738.sock" } },
+      );
+
+      assert.deepEqual(controlOptions(spawned[0], "julius@devbox"), []);
+      assert.deepEqual(controlOptions(spawned[1], "devbox"), []);
+      assert.deepEqual(controlOptions(spawned[2], "devbox"), [
+        "ControlMaster=no",
+        "ControlPath=none",
+      ]);
+      assert.deepEqual(controlOptions(spawned[3], "devbox"), [
+        "ControlMaster=no",
+        "ControlPath=/home/julius/.t3/ssh/711bc738.sock",
+      ]);
+    }).pipe(Effect.provide(layerProcess));
+  });
+
+  it.effect("escalates to SIGKILL when a timed-out ssh ignores SIGTERM", () => {
+    const signals: Array<string> = [];
+    // Models the Node spawner's scoped release: SIGTERM, then SIGKILL only
+    // after the command's forceKillAfter. Without one it waits on the process.
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.gen(function* () {
+        const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+        const forceKillAfter =
+          command._tag === "StandardCommand" ? command.options.forceKillAfter : undefined;
+        yield* Effect.addFinalizer(() =>
+          Effect.gen(function* () {
+            signals.push("SIGTERM");
+            if (forceKillAfter === undefined) {
+              return yield* Effect.sleep(Duration.hours(1));
+            }
+            yield* Effect.sleep(forceKillAfter);
+            signals.push("SIGKILL");
+            yield* Deferred.succeed(exited, ChildProcessSpawner.ExitCode(137));
+          }),
+        );
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(123),
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          exitCode: Deferred.await(exited),
+          isRunning: Effect.map(Deferred.isDone(exited), (done) => !done),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        });
+      }),
+    );
+    const layerProcess = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      TestClock.layer(),
+    );
+
+    return Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(
+        Effect.result(
+          runSshCommand(
+            { alias: "devbox", hostname: "devbox.example.com", username: null, port: null },
+            { timeoutMs: 1_000 },
+          ),
+        ),
+      );
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.deepEqual(signals, ["SIGTERM"]);
+      yield* TestClock.adjust(Duration.seconds(2));
+
+      const exit = fiber.pollUnsafe();
+      assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+      assert.isDefined(exit);
+      if (exit !== undefined && Exit.isSuccess(exit)) {
+        assert.isTrue(Result.isFailure(exit.value));
+        if (Result.isFailure(exit.value)) {
+          assert.isTrue(
+            exit.value.failure._tag === "SshCommandError" && exit.value.failure.timedOut,
+          );
+        }
+      }
+    }).pipe(
+      // A failed assertion must not leave the test waiting on the stuck release.
+      Effect.ensuring(TestClock.adjust(Duration.hours(1))),
+      Effect.provide(layerProcess),
+    );
+  });
 
   // Remote servers store state under this key, so it must not change across releases.
   it.effect("derives a stable remote state key", () =>

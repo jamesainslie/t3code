@@ -70,6 +70,8 @@ export class DesktopSshEnvironment extends Context.Service<
 
 export interface DesktopSshEnvironmentLayerOptions {
   readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteT3RunnerOptions>;
+  /** Where owned ssh ControlMaster sockets live; see `SshEnvironmentManagerOptions`. */
+  readonly controlSocketDirectory?: string;
 }
 
 function discoverDesktopSshHostsEffect(input?: { readonly homeDir?: string }) {
@@ -177,10 +179,13 @@ export const layer = (options: DesktopSshEnvironmentLayerOptions = {}) =>
     // Exposed as well: the IPC layer serves the log to renderers that subscribe.
     Layer.provideMerge(DesktopSshOutputLog.layer),
     Layer.provide(
-      SshTunnel.SshEnvironmentManager.layer(
-        options.resolveCliRunner === undefined
+      SshTunnel.SshEnvironmentManager.layer({
+        ...(options.resolveCliRunner === undefined
           ? {}
-          : { resolveCliRunner: options.resolveCliRunner },
-      ),
+          : { resolveCliRunner: options.resolveCliRunner }),
+        ...(options.controlSocketDirectory === undefined
+          ? {}
+          : { controlSocketDirectory: options.controlSocketDirectory }),
+      }),
     ),
   );

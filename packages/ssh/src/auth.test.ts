@@ -6,6 +6,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Stream from "effect/Stream";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import {
   buildSshAskpassHelperDescriptor,
@@ -53,6 +55,58 @@ describe("ssh auth", () => {
       Effect.provide(Layer.merge(NodeServices.layer, Layer.succeed(HostProcess.Platform, "linux"))),
       Effect.scoped,
     ),
+  );
+
+  // A long-lived ssh keeps its environment until it exits, so the secret goes in
+  // a file the caller deletes once authentication is done.
+  it.live.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+    "can hand the askpass helper its secret through a private file",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-askpass-test-" });
+        const env = yield* buildSshChildEnvironment({
+          authSecret: "super-secret",
+          authSecretDelivery: "file",
+          interactiveAuth: true,
+          askpassDirectory: directory,
+          baseEnv: {},
+        });
+
+        assert.isUndefined(env.T3_SSH_AUTH_SECRET);
+        const secretFile = env.T3_SSH_AUTH_SECRET_FILE;
+        assert.isDefined(secretFile);
+        if (secretFile === undefined || env.SSH_ASKPASS === undefined) return;
+        assert.equal((yield* fs.stat(secretFile)).mode & 0o777, 0o600);
+
+        const askpass = (childEnv: Record<string, string | undefined>) =>
+          Effect.gen(function* () {
+            const child = yield* spawner.spawn(
+              ChildProcess.make(env.SSH_ASKPASS ?? "", [], { env: childEnv, extendEnv: false }),
+            );
+            const [stdout, exitCode] = yield* Effect.all(
+              [child.stdout.pipe(Stream.decodeText(), Stream.mkString), child.exitCode],
+              { concurrency: "unbounded" },
+            );
+            return { stdout, exitCode: Number(exitCode) };
+          }).pipe(Effect.scoped);
+
+        assert.deepEqual(
+          yield* askpass({ PATH: "/usr/bin:/bin", T3_SSH_AUTH_SECRET_FILE: secretFile }),
+          { stdout: "super-secret\n", exitCode: 0 },
+        );
+        yield* fs.remove(secretFile);
+        assert.notEqual(
+          (yield* askpass({ PATH: "/usr/bin:/bin", T3_SSH_AUTH_SECRET_FILE: secretFile })).exitCode,
+          0,
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.merge(NodeServices.layer, Layer.succeed(HostProcess.Platform, "linux")),
+        ),
+        Effect.scoped,
+      ),
   );
 
   it.effect("builds a windows askpass launcher pair", () =>

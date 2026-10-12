@@ -409,6 +409,8 @@ describe("connection onboarding", () => {
           connectionId: 'ssh:environment-ssh:["devbox","devbox.example.test","developer",22]',
           target,
         },
+        // Provisioning already paired, so the first connect reuses this bearer.
+        credential: { token: "bearer-token" },
       });
     }),
   );

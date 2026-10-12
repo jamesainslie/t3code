@@ -9,6 +9,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as LogLevel from "effect/LogLevel";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
@@ -80,6 +81,9 @@ export class DesktopEnvironment extends Context.Service<
     readonly otlpExportIntervalMs: number;
     readonly otlpHeaders: Option.Option<Record<string, string>>;
     readonly otlpProtocol: OtlpProtocol;
+    /** T3CODE_LOG_LEVEL and T3CODE_TRACE_MIN_LEVEL, Info unless set. */
+    readonly logLevel: LogLevel.LogLevel;
+    readonly traceMinLevel: LogLevel.LogLevel;
     readonly branding: DesktopAppBranding;
     readonly displayName: string;
     readonly appUserModelId: string;
@@ -235,6 +239,8 @@ const make = Effect.fn("desktop.environment.make")(function* (
     otlpExportIntervalMs: config.otlpExportIntervalMs,
     otlpHeaders: config.otlpHeaders,
     otlpProtocol: config.otlpProtocol,
+    logLevel: config.logLevel,
+    traceMinLevel: config.traceMinLevel,
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () => desktopIds.appId),

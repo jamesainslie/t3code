@@ -7,6 +7,7 @@ import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Tracer from "effect/Tracer";
@@ -25,6 +26,7 @@ import {
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import {
   BearerConnectionTarget,
+  ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
@@ -58,6 +60,15 @@ function catalogEntry(
   return { target, profile, enabled: true };
 }
 
+function mapCredentialStore(credentials: Map<string, ConnectionCredential>) {
+  return ConnectionCredentialStore.ConnectionCredentialStore.of({
+    get: (connectionId) => Effect.sync(() => Option.fromNullishOr(credentials.get(connectionId))),
+    put: (connectionId, credential) =>
+      Effect.sync(() => void credentials.set(connectionId, credential)),
+    remove: (connectionId) => Effect.sync(() => void credentials.delete(connectionId)),
+  });
+}
+
 function collectingTracer(spans: Array<string>): Tracer.Tracer {
   return Tracer.make({
     span: (options) => {
@@ -76,6 +87,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
   readonly profiles?: ReadonlyArray<ConnectionProfile>;
   readonly profileStore?: ConnectionProfileStore.ConnectionProfileStore["Service"];
   readonly credentials?: ReadonlyArray<readonly [string, ConnectionCredential]>;
+  readonly credentialStore?: ConnectionCredentialStore.ConnectionCredentialStore["Service"];
   readonly authorizeBearer?: RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeBearer"];
   readonly authorizeDpop?: RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeDpop"];
   readonly primaryBearerToken?: string;
@@ -92,12 +104,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
     put: (profile) => Effect.sync(() => void profiles.set(profile.connectionId, profile)),
     remove: (connectionId) => Effect.sync(() => void profiles.delete(connectionId)),
   });
-  const credentialStore = ConnectionCredentialStore.ConnectionCredentialStore.of({
-    get: (connectionId) => Effect.succeed(Option.fromNullishOr(credentials.get(connectionId))),
-    put: (connectionId, credential) =>
-      Effect.sync(() => void credentials.set(connectionId, credential)),
-    remove: (connectionId) => Effect.sync(() => void credentials.delete(connectionId)),
-  });
+  const credentialStore = options?.credentialStore ?? mapCredentialStore(credentials);
   const remote = RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization.of({
     authorizeBearer:
       options?.authorizeBearer ??
@@ -538,6 +545,198 @@ describe("ConnectionResolver", () => {
         expect(yield* permissions.get(entry)).toBe(scenario === "changed" ? "off" : "read-write");
       }),
   );
+
+  describe("SSH bearer reuse", () => {
+    const target = new SshConnectionTarget({
+      environmentId: ENVIRONMENT_ID,
+      label: "SSH",
+      connectionId: "ssh-1",
+    });
+    const profile = new SshConnectionProfile({
+      connectionId: "ssh-1",
+      environmentId: ENVIRONMENT_ID,
+      label: "SSH",
+      target: SSH_TARGET,
+    });
+    const entry = catalogEntry(target, Option.some(profile));
+
+    // A host that mints a bearer only when asked to pair, and rejects the
+    // listed bearers with `rejection`.
+    const makeSshHost = Effect.fn("TestConnectionResolver.makeSshHost")(function* (options?: {
+      readonly storedToken?: string;
+      readonly rejectedTokens?: ReadonlyArray<string>;
+      readonly rejection?: ConnectionBlockedError | ConnectionTransientError;
+      readonly launchFailure?: ConnectionBlockedError;
+    }) {
+      const credentials = new Map<string, ConnectionCredential>(
+        options?.storedToken === undefined
+          ? []
+          : [["ssh-1", new BearerConnectionCredential({ token: options.storedToken })]],
+      );
+      const pairingRequests: Array<boolean> = [];
+      const authorizedTokens: Array<string> = [];
+      const layerBroker = yield* makeDependencies({
+        credentialStore: mapCredentialStore(credentials),
+        prepareSsh: (input) => {
+          pairingRequests.push(input.issuePairingToken);
+          if (options?.launchFailure !== undefined) return Effect.fail(options.launchFailure);
+          return Effect.succeed({
+            bootstrap: {
+              target: input.target,
+              httpBaseUrl: "http://127.0.0.1:4010",
+              wsBaseUrl: "ws://127.0.0.1:4010",
+              pairingToken: null,
+            },
+            bearerToken: input.issuePairingToken ? `fresh-bearer-${pairingRequests.length}` : null,
+          });
+        },
+        authorizeBearer: (input) => {
+          authorizedTokens.push(input.bearerToken);
+          return options?.rejectedTokens?.includes(input.bearerToken)
+            ? Effect.fail(
+                options.rejection ??
+                  new ConnectionBlockedError({
+                    reason: "authentication",
+                    detail: "The environment credential is invalid.",
+                  }),
+              )
+            : Effect.succeed({
+                environmentId: input.expectedEnvironmentId,
+                label: "SSH",
+                httpBaseUrl: input.httpBaseUrl,
+                socketUrl: "ws://127.0.0.1:4010/ws?wsTicket=ssh",
+                httpAuthorization: { _tag: "Bearer" as const, token: input.bearerToken },
+              });
+        },
+      });
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(layerBroker));
+      return {
+        broker,
+        pairingRequests,
+        authorizedTokens,
+        storedToken: () => credentials.get("ssh-1")?.token,
+      };
+    });
+
+    it.effect("reuses a stored bearer without asking the host to pair", () =>
+      Effect.gen(function* () {
+        const host = yield* makeSshHost({ storedToken: "stored-bearer" });
+
+        expect((yield* host.broker.prepare(entry)).httpAuthorization).toEqual({
+          _tag: "Bearer",
+          token: "stored-bearer",
+        });
+        expect(host.pairingRequests).toEqual([false]);
+        expect(host.authorizedTokens).toEqual(["stored-bearer"]);
+        expect(host.storedToken()).toBe("stored-bearer");
+      }),
+    );
+
+    it.effect.each(["authentication", "permission"] as const)(
+      "pairs again and stores the new bearer when the host rejects the stored one (%s)",
+      (reason) =>
+        Effect.gen(function* () {
+          const host = yield* makeSshHost({
+            storedToken: "dead-bearer",
+            rejectedTokens: ["dead-bearer"],
+            rejection: new ConnectionBlockedError({ reason, detail: "Rejected." }),
+          });
+
+          expect((yield* host.broker.prepare(entry)).httpAuthorization).toEqual({
+            _tag: "Bearer",
+            token: "fresh-bearer-2",
+          });
+          expect(host.pairingRequests).toEqual([false, true]);
+          expect(host.authorizedTokens).toEqual(["dead-bearer", "fresh-bearer-2"]);
+          expect(host.storedToken()).toBe("fresh-bearer-2");
+        }),
+    );
+
+    it.effect(
+      "keeps the stored bearer and does not pair when authorization fails transiently",
+      () =>
+        Effect.gen(function* () {
+          const failure = new ConnectionTransientError({
+            reason: "network",
+            detail: "The tunnel dropped.",
+          });
+          const host = yield* makeSshHost({
+            storedToken: "stored-bearer",
+            rejectedTokens: ["stored-bearer"],
+            rejection: failure,
+          });
+
+          expect(yield* Effect.flip(host.broker.prepare(entry))).toBe(failure);
+          expect(host.pairingRequests).toEqual([false]);
+          expect(host.storedToken()).toBe("stored-bearer");
+        }),
+    );
+
+    it.effect("does not pair again when the SSH launch itself is refused", () =>
+      Effect.gen(function* () {
+        const cancelled = new ConnectionBlockedError({
+          reason: "authentication",
+          detail: "SSH password entry was cancelled.",
+        });
+        const host = yield* makeSshHost({ storedToken: "stored-bearer", launchFailure: cancelled });
+
+        expect(yield* Effect.flip(host.broker.prepare(entry))).toBe(cancelled);
+        expect(host.pairingRequests).toEqual([false]);
+        expect(host.storedToken()).toBe("stored-bearer");
+      }),
+    );
+
+    it.effect.each([
+      ["stored-bearer", { storedToken: "kept-token-1" }],
+      [
+        "stored-bearer-rejected-repaired",
+        { storedToken: "dead-token-1", rejectedTokens: ["dead-token-1"] },
+      ],
+      ["paired", {}],
+    ] as const)("logs that the %s credential path ran, but never a bearer", ([path, options]) => {
+      const logs: Array<unknown> = [];
+      const logger = Logger.make(({ logLevel, message }) => {
+        logs.push({ logLevel, message });
+      });
+      return Effect.gen(function* () {
+        const host = yield* makeSshHost(options);
+        yield* host.broker
+          .prepare(entry)
+          .pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+
+        const authorized = logs.filter((log) =>
+          JSON.stringify(log).includes("clientRuntime.connection.ssh.authorized"),
+        );
+        expect(authorized).toEqual([
+          {
+            logLevel: "Info",
+            message: [
+              "clientRuntime.connection.ssh.authorized",
+              { environmentId: ENVIRONMENT_ID, connectionId: "ssh-1", credentialPath: path },
+            ],
+          },
+        ]);
+        const logged = JSON.stringify(logs);
+        for (const token of ["kept-token-1", "dead-token-1", "fresh-bearer"]) {
+          expect(logged).not.toContain(token);
+        }
+      });
+    });
+
+    it.effect("pairs and stores the bearer when none is stored", () =>
+      Effect.gen(function* () {
+        const host = yield* makeSshHost();
+
+        expect((yield* host.broker.prepare(entry)).httpAuthorization).toEqual({
+          _tag: "Bearer",
+          token: "fresh-bearer-1",
+        });
+        expect(host.pairingRequests).toEqual([true]);
+        expect(host.authorizedTokens).toEqual(["fresh-bearer-1"]);
+        expect(host.storedToken()).toBe("fresh-bearer-1");
+      }),
+    );
+  });
 
   it.effect("preserves relay authorization failure classification and trace details", () =>
     Effect.gen(function* () {

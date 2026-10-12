@@ -4,9 +4,11 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
+import * as References from "effect/References";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
@@ -22,13 +24,14 @@ import { fetchEnvironmentSessionState } from "../state/session.ts";
 import type { ConnectionCatalogEntry, ConnectionRoute } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
-import { BearerConnectionProfile } from "./catalog.ts";
+import { BearerConnectionProfile, SshConnectionProfile } from "./catalog.ts";
 import {
   BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
+  SshConnectionTarget,
   type ConnectionAttemptError,
   type ConnectionTarget,
   type NetworkStatus,
@@ -548,6 +551,82 @@ describe("EnvironmentSupervisor", () => {
       });
     }).pipe(Effect.provide(TestClock.layer())),
   );
+
+  const sshTarget = new SshConnectionTarget({
+    environmentId: TARGET.environmentId,
+    label: TARGET.label,
+    connectionId: "ssh:devbox",
+  });
+  const sshEntry: ConnectionCatalogEntry = {
+    target: sshTarget,
+    profile: Option.some(
+      new SshConnectionProfile({
+        connectionId: sshTarget.connectionId,
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        target: { alias: "devbox", hostname: "devbox", username: null, port: null },
+      }),
+    ),
+    enabled: true,
+  };
+
+  it.effect("gives an SSH route time to start its remote server before timing out", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        prepare: (_attempt, target) =>
+          Effect.sleep("40 seconds").pipe(Effect.as(preparedFor(target))),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(sshEntry, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connecting" && state.stage === "preparing",
+      );
+      yield* TestClock.adjust("40 seconds");
+      const connected = yield* eventuallyState(
+        supervisor.state,
+        (state) => state.phase === "connected",
+      );
+
+      expect(connected).toMatchObject({ attempt: 1, lastFailure: null });
+      expect(yield* Ref.get(harness.prepareCount)).toBe(1);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("logs a setup timeout with the route kinds and the budget it used", () => {
+    const logs: Array<{ readonly message: unknown; readonly annotations: unknown }> = [];
+    const logger = Logger.make(({ message, fiber }) => {
+      const [text] = Array.isArray(message) ? message : [message];
+      logs.push({ message: text, annotations: fiber.getRef(References.CurrentLogAnnotations) });
+    });
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness({ prepare: () => Effect.never });
+      const supervisor = yield* EnvironmentSupervisor.make(sshEntry, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connecting" && state.stage === "preparing",
+      );
+      yield* TestClock.adjust("60 seconds");
+      yield* eventuallyState(supervisor.state, (state) => state.phase === "backoff");
+
+      const timeouts = logs.filter((entry) => entry.message === "Connection setup timed out.");
+      expect(timeouts).toHaveLength(1);
+      expect(timeouts[0]?.annotations).toMatchObject({
+        "environment.id": TARGET.environmentId,
+        "connection.route.kinds": "ssh",
+        "connection.establishment.budget_ms": 60_000,
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.merge(TestClock.layer(), Logger.layer([logger], { mergeWithExisting: false })),
+      ),
+    );
+  });
 
   it.effect(
     "shows a network hint for a stalled relay connection and clears it after recovery",

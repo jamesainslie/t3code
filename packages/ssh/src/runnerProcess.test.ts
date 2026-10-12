@@ -12,7 +12,13 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as NodeNet from "node:net";
 
 import { remoteStateKey } from "./command.ts";
-import { buildRemoteStopScript, buildRemoteT3RunnerScript } from "./tunnel.ts";
+import {
+  buildRemoteLaunchScript,
+  buildRemotePairingScript,
+  buildRemoteStopScript,
+  buildRemoteT3RunnerScript,
+  REMOTE_LAUNCH_ACTIONS,
+} from "./tunnel.ts";
 
 const Started = Schema.Struct({
   pid: Schema.Number,
@@ -196,11 +202,12 @@ server.listen(0, "127.0.0.1", () => {
             }),
           );
           // Redirect only the state directory. Never use the developer's SSH state.
-          const isolatedScript = script.replace(
-            /^STATE_DIR=.*$/mu,
-            'STATE_DIR="$T3_TEST_STATE_DIR"',
-          );
-          assert.notEqual(isolatedScript, script);
+          // The timeout case waits out the whole grace, so shorten it to keep the test quick.
+          const isolatedScript = script
+            .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$T3_TEST_STATE_DIR"')
+            .replace(/^STOP_WAIT_SECONDS=15$/mu, "STOP_WAIT_SECONDS=2");
+          assert.include(isolatedScript, 'STATE_DIR="$T3_TEST_STATE_DIR"');
+          assert.include(isolatedScript, "STOP_WAIT_SECONDS=2\n");
           const runStop = Effect.fn("test.remoteStop")(function* () {
             const stop = yield* spawner.spawn(
               ChildProcess.make("/bin/sh", ["-s"], {
@@ -251,6 +258,399 @@ server.listen(0, "127.0.0.1", () => {
             assert.equal(yield* fs.readFileString(signalPath), mode === "timeout" ? "2" : "1");
           }
         }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    );
+  },
+);
+
+// The launch script is generated shell, so reuse is proven by running it with
+// real sh against a fake node-script server. HOME and both state directories
+// point at the fixture; nothing touches the developer's T3 home.
+describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+  "remote launch server reuse",
+  () => {
+    const LaunchResult = Schema.Struct({
+      remotePort: Schema.Number,
+      serverKind: Schema.Literals(["external", "managed"]),
+      action: Schema.Literals(REMOTE_LAUNCH_ACTIONS),
+    });
+    const decodeLaunchResult = Schema.decodeUnknownSync(Schema.fromJsonString(LaunchResult));
+    const ServerEvent = Schema.Struct({
+      pid: Schema.Number,
+      event: Schema.Literals(["listening", "request", "sigterm"]),
+      port: Schema.optional(Schema.Number),
+    });
+    const decodeServerEvent = Schema.decodeUnknownSync(Schema.fromJsonString(ServerEvent));
+
+    // Serves 200 on `/`, writes the runtime file the real server writes under
+    // its base dir, and logs every event so a test can see restarts and kills.
+    const FAKE_SERVER = `import * as fs from "node:fs";
+import * as http from "node:http";
+import * as path from "node:path";
+const log = (entry) =>
+  fs.appendFileSync(process.env.T3_TEST_LOG, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
+const args = process.argv.slice(2);
+const option = (name) => args[args.indexOf(name) + 1];
+if (args[0] === "auth") {
+  process.stdout.write(JSON.stringify({ credential: "fixture" }) + "\\n");
+  process.exit(0);
+}
+const server = http.createServer((_request, response) => {
+  log({ event: "request" });
+  response.end("ok");
+});
+process.on("SIGTERM", () => {
+  log({ event: "sigterm" });
+  process.exit(0);
+});
+server.listen(Number(option("--port")), "127.0.0.1", () => {
+  const port = server.address().port;
+  const userdata = path.join(option("--base-dir"), "userdata");
+  fs.mkdirSync(userdata, { recursive: true });
+  fs.writeFileSync(
+    path.join(userdata, "server-runtime.json"),
+    JSON.stringify({ pid: process.pid, port, origin: "http://127.0.0.1:" + port }),
+  );
+  log({ event: "listening", port });
+  process.stdout.write("listening\\n");
+});
+`;
+
+    const freeLoopbackPort = Effect.callback<number, Error>((resume) => {
+      const server = NodeNet.createServer();
+      server.once("error", (error) => resume(Effect.fail(error)));
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        const port = typeof address === "object" && address !== null ? address.port : 0;
+        server.close(() => resume(Effect.succeed(port)));
+      });
+    });
+
+    const isAlive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const makeFixture = Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "t3-launch-" });
+      const bin = path.join(fixture, "bin");
+      const cliPath = path.join(fixture, "fake server.mjs");
+      const logPath = path.join(fixture, "events.log");
+      const serverHome = path.join(fixture, "home", ".t3");
+      const stateDir = path.join(serverHome, "ssh-launch", "fixture");
+      yield* fs.makeDirectory(bin);
+      yield* fs.makeDirectory(stateDir, { recursive: true });
+      yield* fs.symlink(process.execPath, path.join(bin, "node"));
+      yield* fs.writeFileString(cliPath, FAKE_SERVER);
+      yield* fs.writeFileString(logPath, "");
+      const env = {
+        HOME: path.join(fixture, "home"),
+        PATH: `${bin}:/usr/bin:/bin`,
+        T3_TEST_LOG: logPath,
+        T3_TEST_STATE_DIR: stateDir,
+        T3_TEST_SERVER_HOME: serverHome,
+      };
+
+      const events = Effect.map(fs.readFileString(logPath), (text) =>
+        text
+          .split("\n")
+          .filter((line) => line.length > 0)
+          .map((line) => decodeServerEvent(line)),
+      );
+      // Launched servers outlive the launch shell, so stop each one the fake logged.
+      yield* Effect.addFinalizer(() =>
+        events.pipe(
+          Effect.map((entries) => {
+            for (const entry of entries) {
+              if (entry.event === "listening" && isAlive(entry.pid)) {
+                process.kill(entry.pid, "SIGKILL");
+              }
+            }
+          }),
+          Effect.ignore,
+        ),
+      );
+
+      const isolate = (script: string) => {
+        const isolated = script
+          .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$T3_TEST_STATE_DIR"')
+          .replace(/^DEFAULT_SERVER_HOME=.*$/mu, 'DEFAULT_SERVER_HOME="$T3_TEST_SERVER_HOME"');
+        assert.include(isolated, 'STATE_DIR="$T3_TEST_STATE_DIR"');
+        assert.include(isolated, 'DEFAULT_SERVER_HOME="$T3_TEST_SERVER_HOME"');
+        return isolated;
+      };
+
+      const runScript = Effect.fn("test.remoteScript")(function* (
+        script: string,
+        args: ReadonlyArray<string>,
+      ) {
+        const child = yield* spawner.spawn(
+          ChildProcess.make("/bin/sh", ["-s", "--", ...args], {
+            cwd: fixture,
+            env,
+            // The launched server must outlive this shell, as it does over SSH.
+            detached: false,
+            stdin: Stream.make(new TextEncoder().encode(isolate(script))),
+          }),
+        );
+        return yield* Effect.all(
+          {
+            stdout: child.stdout.pipe(Stream.decodeText(), Stream.mkString),
+            stderr: child.stderr.pipe(Stream.decodeText(), Stream.mkString),
+            exitCode: child.exitCode,
+          },
+          { concurrency: "unbounded" },
+        );
+      }, Effect.scoped);
+
+      const launch = Effect.gen(function* () {
+        const result = yield* runScript(buildRemoteLaunchScript({ nodeScriptPath: cliPath }), [
+          "fixture",
+        ]);
+        assert.equal(result.exitCode, 0, result.stderr);
+        return decodeLaunchResult(result.stdout.trim());
+      });
+
+      const readState = (name: string) =>
+        fs.readFileString(path.join(stateDir, name)).pipe(
+          Effect.map((text) => text.trim()),
+          Effect.orElseSucceed(() => null),
+        );
+
+      // An unowned server on the same base dir, as if the user ran `serve` themselves.
+      const startExternalServer = Effect.gen(function* () {
+        const child = yield* spawner.spawn(
+          ChildProcess.make(
+            process.execPath,
+            [cliPath, "serve", "--host", "127.0.0.1", "--port", "0", "--base-dir", serverHome],
+            { cwd: fixture, env, detached: false },
+          ),
+        );
+        yield* Effect.addFinalizer(() => child.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore));
+        yield* child.stdout.pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.take(1),
+          Stream.runDrain,
+        );
+        return Number(child.pid);
+      });
+
+      // Pin the cold start to a free port instead of the product default.
+      yield* fs.writeFileString(path.join(stateDir, "port"), `${yield* freeLoopbackPort}\n`);
+      return {
+        fs,
+        path,
+        cliPath,
+        serverHome,
+        stateDir,
+        events,
+        launch,
+        readState,
+        runScript,
+        startExternalServer,
+      };
+    });
+
+    it.live(
+      "reuses its own managed server even though that server wrote the default runtime file",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const first = yield* fixture.launch;
+          assert.equal(first.serverKind, "managed");
+          assert.equal(first.action, "started");
+          const managedPid = Number(yield* fixture.readState("pid"));
+          const runtime = yield* fixture.fs.readFileString(
+            fixture.path.join(fixture.serverHome, "userdata", "server-runtime.json"),
+          );
+          assert.include(runtime, `"pid":${managedPid}`);
+          assert.include(runtime, `"port":${first.remotePort}`);
+
+          const second = yield* fixture.launch;
+
+          assert.deepEqual(second, {
+            remotePort: first.remotePort,
+            serverKind: "managed",
+            action: "reused",
+          });
+          assert.equal(yield* fixture.readState("pid"), String(managedPid));
+          assert.equal(yield* fixture.readState("managed"), "managed");
+          assert.isTrue(isAlive(managedPid));
+          const events = yield* fixture.events;
+          assert.isFalse(events.some((entry) => entry.event === "sigterm"));
+          assert.equal(events.filter((entry) => entry.event === "listening").length, 1);
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
+    );
+
+    it.live(
+      "adopts an external server named by the default runtime file and stops its own",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const first = yield* fixture.launch;
+          const managedPid = Number(yield* fixture.readState("pid"));
+          const externalPid = yield* fixture.startExternalServer;
+          const external = (yield* fixture.events).find(
+            (entry) => entry.pid === externalPid && entry.event === "listening",
+          );
+          assert.isDefined(external);
+
+          const second = yield* fixture.launch;
+
+          assert.deepEqual(second, {
+            remotePort: external?.port ?? -1,
+            serverKind: "external",
+            action: "replaced-by-external",
+          });
+          assert.notEqual(second.remotePort, first.remotePort);
+          assert.isNull(yield* fixture.readState("pid"));
+          assert.equal(yield* fixture.readState("managed"), "external");
+          assert.isFalse(isAlive(managedPid));
+          assert.isTrue(isAlive(externalPid));
+          assert.deepEqual(
+            (yield* fixture.events)
+              .filter((entry) => entry.event === "sigterm")
+              .map((entry) => entry.pid),
+            [managedPid],
+          );
+
+          const third = yield* fixture.launch;
+
+          assert.deepEqual(third, { ...second, action: "reused-external" });
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
+    );
+
+    it.live(
+      "adopts an external server on a first launch without starting its own",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const externalPid = yield* fixture.startExternalServer;
+
+          const first = yield* fixture.launch;
+
+          assert.equal(first.serverKind, "external");
+          assert.equal(first.action, "adopted-external");
+          assert.isTrue(isAlive(externalPid));
+          const listening = (yield* fixture.events).filter((entry) => entry.event === "listening");
+          assert.deepEqual(
+            listening.map((entry) => entry.pid),
+            [externalPid],
+          );
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
+    );
+
+    it.live(
+      "restarts its own managed server when it stops answering",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          yield* fixture.launch;
+          const firstPid = Number(yield* fixture.readState("pid"));
+          // The server dies and its pid goes to a live process that serves nothing.
+          process.kill(firstPid, "SIGKILL");
+          const silent = yield* spawner.spawn(ChildProcess.make("/bin/sleep", ["60"]));
+          yield* Effect.addFinalizer(() =>
+            silent.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore),
+          );
+          yield* fixture.fs.writeFileString(
+            fixture.path.join(fixture.stateDir, "pid"),
+            `${Number(silent.pid)}\n`,
+          );
+
+          const second = yield* fixture.launch;
+
+          assert.equal(second.serverKind, "managed");
+          assert.equal(second.action, "restarted-unready");
+          assert.isFalse(isAlive(Number(silent.pid)));
+          assert.notEqual(Number(yield* fixture.readState("pid")), Number(silent.pid));
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
+    );
+
+    it.live(
+      "restarts its own managed server when the runner changed",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          yield* fixture.launch;
+          const firstPid = Number(yield* fixture.readState("pid"));
+          const runnerPath = fixture.path.join(fixture.stateDir, "run-t3.sh");
+          yield* fixture.fs.writeFileString(
+            runnerPath,
+            `${yield* fixture.fs.readFileString(runnerPath)}\n# older runner\n`,
+          );
+
+          const second = yield* fixture.launch;
+
+          assert.equal(second.serverKind, "managed");
+          assert.equal(second.action, "restarted-runner-changed");
+          const secondPid = Number(yield* fixture.readState("pid"));
+          assert.notEqual(secondPid, firstPid);
+          assert.isFalse(isAlive(firstPid));
+          const events = yield* fixture.events;
+          assert.deepEqual(
+            events.filter((entry) => entry.event === "sigterm").map((entry) => entry.pid),
+            [firstPid],
+          );
+          const listening = events.filter((entry) => entry.event === "listening");
+          assert.deepEqual(
+            listening.map((entry) => entry.pid),
+            [firstPid, secondPid],
+          );
+          assert.equal(second.remotePort, listening[1]?.port);
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
+    );
+
+    it.live(
+      "pairing replaces the runner atomically and leaves an identical one alone",
+      () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const runnerPath = fixture.path.join(fixture.stateDir, "run-t3.sh");
+          const heldPath = fixture.path.join(fixture.stateDir, "held-runner");
+          const pair = Effect.gen(function* () {
+            const result = yield* fixture.runScript(
+              buildRemotePairingScript("fixture", { nodeScriptPath: fixture.cliPath }),
+              [],
+            );
+            assert.equal(result.exitCode, 0, result.stderr);
+            assert.equal(result.stdout, '{"credential":"fixture"}\n');
+          });
+          // A launch may be executing the old runner; it must never see a partial rewrite.
+          yield* fixture.fs.writeFileString(runnerPath, "#!/bin/sh\nexit 1\n");
+          yield* fixture.fs.link(runnerPath, heldPath);
+
+          yield* pair;
+
+          assert.equal(yield* fixture.fs.readFileString(heldPath), "#!/bin/sh\nexit 1\n");
+          const replaced = yield* fixture.fs.stat(runnerPath);
+          assert.notDeepEqual(replaced.ino, (yield* fixture.fs.stat(heldPath)).ino);
+          assert.equal(replaced.mode & 0o777, 0o700);
+          // No temporary runner is left behind.
+          assert.deepEqual((yield* fixture.fs.readDirectory(fixture.stateDir)).toSorted(), [
+            "held-runner",
+            "port",
+            "run-t3.sh",
+          ]);
+
+          yield* pair;
+
+          assert.deepEqual((yield* fixture.fs.stat(runnerPath)).ino, replaced.ino);
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      30_000,
     );
   },
 );

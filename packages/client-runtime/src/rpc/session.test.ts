@@ -12,7 +12,9 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -251,6 +253,35 @@ const awaitRequest = Effect.fn("TestRpcSessionFactory.awaitRequest")(function* (
     yield* Effect.yieldNow;
   }
   return yield* Effect.die(new Error("Expected the RPC protocol to send a request."));
+});
+
+const awaitPings = Effect.fn("TestRpcSessionFactory.awaitPings")(function* (
+  socket: TestWebSocket,
+  count: number,
+) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (socket.sent.map((message) => decodeJson(message)).filter(isPing).length >= count) {
+      return;
+    }
+    yield* Effect.yieldNow;
+  }
+  return yield* Effect.die(new Error(`Expected the RPC protocol to send ${count} pings.`));
+});
+
+// Chromium runs a hidden page's chained timers on one-minute wake-ups, so every
+// sleep on this clock ends on the next whole minute.
+const minuteAlignedClock = (clock: Clock.Clock): Clock.Clock => ({
+  currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+  currentTimeMillis: clock.currentTimeMillis,
+  currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+  currentTimeNanos: clock.currentTimeNanos,
+  monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+  monotonicTimeNanos: clock.monotonicTimeNanos,
+  sleep: (duration) => {
+    const now = clock.currentTimeMillisUnsafe();
+    const wakeAt = Math.ceil((now + Duration.toMillis(duration)) / 60_000) * 60_000;
+    return clock.sleep(Duration.millis(wakeAt - now));
+  },
 });
 
 const completeInitialConfig = Effect.fn("TestRpcSessionFactory.completeInitialConfig")(function* (
@@ -1114,6 +1145,68 @@ describe("RpcSessionFactory", () => {
         reason: "transport",
         detail: "Test environment stopped responding.",
       });
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("keeps a hidden session open while its timers run once a minute", () =>
+    Effect.gen(function* () {
+      const { factory, sockets } = yield* makeFactory();
+      const hidden = minuteAlignedClock(yield* Clock.Clock);
+      const session = yield* factory
+        .connect(PREPARED)
+        .pipe(Effect.provideService(Clock.Clock, hidden));
+      const readyFiber = yield* Effect.forkChild(session.ready);
+      const closedFiber = yield* Effect.forkChild(Effect.flip(session.closed));
+      const socket = yield* awaitSocket(sockets);
+
+      socket.open();
+      yield* completeInitialConfig(socket);
+      yield* Fiber.join(readyFiber);
+
+      for (let minute = 1; minute <= 5; minute += 1) {
+        yield* TestClock.adjust("1 minute");
+        expect(closedFiber.pollUnsafe()).toBeUndefined();
+        yield* awaitPings(socket, minute);
+        socket.serverMessage(encodeJson({ _tag: "Pong" }));
+      }
+
+      expect(closedFiber.pollUnsafe()).toBeUndefined();
+      expect(socket.readyState).toBe(TestWebSocket.OPEN);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("closes a hidden session once a ping goes unanswered past the timeout", () =>
+    Effect.gen(function* () {
+      const { factory, sockets } = yield* makeFactory();
+      const hidden = minuteAlignedClock(yield* Clock.Clock);
+      const session = yield* factory
+        .connect(PREPARED)
+        .pipe(Effect.provideService(Clock.Clock, hidden));
+      const readyFiber = yield* Effect.forkChild(session.ready);
+      const closedFiber = yield* Effect.forkChild(Effect.flip(session.closed));
+      const socket = yield* awaitSocket(sockets);
+
+      socket.open();
+      yield* completeInitialConfig(socket);
+      yield* Fiber.join(readyFiber);
+
+      yield* TestClock.adjust("1 minute");
+      yield* awaitPings(socket, 1);
+      socket.serverMessage(encodeJson({ _tag: "Pong" }));
+
+      // The server dies silently: this ping is never answered.
+      yield* TestClock.adjust("1 minute");
+      yield* awaitPings(socket, 2);
+      expect(closedFiber.pollUnsafe()).toBeUndefined();
+
+      yield* TestClock.adjust("1 minute");
+      const error = yield* Fiber.join(closedFiber);
+      expect(error).toBeInstanceOf(ConnectionTransientError);
+      expect(error).toMatchObject({
+        reason: "transport",
+        detail: "Test environment stopped responding.",
+      });
+      expect(socket.readyState).toBe(TestWebSocket.CLOSED);
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 

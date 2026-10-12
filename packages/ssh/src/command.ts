@@ -16,6 +16,7 @@ import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
 import { SshOutputObserver, type SshOutputSource } from "./output.ts";
 
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
+const SSH_COMMAND_KILL_GRACE_MS = 2_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
 
 /**
@@ -40,12 +41,30 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly timeoutMs?: number;
+  /** Pins how the command multiplexes; left out, ~/.ssh/config decides. */
+  readonly multiplex?: SshMultiplex;
   /**
    * Report this command's output to the `SshOutputObserver` as it arrives. stderr only unless
    * `stdout` is set; never set it for a command whose stdout carries a credential.
    */
   readonly observe?: { readonly source: SshOutputSource; readonly stdout?: boolean };
+  /** What the command is for, such as "launch" or "control-probe"; tags its span and failures. */
+  readonly purpose?: string;
 }
+
+/**
+ * Tags the current span with the target, so a trace can be filtered by host.
+ * A plain effect rather than an `Effect.fn`, which would tag a span of its own.
+ */
+export const annotateSshTargetSpan = (
+  target: DesktopSshEnvironmentTarget,
+  extra?: Readonly<Record<string, unknown>>,
+) =>
+  Effect.annotateCurrentSpan({
+    "ssh.alias": target.alias,
+    "ssh.hostname": target.hostname,
+    ...extra,
+  });
 
 export function parseSshResolveOutput(alias: string, stdout: string): DesktopSshEnvironmentTarget {
   const values = new Map<string, string>();
@@ -108,15 +127,48 @@ export const buildSshHostSpecEffect = (
       }),
   });
 
+/**
+ * How one ssh invocation multiplexes. Left out, ~/.ssh/config decides, which
+ * suits callers such as device automation that benefit from a user master.
+ * A chosen mode is pinned ahead of the host, where ssh keeps the first value
+ * of an option, so ~/.ssh/config cannot route the command through a stale user
+ * master: `direct` connects on its own, `client` rides an owned master's
+ * socket, and `master` makes this invocation that owned master.
+ */
+export type SshMultiplex =
+  | { readonly mode: "direct" }
+  | { readonly mode: "client"; readonly socketPath: string }
+  | { readonly mode: "master"; readonly socketPath: string };
+
+export const SSH_DIRECT: SshMultiplex = { mode: "direct" };
+
+function multiplexArgs(multiplex: SshMultiplex | undefined): string[] {
+  switch (multiplex?.mode) {
+    case undefined:
+      return [];
+    case "direct":
+      return ["-o", "ControlMaster=no", "-o", "ControlPath=none"];
+    case "client":
+      return ["-o", "ControlMaster=no", "-o", `ControlPath=${multiplex.socketPath}`];
+    case "master":
+      return ["-o", "ControlMaster=yes", "-o", `ControlPath=${multiplex.socketPath}`];
+  }
+}
+
+/** Options every ssh invocation starts with. */
 export function baseSshArgs(
   target: DesktopSshEnvironmentTarget,
-  input?: { readonly batchMode?: "yes" | "no" },
+  input?: {
+    readonly batchMode?: "yes" | "no";
+    readonly multiplex?: SshMultiplex;
+  },
 ): string[] {
   return [
     "-o",
     `BatchMode=${input?.batchMode ?? "no"}`,
     "-o",
     "ConnectTimeout=10",
+    ...multiplexArgs(input?.multiplex),
     ...(target.port !== null ? ["-p", String(target.port)] : []),
   ];
 }
@@ -216,6 +268,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   const args = [
     ...baseSshArgs(target, {
       batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
+      ...(input.multiplex === undefined ? {} : { multiplex: input.multiplex }),
     }),
     ...(input.preHostArgs ?? []),
     hostSpec,
@@ -234,6 +287,9 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
       ChildProcess.make(sshCommand, args, {
         env: environment,
         extendEnv: true,
+        // A timeout closes the command scope; an ssh that ignores SIGTERM must
+        // not hold that close, and the caller's lock, open indefinitely.
+        forceKillAfter: SSH_COMMAND_KILL_GRACE_MS,
         stdin: {
           stream: stdinStream(input.stdin),
           endOnDone: true,
@@ -291,6 +347,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
     const diagnosticStdout = redactSshErrorOutput(stdout);
     yield* Effect.logWarning("ssh.command.failed", {
       ...sshTargetLogFields(target),
+      purpose: input.purpose ?? null,
       command: ["ssh", ...args],
       exitCode,
       stdout: diagnosticStdout,
@@ -324,6 +381,10 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
   SshCommandError | SshInvalidTargetError,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
+  yield* annotateSshTargetSpan(
+    target,
+    input.purpose === undefined ? undefined : { "ssh.purpose": input.purpose },
+  );
   return yield* Effect.scopedWith((commandScope) =>
     runSshCommandInScope(target, input, commandScope),
   ).pipe(
@@ -335,6 +396,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
           Effect.gen(function* () {
             yield* Effect.logWarning("ssh.command.timedOut", {
               ...sshTargetLogFields(target),
+              purpose: input.purpose ?? null,
               timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
               remoteCommandArgs: input.remoteCommandArgs ?? [],
               preHostArgs: input.preHostArgs ?? [],
@@ -355,6 +417,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
 
 export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(function* (
   alias: string,
+  options?: { readonly multiplex?: SshMultiplex },
 ): Effect.fn.Return<
   DesktopSshEnvironmentTarget,
   SshCommandError | SshInvalidTargetError,
@@ -373,7 +436,11 @@ export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(functi
       username: null,
       port: null,
     },
-    { preHostArgs: ["-G"] },
+    {
+      preHostArgs: ["-G"],
+      purpose: "resolve",
+      ...(options?.multiplex === undefined ? {} : { multiplex: options.multiplex }),
+    },
   ).pipe(
     Effect.map((result) => parseSshResolveOutput(trimmedAlias, result.stdout)),
     Effect.tap((target) =>

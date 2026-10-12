@@ -61,6 +61,9 @@ export const DesktopConfig = Config.all({
   mockUpdateServerPort: Config.Port("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
     Config.withDefault(3000),
   ),
+  // Same variables and defaults as the server, so one setting raises both.
+  logLevel: Config.LogLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
+  traceMinLevel: Config.LogLevel("T3CODE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
 });
 
 export const layerTest = (env: Readonly<Record<string, string | undefined>>) =>

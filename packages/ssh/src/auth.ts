@@ -58,7 +58,16 @@ export interface SshChildEnvironmentOptions {
   readonly baseEnv?: NodeJS.ProcessEnv;
   readonly askpassDirectory?: string;
   readonly authSecret?: string | null;
+  /**
+   * How the askpass helper receives `authSecret`. A long-lived ssh keeps its
+   * environment until it exits, so it takes `"file"`: the secret goes in a
+   * private file named by `SSH_AUTH_SECRET_FILE_ENV`, which the caller deletes
+   * once authentication is done.
+   */
+  readonly authSecretDelivery?: "environment" | "file";
 }
+
+export const SSH_AUTH_SECRET_FILE_ENV = "T3_SSH_AUTH_SECRET_FILE";
 
 const SSH_ASKPASS_DIR_NAME = "t3code-ssh-askpass";
 
@@ -75,6 +84,9 @@ const ASKPASS_POSIX_SCRIPT = `#!/bin/sh
 # Invoked by ssh via SSH_ASKPASS when T3 Code re-runs ssh with a cached password
 # from the renderer's in-app prompt. We never expose a native dialog here - if
 # T3_SSH_AUTH_SECRET is missing, that's a caller bug and we fail loudly.
+if [ -n "\${T3_SSH_AUTH_SECRET_FILE:-}" ]; then
+  exec cat "$T3_SSH_AUTH_SECRET_FILE"
+fi
 if [ "\${T3_SSH_AUTH_SECRET+x}" = "x" ]; then
   printf "%s\\n" "$T3_SSH_AUTH_SECRET"
   exit 0
@@ -91,6 +103,10 @@ const ASKPASS_WINDOWS_SCRIPT = `# Invoked by ssh via SSH_ASKPASS (through ssh-as
 # ssh with a cached password from the renderer's in-app prompt. We never expose\r
 # a native dialog here - if T3_SSH_AUTH_SECRET is missing, that's a caller bug\r
 # and we fail loudly.\r
+if ($env:T3_SSH_AUTH_SECRET_FILE) {\r
+  [Console]::Out.Write([System.IO.File]::ReadAllText($env:T3_SSH_AUTH_SECRET_FILE))\r
+  exit 0\r
+}\r
 if ($null -ne $env:T3_SSH_AUTH_SECRET) {\r
   [Console]::Out.WriteLine($env:T3_SSH_AUTH_SECRET)\r
   exit 0\r
@@ -183,6 +199,8 @@ export const buildSshChildEnvironment = Effect.fn("ssh/auth.buildSshChildEnviron
   }
 
   const platform = yield* HostProcess.Platform;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const hostDisplay = input.baseEnv
     ? input.baseEnv.DISPLAY
     : yield* Config.String("DISPLAY").pipe(
@@ -192,12 +210,23 @@ export const buildSshChildEnvironment = Effect.fn("ssh/auth.buildSshChildEnviron
       );
   const directory = input.askpassDirectory ?? (yield* getDefaultSshAskpassDirectory());
   const sshAskpass = yield* ensureSshAskpassHelpers({ directory });
+  const secretFile =
+    input.authSecretDelivery === "file" && typeof input.authSecret === "string"
+      ? path.join(directory, "auth-secret")
+      : null;
+  if (secretFile !== null) {
+    yield* fs.writeFileString(secretFile, `${input.authSecret}\n`, { mode: 0o600 });
+  }
 
   return {
     ...baseEnv,
     SSH_ASKPASS: sshAskpass,
     SSH_ASKPASS_REQUIRE: "force",
-    ...(input.authSecret === undefined ? {} : { T3_SSH_AUTH_SECRET: input.authSecret ?? "" }),
+    ...(secretFile !== null
+      ? { [SSH_AUTH_SECRET_FILE_ENV]: secretFile }
+      : input.authSecret === undefined
+        ? {}
+        : { T3_SSH_AUTH_SECRET: input.authSecret ?? "" }),
     ...(platform === "win32" || baseEnv.DISPLAY || hostDisplay ? {} : { DISPLAY: "t3code" }),
   };
 });
