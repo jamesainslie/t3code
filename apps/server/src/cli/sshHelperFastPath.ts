@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalTimers:off
 // @effect-diagnostics globalDateInEffect:off
+// @effect-diagnostics globalDate:off
 // The helpers mirror the inline Node snippets the SSH launch script used to
 // run, byte for byte in behaviour, so they stay on plain Node APIs.
 import * as NodeFS from "node:fs";
@@ -73,7 +74,6 @@ export const waitReady = async (port: number, timeoutMs: number, probeTimeoutMs:
 /** `<pid> <port>` for a live default-home server, or undefined. */
 export const runtimePort = (runtimeFile: string) => {
   try {
-    // @effect-diagnostics-next-line preferSchemaOverJson:off - mirrors the shell snippet's loose parse.
     const runtime = JSON.parse(NodeFS.readFileSync(runtimeFile, "utf8")) as {
       pid?: unknown;
       port?: unknown;
