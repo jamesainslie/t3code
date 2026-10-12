@@ -20,6 +20,7 @@ import {
   remoteStateKey,
   resolveSshTarget,
   runSshCommand,
+  type SshMultiplex,
 } from "./command.ts";
 import { SshCommandError } from "./errors.ts";
 import { SshOutputObserver, type SshOutputChunk } from "./output.ts";
@@ -114,23 +115,38 @@ describe("ssh command", () => {
           },
           { batchMode: "no" },
         ),
-        [
-          "-o",
-          "BatchMode=no",
-          "-o",
-          "ConnectTimeout=10",
-          "-o",
-          "ControlMaster=no",
-          "-o",
-          "ControlPath=none",
-          "-p",
-          "2222",
-        ],
+        ["-o", "BatchMode=no", "-o", "ConnectTimeout=10", "-p", "2222"],
       );
     }),
   );
 
-  it.effect("pins multiplexing ahead of the host so ~/.ssh/config cannot change it", () => {
+  // ssh keeps the first value of an option, so a pin ahead of the host wins
+  // over ~/.ssh/config. Without one the user's config still applies.
+  it.effect("pins multiplexing only when the caller chooses it", () =>
+    Effect.sync(() => {
+      const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+      const controlOptions = (multiplex?: SshMultiplex) =>
+        baseSshArgs(target, multiplex === undefined ? {} : { multiplex }).filter((arg) =>
+          arg.startsWith("Control"),
+        );
+
+      assert.deepEqual(controlOptions(), []);
+      assert.deepEqual(controlOptions({ mode: "direct" }), [
+        "ControlMaster=no",
+        "ControlPath=none",
+      ]);
+      assert.deepEqual(controlOptions({ mode: "client", socketPath: "/t3/ssh/a.sock" }), [
+        "ControlMaster=no",
+        "ControlPath=/t3/ssh/a.sock",
+      ]);
+      assert.deepEqual(controlOptions({ mode: "master", socketPath: "/t3/ssh/a.sock" }), [
+        "ControlMaster=yes",
+        "ControlPath=/t3/ssh/a.sock",
+      ]);
+    }),
+  );
+
+  it.effect("puts a chosen multiplexing pin ahead of the host and leaves the rest alone", () => {
     const spawned: Array<ReadonlyArray<string>> = [];
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.sync(() => {
@@ -155,20 +171,19 @@ describe("ssh command", () => {
         { remoteCommandArgs: ["sh", "-s"] },
       );
       yield* resolveSshTarget("devbox");
+      yield* resolveSshTarget("devbox", { multiplex: { mode: "direct" } });
       yield* runSshCommand(
         { alias: "devbox", hostname: "devbox.example.com", username: null, port: null },
-        { controlPath: "/home/julius/.t3/ssh/711bc738.sock" },
+        { multiplex: { mode: "client", socketPath: "/home/julius/.t3/ssh/711bc738.sock" } },
       );
 
-      assert.deepEqual(controlOptions(spawned[0], "julius@devbox"), [
-        "ControlMaster=no",
-        "ControlPath=none",
-      ]);
-      assert.deepEqual(controlOptions(spawned[1], "devbox"), [
-        "ControlMaster=no",
-        "ControlPath=none",
-      ]);
+      assert.deepEqual(controlOptions(spawned[0], "julius@devbox"), []);
+      assert.deepEqual(controlOptions(spawned[1], "devbox"), []);
       assert.deepEqual(controlOptions(spawned[2], "devbox"), [
+        "ControlMaster=no",
+        "ControlPath=none",
+      ]);
+      assert.deepEqual(controlOptions(spawned[3], "devbox"), [
         "ControlMaster=no",
         "ControlPath=/home/julius/.t3/ssh/711bc738.sock",
       ]);

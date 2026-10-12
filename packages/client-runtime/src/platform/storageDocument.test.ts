@@ -24,6 +24,7 @@ import {
   GitHubRoutingPermissions,
   makeGitHubRoutingPermissions,
 } from "../connection/githubRoutingPermissions.ts";
+import { credentialConnectionId } from "../connection/routes.ts";
 import {
   ConnectionCatalogDocument,
   EMPTY_CONNECTION_CATALOG_DOCUMENT,
@@ -414,6 +415,37 @@ describe("ConnectionCatalogDocument", () => {
     expect(document.targets).toEqual([target]);
     expect(document.profiles).toEqual([profile]);
     expect(document.credentials).toEqual([]);
+  });
+
+  // Adding an SSH host pairs once; its first connect must find that bearer
+  // where the SSH broker looks, or it pairs again and orphans a session.
+  it("stores the bearer an SSH registration was provisioned with where its connect reads it", () => {
+    const target = new SshConnectionTarget({
+      environmentId: ENVIRONMENT_ID,
+      label: "SSH",
+      connectionId: 'ssh:environment-1:["devbox","devbox.example.test","developer",22]',
+    });
+    const profile = new SshConnectionProfile({
+      connectionId: target.connectionId,
+      environmentId: target.environmentId,
+      label: target.label,
+      target: {
+        alias: "devbox",
+        hostname: "devbox.example.test",
+        username: "developer",
+        port: 22,
+      },
+    });
+    const credential = new BearerConnectionCredential({ token: "provisioned-bearer" });
+    const document = registerConnectionInCatalog(
+      EMPTY_CONNECTION_CATALOG_DOCUMENT,
+      new SshConnectionRegistration({ target, profile, credential }),
+    );
+
+    const brokerCredentialId = credentialConnectionId(target.connectionId);
+    expect(
+      document.credentials.find((entry) => entry.connectionId === brokerCredentialId)?.credential,
+    ).toEqual(credential);
   });
 
   it("keeps every route of an environment and drops only a removed route's records", () => {

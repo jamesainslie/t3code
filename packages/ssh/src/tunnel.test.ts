@@ -900,6 +900,53 @@ describe("ssh tunnel scripts", () => {
         );
       }).pipe(Effect.provide(layer), Effect.scoped);
     });
+
+    /** Ensures the target, then lets its tunnel's ssh exit and waits until it is pruned. */
+    const ensureThenLoseTunnel = (input: {
+      readonly tunnelExits: ReadonlyArray<Deferred.Deferred<ChildProcessSpawner.ExitCode>>;
+      readonly tunnelCloses: ReadonlyArray<Deferred.Deferred<void>>;
+    }) =>
+      Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        yield* manager.ensureEnvironment(target);
+        const [exit] = input.tunnelExits;
+        const [closed] = input.tunnelCloses;
+        if (exit === undefined || closed === undefined) {
+          return yield* Effect.die(new Error("The ensure spawned no tunnel."));
+        }
+        const pruned = yield* Effect.forkChild(
+          Deferred.await(closed).pipe(Effect.timeout(Duration.seconds(1))),
+        );
+        yield* Deferred.succeed(exit, ChildProcessSpawner.ExitCode(255));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* Fiber.join(pruned);
+        return manager;
+      });
+
+    // Quitting the app stops the managed servers it started, as it did before
+    // dead tunnels were pruned from the manager.
+    it.effect("stops a managed server whose tunnel died once the manager shuts down", () => {
+      const recording = recordingLayer({ isHealthy: () => true });
+      const count = (event: string) => recording.events.filter((entry) => entry === event).length;
+      return ensureThenLoseTunnel(recording).pipe(
+        Effect.tap(() => Effect.sync(() => assert.equal(count("stop"), 0))),
+        Effect.provide(recording.layer),
+        Effect.scoped,
+        Effect.andThen(Effect.sync(() => assert.equal(count("stop"), 1))),
+      );
+    });
+
+    it.effect("does not stop a disconnected server again when the manager shuts down", () => {
+      const recording = recordingLayer({ isHealthy: () => true });
+      const count = (event: string) => recording.events.filter((entry) => entry === event).length;
+      return ensureThenLoseTunnel(recording).pipe(
+        Effect.flatMap((manager) => manager.disconnectEnvironment(target)),
+        Effect.tap(() => Effect.sync(() => assert.equal(count("stop"), 1))),
+        Effect.provide(recording.layer),
+        Effect.scoped,
+        Effect.andThen(Effect.sync(() => assert.equal(count("stop"), 1))),
+      );
+    });
   });
 });
 

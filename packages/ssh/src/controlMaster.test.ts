@@ -7,6 +7,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Sink from "effect/Sink";
@@ -69,17 +70,45 @@ describe("control socket path", () => {
 type MasterBehavior =
   | { readonly _tag: "ready" }
   | { readonly _tag: "exits"; readonly stderr: string }
+  /** Keeps running as a plain connection, saying why it opened no socket. */
+  | { readonly _tag: "refuses"; readonly stderr: string }
   | { readonly _tag: "silent" };
 
 /**
- * Routes each ssh invocation by shape and records it. Masters create their
- * socket file when told to be ready, like a real master after authentication.
+ * Holds the code under test at one point until the test opens it. `reached`
+ * resolves once the code has arrived there.
+ */
+const makeGate = () => {
+  let arrive = () => {};
+  let release = () => {};
+  const arrived = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    pass: Effect.sync(() => arrive()).pipe(Effect.andThen(Effect.promise(() => opened))),
+    reached: Effect.promise(() => arrived),
+    open: Effect.sync(() => release()),
+  };
+};
+type Gate = ReturnType<typeof makeGate>;
+
+/**
+ * Routes each ssh invocation by shape and records it. A ready master reads
+ * its askpass secret and creates its socket when the app first looks for the
+ * socket, like a real master that authenticates after it was spawned.
  */
 const makeHarness = (input: {
   readonly master?: (attempt: number) => MasterBehavior;
   readonly probe?: (attempt: number) => "ok" | "hang";
   readonly launch?: (attempt: number) => { readonly exitCode: number; readonly stderr?: string };
   readonly prompt?: () => string | null;
+  /** Held right after the askpass secret file is written. */
+  readonly secretWritten?: Gate;
+  /** Held when the app kills a master that already exited on its own. */
+  readonly exitedMasterKill?: Gate;
 }) => {
   const events: Array<string> = [];
   const spawned: Array<{
@@ -88,6 +117,11 @@ const makeHarness = (input: {
     readonly env: Record<string, string | undefined>;
   }> = [];
   const secretFilesSeen: Array<{ readonly path: string; readonly contents: string }> = [];
+  const secretFilesWritten: Array<string> = [];
+  // Sockets of ready masters that have not authenticated yet.
+  const pendingSockets = new Map<string, () => void>();
+  // Ends the latest master as a crash would, leaving its socket behind.
+  let crashLatestMaster: Effect.Effect<void> = Effect.void;
   let masters = 0;
   let probes = 0;
   let launches = 0;
@@ -112,6 +146,11 @@ const makeHarness = (input: {
   const runningProcess = (name: string, stderr: string, onKill: () => void = () => {}) =>
     Effect.gen(function* () {
       const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+      if (name === "master") {
+        crashLatestMaster = Deferred.succeed(exited, ChildProcessSpawner.ExitCode(255)).pipe(
+          Effect.asVoid,
+        );
+      }
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(300),
         stdout: Stream.empty,
@@ -121,7 +160,12 @@ const makeHarness = (input: {
         isRunning: Effect.map(Deferred.isDone(exited), (done) => !done),
         kill: () =>
           Effect.gen(function* () {
-            if (yield* Deferred.isDone(exited)) return;
+            if (yield* Deferred.isDone(exited)) {
+              if (name === "master" && input.exitedMasterKill !== undefined) {
+                yield* input.exitedMasterKill.pass;
+              }
+              return;
+            }
             events.push(`${name}.kill`);
             onKill();
             yield* Deferred.succeed(exited, ChildProcessSpawner.ExitCode(143));
@@ -156,24 +200,30 @@ const makeHarness = (input: {
           return exitedProcess("");
         case "master": {
           const socket = controlPathOf(args);
-          const secretFile = env.T3_SSH_AUTH_SECRET_FILE;
-          if (secretFile !== undefined && NodeFS.existsSync(secretFile)) {
-            secretFilesSeen.push({
-              path: secretFile,
-              contents: NodeFS.readFileSync(secretFile, "utf8"),
-            });
-          }
           const behavior = input.master?.(++masters) ?? { _tag: "ready" };
           if (behavior._tag === "exits") {
             return exitedProcess("", 255, behavior.stderr);
           }
           if (behavior._tag === "ready" && socket !== undefined) {
-            NodeFS.writeFileSync(socket, "");
+            pendingSockets.set(socket, () => {
+              const secretFile = env.T3_SSH_AUTH_SECRET_FILE;
+              if (secretFile !== undefined && NodeFS.existsSync(secretFile)) {
+                secretFilesSeen.push({
+                  path: secretFile,
+                  contents: NodeFS.readFileSync(secretFile, "utf8"),
+                });
+              }
+              NodeFS.writeFileSync(socket, "");
+            });
           }
           // A real master removes its socket when it is told to stop.
-          return yield* runningProcess("master", "", () => {
-            if (socket !== undefined) NodeFS.rmSync(socket, { force: true });
-          });
+          return yield* runningProcess(
+            "master",
+            behavior._tag === "refuses" ? behavior.stderr : "",
+            () => {
+              if (socket !== undefined) NodeFS.rmSync(socket, { force: true });
+            },
+          );
         }
         case "probe":
           return (input.probe?.(++probes) ?? "ok") === "ok"
@@ -197,11 +247,47 @@ const makeHarness = (input: {
     }),
   );
 
+  // The real filesystem, watched where a master's life touches it.
+  const fileSystem = Layer.effect(
+    FileSystem.FileSystem,
+    Effect.map(FileSystem.FileSystem, (fs) =>
+      FileSystem.FileSystem.of({
+        ...fs,
+        exists: (path) =>
+          Effect.suspend(() => {
+            const authenticate = pendingSockets.get(path);
+            pendingSockets.delete(path);
+            authenticate?.();
+            return fs.exists(path);
+          }),
+        // Synchronous for sockets, so a cleanup the test releases finishes
+        // within a few scheduler turns instead of after unordered real I/O.
+        remove: (path, options) =>
+          path.endsWith(".sock")
+            ? Effect.sync(() => NodeFS.rmSync(path, { force: true }))
+            : fs.remove(path, options),
+        writeFileString: (path, data, options) =>
+          fs
+            .writeFileString(path, data, options)
+            .pipe(
+              Effect.andThen(
+                NodePath.basename(path) === "auth-secret"
+                  ? Effect.sync(() => secretFilesWritten.push(path)).pipe(
+                      Effect.andThen(input.secretWritten?.pass ?? Effect.void),
+                    )
+                  : Effect.void,
+              ),
+            ),
+      }),
+    ),
+  ).pipe(Layer.provide(NodeServices.layer));
+
   const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cm-"));
   /** `directory: null` builds a manager that was given no socket directory. */
   const layer = (options: { readonly directory?: string | null } = {}) =>
     Layer.mergeAll(
       NodeServices.layer,
+      fileSystem,
       Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Layer.succeed(
         HttpClient.HttpClient,
@@ -259,6 +345,8 @@ const makeHarness = (input: {
     events,
     spawned,
     secretFilesSeen,
+    secretFilesWritten,
+    crashLatestMaster: Effect.suspend(() => crashLatestMaster),
     directory,
     layer,
     count,
@@ -342,6 +430,31 @@ describe("owned control master", () => {
     }).pipe(Effect.provide(harness.layer()), Effect.scoped);
   });
 
+  // A user master from ~/.ssh/config must never carry an environment command,
+  // so each ssh the manager runs chooses its multiplexing explicitly.
+  it.effect("pins multiplexing on every ssh it runs", () => {
+    const harness = makeHarness({});
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+      yield* manager.disconnectEnvironment(target);
+      // A socket left behind is reclaimed with `-O exit` before the next master.
+      const socket = controlPathOf(harness.argsOf("master")[0]?.args ?? []) ?? "";
+      NodeFS.writeFileSync(socket, "");
+      yield* manager.ensureEnvironment(target);
+
+      assert.includeMembers(
+        harness.spawned.map((entry) => entry.kind),
+        ["resolve", "master", "launch", "tunnel", "script", "probe", "control.exit"],
+      );
+      for (const entry of harness.spawned) {
+        assert.lengthOf(optionValues(entry.args, "ControlMaster"), 1, entry.kind);
+        assert.lengthOf(optionValues(entry.args, "ControlPath"), 1, entry.kind);
+      }
+    }).pipe(Effect.provide(harness.layer()), Effect.scoped);
+  });
+
   it.effect("connects directly without a socket directory", () => {
     const harness = makeHarness({});
     const logs = captureLogs();
@@ -418,6 +531,63 @@ describe("owned control master", () => {
       }
       assert.equal(harness.count("launch"), 1);
       assert.equal(harness.count("script"), 1);
+    }).pipe(Effect.provide(harness.layer()), Effect.scoped);
+  });
+
+  it.effect("removes the askpass secret when the master start is interrupted", () => {
+    const secretWritten = makeGate();
+    const harness = makeHarness({
+      master: (attempt) =>
+        attempt === 1
+          ? { _tag: "exits", stderr: "devbox: Permission denied (publickey,password).\n" }
+          : { _tag: "ready" },
+      prompt: () => "hunter2",
+      secretWritten,
+    });
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      const ensure = yield* Effect.forkChild(manager.ensureEnvironment(target));
+      // Interrupted the moment the secret is on disk, before the master spawns.
+      yield* secretWritten.reached;
+      const interrupt = yield* Effect.forkChild(Fiber.interrupt(ensure));
+      for (let turn = 0; turn < 10; turn += 1) {
+        yield* Effect.yieldNow;
+      }
+      yield* secretWritten.open;
+      yield* Fiber.join(interrupt);
+
+      assert.equal(harness.count("master"), 1);
+      assert.lengthOf(harness.secretFilesWritten, 1);
+      assert.isFalse(NodeFS.existsSync(harness.secretFilesWritten[0] ?? ""));
+    }).pipe(Effect.provide(harness.layer()), Effect.scoped);
+  });
+
+  // A master that exits on its own is cleaned up outside the target lock, so
+  // a new master may already listen at the same path when that cleanup runs.
+  it.effect("keeps a new master's socket when a crashed master is cleaned up late", () => {
+    const exitedMasterKill = makeGate();
+    const harness = makeHarness({ exitedMasterKill });
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* manager.ensureEnvironment(target);
+      const socket = controlPathOf(harness.argsOf("master")[0]?.args ?? []) ?? "";
+      yield* harness.crashLatestMaster;
+      // The crashed master's cleanup has started, and waits here.
+      yield* exitedMasterKill.reached;
+
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+      assert.equal(harness.count("master"), 2);
+      assert.equal(controlPathOf(harness.argsOf("master")[1]?.args ?? []), socket);
+
+      yield* exitedMasterKill.open;
+      for (let turn = 0; turn < 10; turn += 1) {
+        yield* Effect.yieldNow;
+      }
+
+      assert.isTrue(NodeFS.existsSync(socket));
+      // The new master still answers, so the next one-shot reuses it.
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+      assert.equal(harness.count("master"), 2);
     }).pipe(Effect.provide(harness.layer()), Effect.scoped);
   });
 
@@ -541,10 +711,23 @@ describe("owned control master", () => {
 
   it.effect.each([
     [
-      "exits",
+      "cannot listen on its socket",
       { _tag: "exits", stderr: "muxserver_listen: link mux listener: Operation not permitted\n" },
     ],
-    ["never opens its socket", { _tag: "silent" }],
+    [
+      "has a socket path that is too long",
+      {
+        _tag: "exits",
+        stderr: 'unix_listener: path "/t3/ssh/711bc738.sock.Xy" too long for Unix domain socket\n',
+      },
+    ],
+    [
+      "disables multiplexing and connects anyway",
+      {
+        _tag: "refuses",
+        stderr: "ControlSocket /t3/ssh/711bc738.sock already exists, disabling multiplexing\n",
+      },
+    ],
   ] as const)("falls back to direct commands for good when the master %s", ([, behavior]) => {
     const harness = makeHarness({ master: () => behavior });
     const logs = captureLogs();
@@ -552,14 +735,15 @@ describe("owned control master", () => {
       const manager = yield* SshTunnel.SshEnvironmentManager;
       const masterSpawned = harness.nextSpawn("master");
       const first = yield* Effect.forkChild(manager.ensureEnvironment(target));
-      if (behavior._tag === "silent") {
-        yield* passTimeout(masterSpawned, Duration.seconds(30));
+      if (behavior._tag === "refuses") {
+        // The master keeps running; the readiness poll reads its stderr.
+        yield* passTimeout(masterSpawned, Duration.millis(100));
       }
       yield* Fiber.join(first);
       yield* manager.ensureEnvironment(target, { issuePairingToken: true });
 
       assert.equal(harness.count("master"), 1);
-      assert.equal(harness.count("master.kill"), behavior._tag === "silent" ? 1 : 0);
+      assert.equal(harness.count("master.kill"), behavior._tag === "refuses" ? 1 : 0);
       for (const kind of ["launch", "script", "tunnel"]) {
         for (const entry of harness.argsOf(kind)) {
           assert.deepEqual(optionValues(entry.args, "ControlPath"), ["ControlPath=none"]);
@@ -572,8 +756,60 @@ describe("owned control master", () => {
           .named("ssh.environment.ensure.succeeded")
           .map((summary) => [summary.controlMaster, summary.controlMasterReason]),
         [
-          ["unavailable", "master-failed"],
-          ["unavailable", "master-failed"],
+          ["unavailable", "multiplexing-unsupported"],
+          ["unavailable", "multiplexing-unsupported"],
+        ],
+      );
+    }).pipe(Effect.provide(Layer.merge(harness.layer(), logs.layer)), Effect.scoped);
+  });
+
+  // A network blip or a wake from sleep says nothing about multiplexing, so
+  // only that one ensure goes direct and the next tries a master again.
+  it.effect.each([
+    [
+      "cannot reach the host",
+      { _tag: "exits", stderr: "ssh: connect to host devbox port 22: Operation timed out\n" },
+    ],
+    [
+      "loses its proxy",
+      { _tag: "exits", stderr: "kex_exchange_identification: Connection closed by remote host\n" },
+    ],
+    ["never opens its socket", { _tag: "silent" }],
+  ] as const)("falls back to direct commands for one ensure when the master %s", ([, behavior]) => {
+    const harness = makeHarness({
+      master: (attempt) => (attempt === 1 ? behavior : { _tag: "ready" }),
+    });
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      const masterSpawned = harness.nextSpawn("master");
+      const first = yield* Effect.forkChild(manager.ensureEnvironment(target));
+      if (behavior._tag === "silent") {
+        yield* passTimeout(masterSpawned, Duration.seconds(30));
+      }
+      yield* Fiber.join(first);
+
+      assert.equal(harness.count("master"), 1);
+      for (const kind of ["launch", "tunnel"]) {
+        for (const entry of harness.argsOf(kind)) {
+          assert.deepEqual(optionValues(entry.args, "ControlPath"), ["ControlPath=none"]);
+        }
+      }
+
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+
+      assert.equal(harness.count("master"), 2);
+      const socket = controlPathOf(harness.argsOf("master")[1]?.args ?? []);
+      assert.deepEqual(optionValues(harness.argsOf("script")[0]?.args ?? [], "ControlPath"), [
+        `ControlPath=${socket}`,
+      ]);
+      assert.deepEqual(
+        logs
+          .named("ssh.environment.ensure.succeeded")
+          .map((summary) => [summary.controlMaster, summary.controlMasterReason]),
+        [
+          ["failed", "master-failed"],
+          ["created", undefined],
         ],
       );
     }).pipe(Effect.provide(Layer.merge(harness.layer(), logs.layer)), Effect.scoped);

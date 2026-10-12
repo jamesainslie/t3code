@@ -42,12 +42,38 @@ const encoder = new TextEncoder();
  */
 const MUX_FAILURE_PATTERN = /read from master failed|mux_client_|muxclient|master is not running/iu;
 
+/**
+ * stderr that means this ssh or host cannot run a master at that socket, as
+ * opposed to a master that failed to connect. Only this keeps a target off
+ * masters for good; a network blip must not.
+ */
+const MULTIPLEXING_UNSUPPORTED_PATTERN =
+  /disabling multiplexing|muxserver_listen|unix_listener|ControlPath|ControlSocket|too long for Unix domain socket/iu;
+
+function isMultiplexingUnsupported(error: unknown): boolean {
+  return (
+    error instanceof SshCommandError &&
+    MULTIPLEXING_UNSUPPORTED_PATTERN.test(`${error.stderr}\n${error.message}`)
+  );
+}
+
 export function isMuxFailure(error: unknown): boolean {
   return (
     error instanceof SshCommandError &&
     !error.timedOut &&
     MUX_FAILURE_PATTERN.test(`${error.stderr}\n${error.message}`)
   );
+}
+
+/** Deletes the askpass secret file a master's environment names, if any. */
+function forgetSecretOf(
+  fs: FileSystem.FileSystem,
+  environment: Record<string, string | undefined>,
+) {
+  const secretFile = environment[SshAuth.SSH_AUTH_SECRET_FILE_ENV];
+  return secretFile === undefined
+    ? Effect.void
+    : fs.remove(secretFile, { force: true }).pipe(Effect.ignore);
 }
 
 function sunPathBytes(platform: NodeJS.Platform): number {
@@ -87,13 +113,19 @@ interface OwnedMaster {
 
 /**
  * How `acquire` found a target's master: kept a healthy one, started one,
- * gave up on masters for this target (`reason` says why), or has none to give
- * because no socket directory was configured or the platform has no masters.
+ * gave up on masters for this target for good (`unavailable`), could not start
+ * one this time and will try again on the next acquire (`failed`), or has none
+ * to give because no socket directory was configured or the platform has no
+ * masters. `reason` says why there is no master.
  */
 export type ControlMasterOutcome =
   | { readonly socketPath: string; readonly decision: "reused" | "created" }
   | { readonly socketPath: null; readonly decision: "disabled" }
-  | { readonly socketPath: null; readonly decision: "unavailable"; readonly reason: string };
+  | {
+      readonly socketPath: null;
+      readonly decision: "unavailable" | "failed";
+      readonly reason: string;
+    };
 
 interface ControlMasterRequest<E, R> {
   readonly key: string;
@@ -136,8 +168,9 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
 > {
   const managerScope = yield* Scope.Scope;
   const masters = new Map<string, OwnedMaster>();
-  // Targets whose master failed for a reason other than authentication, with
-  // that reason. They stay on direct connections for the manager's lifetime.
+  // Targets that cannot have a master at all, with the reason: no usable
+  // socket path, or ssh refused to multiplex. They stay on direct connections
+  // for the manager's lifetime.
   const unavailable = new Map<string, string>();
   let removeFallbackDirectory: Effect.Effect<void> = Effect.void;
 
@@ -219,7 +252,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     // `ssh -O check` only asks the local master, which answers even when its
     // connection is dead; a real command proves the whole path.
     return yield* runSshCommand(target, {
-      controlPath: master.socketPath,
+      multiplex: { mode: "client", socketPath: master.socketPath },
       remoteCommandArgs: ["true"],
       timeoutMs: MASTER_PROBE_TIMEOUT_MS,
       batchMode: "yes",
@@ -251,47 +284,49 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     return null;
   });
 
-  const startMaster = Effect.fn("ssh/controlMaster.start")(function* (input: {
+  const runMaster = Effect.fnUntraced(function* (input: {
     readonly key: string;
     readonly target: DesktopSshEnvironmentTarget;
     readonly socketPath: string;
     readonly authOptions: SshAuth.SshAuthOptions;
+    readonly fs: FileSystem.FileSystem;
+    readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
+    readonly sshCommand: string;
+    readonly hostSpec: string;
+    readonly scope: Scope.Closeable;
   }): Effect.fn.Return<void, SshCommandError | SshInvalidTargetError, ControlMasterContext> {
-    yield* annotateSshTargetSpan(input.target);
-    const fs = yield* FileSystem.FileSystem;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const sshCommand = yield* resolveSshCommand;
-    const hostSpec = yield* buildSshHostSpecEffect(input.target);
-    const environment = yield* SshAuth.buildSshChildEnvironment({
-      ...(input.authOptions.interactiveAuth === undefined
-        ? {}
-        : { interactiveAuth: input.authOptions.interactiveAuth }),
-      ...(input.authOptions.authSecret === undefined
-        ? {}
-        : { authSecret: input.authOptions.authSecret }),
-      authSecretDelivery: "file",
-    }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new SshCommandError({
-            command: ["ssh"],
-            exitCode: null,
-            stderr: "",
-            message: "Failed to prepare SSH authentication helpers.",
-            cause,
-          }),
+    const { fs, spawner, sshCommand, hostSpec, scope } = input;
+    // Finalizers run last-added first: kill, then the socket, then the secret.
+    // The secret file is written and its removal registered in one
+    // uninterruptible step, so no interruption can leave it on disk.
+    const environment = yield* Effect.acquireRelease(
+      SshAuth.buildSshChildEnvironment({
+        ...(input.authOptions.interactiveAuth === undefined
+          ? {}
+          : { interactiveAuth: input.authOptions.interactiveAuth }),
+        ...(input.authOptions.authSecret === undefined
+          ? {}
+          : { authSecret: input.authOptions.authSecret }),
+        authSecretDelivery: "file",
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SshCommandError({
+              command: ["ssh"],
+              exitCode: null,
+              stderr: "",
+              message: "Failed to prepare SSH authentication helpers.",
+              cause,
+            }),
+        ),
       ),
-    );
-    const secretFile = environment[SshAuth.SSH_AUTH_SECRET_FILE_ENV];
-    const forgetSecret =
-      secretFile === undefined
-        ? Effect.void
-        : fs.remove(secretFile, { force: true }).pipe(Effect.ignore);
+      (environment) => forgetSecretOf(fs, environment),
+    ).pipe(Effect.provideService(Scope.Scope, scope));
+    const forgetSecret = forgetSecretOf(fs, environment);
     const args = [
       ...baseSshArgs(input.target, {
         batchMode: input.authOptions.batchMode ?? "no",
-        controlMaster: "yes",
-        controlPath: input.socketPath,
+        multiplex: { mode: "master", socketPath: input.socketPath },
       }),
       "-o",
       "ControlPersist=no",
@@ -304,13 +339,14 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
       hostSpec,
     ];
     const command = [sshCommand, ...args];
-    const scope = yield* Scope.make("sequential");
-    // Finalizers run last-added first: kill, then forget the secret, then the socket.
+    // Cleared once this master's socket is removed early (see the watcher
+    // below), so a later cleanup never unlinks a newer master at the same path.
+    let ownsSocket = true;
+    const removeSocket = fs.remove(input.socketPath, { force: true }).pipe(Effect.ignore);
     yield* Scope.addFinalizer(
       scope,
-      fs.remove(input.socketPath, { force: true }).pipe(Effect.ignore),
+      Effect.suspend(() => (ownsSocket ? removeSocket : Effect.void)),
     );
-    yield* Scope.addFinalizer(scope, forgetSecret);
     yield* Effect.logDebug("ssh.controlMaster.spawn.start", {
       alias: input.target.alias,
       hostname: input.target.hostname,
@@ -340,7 +376,6 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
               cause,
             }),
         ),
-        Effect.onError(() => Scope.close(scope, Exit.void)),
       );
     yield* Scope.addFinalizer(
       scope,
@@ -372,21 +407,34 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     ).pipe(
       Effect.flatMap(([stderr, exitCode]) => Deferred.succeed(exited, { stderr, exitCode })),
       Effect.andThen(
-        Effect.suspend(() => {
-          if (masters.get(input.key)?.process !== child) {
-            return Effect.void;
-          }
-          masters.delete(input.key);
-          return Effect.logInfo("ssh.controlMaster.exited", {
-            alias: input.target.alias,
-            hostname: input.target.hostname,
-            stderr: stderrSoFar,
-          }).pipe(
-            // Closing the scope interrupts this fiber, so it runs on its own.
-            Effect.andThen(Scope.close(scope, Exit.void).pipe(Effect.forkIn(managerScope))),
-            Effect.asVoid,
-          );
-        }),
+        Effect.suspend(() =>
+          masters.get(input.key)?.process !== child
+            ? Effect.void
+            : // The socket goes while this master still holds the target, so
+              // a master started at the same path afterwards keeps its socket.
+              removeSocket.pipe(
+                Effect.andThen(
+                  Effect.suspend(() => {
+                    if (masters.get(input.key)?.process !== child) {
+                      return Effect.void;
+                    }
+                    ownsSocket = false;
+                    masters.delete(input.key);
+                    return Effect.logInfo("ssh.controlMaster.exited", {
+                      alias: input.target.alias,
+                      hostname: input.target.hostname,
+                      stderr: stderrSoFar,
+                    }).pipe(
+                      // Closing the scope interrupts this fiber, so it runs on its own.
+                      Effect.andThen(
+                        Scope.close(scope, Exit.void).pipe(Effect.forkIn(managerScope)),
+                      ),
+                      Effect.asVoid,
+                    );
+                  }),
+                ),
+              ),
+        ),
       ),
       Effect.forkIn(scope),
     );
@@ -440,7 +488,6 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
         }),
       ),
       Effect.ensuring(forgetSecret),
-      Effect.onError(() => Scope.close(scope, Exit.void)),
     );
     masters.set(input.key, { socketPath: input.socketPath, process: child, scope });
     yield* Effect.logInfo("ssh.controlMaster.ready", {
@@ -448,6 +495,25 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
       hostname: input.target.hostname,
       socketPath: input.socketPath,
     });
+  });
+
+  const startMaster = Effect.fn("ssh/controlMaster.start")(function* (input: {
+    readonly key: string;
+    readonly target: DesktopSshEnvironmentTarget;
+    readonly socketPath: string;
+    readonly authOptions: SshAuth.SshAuthOptions;
+  }): Effect.fn.Return<void, SshCommandError | SshInvalidTargetError, ControlMasterContext> {
+    yield* annotateSshTargetSpan(input.target);
+    const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const sshCommand = yield* resolveSshCommand;
+    const hostSpec = yield* buildSshHostSpecEffect(input.target);
+    const scope = yield* Scope.make("sequential");
+    // Any failure or interruption from here on closes the scope, which kills
+    // the master and removes its secret and socket.
+    return yield* runMaster({ ...input, fs, spawner, sshCommand, hostSpec, scope }).pipe(
+      Effect.onError(() => Scope.close(scope, Exit.void)),
+    );
   });
 
   const acquire = Effect.fn("ssh/controlMaster.acquire")(function* <
@@ -486,7 +552,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     // belongs to a master an earlier run left behind: ask it to exit, then clear it.
     if (yield* fs.exists(socketPath).pipe(Effect.orElseSucceed(() => false))) {
       yield* runSshCommand(target, {
-        controlPath: socketPath,
+        multiplex: { mode: "client", socketPath },
         preHostArgs: ["-O", "exit"],
         timeoutMs: MASTER_PROBE_TIMEOUT_MS,
         batchMode: "yes",
@@ -503,7 +569,22 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
         // connection the same way, and must not cost the target its master.
         Effect.catchIf(
           (error) => error._tag !== "SshPasswordPromptError" && !SshAuth.isSshAuthFailure(error),
-          (error) => markUnavailable(key, target, "master-failed", error),
+          (error) =>
+            isMultiplexingUnsupported(error)
+              ? markUnavailable(key, target, "multiplexing-unsupported", error)
+              : // Anything else, such as a timeout or a refused connection,
+                // runs this attempt directly and leaves the next to try again.
+                Effect.logWarning("ssh.controlMaster.failed", {
+                  alias: target.alias,
+                  hostname: target.hostname,
+                  cause: error,
+                }).pipe(
+                  Effect.as<ControlMasterOutcome>({
+                    socketPath: null,
+                    decision: "failed",
+                    reason: "master-failed",
+                  }),
+                ),
         ),
       );
   });

@@ -10,6 +10,7 @@ import {
 import { type ConnectionTarget, PersistedConnectionTarget } from "../connection/model.ts";
 import * as TokenStore from "../authorization/tokenStore.ts";
 import { StoredGitHubRoutingPermission } from "../connection/githubRoutingPermissions.ts";
+import { credentialConnectionId } from "../connection/routes.ts";
 
 export const StoredConnectionCredential = Schema.Struct({
   connectionId: Schema.String,
@@ -158,8 +159,8 @@ export function registerConnectionInCatalog(
           credential: registration.credential,
         }),
       };
-    case "SshConnectionRegistration":
-      return {
+    case "SshConnectionRegistration": {
+      const withProfile = {
         ...next,
         profiles: replaceCatalogValue(
           next.profiles,
@@ -167,6 +168,21 @@ export function registerConnectionInCatalog(
           registration.profile,
         ),
       };
+      // Saved where the SSH broker reads it, so the first connect reuses it.
+      return registration.credential === undefined
+        ? withProfile
+        : {
+            ...withProfile,
+            credentials: replaceCatalogValue(
+              withProfile.credentials,
+              (value) => value.connectionId,
+              {
+                connectionId: credentialConnectionId(registration.target.connectionId),
+                credential: registration.credential,
+              },
+            ),
+          };
+    }
   }
 }
 

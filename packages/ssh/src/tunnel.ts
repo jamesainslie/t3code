@@ -42,6 +42,8 @@ import {
   resolveSshCommand,
   resolveSshTarget,
   runSshCommand,
+  SSH_DIRECT,
+  type SshMultiplex,
   targetConnectionKey,
 } from "./command.ts";
 import {
@@ -103,9 +105,12 @@ export interface SshEnvironmentManagerOptions {
   readonly controlSocketDirectory?: string;
 }
 
-/** Auth for a one-shot command, plus the owned master socket to run it through. */
+/**
+ * Auth for a one-shot command, plus how it multiplexes. The manager always
+ * chooses: its owned master, or a direct connection, never a user master.
+ */
 interface RemoteCommandOptions extends SshAuth.SshAuthOptions {
-  readonly controlPath?: string;
+  readonly multiplex: SshMultiplex;
 }
 
 interface SshTunnelEntry {
@@ -1108,7 +1113,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
       ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
       ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-      ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
+      ...(input === undefined ? {} : { multiplex: input.multiplex }),
     });
     if (!getLastNonEmptyOutputLine(result.stdout)) {
       return yield* new SshLaunchError({
@@ -1206,7 +1211,7 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
+    ...(input === undefined ? {} : { multiplex: input.multiplex }),
   });
   if (!getLastNonEmptyOutputLine(result.stdout)) {
     return yield* new SshPairingError({
@@ -1260,7 +1265,7 @@ const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
+    ...(input === undefined ? {} : { multiplex: input.multiplex }),
   });
   yield* Effect.logInfo("ssh.remoteServer.stop.succeeded", {
     ...sshTargetLogFields(target),
@@ -1285,7 +1290,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-    ...(input?.controlPath === undefined ? {} : { controlPath: input.controlPath }),
+    ...(input === undefined ? {} : { multiplex: input.multiplex }),
   });
   return result.stdout.trim();
 });
@@ -1414,12 +1419,14 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     ),
   );
   const args = [
+    // A mux client's forward belongs to the master and outlives the client, so
+    // the tunnel keeps its own connection and its exit still means "gone".
     ...baseSshArgs(input.resolvedTarget, {
       batchMode: input.authOptions.batchMode ?? "no",
+      multiplex: SSH_DIRECT,
     }),
     "-o",
     "ExitOnForwardFailure=yes",
-    // baseSshArgs pins ControlMaster and ControlPath.
     "-o",
     "ControlPersist=no",
     "-o",
@@ -1559,7 +1566,10 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
           net.canListenOnHost(input.localPort, "127.0.0.1"),
         );
         const remoteLogTailExit = yield* Effect.exit(
-          readRemoteServerLogTail(input.resolvedTarget, input.authOptions),
+          readRemoteServerLogTail(input.resolvedTarget, {
+            ...input.authOptions,
+            multiplex: SSH_DIRECT,
+          }),
         );
         const processRunning = Exit.isSuccess(processRunningExit) ? processRunningExit.value : null;
         const localPortAvailable = Exit.isSuccess(localPortAvailableExit)
@@ -1615,8 +1625,12 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const exitedTunnels = new Set<string>();
   const targetLocks = yield* KeyedLock.make<string>();
   const authSecrets = new Map<string, string>();
-  // Made before the tunnel finalizer below so masters outlive the remote stops
-  // that run when tunnels close at shutdown.
+  // Managed remote servers this manager launched and no disconnect has
+  // stopped, with how to stop each. Shutdown stops those whose tunnel died
+  // earlier; the tunnel finalizer stops the rest.
+  const managedRemotes = new Map<string, Effect.Effect<void>>();
+  // Made before the shutdown finalizer below, so its masters close last. The
+  // remote stops that run at shutdown connect directly and do not use them.
   const controlMasters = yield* ControlMaster.make({
     directory: options.controlSocketDirectory,
   });
@@ -1649,12 +1663,20 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
 
   yield* Scope.addFinalizer(
     managerScope,
-    Effect.sync(() => [...tunnels.values()]).pipe(
-      Effect.flatMap((entries) =>
-        Effect.forEach(entries, closeTunnelEntry, { concurrency: "unbounded" }),
-      ),
-      Effect.ignore,
-    ),
+    Effect.suspend(() => {
+      const entries = [...tunnels.values()];
+      const orphanedStops = [...managedRemotes]
+        .filter(([key]) => !tunnels.has(key))
+        .map(([, stop]) => stop);
+      managedRemotes.clear();
+      return Effect.all(
+        [
+          Effect.forEach(entries, closeTunnelEntry, { concurrency: "unbounded" }),
+          Effect.all(orphanedStops, { concurrency: "unbounded" }),
+        ],
+        { concurrency: "unbounded", discard: true },
+      );
+    }).pipe(Effect.ignore),
   );
 
   const promptForPassword = Effect.fn("ssh/tunnel.promptForPassword")(function* (
@@ -1815,8 +1837,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
                 controlPath = outcome.socketPath;
                 if (summary !== undefined) {
                   summary.controlMaster = outcome.decision;
-                  summary.controlMasterReason =
-                    outcome.decision === "unavailable" ? outcome.reason : null;
+                  summary.controlMasterReason = "reason" in outcome ? outcome.reason : null;
                 }
                 return outcome.socketPath;
               }),
@@ -1829,9 +1850,10 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
             key,
             target,
             operation: (authOptions) =>
-              operation(
-                socketPath === null ? authOptions : { ...authOptions, controlPath: socketPath },
-              ),
+              operation({
+                ...authOptions,
+                multiplex: socketPath === null ? SSH_DIRECT : { mode: "client", socketPath },
+              }),
           });
         const socketPath = yield* resolveControlPath;
         return yield* attempt(socketPath).pipe(
@@ -1927,6 +1949,36 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     const cryptoService = yield* Crypto.Crypto;
     const fileSystemService = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
+    // Stops the remote server over its own connection, as shutdown must not
+    // depend on the target's master or on the caller's services.
+    const stopRemoteDirect = Effect.suspend(() => {
+      const authSecret = authSecrets.get(tunnelEntry.key) ?? null;
+      return stopRemoteServer(
+        tunnelEntry.target,
+        authSecret === null
+          ? {
+              batchMode: "yes",
+              interactiveAuth: false,
+              multiplex: SSH_DIRECT,
+            }
+          : {
+              authSecret,
+              batchMode: "no",
+              interactiveAuth: true,
+              multiplex: SSH_DIRECT,
+            },
+      );
+    }).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawnerService),
+      Effect.provideService(Crypto.Crypto, cryptoService),
+      Effect.provideService(FileSystem.FileSystem, fileSystemService),
+      Effect.provideService(Path.Path, pathService),
+    );
+    if (tunnelEntry.remoteServerKind === "managed") {
+      managedRemotes.set(tunnelEntry.key, stopRemoteDirect.pipe(Effect.ignore));
+    } else {
+      managedRemotes.delete(tunnelEntry.key);
+    }
     yield* Scope.addFinalizer(
       entryScope,
       Effect.gen(function* () {
@@ -1949,25 +2001,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           localPort: tunnelEntry.localPort,
           remotePort: tunnelEntry.remotePort,
         });
-        const authSecret = authSecrets.get(tunnelEntry.key) ?? null;
-        yield* stopRemoteServer(
-          tunnelEntry.target,
-          authSecret === null
-            ? {
-                batchMode: "yes",
-                interactiveAuth: false,
-              }
-            : {
-                authSecret,
-                batchMode: "no",
-                interactiveAuth: true,
-              },
-        ).pipe(
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawnerService),
-          Effect.provideService(Crypto.Crypto, cryptoService),
-          Effect.provideService(FileSystem.FileSystem, fileSystemService),
-          Effect.provideService(Path.Path, pathService),
-        );
+        yield* stopRemoteDirect;
         yield* Effect.logDebug("ssh.environment.tunnel.finalizer.succeeded", {
           ...sshTargetLogFields(tunnelEntry.target),
           key: tunnelEntry.key,
@@ -1978,7 +2012,8 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
     // A tunnel whose ssh exits on its own leaves the map, so the next ensure
     // creates one instead of probing a dead port. The entry is gone before its
-    // scope closes, so the finalizer skips the remote stop. Forked after the
+    // scope closes, so the finalizer skips the remote stop; a managed server
+    // is still stopped at shutdown through `managedRemotes`. Forked after the
     // finalizer so a normal close interrupts this watcher before the kill.
     yield* tunnelEntry.process.exitCode.pipe(
       Effect.ignore,
@@ -2084,7 +2119,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
 
   /** Applies the caller's username and port over what `ssh -G` resolved for the alias. */
   const resolveTarget = (target: DesktopSshEnvironmentTarget) =>
-    resolveSshTarget(target.alias || target.hostname).pipe(
+    resolveSshTarget(target.alias || target.hostname, { multiplex: SSH_DIRECT }).pipe(
       Effect.map((baseResolved): DesktopSshEnvironmentTarget => ({
         ...baseResolved,
         ...(target.username !== null ? { username: target.username } : {}),
@@ -2215,6 +2250,8 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         Effect.gen(function* () {
           const entry = tunnels.get(key) ?? null;
           exitedTunnels.delete(key);
+          // The stop below is this server's stop; shutdown does not repeat it.
+          managedRemotes.delete(key);
           yield* Effect.logDebug("ssh.environment.disconnect.targetResolved", {
             ...sshTargetLogFields(resolvedTarget),
             key,

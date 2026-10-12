@@ -229,12 +229,21 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
               return next;
             });
             return;
-          case "SshConnectionRegistration":
+          case "SshConnectionRegistration": {
             yield* Ref.update(storedProfiles, (current) => {
               const next = new Map(current);
               next.set(registration.profile.connectionId, registration.profile);
               return next;
             });
+            const credential = registration.credential;
+            if (credential !== undefined) {
+              yield* Ref.update(storedCredentials, (current) => {
+                const next = new Map(current);
+                next.set(registration.target.connectionId, credential);
+                return next;
+              });
+            }
+          }
         }
       }),
     setRoutes: (environmentId, routes) =>

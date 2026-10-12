@@ -41,8 +41,8 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly timeoutMs?: number;
-  /** An owned multiplexing socket to run through; without one the command connects directly. */
-  readonly controlPath?: string;
+  /** Pins how the command multiplexes; left out, ~/.ssh/config decides. */
+  readonly multiplex?: SshMultiplex;
   /**
    * Report this command's output to the `SshOutputObserver` as it arrives. stderr only unless
    * `stdout` is set; never set it for a command whose stdout carries a credential.
@@ -128,18 +128,39 @@ export const buildSshHostSpecEffect = (
   });
 
 /**
- * Options every ssh invocation starts with. Multiplexing is pinned here so a
- * `ControlMaster` in ~/.ssh/config cannot route commands through a stale user
- * master: never create a master, and use `controlPath` only when the caller
- * owns that socket. Only the owned master itself passes `controlMaster: "yes"`;
- * ssh keeps the first value of an option, so it cannot be overridden later.
+ * How one ssh invocation multiplexes. Left out, ~/.ssh/config decides, which
+ * suits callers such as device automation that benefit from a user master.
+ * A chosen mode is pinned ahead of the host, where ssh keeps the first value
+ * of an option, so ~/.ssh/config cannot route the command through a stale user
+ * master: `direct` connects on its own, `client` rides an owned master's
+ * socket, and `master` makes this invocation that owned master.
  */
+export type SshMultiplex =
+  | { readonly mode: "direct" }
+  | { readonly mode: "client"; readonly socketPath: string }
+  | { readonly mode: "master"; readonly socketPath: string };
+
+export const SSH_DIRECT: SshMultiplex = { mode: "direct" };
+
+function multiplexArgs(multiplex: SshMultiplex | undefined): string[] {
+  switch (multiplex?.mode) {
+    case undefined:
+      return [];
+    case "direct":
+      return ["-o", "ControlMaster=no", "-o", "ControlPath=none"];
+    case "client":
+      return ["-o", "ControlMaster=no", "-o", `ControlPath=${multiplex.socketPath}`];
+    case "master":
+      return ["-o", "ControlMaster=yes", "-o", `ControlPath=${multiplex.socketPath}`];
+  }
+}
+
+/** Options every ssh invocation starts with. */
 export function baseSshArgs(
   target: DesktopSshEnvironmentTarget,
   input?: {
     readonly batchMode?: "yes" | "no";
-    readonly controlPath?: string;
-    readonly controlMaster?: "yes" | "no";
+    readonly multiplex?: SshMultiplex;
   },
 ): string[] {
   return [
@@ -147,10 +168,7 @@ export function baseSshArgs(
     `BatchMode=${input?.batchMode ?? "no"}`,
     "-o",
     "ConnectTimeout=10",
-    "-o",
-    `ControlMaster=${input?.controlMaster ?? "no"}`,
-    "-o",
-    `ControlPath=${input?.controlPath ?? "none"}`,
+    ...multiplexArgs(input?.multiplex),
     ...(target.port !== null ? ["-p", String(target.port)] : []),
   ];
 }
@@ -250,7 +268,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   const args = [
     ...baseSshArgs(target, {
       batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
-      ...(input.controlPath === undefined ? {} : { controlPath: input.controlPath }),
+      ...(input.multiplex === undefined ? {} : { multiplex: input.multiplex }),
     }),
     ...(input.preHostArgs ?? []),
     hostSpec,
@@ -399,6 +417,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
 
 export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(function* (
   alias: string,
+  options?: { readonly multiplex?: SshMultiplex },
 ): Effect.fn.Return<
   DesktopSshEnvironmentTarget,
   SshCommandError | SshInvalidTargetError,
@@ -417,7 +436,11 @@ export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(functi
       username: null,
       port: null,
     },
-    { preHostArgs: ["-G"], purpose: "resolve" },
+    {
+      preHostArgs: ["-G"],
+      purpose: "resolve",
+      ...(options?.multiplex === undefined ? {} : { multiplex: options.multiplex }),
+    },
   ).pipe(
     Effect.map((result) => parseSshResolveOutput(trimmedAlias, result.stdout)),
     Effect.tap((target) =>
