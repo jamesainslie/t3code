@@ -14,6 +14,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as SshAuth from "./auth.ts";
 import {
+  annotateSshTargetSpan,
   baseSshArgs,
   buildSshHostSpecEffect,
   collectProcessOutput,
@@ -84,6 +85,16 @@ interface OwnedMaster {
   readonly scope: Scope.Closeable;
 }
 
+/**
+ * How `acquire` found a target's master: kept a healthy one, started one,
+ * gave up on masters for this target (`reason` says why), or has none to give
+ * because no socket directory was configured or the platform has no masters.
+ */
+export type ControlMasterOutcome =
+  | { readonly socketPath: string; readonly decision: "reused" | "created" }
+  | { readonly socketPath: null; readonly decision: "disabled" }
+  | { readonly socketPath: null; readonly decision: "unavailable"; readonly reason: string };
+
 interface ControlMasterRequest<E, R> {
   readonly key: string;
   readonly target: DesktopSshEnvironmentTarget;
@@ -111,7 +122,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     /** The socket for the target's one-shots, starting a master if needed; null runs them directly. */
     readonly acquire: <E extends { readonly _tag: string }, R>(
       request: ControlMasterRequest<E, R>,
-    ) => Effect.Effect<string | null, E, R | ControlMasterContext>;
+    ) => Effect.Effect<ControlMasterOutcome, E, R | ControlMasterContext>;
     /** The socket of a master that answers a round trip; never starts one. */
     readonly reuse: (
       key: string,
@@ -125,9 +136,9 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
 > {
   const managerScope = yield* Scope.Scope;
   const masters = new Map<string, OwnedMaster>();
-  // Targets whose master failed for a reason other than authentication. They
-  // stay on direct connections for the manager's lifetime.
-  const unavailable = new Set<string>();
+  // Targets whose master failed for a reason other than authentication, with
+  // that reason. They stay on direct connections for the manager's lifetime.
+  const unavailable = new Map<string, string>();
   let removeFallbackDirectory: Effect.Effect<void> = Effect.void;
 
   const close = (key: string) =>
@@ -165,14 +176,14 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     reason: string,
     cause?: unknown,
   ) {
-    unavailable.add(key);
+    unavailable.set(key, reason);
     yield* Effect.logWarning("ssh.controlMaster.unavailable", {
       alias: target.alias,
       hostname: target.hostname,
       reason,
       ...(cause === undefined ? {} : { cause }),
     });
-    return null;
+    return { socketPath: null, decision: "unavailable", reason } satisfies ControlMasterOutcome;
   });
 
   const prepareSocketPath = Effect.fn("ssh/controlMaster.prepareSocketPath")(function* (
@@ -195,6 +206,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     master: OwnedMaster,
     target: DesktopSshEnvironmentTarget,
   ) {
+    yield* annotateSshTargetSpan(target);
     const fs = yield* FileSystem.FileSystem;
     // Without its socket a command would quietly connect directly and pass.
     const socketExists = yield* fs
@@ -211,6 +223,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
       remoteCommandArgs: ["true"],
       timeoutMs: MASTER_PROBE_TIMEOUT_MS,
       batchMode: "yes",
+      purpose: "control-probe",
     }).pipe(
       Effect.as(true),
       Effect.catch((cause) =>
@@ -244,6 +257,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     readonly socketPath: string;
     readonly authOptions: SshAuth.SshAuthOptions;
   }): Effect.fn.Return<void, SshCommandError | SshInvalidTargetError, ControlMasterContext> {
+    yield* annotateSshTargetSpan(input.target);
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const sshCommand = yield* resolveSshCommand;
@@ -439,15 +453,22 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
   const acquire = Effect.fn("ssh/controlMaster.acquire")(function* <
     E extends { readonly _tag: string },
     R,
-  >(request: ControlMasterRequest<E, R>) {
+  >(
+    request: ControlMasterRequest<E, R>,
+  ): Effect.fn.Return<ControlMasterOutcome, E, R | ControlMasterContext> {
     const platform = yield* HostProcess.Platform;
     const { key, target } = request;
-    if (options.directory === undefined || platform === "win32" || unavailable.has(key)) {
-      return null;
+    yield* annotateSshTargetSpan(target);
+    if (options.directory === undefined || platform === "win32") {
+      return { socketPath: null, decision: "disabled" };
+    }
+    const unavailableReason = unavailable.get(key);
+    if (unavailableReason !== undefined) {
+      return { socketPath: null, decision: "unavailable", reason: unavailableReason };
     }
     const reused = yield* reuse(key, target);
     if (reused !== null) {
-      return reused;
+      return { socketPath: reused, decision: "reused" };
     }
 
     const fs = yield* FileSystem.FileSystem;
@@ -469,6 +490,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
         preHostArgs: ["-O", "exit"],
         timeoutMs: MASTER_PROBE_TIMEOUT_MS,
         batchMode: "yes",
+        purpose: "control-exit",
       }).pipe(Effect.ignore);
       yield* fs.remove(socketPath, { force: true }).pipe(Effect.ignore);
     }
@@ -476,7 +498,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
     return yield* request
       .authenticate((authOptions) => startMaster({ key, target, socketPath, authOptions }))
       .pipe(
-        Effect.as(socketPath),
+        Effect.as<ControlMasterOutcome>({ socketPath, decision: "created" }),
         // A cancelled prompt or rejected credential would fail the direct
         // connection the same way, and must not cost the target its master.
         Effect.catchIf(

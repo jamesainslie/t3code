@@ -570,7 +570,10 @@ Settings entries as the backend it supervises, and covers work the backend canno
 window and menu handling, backend supervision, and updates. It reports as service
 `t3code-desktop`, so a collector shows it alongside the backend rather than mixed into it. It
 exports traces and logs only; the main process records no metrics, so the metrics endpoint applies
-to the backend alone.
+to the backend alone. Its local trace file is `desktop.trace.ndjson` beside the backend's. It honours
+`T3CODE_LOG_LEVEL` and `T3CODE_TRACE_MIN_LEVEL` like the backend, which inherits them, so launching
+the app from a shell with `T3CODE_LOG_LEVEL=Debug` keeps debug messages such as each SSH connection
+step as span events.
 
 ### Env Vars
 
@@ -581,6 +584,7 @@ Local trace file:
 - `T3CODE_TRACE_MAX_FILES`: rotated file count, default `10`
 - `T3CODE_TRACE_BATCH_WINDOW_MS`: flush window, default `1000`
 - `T3CODE_TRACE_MIN_LEVEL`: minimum trace level, default `Info`
+- `T3CODE_LOG_LEVEL`: minimum log level, default `Info`; `Debug` keeps debug messages as span events
 - `T3CODE_TRACE_TIMING_ENABLED`: enable timing metadata, default `true`
 
 OTLP export:

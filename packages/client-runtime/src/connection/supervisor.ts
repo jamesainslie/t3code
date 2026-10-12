@@ -734,6 +734,8 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   ) {
     const switchingTo = yield* Ref.get(preferredRouteId);
     yield* SubscriptionRef.set(prepared, Option.none());
+    const routes = connectionRoutes(yield* Ref.get(currentEntry));
+    const budget = establishmentBudget(routes);
     const establishment = yield* Effect.raceAllFirst([
       exitUnlessInterrupted(
         establishTracedConnection(attempt, generation, lastFailure, pendingRetry),
@@ -749,9 +751,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
           resetRetry,
         })),
       ),
-      Effect.sleep(establishmentBudget(connectionRoutes(yield* Ref.get(currentEntry)))).pipe(
-        Effect.as<EstablishmentEvent>({ _tag: "TimedOut" }),
-      ),
+      Effect.sleep(budget).pipe(Effect.as<EstablishmentEvent>({ _tag: "TimedOut" })),
     ]);
 
     if (establishment._tag === "Interrupted") {
@@ -763,6 +763,17 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       } satisfies AttemptOutcome;
     }
     if (establishment._tag === "TimedOut") {
+      // Its own span: the run loop's span has ended, and a log only reaches the
+      // trace file as an event on a span that is still open.
+      yield* Effect.logWarning("Connection setup timed out.").pipe(
+        Effect.annotateLogs({
+          "environment.id": target.environmentId,
+          "environment.label": target.label,
+          "connection.route.kinds": routes.map(connectionRouteKind).join(","),
+          "connection.establishment.budget_ms": Duration.toMillis(budget),
+        }),
+        Effect.withSpan("EnvironmentSupervisor.setupTimedOut"),
+      );
       return {
         _tag: "Failure",
         established: false,

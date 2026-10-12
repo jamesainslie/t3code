@@ -294,6 +294,8 @@ const makeSshBroker = Effect.fn("clientRuntime.connection.broker.makeSsh")(funct
       Effect.map(Option.filter(isBearerCredential)),
       Effect.orElseSucceed(() => Option.none<BearerConnectionCredential>()),
     );
+    let credentialPath: "stored-bearer" | "stored-bearer-rejected-repaired" | "paired" =
+      Option.isNone(stored) ? "paired" : "stored-bearer";
     const authorized = Option.isNone(stored)
       ? yield* pairAndAuthorize()
       : yield* launch(false).pipe(
@@ -302,14 +304,21 @@ const makeSshBroker = Effect.fn("clientRuntime.connection.broker.makeSsh")(funct
               // A dead stored bearer is recoverable here; letting it reach the
               // supervisor would park the environment as blocked. Launch
               // failures, such as a cancelled SSH password prompt, still do.
-              Effect.catchIf(isRejectedBearer, () =>
-                credentials
+              Effect.catchIf(isRejectedBearer, () => {
+                credentialPath = "stored-bearer-rejected-repaired";
+                return credentials
                   .remove(credentialId)
-                  .pipe(Effect.ignore, Effect.andThen(pairAndAuthorize())),
-              ),
+                  .pipe(Effect.ignore, Effect.andThen(pairAndAuthorize()));
+              }),
             ),
           ),
         );
+    // Which credential path ran, once per connect; never the bearer itself.
+    yield* Effect.logInfo("clientRuntime.connection.ssh.authorized", {
+      environmentId: target.environmentId,
+      connectionId: target.connectionId,
+      credentialPath,
+    });
     return {
       environmentId: authorized.environmentId,
       label: authorized.label,

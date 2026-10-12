@@ -730,10 +730,21 @@ const layerTelemetry = Layer.unwrap(
   }),
 );
 
+// Info unless T3CODE_LOG_LEVEL or T3CODE_TRACE_MIN_LEVEL says otherwise. The
+// primary backend inherits the same environment and applies it itself.
+const layerLevels = Layer.unwrap(
+  Effect.gen(function* () {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    return Layer.mergeAll(
+      Layer.succeed(References.MinimumLogLevel, environment.logLevel),
+      Layer.succeed(Tracer.MinimumTraceLevel, environment.traceMinLevel),
+    );
+  }),
+);
+
 export const layer = Layer.mergeAll(
   layerBackendOutputLogFactory,
   layerTelemetry,
-  Layer.succeed(References.MinimumLogLevel, "Info"),
-  Layer.succeed(Tracer.MinimumTraceLevel, "Info"),
+  layerLevels,
   Layer.succeed(References.TracerTimingEnabled, true),
 );

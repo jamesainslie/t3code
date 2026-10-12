@@ -59,7 +59,7 @@ const makeExitedProcess = (stdout: string) =>
     unref: Effect.succeed(Effect.void),
   });
 
-const makeNeverFinishingProcess =(stderr: Stream.Stream<Uint8Array> = Stream.empty) => {
+const makeNeverFinishingProcess = (stderr: Stream.Stream<Uint8Array> = Stream.empty) => {
   let finish: ((exitCode: ChildProcessSpawner.ExitCode) => void) | null = null;
   return ChildProcessSpawner.makeHandle({
     pid: ChildProcessSpawner.ProcessId(123),
@@ -236,7 +236,9 @@ describe("ssh command", () => {
       if (exit !== undefined && Exit.isSuccess(exit)) {
         assert.isTrue(Result.isFailure(exit.value));
         if (Result.isFailure(exit.value)) {
-          assert.isTrue(exit.value.failure._tag === "SshCommandError" && exit.value.failure.timedOut);
+          assert.isTrue(
+            exit.value.failure._tag === "SshCommandError" && exit.value.failure.timedOut,
+          );
         }
       }
     }).pipe(

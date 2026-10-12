@@ -9,6 +9,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Result from "effect/Result";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -93,6 +94,28 @@ const testNetService = NetService.NetService.of({
 function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
   return command._tag === "StandardCommand" ? command.args : [];
 }
+
+/** Keeps every Info-and-above log as its message and fields, for asserting what was logged. */
+const captureLogs = () => {
+  const entries: Array<{
+    readonly level: string;
+    readonly message: string;
+    readonly fields: Readonly<Record<string, unknown>>;
+  }> = [];
+  const logger = Logger.make(({ logLevel, message }) => {
+    const [text, fields] = Array.isArray(message) ? message : [message];
+    entries.push({
+      level: logLevel,
+      message: String(text),
+      fields: typeof fields === "object" && fields !== null ? { ...fields } : {},
+    });
+  });
+  return {
+    entries,
+    layer: Logger.layer([logger], { mergeWithExisting: false }),
+    named: (message: string) => entries.filter((entry) => entry.message === message),
+  };
+};
 
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
 const NODE_SCRIPT = {
@@ -743,6 +766,7 @@ describe("ssh tunnel scripts", () => {
     /** Records each ssh step in order; tunnels exit on kill or when the test says so. */
     const recordingLayer = (input: { readonly isHealthy: () => boolean }) => {
       const events: Array<string> = [];
+      const logs = captureLogs();
       const tunnelExits: Array<Deferred.Deferred<ChildProcessSpawner.ExitCode>> = [];
       const tunnelCloses: Array<Deferred.Deferred<void>> = [];
       const spawner = ChildProcessSpawner.make((command) =>
@@ -797,8 +821,9 @@ describe("ssh tunnel scripts", () => {
         Layer.succeed(NetService.NetService, testNetService),
         SshAuth.SshPasswordPrompt.disabledLayer,
         SshTunnel.SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+        logs.layer,
       );
-      return { events, tunnelExits, tunnelCloses, layer };
+      return { events, tunnelExits, tunnelCloses, layer, logs };
     };
 
     it.effect("closes a stale tunnel without stopping the remote server it reconnects to", () => {
@@ -806,7 +831,7 @@ describe("ssh tunnel scripts", () => {
       const count = (event: string) => events.filter((entry) => entry === event).length;
       // A broken first tunnel stops answering, as when a network drop leaves the
       // ssh child alive; the replacement tunnel answers.
-      const { events, layer } = recordingLayer({
+      const { events, layer, logs } = recordingLayer({
         isHealthy: () => !broken || count("tunnel") === 2,
       });
       return Effect.gen(function* () {
@@ -821,6 +846,13 @@ describe("ssh tunnel scripts", () => {
         assert.equal(count("tunnel.kill"), 1);
         assert.equal(count("launch"), 2);
         assert.equal(count("tunnel"), 2);
+        const summaries = logs.named("ssh.environment.ensure.succeeded");
+        assert.deepEqual(
+          summaries.map((entry) => entry.fields.tunnel),
+          ["created", "stale-replaced"],
+        );
+        assert.notProperty(summaries[0]?.fields ?? {}, "existingTunnelCheckMs");
+        assert.isAtLeast(Number(summaries[1]?.fields.existingTunnelCheckMs), 2_000);
       }).pipe(
         Effect.provide(layer),
         Effect.scoped,
@@ -835,7 +867,7 @@ describe("ssh tunnel scripts", () => {
     });
 
     it.effect("forgets a tunnel whose ssh process exits so the next ensure starts fresh", () => {
-      const { events, tunnelExits, tunnelCloses, layer } = recordingLayer({
+      const { events, tunnelExits, tunnelCloses, layer, logs } = recordingLayer({
         isHealthy: () => true,
       });
       return Effect.gen(function* () {
@@ -862,6 +894,10 @@ describe("ssh tunnel scripts", () => {
         yield* manager.ensureEnvironment(target);
 
         assert.deepEqual(events, ["launch", "tunnel", "http"]);
+        assert.deepEqual(
+          logs.named("ssh.environment.ensure.succeeded").map((entry) => entry.fields.tunnel),
+          ["created", "pruned-exited"],
+        );
       }).pipe(Effect.provide(layer), Effect.scoped);
     });
   });
@@ -1020,6 +1056,112 @@ describe("ssh environment output", () => {
             }),
           http: hangingHttpClient,
         }),
+      ),
+    );
+  });
+
+  it.effect.each([
+    ["reused", "Remote server reused on port 3773"],
+    ["started", "Remote server started on port 3773"],
+    ["restarted-runner-changed", "Remote server restarted on port 3773: runner changed"],
+    ["restarted-unready", "Remote server restarted on port 3773: it was not answering"],
+    ["adopted-external", "Using the external remote server on port 3773"],
+    [
+      "replaced-by-external",
+      "Stopped the managed remote server, using the external one on port 3773",
+    ],
+    ["reused-external", "External remote server reused on port 3773"],
+  ] as const)("reports a %s launch in the output and the ready log", ([action, line]) => {
+    const { chunks, provide } = observed();
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* provide(manager.ensureEnvironment(target));
+
+      assert.deepInclude(chunks, { source: "launch", stream: "stdout", text: `${line}\n` });
+      const [ready] = logs.named("ssh.remoteServer.launch.ready");
+      assert.equal(ready?.fields.launchAction, action);
+      const [succeeded] = logs.named("ssh.environment.ensure.succeeded");
+      assert.equal(succeeded?.fields.launchAction, action);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          managerLayer({
+            launch: () =>
+              makeExitedProcess({
+                stdout: `{"remotePort":3773,"serverKind":"managed","action":"${action}"}\n`,
+              }),
+          }),
+          logs.layer,
+        ),
+      ),
+    );
+  });
+
+  it.effect("accepts a launch answer without an action and reports none", () => {
+    const { chunks, provide } = observed();
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* provide(manager.ensureEnvironment(target));
+
+      assert.deepEqual(
+        chunks.map((chunk) => chunk.text),
+        ['{"remotePort":3773}\n'],
+      );
+      const [ready] = logs.named("ssh.remoteServer.launch.ready");
+      assert.isNull(ready?.fields.launchAction);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          managerLayer({ launch: () => makeExitedProcess({ stdout: '{"remotePort":3773}\n' }) }),
+          logs.layer,
+        ),
+      ),
+    );
+  });
+
+  it.effect("summarizes a failed ensure once, with the phases that ran and the error", () => {
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      const result = yield* Effect.result(manager.ensureEnvironment(target));
+
+      assert.isTrue(Result.isFailure(result));
+      assert.lengthOf(logs.named("ssh.environment.ensure.succeeded"), 0);
+      const failed = logs.named("ssh.environment.ensure.failed");
+      assert.lengthOf(failed, 1);
+      const fields = failed[0]?.fields ?? {};
+      assert.equal(failed[0]?.level, "Info");
+      assert.equal(fields.alias, "devbox");
+      assert.equal(fields.errorTag, "SshCommandError");
+      assert.include(String(fields.errorMessage), "Connection refused");
+      assert.equal(fields.tunnel, "created");
+      assert.equal(fields.launchAction, "started");
+      assert.equal(fields.remotePort, 3773);
+      assert.equal(fields.issuedPairingToken, false);
+      for (const phase of ["targetResolveMs", "lockWaitMs", "launchMs", "tunnelStartMs"]) {
+        assert.isNumber(fields[phase], phase);
+      }
+      assert.notProperty(fields, "existingTunnelCheckMs");
+      assert.notProperty(fields, "pairingMs");
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          managerLayer({
+            launch: () =>
+              makeExitedProcess({
+                stdout: '{"remotePort":3773,"serverKind":"managed","action":"started"}\n',
+              }),
+            tunnel: () =>
+              makeExitedProcess({
+                stderr: "channel 2: open failed: connect failed: Connection refused\n",
+                exitCode: 255,
+              }),
+            http: hangingHttpClient,
+          }),
+          logs.layer,
+        ),
       ),
     );
   });

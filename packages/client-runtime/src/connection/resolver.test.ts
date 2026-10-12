@@ -7,6 +7,7 @@ import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Tracer from "effect/Tracer";
@@ -580,12 +581,12 @@ describe("ConnectionResolver", () => {
           pairingRequests.push(input.issuePairingToken);
           if (options?.launchFailure !== undefined) return Effect.fail(options.launchFailure);
           return Effect.succeed({
-              bootstrap: {
-                target: input.target,
-                httpBaseUrl: "http://127.0.0.1:4010",
-                wsBaseUrl: "ws://127.0.0.1:4010",
-                pairingToken: null,
-              },
+            bootstrap: {
+              target: input.target,
+              httpBaseUrl: "http://127.0.0.1:4010",
+              wsBaseUrl: "ws://127.0.0.1:4010",
+              pairingToken: null,
+            },
             bearerToken: input.issuePairingToken ? `fresh-bearer-${pairingRequests.length}` : null,
           });
         },
@@ -608,9 +609,7 @@ describe("ConnectionResolver", () => {
               });
         },
       });
-      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(
-        Effect.provide(layerBroker),
-      );
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(layerBroker));
       return {
         broker,
         pairingRequests,
@@ -653,22 +652,24 @@ describe("ConnectionResolver", () => {
         }),
     );
 
-    it.effect("keeps the stored bearer and does not pair when authorization fails transiently", () =>
-      Effect.gen(function* () {
-        const failure = new ConnectionTransientError({
-          reason: "network",
-          detail: "The tunnel dropped.",
-        });
-        const host = yield* makeSshHost({
-          storedToken: "stored-bearer",
-          rejectedTokens: ["stored-bearer"],
-          rejection: failure,
-        });
+    it.effect(
+      "keeps the stored bearer and does not pair when authorization fails transiently",
+      () =>
+        Effect.gen(function* () {
+          const failure = new ConnectionTransientError({
+            reason: "network",
+            detail: "The tunnel dropped.",
+          });
+          const host = yield* makeSshHost({
+            storedToken: "stored-bearer",
+            rejectedTokens: ["stored-bearer"],
+            rejection: failure,
+          });
 
-        expect(yield* Effect.flip(host.broker.prepare(entry))).toBe(failure);
-        expect(host.pairingRequests).toEqual([false]);
-        expect(host.storedToken()).toBe("stored-bearer");
-      }),
+          expect(yield* Effect.flip(host.broker.prepare(entry))).toBe(failure);
+          expect(host.pairingRequests).toEqual([false]);
+          expect(host.storedToken()).toBe("stored-bearer");
+        }),
     );
 
     it.effect("does not pair again when the SSH launch itself is refused", () =>
@@ -684,6 +685,43 @@ describe("ConnectionResolver", () => {
         expect(host.storedToken()).toBe("stored-bearer");
       }),
     );
+
+    it.effect.each([
+      ["stored-bearer", { storedToken: "kept-token-1" }],
+      [
+        "stored-bearer-rejected-repaired",
+        { storedToken: "dead-token-1", rejectedTokens: ["dead-token-1"] },
+      ],
+      ["paired", {}],
+    ] as const)("logs that the %s credential path ran, but never a bearer", ([path, options]) => {
+      const logs: Array<unknown> = [];
+      const logger = Logger.make(({ logLevel, message }) => {
+        logs.push({ logLevel, message });
+      });
+      return Effect.gen(function* () {
+        const host = yield* makeSshHost(options);
+        yield* host.broker
+          .prepare(entry)
+          .pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+
+        const authorized = logs.filter((log) =>
+          JSON.stringify(log).includes("clientRuntime.connection.ssh.authorized"),
+        );
+        expect(authorized).toEqual([
+          {
+            logLevel: "Info",
+            message: [
+              "clientRuntime.connection.ssh.authorized",
+              { environmentId: ENVIRONMENT_ID, connectionId: "ssh-1", credentialPath: path },
+            ],
+          },
+        ]);
+        const logged = JSON.stringify(logs);
+        for (const token of ["kept-token-1", "dead-token-1", "fresh-bearer"]) {
+          expect(logged).not.toContain(token);
+        }
+      });
+    });
 
     it.effect("pairs and stores the bearer when none is stored", () =>
       Effect.gen(function* () {

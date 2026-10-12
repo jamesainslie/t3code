@@ -189,6 +189,46 @@ describe("DesktopObservability", () => {
     ),
   );
 
+  it.effect.each([
+    ["drops Debug logs by default", {}, false],
+    ["keeps Debug logs when T3CODE_LOG_LEVEL asks for them", { T3CODE_LOG_LEVEL: "Debug" }, true],
+  ] as const)("%s", ([, env, expectDebug]) =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-observability-test-",
+      });
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, env);
+      const tracePath = yield* Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        return environment.path.join(environment.logDir, "desktop.trace.ndjson");
+      }).pipe(Effect.provide(layerEnvironment));
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Effect.logDebug("desktop debug event");
+          yield* Effect.logInfo("desktop info event");
+        }).pipe(
+          Effect.withSpan("desktop-observability-level-test"),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
+        ),
+      );
+
+      const record = (yield* fileSystem.readFileString(tracePath))
+        .trim()
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => decodeTraceRecordLine(line))
+        .find((entry) => entry.name === "desktop-observability-level-test");
+      const events = record?.events.map((event) => event.name) ?? [];
+      assert.include(events, "desktop info event");
+      assert.equal(events.includes("desktop debug event"), expectDebug);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
+    ),
+  );
+
   it.effect("buffers backend child output and persists it only when a failure is reported", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

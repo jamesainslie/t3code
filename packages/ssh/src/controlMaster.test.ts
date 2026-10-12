@@ -8,6 +8,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
@@ -285,6 +286,24 @@ function optionValues(args: ReadonlyArray<string>, name: string): Array<string> 
   return args.filter((arg) => arg.startsWith(`${name}=`));
 }
 
+/** The fields of every Info-and-above log named `message`, in order. */
+const captureLogs = () => {
+  const entries: Array<{ readonly message: string; readonly fields: Record<string, unknown> }> = [];
+  const logger = Logger.make(({ message }) => {
+    const [text, fields] = Array.isArray(message) ? message : [message];
+    entries.push({
+      message: String(text),
+      fields: typeof fields === "object" && fields !== null ? { ...fields } : {},
+    });
+  });
+  return {
+    entries,
+    layer: Logger.layer([logger], { mergeWithExisting: false }),
+    named: (message: string) =>
+      entries.filter((entry) => entry.message === message).map((entry) => entry.fields),
+  };
+};
+
 describe("owned control master", () => {
   it.effect("runs one-shots through an owned master and keeps the tunnel direct", () => {
     const harness = makeHarness({});
@@ -325,6 +344,7 @@ describe("owned control master", () => {
 
   it.effect("connects directly without a socket directory", () => {
     const harness = makeHarness({});
+    const logs = captureLogs();
     return Effect.gen(function* () {
       const manager = yield* SshTunnel.SshEnvironmentManager;
       yield* manager.ensureEnvironment(target, { issuePairingToken: true });
@@ -333,7 +353,12 @@ describe("owned control master", () => {
       for (const entry of harness.spawned) {
         assert.deepEqual(optionValues(entry.args, "ControlPath"), ["ControlPath=none"]);
       }
-    }).pipe(Effect.provide(harness.layer({ directory: null })), Effect.scoped);
+      const [summary] = logs.named("ssh.environment.ensure.succeeded");
+      assert.equal(summary?.controlMaster, "disabled");
+    }).pipe(
+      Effect.provide(Layer.merge(harness.layer({ directory: null }), logs.layer)),
+      Effect.scoped,
+    );
   });
 
   it.effect("never starts a master on Windows", () => {
@@ -522,6 +547,7 @@ describe("owned control master", () => {
     ["never opens its socket", { _tag: "silent" }],
   ] as const)("falls back to direct commands for good when the master %s", ([, behavior]) => {
     const harness = makeHarness({ master: () => behavior });
+    const logs = captureLogs();
     return Effect.gen(function* () {
       const manager = yield* SshTunnel.SshEnvironmentManager;
       const masterSpawned = harness.nextSpawn("master");
@@ -541,6 +567,74 @@ describe("owned control master", () => {
       }
       assert.equal(harness.count("launch"), 1);
       assert.equal(harness.count("script"), 1);
-    }).pipe(Effect.provide(harness.layer()), Effect.scoped);
+      assert.deepEqual(
+        logs
+          .named("ssh.environment.ensure.succeeded")
+          .map((summary) => [summary.controlMaster, summary.controlMasterReason]),
+        [
+          ["unavailable", "master-failed"],
+          ["unavailable", "master-failed"],
+        ],
+      );
+    }).pipe(Effect.provide(Layer.merge(harness.layer(), logs.layer)), Effect.scoped);
+  });
+
+  it.effect("summarizes each ensure and disconnect once, without any credential", () => {
+    const harness = makeHarness({});
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* manager.ensureEnvironment(target, { issuePairingToken: true });
+      yield* manager.ensureEnvironment(target);
+      yield* manager.disconnectEnvironment(target);
+
+      const ensures = logs.named("ssh.environment.ensure.succeeded");
+      assert.lengthOf(ensures, 2);
+      const [first, second] = ensures;
+      assert.deepInclude(first, {
+        alias: "devbox",
+        tunnel: "created",
+        controlMaster: "created",
+        issuedPairingToken: true,
+        launchAction: null,
+        remoteServerKind: "managed",
+        remotePort: 3773,
+        localPort: 41_773,
+      });
+      assert.match(String(first?.stateKey), /^[0-9a-f]{16}$/u);
+      for (const phase of [
+        "totalMs",
+        "targetResolveMs",
+        "lockWaitMs",
+        "controlMasterMs",
+        "launchMs",
+        "tunnelStartMs",
+        "pairingMs",
+      ]) {
+        assert.isNumber(first?.[phase], phase);
+      }
+      // A healthy tunnel is reused without any one-shot, so no master is needed.
+      assert.deepInclude(second, {
+        tunnel: "reused",
+        controlMaster: "not-used",
+        issuedPairingToken: false,
+      });
+      assert.isNumber(second?.existingTunnelCheckMs);
+      for (const phase of ["controlMasterMs", "launchMs", "tunnelStartMs", "pairingMs"]) {
+        assert.notProperty(second ?? {}, phase);
+      }
+
+      const disconnects = logs.named("ssh.environment.disconnect.succeeded");
+      assert.lengthOf(disconnects, 1);
+      assert.deepInclude(disconnects[0], {
+        alias: "devbox",
+        tunnel: "closed",
+        controlMaster: "reused",
+      });
+      for (const phase of ["totalMs", "tunnelCloseMs", "controlMasterMs", "remoteStopMs"]) {
+        assert.isNumber(disconnects[0]?.[phase], phase);
+      }
+      assert.notInclude(JSON.stringify(logs.entries.map((entry) => entry.fields)), "LCL4R2TPHDKQ");
+    }).pipe(Effect.provide(Layer.merge(harness.layer(), logs.layer)), Effect.scoped);
   });
 });

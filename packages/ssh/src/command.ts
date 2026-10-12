@@ -48,7 +48,23 @@ export interface RunSshCommandOptions extends SshAuthOptions {
    * `stdout` is set; never set it for a command whose stdout carries a credential.
    */
   readonly observe?: { readonly source: SshOutputSource; readonly stdout?: boolean };
+  /** What the command is for, such as "launch" or "control-probe"; tags its span and failures. */
+  readonly purpose?: string;
 }
+
+/**
+ * Tags the current span with the target, so a trace can be filtered by host.
+ * A plain effect rather than an `Effect.fn`, which would tag a span of its own.
+ */
+export const annotateSshTargetSpan = (
+  target: DesktopSshEnvironmentTarget,
+  extra?: Readonly<Record<string, unknown>>,
+) =>
+  Effect.annotateCurrentSpan({
+    "ssh.alias": target.alias,
+    "ssh.hostname": target.hostname,
+    ...extra,
+  });
 
 export function parseSshResolveOutput(alias: string, stdout: string): DesktopSshEnvironmentTarget {
   const values = new Map<string, string>();
@@ -313,6 +329,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
     const diagnosticStdout = redactSshErrorOutput(stdout);
     yield* Effect.logWarning("ssh.command.failed", {
       ...sshTargetLogFields(target),
+      purpose: input.purpose ?? null,
       command: ["ssh", ...args],
       exitCode,
       stdout: diagnosticStdout,
@@ -346,6 +363,10 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
   SshCommandError | SshInvalidTargetError,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
+  yield* annotateSshTargetSpan(
+    target,
+    input.purpose === undefined ? undefined : { "ssh.purpose": input.purpose },
+  );
   return yield* Effect.scopedWith((commandScope) =>
     runSshCommandInScope(target, input, commandScope),
   ).pipe(
@@ -357,6 +378,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
           Effect.gen(function* () {
             yield* Effect.logWarning("ssh.command.timedOut", {
               ...sshTargetLogFields(target),
+              purpose: input.purpose ?? null,
               timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
               remoteCommandArgs: input.remoteCommandArgs ?? [],
               preHostArgs: input.preHostArgs ?? [],
@@ -395,7 +417,7 @@ export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(functi
       username: null,
       port: null,
     },
-    { preHostArgs: ["-G"] },
+    { preHostArgs: ["-G"], purpose: "resolve" },
   ).pipe(
     Effect.map((result) => parseSshResolveOutput(trimmedAlias, result.stdout)),
     Effect.tap((target) =>
