@@ -1,0 +1,169 @@
+// @effect-diagnostics nodeBuiltinImport:off
+// @effect-diagnostics globalTimers:off
+// @effect-diagnostics globalDateInEffect:off
+// The helpers mirror the inline Node snippets the SSH launch script used to
+// run, byte for byte in behaviour, so they stay on plain Node APIs.
+import * as NodeFS from "node:fs";
+import * as NodeHttp from "node:http";
+import * as NodeNet from "node:net";
+
+/**
+ * Small helpers the SSH launch script needs on the remote host. The script
+ * used to run these as inline `node -` snippets; archive-distributed runtimes
+ * have no Node on the remote, so the executable provides them instead. Output
+ * and exit codes match the snippets exactly because the shell script parses
+ * them.
+ *
+ * The launch script runs several of these per reconnect, so bin.ts dispatches
+ * them here before the full CLI graph loads. Keep this module on Node
+ * built-ins only; `__ssh-helper` in ./sshHelper.ts wraps the same functions
+ * for help and for anything that drives the full CLI.
+ */
+
+const tryPort = (port: number) =>
+  new Promise<number | false>((resolve) => {
+    const server = NodeNet.createServer();
+    server.unref();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close((error) => resolve(error ? false : port));
+    });
+  });
+
+/** The first free loopback port from the preferred one, scanning `scanWindow` ports. */
+export const pickPort = async (portFile: string, defaultPort: number, scanWindow: number) => {
+  const raw = NodeFS.existsSync(portFile) ? NodeFS.readFileSync(portFile, "utf8").trim() : "";
+  const preferred = Number.parseInt(raw, 10);
+  const start = Number.isInteger(preferred) ? preferred : defaultPort;
+  for (let port = start; port < start + scanWindow; port += 1) {
+    if (await tryPort(port)) return port;
+  }
+  return undefined;
+};
+
+const probe = (port: number, probeTimeoutMs: number) =>
+  new Promise<boolean>((resolve) => {
+    const request = NodeHttp.get(
+      { hostname: "127.0.0.1", port, path: "/", timeout: probeTimeoutMs },
+      (response) => {
+        response.resume();
+        response.once("end", () => {
+          const status = response.statusCode ?? 0;
+          resolve(status >= 200 && status < 300);
+        });
+      },
+    );
+    request.once("timeout", () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.once("error", () => resolve(false));
+  });
+
+/** Whether the loopback server answers 2xx before the deadline passes. */
+export const waitReady = async (port: number, timeoutMs: number, probeTimeoutMs: number) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await probe(port, probeTimeoutMs)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+};
+
+/** `<pid> <port>` for a live default-home server, or undefined. */
+export const runtimePort = (runtimeFile: string) => {
+  try {
+    // @effect-diagnostics-next-line preferSchemaOverJson:off - mirrors the shell snippet's loose parse.
+    const runtime = JSON.parse(NodeFS.readFileSync(runtimeFile, "utf8")) as {
+      pid?: unknown;
+      port?: unknown;
+      origin?: unknown;
+    };
+    const pid = Number(runtime.pid);
+    const port = Number(runtime.port);
+    if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(port)) return undefined;
+    const origin = new URL(String(runtime.origin ?? ""));
+    if (origin.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(origin.hostname)) {
+      return undefined;
+    }
+    process.kill(pid, 0);
+    return `${pid} ${port}`;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Prints the picked port, or exits 1 with no output. */
+export const runPickPort = async (portFile: string, defaultPort: number, scanWindow: number) => {
+  const port = await pickPort(portFile, defaultPort, scanWindow);
+  if (port === undefined) process.exitCode = 1;
+  else process.stdout.write(String(port));
+};
+
+/** Exits 0 once the loopback server answers, 1 when the deadline passes first. */
+export const runWaitReady = async (port: number, timeoutMs: number, probeTimeoutMs: number) => {
+  if (!(await waitReady(port, timeoutMs, probeTimeoutMs))) process.exitCode = 1;
+};
+
+/** Prints `<pid> <port>` for a live default-home server, or exits 1 with no output. */
+export const runRuntimePort = (runtimeFile: string) => {
+  const output = runtimePort(runtimeFile);
+  if (output === undefined) process.exitCode = 1;
+  else process.stdout.write(output);
+};
+
+// Only shapes that effect/cli parses to the same values qualify: a canonical
+// non-negative integer, or a non-empty value that its lexer cannot take for a
+// flag. Anything else falls through to the full CLI, which owns the help and
+// error output.
+const intArg = (value: string | undefined) =>
+  value !== undefined && /^(?:0|[1-9]\d{0,14})$/.test(value) ? Number(value) : undefined;
+const stringArg = (value: string | undefined) =>
+  value !== undefined && value !== "" && !value.startsWith("-") ? value : undefined;
+
+const match = (args: ReadonlyArray<string>): (() => Promise<void>) | undefined => {
+  const [subcommand, ...rest] = args;
+  if (subcommand === "runtime-port" && rest.length === 1) {
+    const runtimeFile = stringArg(rest[0]);
+    if (runtimeFile === undefined) return undefined;
+    return async () => runRuntimePort(runtimeFile);
+  }
+  if (subcommand === "wait-ready" && rest.length === 3) {
+    const [port, timeoutMs, probeTimeoutMs] = rest.map(intArg);
+    if (port === undefined || timeoutMs === undefined || probeTimeoutMs === undefined) {
+      return undefined;
+    }
+    return () => runWaitReady(port, timeoutMs, probeTimeoutMs);
+  }
+  if (subcommand === "pick-port" && rest.length === 3) {
+    const portFile = stringArg(rest[0]);
+    const defaultPort = intArg(rest[1]);
+    const scanWindow = intArg(rest[2]);
+    if (portFile === undefined || defaultPort === undefined || scanWindow === undefined) {
+      return undefined;
+    }
+    return () => runPickPort(portFile, defaultPort, scanWindow);
+  }
+  return undefined;
+};
+
+/**
+ * The helper run for `__ssh-helper <args>` when the arguments have exactly the
+ * shape the launch script sends, else undefined. The run exits 130 on SIGINT
+ * or SIGTERM, as the effect runtime does when it interrupts the full CLI.
+ */
+export const matchSshHelperFastPath = (args: ReadonlyArray<string>) => {
+  const run = match(args);
+  if (run === undefined) return undefined;
+  return async () => {
+    const onSignal = () => process.exit(130);
+    process.once("SIGINT", onSignal);
+    process.once("SIGTERM", onSignal);
+    try {
+      await run();
+    } finally {
+      process.removeListener("SIGINT", onSignal);
+      process.removeListener("SIGTERM", onSignal);
+    }
+  };
+};
