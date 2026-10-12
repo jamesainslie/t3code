@@ -87,6 +87,32 @@ describe("DesktopUpdates", () => {
     }).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });
 
+  it.effect("gives the updater a download cache of its own instead of upstream's", () => {
+    const harness = makeHarness({
+      appUpdateYml: [
+        "owner: jamesainslie",
+        "repo: t3code",
+        "provider: github",
+        "updaterCacheDirName: t3code-updater",
+        "",
+      ].join("\n"),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+
+        const [configPath, ...extra] = harness.updateConfigPaths();
+        assert.deepEqual(extra, []);
+        assert.match(configPath ?? "", /lathe-app-update\.yml$/);
+        const written = harness.writtenFiles().get(configPath ?? "") ?? "";
+        assert.include(written, "updaterCacheDirName: lathe-updater\n");
+        assert.include(written, "owner: jamesainslie\n");
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
   it.effect("updates Linux .deb installs and leaves other non-AppImage installs off", () =>
     Effect.gen(function* () {
       const linuxState = (packageType: string | undefined) =>
@@ -461,6 +487,11 @@ describe("DesktopUpdates", () => {
         assert.isNull(loggedAnnotation.channel);
         assert.notProperty(loggedAnnotation, "error");
         assert.notInclude(Object.values(loggedAnnotation).map(String).join(" "), "secret");
+        assert.equal(loggedAnnotation.causeName, "Error");
+        assert.equal(
+          loggedAnnotation.causeSummary,
+          "request failed for https://example.com/update",
+        );
         assert.equal(
           state.message,
           "Electron updater failed to check for updates on channel default.",

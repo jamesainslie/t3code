@@ -47,6 +47,12 @@ export const FORK_IDENTITY = Object.freeze({
   releaseRepository: "jamesainslie/t3code",
   releasesUrl: "https://github.com/jamesainslie/t3code/releases",
   urlHandlerDesktopEntryName: "lathe-url-handler.desktop",
+  /**
+   * electron-updater's download cache under the OS cache dir. electron-builder
+   * names it after the bundled package.json name, `t3code` in both apps, so the
+   * desktop swaps it in at runtime (`DesktopForkUpdaterCacheDir`).
+   */
+  updaterCacheDirName: "lathe-updater",
   /** Debian control fields for the Linux .deb; upstream's package is named `t3code`. */
   linuxPackage: Object.freeze({
     name: "lathe",

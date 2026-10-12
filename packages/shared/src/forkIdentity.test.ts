@@ -25,6 +25,8 @@ const UPSTREAM = {
   legacyUserDataDirName: "T3 Code (Alpha)",
   systemdName: "t3code",
   launchdLabel: "com.t3tools.t3code.service",
+  // electron-builder derives it from the bundled package.json name, `t3code` in both.
+  updaterCacheDirName: "t3code-updater",
 } as const;
 
 describe("FORK_IDENTITY", () => {
@@ -37,6 +39,8 @@ describe("FORK_IDENTITY", () => {
     expect(FORK_IDENTITY.appId).not.toBe(UPSTREAM.appId);
     expect(FORK_IDENTITY.bootService.systemdName).not.toBe(UPSTREAM.systemdName);
     expect(FORK_IDENTITY.bootService.launchdLabel).not.toBe(UPSTREAM.launchdLabel);
+    expect(FORK_IDENTITY.updaterCacheDirName).toBe("lathe-updater");
+    expect(FORK_IDENTITY.updaterCacheDirName).not.toBe(UPSTREAM.updaterCacheDirName);
 
     const production = FORK_IDENTITY.desktop.production;
     expect(production.appId).not.toBe(UPSTREAM.appId);
