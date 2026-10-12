@@ -5,8 +5,10 @@ import {
   WS_METHODS,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
@@ -21,10 +23,16 @@ import * as Stream from "effect/Stream";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
+import * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
 
-import { makeWsRpcProtocolClient, PING_TIMEOUT, type WsRpcProtocolClient } from "./protocol.ts";
+import {
+  makeWsRpcProtocolClient,
+  PING_INTERVAL,
+  PING_TIMEOUT,
+  type WsRpcProtocolClient,
+} from "./protocol.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import type {
   ConnectionAttemptError,
@@ -44,6 +52,7 @@ import {
 import { environmentMismatchError } from "../connection/errors.ts";
 
 const SOCKET_OPEN_TIMEOUT = "15 seconds";
+const PING_TIMEOUT_MILLIS = Duration.toMillis(PING_TIMEOUT);
 
 export interface RpcSession {
   readonly client: WsRpcProtocolClient;
@@ -173,8 +182,15 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
     const disconnected = yield* Deferred.make<never, ConnectionTransientError>();
     // The disconnect hook carries no event, so the close is read off the socket itself.
     let socketClose: ConnectionSocketClose | undefined;
+    let liveSocket: ReturnType<typeof webSocketConstructor> | undefined;
+    // When the oldest unanswered ping went out. Any frame from the server answers it.
+    let pingSentAt: number | undefined;
     const trackingConstructor: typeof webSocketConstructor = (url, protocols) => {
       const socket = webSocketConstructor(url, protocols);
+      liveSocket = socket;
+      socket.addEventListener("message", () => {
+        pingSentAt = undefined;
+      });
       socket.addEventListener("close", (event) => {
         // A browser CloseEvent; the socket's own event type only promises `type`.
         const { code, reason, wasClean } = event as {
@@ -190,30 +206,25 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
       });
       return socket;
     };
-    // Set when the socket closes because the server stopped answering, so the failure says so
-    // instead of looking like the server closed the connection.
-    const pingTimedOut = yield* Ref.make(false);
+    const failDisconnected = (detail: string) =>
+      Effect.suspend(() =>
+        Deferred.fail(
+          disconnected,
+          new ConnectionTransientErrorClass({
+            reason: "transport",
+            detail: `${connection.label} ${detail}${networkHint}`,
+            ...(socketClose === undefined ? {} : { socketClose }),
+          }),
+        ),
+      ).pipe(Effect.asVoid);
     const hooks = RpcClient.ConnectionHooks.of({
       onConnect: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
-      onPingTimeout: Ref.set(pingTimedOut, true),
-      onDisconnect: Effect.all([Deferred.isDone(connected), Ref.get(pingTimedOut)]).pipe(
-        Effect.flatMap(([wasConnected, timedOut]) =>
-          Deferred.fail(
-            disconnected,
-            new ConnectionTransientErrorClass({
-              reason: "transport",
-              detail: `${
-                !wasConnected
-                  ? `${connection.label} could not establish a WebSocket connection.`
-                  : timedOut
-                    ? `${connection.label} stopped responding.`
-                    : `${connection.label} disconnected.`
-              }${networkHint}`,
-              ...(socketClose === undefined ? {} : { socketClose }),
-            }),
+      onDisconnect: Deferred.isDone(connected).pipe(
+        Effect.flatMap((wasConnected) =>
+          failDisconnected(
+            wasConnected ? "disconnected." : "could not establish a WebSocket connection.",
           ),
         ),
-        Effect.asVoid,
       ),
     });
     const layerSocket = Socket.layerWebSocket(connection.socketUrl, {
@@ -222,7 +233,8 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
     const layerProtocol = Layer.effect(
       RpcClient.Protocol,
       RpcClient.makeProtocolSocket({
-        pingTimeout: PING_TIMEOUT,
+        // The keep-alive below sends the pings and judges the replies instead.
+        pingInterval: Duration.infinity,
         retryTransientErrors: false,
         retryPolicy: Schedule.recurs(0),
       }),
@@ -239,6 +251,30 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
       Effect.withSpan("environment.websocket.connect"),
     );
     const protocolClient = yield* makeWsRpcProtocolClient.pipe(Effect.provide(protocolContext));
+    const protocol = Context.get(protocolContext, RpcClient.Protocol);
+    // Effect's pinger fails the socket when no frame has arrived for the timeout at its next
+    // tick. A hidden Chromium page runs that tick once a minute, so it dropped healthy sockets.
+    // Here the socket is dead only once a ping it sent goes unanswered for PING_TIMEOUT,
+    // measured from that send, so a late timer never counts as a missed pong.
+    yield* Deferred.await(connected).pipe(
+      Effect.andThen(
+        Effect.gen(function* () {
+          for (;;) {
+            yield* Effect.sleep(PING_INTERVAL);
+            const now = yield* Clock.currentTimeMillis;
+            if (pingSentAt !== undefined && now - pingSentAt >= PING_TIMEOUT_MILLIS) {
+              return;
+            }
+            pingSentAt ??= now;
+            // A ping carries no request id, so the client id is unused.
+            yield* protocol.send(0, RpcMessage.constPing).pipe(Effect.ignore);
+          }
+        }),
+      ),
+      Effect.andThen(failDisconnected("stopped responding.")),
+      Effect.andThen(Effect.sync(() => liveSocket?.close())),
+      Effect.forkScoped,
+    );
     const initialConfigDeferred = yield* Deferred.make<ServerConfig>();
     const serverConfigExit = yield* Deferred.make<void, ServerConfigSubscriptionError>();
     const configSubscriptionClosed = yield* Deferred.make<never, ConnectionAttemptError>();
