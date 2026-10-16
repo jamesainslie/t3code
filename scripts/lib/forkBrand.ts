@@ -41,7 +41,8 @@ export type ForkBrandException =
   | { readonly kind: "file"; readonly file: string; readonly reason: string }
   /**
    * A string that is the value of `property` (a dotted key path, matched as a
-   * suffix of the enclosing object keys) in `file`.
+   * suffix of the enclosing object keys) in `file`. A variable's name counts
+   * as a key, so `CLIENT_NAME` also matches `const CLIENT_NAME = "..."`.
    */
   | {
       readonly kind: "property";
@@ -72,14 +73,9 @@ export const FORK_BRAND_EXCEPTIONS: ReadonlyArray<ForkBrandException> = [
   {
     kind: "property",
     file: "apps/server/src/provider/CodexProvider.ts",
-    property: "clientInfo.name",
-    reason: "Codex app-server client identity that OpenAI sees; the fork reports as upstream.",
-  },
-  {
-    kind: "property",
-    file: "apps/server/src/provider/CodexProvider.ts",
-    property: "clientInfo.title",
-    reason: "Codex app-server client identity that OpenAI sees; the fork reports as upstream.",
+    property: "CODEX_CLIENT_NAME",
+    reason:
+      "Codex app-server client identity and originator that OpenAI sees; the fork reports as upstream.",
   },
   {
     kind: "property",
@@ -374,9 +370,15 @@ const collectTextSites = (code: string, program: unknown): Array<TextSite> => {
     }
     const skipped = skippedKeys(value);
     const name = value.type === "Property" ? propertyName(value) : undefined;
+    const binding =
+      value.type === "VariableDeclarator" && isAstNode(value.id) && value.id.type === "Identifier"
+        ? (value.id.name as string)
+        : undefined;
     for (const [key, child] of Object.entries(value)) {
       if (TYPE_KEYS.has(key) || skipped?.has(key) || typeof child !== "object") continue;
-      visit(child, name !== undefined && key === "value" ? [...keyPath, name] : keyPath);
+      if (name !== undefined && key === "value") visit(child, [...keyPath, name]);
+      else if (binding !== undefined && key === "init") visit(child, [...keyPath, binding]);
+      else visit(child, keyPath);
     }
   };
   visit(program, []);
