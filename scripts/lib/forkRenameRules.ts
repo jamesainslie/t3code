@@ -169,7 +169,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "The mobile app keeps upstream's identity and its native module names until its own rename project; only imports of renamed workspace packages change.",
-    path: /^apps\/mobile\/|^\.github\/workflows\/mobile-/,
+    path: /^apps\/mobile\/|^\.github\/workflows\/mobile-|^scripts\/mobile-/,
     test: (o) => !/@t3tools/.test(o.token),
   },
   {
