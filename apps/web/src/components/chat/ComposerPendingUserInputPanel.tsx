@@ -1,4 +1,4 @@
-import { type RuntimeRequestId } from "@t3tools/contracts";
+import { type RuntimeRequestId, type ScopedThreadRef } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { type PendingUserInput } from "../../session-logic";
 import {
@@ -10,9 +10,12 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collaps
 import { cn } from "~/lib/utils";
 import { ComposerBanner } from "./ComposerBanner";
 import { QuestionLeadIn } from "./QuestionLeadIn";
+import ChatMarkdown from "../ChatMarkdown";
 
 interface PendingUserInputPanelProps {
   pendingUserInputs: PendingUserInput[];
+  cwd: string | undefined;
+  threadRef: ScopedThreadRef;
   disabled?: boolean;
   respondingRequestIds: RuntimeRequestId[];
   answers: Record<string, PendingUserInputDraftAnswer>;
@@ -24,6 +27,8 @@ interface PendingUserInputPanelProps {
 
 export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserInputPanel({
   pendingUserInputs,
+  cwd,
+  threadRef,
   disabled = false,
   respondingRequestIds,
   answers,
@@ -40,6 +45,8 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
     <ComposerPendingUserInputCard
       key={activePrompt.requestId}
       prompt={activePrompt}
+      cwd={cwd}
+      threadRef={threadRef}
       disabled={disabled}
       isResponding={respondingRequestIds.includes(activePrompt.requestId)}
       answers={answers}
@@ -53,6 +60,8 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
 
 const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard({
   prompt,
+  cwd,
+  threadRef,
   disabled,
   isResponding,
   answers,
@@ -62,6 +71,8 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onDismiss,
 }: {
   prompt: PendingUserInput;
+  cwd: string | undefined;
+  threadRef: ScopedThreadRef;
   disabled: boolean;
   isResponding: boolean;
   answers: Record<string, PendingUserInputDraftAnswer>;
@@ -81,12 +92,6 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     questionId: string;
     optionValue: string;
   } | null>(null);
-  // Collapsing hides everything but the header so a tall prompt stops covering
-  // the thread the user is trying to read. Scoped to a single question: the card
-  // is keyed by request id so the next prompt starts expanded, and storing the
-  // collapsed question's id (rather than a bare flag) reopens the card when the
-  // prompt advances to its next question, which can happen without a click —
-  // sending from the composer advances the active question.
   const [collapsedQuestionId, setCollapsedQuestionId] = useState<string | null>(null);
   const isCollapsed = collapsedQuestionId !== null && collapsedQuestionId === activeQuestion?.id;
 
@@ -147,10 +152,6 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     [activeQuestion, disabled, isResponding, onToggleOption],
   );
 
-  // Keyboard shortcut: number keys 1-9 select corresponding options when focus is
-  // outside editable fields. Multi-select prompts toggle options in place; single-
-  // select prompts keep the existing auto-advance behavior. Collapsed prompts opt
-  // out, since the numbers they refer to are not on screen.
   useEffect(() => {
     if (!activeQuestion || responseDisabled || isCollapsed) return;
     const handler = (event: globalThis.KeyboardEvent) => {
@@ -217,8 +218,6 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
           ) : null}
           <ComposerBanner.ToggleIcon expanded={!isCollapsed} />
           {prompt.dismissible ? (
-            // Sits inside the trigger button, so stop the click from toggling
-            // the disclosure. Dismiss closes the question without a reply.
             <ComposerBanner.Dismiss
               render={<span role="button" tabIndex={0} />}
               aria-label="Dismiss question without answering"
@@ -244,7 +243,12 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
         <ComposerBanner.Scroll>
           <ComposerBanner.Body className="pe-1 pb-1 wrap-anywhere">
             {prompt.leadIn ? <QuestionLeadIn text={prompt.leadIn} /> : null}
-            <p className="text-sm text-foreground/85">{activeQuestion.question}</p>
+            <ChatMarkdown
+              text={activeQuestion.question}
+              cwd={cwd}
+              threadRef={threadRef}
+              className="text-foreground/85"
+            />
             {activeQuestion.multiSelect ? (
               <p className="mt-1 text-secondary-label text-xs">Select one or more options.</p>
             ) : null}

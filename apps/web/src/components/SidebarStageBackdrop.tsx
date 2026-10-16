@@ -11,8 +11,6 @@ import { primaryServerConfigAtom } from "../state/server";
 
 export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
 
-// A wide viewBox keeps the 96-unit art height at a fixed scale while sidebar resizing reveals
-// more horizontal canvas instead of zooming the scene.
 const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
 // Generated strips are 2048 art units wide; see scripts/export-edition-art.ts.
 const EDITION_STRIP_WIDTH = 2048;

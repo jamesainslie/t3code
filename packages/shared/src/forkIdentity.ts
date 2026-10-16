@@ -10,11 +10,6 @@
 export const FORK_IDENTITY = Object.freeze({
   npmPackageName: "@jamesainslie/lathe",
   cliBin: "lathe",
-  /** Per-platform executable packages the launcher (`npmPackageName`) depends on. */
-  npm: Object.freeze({
-    platformPackageScope: "@jamesainslie",
-    platformPackagePrefix: "lathe-",
-  }),
   baseDirName: ".lathe",
   /**
    * The base directory before the Lathe rename. An existing one is used in
@@ -108,7 +103,3 @@ export const forkDesktopSchemes = [
   FORK_IDENTITY.desktop.production.scheme,
   FORK_IDENTITY.desktop.development.scheme,
 ] as const;
-
-/** `@jamesainslie/lathe-<platformKey>`: the executable package the launcher installs for one platform. */
-export const forkPlatformPackageName = (platformKey: string): string =>
-  `${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}${platformKey}`;

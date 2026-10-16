@@ -4,11 +4,11 @@ import {
   terminalColorHex,
   terminalTranscript,
 } from "@t3tools/client-runtime/work-log/terminal";
-import { memo, useMemo } from "react";
+import { memo, type ReactNode, useMemo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-import { SymbolView } from "../../components/AppSymbol";
-import { AppText as Text } from "../../components/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 
 const TerminalOutput = memo(function TerminalOutput(props: {
   readonly text: string;
@@ -53,6 +53,8 @@ export const ThreadTerminalCard = memo(function ThreadTerminalCard(props: {
   readonly output: string | null;
   /** Shown in place of output while it loads or when it is unavailable. */
   readonly status: string | null;
+  /** Replaces the fetched output, e.g. with a command's live output. */
+  readonly outputSlot?: ReactNode;
   readonly themeAppearance: "light" | "dark";
   readonly onCopy: (transcript: string) => void;
 }) {
@@ -127,7 +129,9 @@ export const ThreadTerminalCard = memo(function ThreadTerminalCard(props: {
             {props.command.trim()}
           </Text>
         </View>
-        {props.output ? (
+        {props.outputSlot ? (
+          props.outputSlot
+        ) : props.output ? (
           <View className="mt-1.5">
             <TerminalOutput text={props.output} themeAppearance={props.themeAppearance} />
           </View>

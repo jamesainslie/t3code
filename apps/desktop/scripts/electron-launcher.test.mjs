@@ -146,7 +146,6 @@ describe("electron development launcher", () => {
     const development = resolveMacLauncherIconPaths("/runtime", true);
     const production = resolveMacLauncherIconPaths("/runtime", false);
 
-    // The source icons are real repo paths, joined for the host.
     assert.match(
       development.sourceIconPath,
       /assets[\\/]lathe[\\/]dev[\\/]blueprint-macos-1024\.png$/,
@@ -191,7 +190,7 @@ describe("electron launcher fork identity", () => {
     const launcher = await loadLauncher("");
     const values = launcher.resolveMacBundleInfoPlistStrings("Launcher");
 
-    assert.equal(values.CFBundleDisplayName, `${FORK_IDENTITY.productBaseName} (Alpha)`);
+    assert.equal(values.CFBundleDisplayName, `${FORK_IDENTITY.productBaseName} (Beta)`);
     assert.equal(values.CFBundleIdentifier, FORK_IDENTITY.desktop.production.appId);
   });
 });

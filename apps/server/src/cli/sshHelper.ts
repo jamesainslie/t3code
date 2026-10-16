@@ -13,7 +13,6 @@ import { runPickPort, runRuntimePort, runWaitReady } from "./sshHelperFastPath.t
  * full CLI programmatically. Both routes run the same functions.
  */
 
-/** Prints the first free loopback port from the preferred one, scanning `window` ports. */
 const pickPort = Command.make("pick-port", {
   portFile: Argument.String("port-file"),
   defaultPort: Argument.Int("default-port"),

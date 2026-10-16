@@ -7,10 +7,10 @@ import { useCallback, useMemo } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
-import { AppText as Text } from "../../components/AppText";
-import { MaterialListRow } from "../../components/MaterialListRow";
-import { MaterialScreenContent } from "../../components/MaterialScreenContent";
+import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppText as Text } from "../../components/ui/AppText";
+import { NavigationRow } from "../../components/ui/NavigationRow";
+import { ScreenContent } from "../../components/ui/ScreenContent";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { cn } from "../../lib/cn";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
@@ -87,7 +87,7 @@ export function ThreadDependencyPickerRouteScreen({
 
     if (Platform.OS === "android") {
       return (
-        <MaterialListRow
+        <NavigationRow
           key={candidate.id}
           title={candidate.title}
           subtitle={subtitle}
@@ -135,7 +135,7 @@ export function ThreadDependencyPickerRouteScreen({
           onBack={() => navigation.goBack()}
         />
       ) : null}
-      <MaterialScreenContent>
+      <ScreenContent>
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={{
@@ -165,7 +165,7 @@ export function ThreadDependencyPickerRouteScreen({
             </View>
           )}
         </ScrollView>
-      </MaterialScreenContent>
+      </ScreenContent>
     </View>
   );
 }

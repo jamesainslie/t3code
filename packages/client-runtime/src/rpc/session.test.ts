@@ -554,7 +554,6 @@ describe("RpcSessionFactory", () => {
             Effect.forkChild,
           );
           yield* Deferred.await(started);
-          // A live end marker makes a missing or stale replay event fail without a timeout.
           const marker: ServerConfigStreamEventType = {
             version: 1,
             type: "keybindingsUpdated",
@@ -1220,7 +1219,6 @@ describe("RpcSessionFactory", () => {
       yield* completeInitialConfig(socket);
       yield* Fiber.join(readyFiber);
 
-      // The consumer takes one event and stops pulling, so the stream buffer fills.
       const consuming = yield* Deferred.make<void>();
       const streamFiber = yield* session.client[WS_METHODS.subscribeServerConfig]({}).pipe(
         Stream.runForEach(() =>

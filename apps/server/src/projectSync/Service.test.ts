@@ -28,6 +28,7 @@ import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.t
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import { ProjectService } from "../project/ProjectService.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { importThreadEvents, manageThread } from "./Apply.ts";
 import type { SyncStep } from "./Planner.ts";
@@ -69,6 +70,7 @@ const runtimeLayer = (home: string) =>
     ),
     Layer.provideMerge(ProjectEnrichmentService.layer),
     Layer.provideMerge(environmentLayer(home)),
+    Layer.provideMerge(ServerSettings.ServerSettingsService.layerTest()),
   );
 
 type Services =

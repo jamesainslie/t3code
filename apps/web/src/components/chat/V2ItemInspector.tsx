@@ -3,6 +3,7 @@ import type {
   OrchestrationV2ProjectedTurnItem,
   RunId,
   ThreadId,
+  TurnItemId,
 } from "@t3tools/contracts";
 import {
   toolCallLines,
@@ -11,6 +12,8 @@ import {
   turnItemOutputImages,
   turnItemOutputText,
 } from "@t3tools/client-runtime/work-log/item-detail";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import { isJavaScriptReplTool } from "@t3tools/shared/toolActivity";
 import { ExternalLinkIcon, GitBranchIcon, RotateCcwIcon } from "lucide-react";
 import { memo, Suspense, use, useMemo } from "react";
 
@@ -23,6 +26,11 @@ import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import { Button } from "../ui/button";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
+import {
+  CommandOutputPanel,
+  useCommandOutputStreaming,
+  useStreamedTerminalOutput,
+} from "./CommandOutputPanel";
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { TerminalCard } from "./TerminalCard";
@@ -41,12 +49,18 @@ interface V2ItemInspectorProps {
   readonly onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
 }
 
-function JsonTokens({ text }: { readonly text: string }) {
+function SyntaxTokens({
+  text,
+  language,
+}: {
+  readonly text: string;
+  readonly language: "json" | "typescript";
+}) {
   const themeName = useDiffThemeName();
-  const highlighter = use(getSyntaxHighlighterPromise("json", themeName));
+  const highlighter = use(getSyntaxHighlighterPromise(language, themeName));
   const { tokens } = useMemo(
-    () => highlighter.codeToTokens(text, { lang: "json", theme: themeName }),
-    [highlighter, text, themeName],
+    () => highlighter.codeToTokens(text, { lang: language, theme: themeName }),
+    [highlighter, text, language, themeName],
   );
   return tokens.flatMap((line, lineIndex) => [
     lineIndex > 0 ? "\n" : "",
@@ -64,9 +78,11 @@ const monoClassName =
 function StructuredValue({
   value,
   highlightJson = false,
+  language,
 }: {
   readonly value: unknown;
   readonly highlightJson?: boolean;
+  readonly language?: "typescript";
 }) {
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
   const isJson = useMemo(() => {
@@ -81,10 +97,10 @@ function StructuredValue({
   if (!text) return null;
   return (
     <pre className={cn("max-h-80 overflow-auto text-muted-foreground", monoClassName)}>
-      {isJson ? (
+      {language || isJson ? (
         <RenderErrorBoundary fallback={text}>
           <Suspense fallback={text}>
-            <JsonTokens text={text} />
+            <SyntaxTokens text={text} language={language ?? "json"} />
           </Suspense>
         </RenderErrorBoundary>
       ) : (
@@ -94,16 +110,13 @@ function StructuredValue({
   );
 }
 
-/**
- * The item behind a projected row, with the output the timeline withheld
- * fetched while the row is open.
- */
 function useFetchedTurnItem(
   projectedItem: OrchestrationV2ProjectedTurnItem,
   environmentId: EnvironmentId,
+  skip = false,
 ) {
   const wireItem = projectedItem.item;
-  const fetches = turnItemNeedsDetailFetch(wireItem);
+  const fetches = !skip && turnItemNeedsDetailFetch(wireItem);
   const detail = useTurnItemDetail(
     fetches
       ? {
@@ -172,7 +185,6 @@ function ToolOutput(props: ToolOutputState) {
   );
 }
 
-/** Fetched output for rows that show their own plain text instead of the inspector. */
 export function FetchedToolOutput(props: {
   readonly projectedItem: OrchestrationV2ProjectedTurnItem;
   readonly environmentId: EnvironmentId;
@@ -190,7 +202,12 @@ export function FetchedToolOutput(props: {
  * A tool call's body: the call itself in the foreground, its result muted below.
  * Commands draw as a TerminalCard instead.
  */
-function ToolCallBody(props: ToolOutputState & { readonly args?: unknown }) {
+function ToolCallBody(
+  props: ToolOutputState & {
+    readonly args?: unknown;
+    readonly toolName?: string | null;
+  },
+) {
   const call = toolCallLines({ args: props.args });
   return (
     <div className={cn("space-y-1.5", monoClassName)}>
@@ -199,7 +216,11 @@ function ToolCallBody(props: ToolOutputState & { readonly args?: unknown }) {
           {call.args.map(([key, value]) => (
             <div key={key}>
               <span className="text-muted-foreground">{key} </span>
-              {value}
+              {key === "code" && isJavaScriptReplTool(props.toolName) ? (
+                <StructuredValue value={value} language="typescript" />
+              ) : (
+                value
+              )}
             </div>
           ))}
         </div>
@@ -210,8 +231,37 @@ function ToolCallBody(props: ToolOutputState & { readonly args?: unknown }) {
   );
 }
 
+/** Fork: a terminal card whose output, and copied transcript, come from the stream. */
+function StreamedTerminalCard(props: {
+  readonly command: string;
+  readonly exitCode: number | undefined;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+}) {
+  const ids = {
+    environmentId: props.environmentId,
+    threadId: props.threadId,
+    itemId: props.itemId,
+  };
+  const outputState = useStreamedTerminalOutput(ids);
+  return (
+    <TerminalCard
+      command={props.command}
+      exitCode={props.exitCode}
+      className={monoClassName}
+      {...outputState}
+      outputSlot={<CommandOutputPanel {...ids} />}
+    />
+  );
+}
+
 export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspectorProps) {
-  const fetched = useFetchedTurnItem(props.projectedItem, props.environmentId);
+  // Command rows stream their output, including the final output, from the server.
+  const streamsOutput =
+    useCommandOutputStreaming(props.environmentId) &&
+    props.projectedItem.item.type === "command_execution";
+  const fetched = useFetchedTurnItem(props.projectedItem, props.environmentId, streamsOutput);
   const item = fetched.item;
   const outputState = fetched.output;
   const support = useV2ItemSupport({
@@ -236,12 +286,22 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
 
       {item.type === "command_execution" ? (
-        <TerminalCard
-          command={item.input}
-          exitCode={item.exitCode}
-          className={monoClassName}
-          {...outputState}
-        />
+        streamsOutput ? (
+          <StreamedTerminalCard
+            command={item.input}
+            exitCode={item.exitCode}
+            environmentId={props.environmentId}
+            threadId={props.projectedItem.sourceThreadId}
+            itemId={props.projectedItem.sourceItemId}
+          />
+        ) : (
+          <TerminalCard
+            command={item.input}
+            exitCode={item.exitCode}
+            className={monoClassName}
+            {...outputState}
+          />
+        )
       ) : null}
 
       {item.type === "file_change" ? (
@@ -252,8 +312,8 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
             </span>
             {item.additions !== undefined || item.deletions !== undefined ? (
               <span>
-                <span className="text-success">+{item.additions ?? 0}</span>{" "}
-                <span className="text-destructive">-{item.deletions ?? 0}</span>
+                <span className="text-success">+{formatDiffCount(item.additions ?? 0)}</span>{" "}
+                <span className="text-destructive">-{formatDiffCount(item.deletions ?? 0)}</span>
               </span>
             ) : null}
             {item.runId !== null ? (
@@ -339,7 +399,12 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
 
       {item.type === "dynamic_tool" ? (
-        <ToolCallBody args={item.input} {...outputState} onImageExpand={props.onImageExpand} />
+        <ToolCallBody
+          toolName={item.toolName}
+          args={item.input}
+          {...outputState}
+          onImageExpand={props.onImageExpand}
+        />
       ) : null}
 
       {item.type === "approval_request" ? <StructuredValue value={item.prompt} /> : null}

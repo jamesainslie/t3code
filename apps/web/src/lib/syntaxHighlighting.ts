@@ -33,10 +33,8 @@ export function getSyntaxHighlighterPromise(
   }).catch((error) => {
     if (language === "text") {
       highlighterPromiseCache.delete(cacheKey);
-      // "text" itself failed — Shiki cannot initialize at all, surface the error
       throw error;
     }
-    // Language not supported by Shiki — fall back to "text"
     return getSyntaxHighlighterPromise("text", themeName);
   });
   highlighterPromiseCache.set(cacheKey, promise);

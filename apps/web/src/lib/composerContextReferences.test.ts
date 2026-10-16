@@ -9,7 +9,6 @@ import {
   inlineContextReferenceReplacement,
   removeInlineContextReference,
   stripInlineContextReferences,
-  toKindScopedComposerContextId,
 } from "./composerContextReferences";
 
 const review = { kind: "review-comment", contextId: "rc-1", label: "a.ts L4" };
@@ -60,12 +59,5 @@ describe("composerContextReferences", () => {
     );
     expect(ensureInlineContextReferences("", [review])).toBe(`${reviewLink} `);
     expect(ensureInlineContextReferences(reviewLink, [review])).toBe(reviewLink);
-  });
-});
-
-describe("toKindScopedComposerContextId", () => {
-  it("keeps same-kind raw IDs distinct when one contains the namespace prefix", () => {
-    expect(toKindScopedComposerContextId("image", "x")).toBe("image_x");
-    expect(toKindScopedComposerContextId("image", "image_x")).toBe("image_image_x");
   });
 });

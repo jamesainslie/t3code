@@ -21,7 +21,6 @@ import {
   ServerCliDevelopmentIconTargetMissingError,
   ServerCliExecutableImportError,
 } from "./cliErrors.ts";
-import { publishPlatformsThenLauncher } from "./publishOrder.ts";
 
 const decodePackageIdentity = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String })),
@@ -70,10 +69,6 @@ const applyDevelopmentIconOverrides = Effect.fn("applyDevelopmentIconOverrides")
   yield* Effect.log("[cli] Applied development icon overrides to dist/client");
 });
 
-// ---------------------------------------------------------------------------
-// build subcommand
-// ---------------------------------------------------------------------------
-
 const buildCmd = Command.make(
   "build",
   {
@@ -108,10 +103,6 @@ const buildCmd = Command.make(
       }
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
-
-// ---------------------------------------------------------------------------
-// build-exe subcommand
-// ---------------------------------------------------------------------------
 
 const buildExeCmd = Command.make(
   "build-exe",
@@ -168,22 +159,16 @@ const buildExeCmd = Command.make(
   ),
 );
 
-// ---------------------------------------------------------------------------
-// publish subcommand
-// ---------------------------------------------------------------------------
-
 /**
- * Publishes the tarballs scripts/build-npm-platform-packages.ts produced:
- * every `@t3code/t3-<platform>.tgz` first, `t3.tgz` (the launcher) last, so
- * the launcher is never installable before the executables it depends on.
- * Tarballs rather than directories because `npm publish <dir>` strips the
- * `node_modules/` the executable loads its native addons from.
+ * Publishes the `t3.tgz` launcher scripts/build-npm-launcher.ts produced. The
+ * launcher downloads its executable from the GitHub Release, so the release
+ * workflow runs this only after that release is published.
  */
 const publishCmd = Command.make(
   "publish",
   {
     packagesDir: Flag.String("packages-dir").pipe(
-      Flag.withDescription("Output dir of scripts/build-npm-platform-packages.ts."),
+      Flag.withDescription("Output dir of scripts/build-npm-launcher.ts."),
     ),
     tag: Flag.String("tag").pipe(Flag.withDefault("latest")),
     access: Flag.String("access").pipe(Flag.withDefault("public")),
@@ -195,28 +180,8 @@ const publishCmd = Command.make(
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      // npm runs with cwd set to the packages dir below, so tarball paths are
-      // resolved once here rather than joined twice.
       const packagesDir = path.resolve(config.packagesDir);
-      const scopeDir = path.join(packagesDir, FORK_IDENTITY.npm.platformPackageScope);
       const launcherTarball = path.join(packagesDir, `${FORK_IDENTITY.npmPackageName}.tgz`);
-      const platformTarballs = (yield* fs
-        .readDirectory(scopeDir)
-        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => [])))
-        .filter(
-          (entry) =>
-            entry.startsWith(FORK_IDENTITY.npm.platformPackagePrefix) && entry.endsWith(".tgz"),
-        )
-        .sort()
-        .map((entry) => path.join(scopeDir, entry));
-      if (platformTarballs.length === 0) {
-        return yield* new ServerCliBuildAssetMissingError({
-          assetPath: path.join(
-            scopeDir,
-            `${FORK_IDENTITY.npm.platformPackagePrefix}<platform>.tgz`,
-          ),
-        });
-      }
       if (!(yield* fs.exists(launcherTarball))) {
         return yield* new ServerCliBuildAssetMissingError({ assetPath: launcherTarball });
       }
@@ -225,70 +190,52 @@ const publishCmd = Command.make(
       if (config.provenance) args.push("--provenance");
       if (config.dryRun) args.push("--dry-run");
 
-      // npm refuses to republish a version, so a rerun after a partial
-      // publish (one package rejected, the rest already live) skips what
-      // landed instead of failing on the first tarball again. The build
-      // script leaves each package's directory beside its tarball.
-      const alreadyPublished = Effect.fn("alreadyPublished")(function* (tarball: string) {
+      // npm refuses to republish a version, so a rerun after the launcher
+      // landed (and a later step failed) skips it instead of failing. The build
+      // script leaves the package's directory beside its tarball.
+      if (!config.dryRun) {
         const manifest = yield* fs
-          .readFileString(path.join(tarball.slice(0, -".tgz".length), "package.json"))
+          .readFileString(path.join(launcherTarball.slice(0, -".tgz".length), "package.json"))
           .pipe(Effect.flatMap(decodePackageIdentity));
-        const spawnCommand = yield* resolveSpawnCommand("npm", [
+        const view = yield* resolveSpawnCommand("npm", [
           "view",
           `${manifest.name}@${manifest.version}`,
           "version",
         ]);
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const exitCode = yield* spawner
+        const viewExitCode = yield* spawner
           .spawn(
-            ChildProcess.make(spawnCommand.command, spawnCommand.args, {
+            ChildProcess.make(view.command, view.args, {
               cwd: packagesDir,
               stdout: "ignore",
               stderr: "ignore",
-              shell: spawnCommand.shell,
+              shell: view.shell,
             }),
           )
           .pipe(
             Effect.flatMap((child) => child.exitCode),
             Effect.scoped,
           );
-        return { ...manifest, published: exitCode === 0 };
-      });
-
-      const publish = Effect.fn("publish")(function* (tarball: string) {
-        if (!config.dryRun) {
-          const existing = yield* alreadyPublished(tarball);
-          if (existing.published) {
-            yield* Effect.log(
-              `[cli] ${existing.name}@${existing.version} is already on npm, skipping`,
-            );
-            return;
-          }
+        if (viewExitCode === 0) {
+          yield* Effect.log(
+            `[cli] ${manifest.name}@${manifest.version} is already on npm, skipping`,
+          );
+          return;
         }
-        const spawnCommand = yield* resolveSpawnCommand("npm", [...args, tarball]);
-        yield* Effect.log(`[cli] npm ${args.join(" ")} ${path.basename(tarball)}`);
-        yield* runCommand(
-          ChildProcess.make(spawnCommand.command, spawnCommand.args, {
-            cwd: packagesDir,
-            stdout: config.verbose ? "inherit" : "ignore",
-            stderr: "inherit",
-            shell: spawnCommand.shell,
-          }),
-        );
-      });
+      }
 
-      // Each publish takes about 17s, so the platform packages go at once.
-      yield* publishPlatformsThenLauncher({ platformTarballs, launcherTarball, publish });
+      const spawnCommand = yield* resolveSpawnCommand("npm", [...args, launcherTarball]);
+      yield* Effect.log(`[cli] npm ${args.join(" ")} ${path.basename(launcherTarball)}`);
+      yield* runCommand(
+        ChildProcess.make(spawnCommand.command, spawnCommand.args, {
+          cwd: packagesDir,
+          stdout: config.verbose ? "inherit" : "ignore",
+          stderr: "inherit",
+          shell: spawnCommand.shell,
+        }),
+      );
     }),
-).pipe(
-  Command.withDescription(
-    `Publish the ${FORK_IDENTITY.npm.platformPackageScope}/${FORK_IDENTITY.npm.platformPackagePrefix}<platform> tarballs and then the ${FORK_IDENTITY.npmPackageName} launcher to npm.`,
-  ),
-);
-
-// ---------------------------------------------------------------------------
-// root command
-// ---------------------------------------------------------------------------
+).pipe(Command.withDescription(`Publish the ${FORK_IDENTITY.npmPackageName} launcher to npm.`));
 
 const cli = Command.make("cli").pipe(
   Command.withDescription("T3 server build & publish CLI."),

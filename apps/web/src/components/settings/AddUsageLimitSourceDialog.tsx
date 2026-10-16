@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
+import { SecretInput } from "./SecretInput";
 import { Label } from "../ui/label";
 
 type SourceKind = "cliproxy" | "modelproxy";
@@ -26,9 +27,7 @@ function sourceIdFromUrl(kind: SourceKind, url: string): UsageLimitSourceId {
   let host = url;
   try {
     host = new URL(url).host;
-  } catch {
-    // Keep the raw text; the server reports the bad URL on its row.
-  }
+  } catch {}
   const slug = host
     .toLowerCase()
     .replace(/[^a-z0-9.-]+/g, "-")
@@ -200,10 +199,8 @@ export function AddUsageLimitSourceDialog({
               <Label htmlFor="usage-source-key">
                 {kind === "cliproxy" ? "Management key" : "Client secret"}
               </Label>
-              <Input
+              <SecretInput
                 id="usage-source-key"
-                type="password"
-                autoComplete="off"
                 value={secret}
                 onChange={(event) => setSecret(event.target.value)}
               />

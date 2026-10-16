@@ -20,10 +20,10 @@
  *   - Readers download whichever name SHA256SUMS lists, `lathe-` first, and
  *     run `<dir>/lathe`, falling back to `<dir>/t3` for runtimes unpacked
  *     before the rename.
- *   - The npm launcher is `bin/lathe.js`; installs from before the rename have
- *     `bin/t3.js` and are still recognised. Platform packages carry only
- *     `lathe`: their only readers are the launcher published with them at the
- *     same exact version, and the registry refuses the archive's symlink.
+ *   - The npm launcher (`bin/lathe.mjs`, built from scripts/npm-launcher/t3.mjs)
+ *     downloads its exact version's archive from the release like the
+ *     installers do, so it is a reader too: `lathe-` first, then `<dir>/lathe`
+ *     or `<dir>/t3`.
  *   - The Windows desktop's WSL runtime runs `lathe` with no fallback: its
  *     archive is bundled by the same build and its cache is keyed by that
  *     archive's digest, so no older tree is ever selected.
@@ -41,9 +41,7 @@
  *     scripts/build-cli-archive.ts, `wslRuntimeArchiveStem` in
  *     scripts/build-desktop-artifact.ts), and first make install.ps1 move the
  *     archive's single top-level directory instead of looking up `$stem`.
- *   - npm: drop `bin/t3.js` from `FORK_NPM_LAUNCHER_SCRIPTS` (detection in
- *     apps/server/src/cli/invocation.ts) once no pre-rename global install can
- *     still be the running process.
+ *   - npm: drop the `t3` candidates from scripts/npm-launcher/t3.mjs.
  *   - Executables: keep the `t3` fallback in `forkCliExecutableNames` and both
  *     installers' executable pickers for as long as a `runtime/versions/<v>`
  *     unpacked before phase 1 can still start (service rollback, an existing
@@ -103,8 +101,8 @@ export const forkCliArchiveFileNameIn = (
   return candidates.find((name) => checksums.has(name)) ?? (candidates[0] as string);
 };
 
-/** The npm launcher's bin script, the one the fork publishes first. */
-export const FORK_NPM_LAUNCHER_SCRIPTS = CLI_NAMES.map((name) => `bin/${name}.js`);
+/** The npm launcher's bin script inside the published package. */
+export const FORK_NPM_LAUNCHER_SCRIPT = `bin/${FORK_IDENTITY.cliBin}.mjs`;
 
 /**
  * `forkCliExecutablePath` as a POSIX shell expression for a non-Windows
@@ -123,11 +121,3 @@ export const forkCliExecutableShell = (dir: string): string =>
  */
 export const forkCliArchiveShell = (checksumsFile: string, suffix: string): string =>
   `$(for name in ${CLI_NAMES.join(" ")}; do if grep -q " \\*\\{0,1\\}$name-${suffix}$" "${checksumsFile}"; then printf %s "$name-${suffix}"; exit 0; fi; done; printf %s "${FORK_IDENTITY.cliBin}-${suffix}")`;
-
-/**
- * A JavaScript expression for the npm launchers, which run as plain scripts
- * with `join` and `existsSync` in scope: the executable to run in the
- * directory `dir` evaluates to.
- */
-export const forkCliExecutableJs = (dir: string): string =>
-  `${JSON.stringify(CLI_NAMES)}.map((name) => join(${dir}, process.platform === "win32" ? name + ".exe" : name)).find((candidate) => existsSync(candidate)) ?? join(${dir}, ${JSON.stringify(FORK_IDENTITY.cliBin)} + (process.platform === "win32" ? ".exe" : ""))`;

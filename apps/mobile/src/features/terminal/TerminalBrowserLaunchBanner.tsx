@@ -11,7 +11,7 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { terminalEnvironment } from "../../state/terminal";

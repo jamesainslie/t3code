@@ -127,11 +127,17 @@ export const loadBrandLeakAllowlist = Effect.gen(function* () {
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** `a: {... b: "` before the token, in source or minified form. */
+/**
+ * `a: {... b: "` before the token, in source or minified form. The last key
+ * may also be a variable, `b = "`, as forkBrand.ts treats a binding's name.
+ */
 const propertyPattern = (keys: ReadonlyArray<string>) =>
   new RegExp(
     `${keys
-      .map((key) => `(?<![\\w$])["']?${escapeRegExp(key)}["']?\\s*:\\s*`)
+      .map(
+        (key, index) =>
+          `(?<![\\w$])["']?${escapeRegExp(key)}["']?\\s*${index === keys.length - 1 ? "[:=]" : ":"}\\s*`,
+      )
       .join("\\{[^{}]*?")}(["'\`])$`,
   );
 

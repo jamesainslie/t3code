@@ -254,7 +254,9 @@ describe("exceptions", () => {
     const file = "apps/server/src/provider/CodexProvider.ts";
     const source = readRepoFile(file);
     const result = rebrandSource(source, moduleId(file));
-    expect(result.code).toMatch(/clientInfo: \{\s*name: "T3 Code",\s*title: "T3 Code",/);
+    // Upstream names the client once and reuses it for clientInfo and the originator.
+    expect(result.code).toContain(`const CODEX_CLIENT_NAME = "T3 Code";`);
+    expect(result.code).toMatch(/clientInfo: \{\s*name: CODEX_CLIENT_NAME,/);
     expect(result.code).toContain(`"Codex is disabled in ${brand} settings."`);
     expect(result.code).not.toContain(`"Codex is disabled in T3 Code settings."`);
   });
@@ -266,13 +268,8 @@ describe("exceptions", () => {
   });
 
   it("keeps the property exception scoped to its own file", () => {
-    const result = rebrandSource(
-      `const params = { clientInfo: { name: "T3 Code", title: "T3 Code" } };\n`,
-      serverModule,
-    );
-    expect(result.code).toBe(
-      `const params = { clientInfo: { name: "${brand}", title: "${brand}" } };\n`,
-    );
+    const result = rebrandSource(`const CODEX_CLIENT_NAME = "T3 Code";\n`, serverModule);
+    expect(result.code).toBe(`const CODEX_CLIENT_NAME = "${brand}";\n`);
   });
 
   it("leaves the triage playbook byte-identical to upstream", () => {

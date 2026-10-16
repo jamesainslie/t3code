@@ -48,8 +48,8 @@ describe("findBrandLeaksInText", () => {
     Effect.gen(function* () {
       const allowlist = yield* loadBrandLeakAllowlist;
       const allowed = [
-        `const p={clientInfo:{name:"T3 Code",title:"T3 Code",version:"1.0.0"}};`,
-        `clientInfo: {\n      name: "T3 Code",\n      title: "T3 Code",\n      version: packageJson.version\n    },`,
+        `const CODEX_CLIENT_NAME = "T3 Code";`,
+        `const CODEX_CLIENT_NAME="T3 Code";`,
         `: { agent_name_hint: "T3 Code" }`,
         `"Check T3 Code SnapShots in GNOME Extensions, then try again."`,
         `.annotate(OpenApi.Title, "T3 Code Relay API")`,
@@ -68,6 +68,7 @@ describe("findBrandLeaksInText", () => {
       const allowlist = yield* loadBrandLeakAllowlist;
       assert.lengthOf(findBrandLeaksInText(`const p={name:"T3 Code"};`, allowlist), 1);
       assert.lengthOf(findBrandLeaksInText(`const p={title:"T3 Code is here"};`, allowlist), 1);
+      assert.lengthOf(findBrandLeaksInText(`const CLIENT_NAME = "T3 Code";`, allowlist), 1);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
@@ -107,7 +108,7 @@ describe("checkBrandLeaks", () => {
   it.effect("passes output that holds only allowlisted strings", () =>
     Effect.gen(function* () {
       const root = yield* writeFixture({
-        "bin.mjs": `/** Where T3 Code reads its config. */\nconst params = { clientInfo: { name: "T3 Code", title: "T3 Code" } };\n// T3 Code\nconst label = "Lathe";\n`,
+        "bin.mjs": `/** Where T3 Code reads its config. */\nconst CODEX_CLIENT_NAME = "T3 Code";\n// T3 Code\nconst label = "Lathe";\n`,
         "client/assets/index.js": `const m="Enable T3 Code SnapShots to start capturing windows.";`,
       });
       const scanned = yield* checkBrandLeaks([root]);
