@@ -182,8 +182,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "kept-rename-rules",
     class: "kept",
-    reason: "The rename's own rules and report, which must keep naming the old forms.",
-    path: /^scripts\/(?:lib\/forkRenameRules(?:\.test)?\.ts|fork-rename-report\.ts)$/,
+    reason: "The rename's own rules, codemod and report, which must keep naming the old forms.",
+    path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$/,
   },
   {
     id: "fp-encoded-data",

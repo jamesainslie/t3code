@@ -74,7 +74,9 @@ export const runForkRenameCodemod = Effect.fn("runForkRenameCodemod")(function* 
     .split("\0")
     .filter((file) => file !== "" && !IGNORED_PATH.test(file));
   const decoder = new TextDecoder("utf-8", { fatal: false });
-  let changedFiles = 0;
+  // Every change is computed before anything is written, so a refusal never
+  // leaves the tree half renamed.
+  const rewrites: Array<readonly [absolute: string, text: string]> = [];
   let edits = 0;
   for (const file of files) {
     const absolute = path.join(repoRoot, file);
@@ -82,13 +84,12 @@ export const runForkRenameCodemod = Effect.fn("runForkRenameCodemod")(function* 
     if (info._tag === "None" || info.value.type !== "File") continue;
     const bytes = yield* fs.readFile(absolute);
     if (bytes.subarray(0, 8192).includes(0)) continue;
-    const text = decoder.decode(bytes);
-    const renamed = renameForkText(file, text);
+    const renamed = renameForkText(file, decoder.decode(bytes));
     if (renamed.edits === 0) continue;
-    changedFiles += 1;
+    rewrites.push([absolute, renamed.text]);
     edits += renamed.edits;
-    if (write) yield* fs.writeFileString(absolute, renamed.text);
   }
+  const changedFiles = rewrites.length;
   const moves = files
     .map((file) => [file, renameForkPath(file)] as const)
     .filter(([from, to]) => from !== to);
@@ -103,6 +104,7 @@ export const runForkRenameCodemod = Effect.fn("runForkRenameCodemod")(function* 
   }
   if (collisions.length > 0) return yield* new ForkRenamePathCollisionError({ collisions });
   if (write) {
+    for (const [absolute, text] of rewrites) yield* fs.writeFileString(absolute, text);
     for (const [from, to] of moves) {
       yield* fs.makeDirectory(path.dirname(path.join(repoRoot, to)), { recursive: true });
       yield* git(repoRoot, ["mv", from, to]);
