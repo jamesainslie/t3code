@@ -17,9 +17,10 @@ describe("long active tool groups", () => {
           createdAt,
           runId,
           label: `Tool ${index}`,
-          tone: index % 2 === 0 ? ("thinking" as const) : ("tool" as const),
-          itemType: index % 2 === 0 ? ("reasoning" as const) : ("command_execution" as const),
-          ...(index % 2 === 0 ? { detail: `Thought ${index}` } : {}),
+          // Fork: every thought starts a work group of its own, so the long
+          // group is all tools.
+          tone: "tool" as const,
+          itemType: "command_execution" as const,
           toolLifecycleStatus: index === 999 ? ("inProgress" as const) : ("completed" as const),
         },
       }));
@@ -36,7 +37,7 @@ describe("long active tool groups", () => {
       expect(live).toBeDefined();
       expect(live?.entry.id).toBe("work-999");
       expect(live && liveWorkEntryLabel(live.entry, undefined, live.active)).toContain("999");
-      expect(live?.thought?.id).toBe("work-998");
+      expect(live?.thought).toBeUndefined();
       expect(live?.groupedEntries.map(({ id }) => id)).toEqual(
         timelineEntries.map(({ entry }) => entry.id),
       );

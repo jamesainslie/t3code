@@ -484,11 +484,13 @@ describe("scoped settings writes", () => {
       {
         environmentId: server.environmentId,
         label: server.label,
+        previous: expect.anything(),
         patch: { projectSettingsOverrides: { [projectId]: { gitHubAccount: "work" } } },
       },
       {
         environmentId: laptop.environmentId,
         label: laptop.label,
+        previous: expect.anything(),
         patch: { projectSettingsOverrides: { [laptopProjectId]: { gitHubAccount: "work" } } },
       },
     ]);
@@ -504,6 +506,7 @@ describe("scoped settings writes", () => {
       {
         environmentId: server.environmentId,
         label: server.label,
+        previous: expect.anything(),
         patch: { projectSettingsOverrides: { [projectId]: null } },
       },
     ]);

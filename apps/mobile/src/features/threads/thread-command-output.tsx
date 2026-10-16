@@ -8,6 +8,7 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { useServerConfigs } from "../../state/entities";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { useEnvironmentQuery } from "../../state/query";
+import { ThreadTerminalCard } from "./ThreadTerminalCard";
 
 // Within this many points of the end still counts as following the output.
 const FOLLOW_SLACK = 8;
@@ -16,6 +17,48 @@ const FOLLOW_SLACK = 8;
 export function useCommandOutputStreaming(environmentId: EnvironmentId): boolean {
   return (
     useServerConfigs().get(environmentId)?.environment.capabilities.commandOutputStreaming === true
+  );
+}
+
+/**
+ * Fork: a terminal card whose output comes from the stream. The copied
+ * transcript is the final output, and copying stays disabled until the
+ * command has finished; the panel shows the live output meanwhile.
+ */
+export function StreamedThreadTerminalCard(props: {
+  readonly command: string;
+  readonly exitCode: number | undefined;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+  readonly themeAppearance: "light" | "dark";
+  readonly onCopy: (transcript: string) => void;
+}) {
+  const { data } = useEnvironmentQuery(
+    orchestrationEnvironment.v2.commandOutput({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, itemId: props.itemId },
+    }),
+  );
+  const finished = data !== null && data !== undefined && !data.running;
+  const text = finished ? data.output.text : "";
+  return (
+    <ThreadTerminalCard
+      command={props.command}
+      exitCode={props.exitCode}
+      output={text.length > 0 ? text : null}
+      status={finished ? null : "Loading output…"}
+      outputSlot={
+        <ThreadCommandOutput
+          environmentId={props.environmentId}
+          threadId={props.threadId}
+          itemId={props.itemId}
+          themeAppearance={props.themeAppearance}
+        />
+      }
+      themeAppearance={props.themeAppearance}
+      onCopy={props.onCopy}
+    />
   );
 }
 

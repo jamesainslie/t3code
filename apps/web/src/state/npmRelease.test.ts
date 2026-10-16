@@ -2,6 +2,8 @@ import { AtomRegistry } from "effect/reactivity";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { afterAll, afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+
 import { npmReleasePublishedAtom } from "./npmRelease";
 
 const version = "0.0.46-nightly.20261012.3021";
@@ -42,7 +44,9 @@ describe("npmReleasePublishedAtom", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const request = new Request(fetchMock.mock.calls[0]?.[0] ?? "", fetchMock.mock.calls[0]?.[1]);
-    expect(request.url).toBe(`https://registry.npmjs.org/t3/${version}`);
+    expect(request.url).toBe(
+      `https://registry.npmjs.org/${FORK_IDENTITY.npmPackageName}/${version}`,
+    );
     expect(request.headers.get("traceparent")).toBeNull();
     expect(request.headers.get("b3")).toBeNull();
     expect(AsyncResult.getOrElse(result, () => false)).toBe(true);

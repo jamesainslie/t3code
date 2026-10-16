@@ -3,6 +3,7 @@ import type {
   OrchestrationV2ProjectedTurnItem,
   RunId,
   ThreadId,
+  TurnItemId,
 } from "@t3tools/contracts";
 import {
   toolCallLines,
@@ -25,7 +26,11 @@ import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import { Button } from "../ui/button";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
-import { CommandOutputPanel, useCommandOutputStreaming } from "./CommandOutputPanel";
+import {
+  CommandOutputPanel,
+  useCommandOutputStreaming,
+  useStreamedTerminalOutput,
+} from "./CommandOutputPanel";
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { TerminalCard } from "./TerminalCard";
@@ -226,6 +231,31 @@ function ToolCallBody(
   );
 }
 
+/** Fork: a terminal card whose output, and copied transcript, come from the stream. */
+function StreamedTerminalCard(props: {
+  readonly command: string;
+  readonly exitCode: number | undefined;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+}) {
+  const ids = {
+    environmentId: props.environmentId,
+    threadId: props.threadId,
+    itemId: props.itemId,
+  };
+  const outputState = useStreamedTerminalOutput(ids);
+  return (
+    <TerminalCard
+      command={props.command}
+      exitCode={props.exitCode}
+      className={monoClassName}
+      {...outputState}
+      outputSlot={<CommandOutputPanel {...ids} />}
+    />
+  );
+}
+
 export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspectorProps) {
   // Command rows stream their output, including the final output, from the server.
   const streamsOutput =
@@ -256,21 +286,22 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
 
       {item.type === "command_execution" ? (
-        <TerminalCard
-          command={item.input}
-          exitCode={item.exitCode}
-          className={monoClassName}
-          {...outputState}
-          outputSlot={
-            streamsOutput ? (
-              <CommandOutputPanel
-                environmentId={props.environmentId}
-                threadId={props.projectedItem.sourceThreadId}
-                itemId={props.projectedItem.sourceItemId}
-              />
-            ) : undefined
-          }
-        />
+        streamsOutput ? (
+          <StreamedTerminalCard
+            command={item.input}
+            exitCode={item.exitCode}
+            environmentId={props.environmentId}
+            threadId={props.projectedItem.sourceThreadId}
+            itemId={props.projectedItem.sourceItemId}
+          />
+        ) : (
+          <TerminalCard
+            command={item.input}
+            exitCode={item.exitCode}
+            className={monoClassName}
+            {...outputState}
+          />
+        )
       ) : null}
 
       {item.type === "file_change" ? (

@@ -8,7 +8,11 @@ import {
   WorkLogPressable,
 } from "./work-log-layout";
 import { QuestionAnswerHistory } from "./QuestionAnswerHistory";
-import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
+import {
+  StreamedThreadTerminalCard,
+  ThreadCommandOutput,
+  useCommandOutputStreaming,
+} from "./thread-command-output";
 import {
   getQuestionAnswerPreview,
   hasQuestionAnswer,
@@ -1224,22 +1228,22 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
               </View>
             ))}
           </FilePreviewGallery>
-          {terminalItem ? (
+          {terminalItem && streamsOutput ? (
+            <StreamedThreadTerminalCard
+              command={terminalItem.input}
+              exitCode={terminalItem.exitCode}
+              environmentId={props.environmentId}
+              threadId={row.projectedItem.sourceThreadId}
+              itemId={row.projectedItem.sourceItemId}
+              themeAppearance={props.themeAppearance}
+              onCopy={(transcript) => props.onCopyRow(row.id, transcript)}
+            />
+          ) : terminalItem ? (
             <ThreadTerminalCard
               command={terminalItem.input}
               exitCode={terminalItem.exitCode}
               output={terminalOutput}
               status={terminalOutput ? null : fetchedOutput}
-              outputSlot={
-                streamsOutput ? (
-                  <ThreadCommandOutput
-                    environmentId={props.environmentId}
-                    threadId={row.projectedItem.sourceThreadId}
-                    itemId={row.projectedItem.sourceItemId}
-                    themeAppearance={props.themeAppearance}
-                  />
-                ) : undefined
-              }
               themeAppearance={props.themeAppearance}
               onCopy={(transcript) => props.onCopyRow(row.id, transcript)}
             />

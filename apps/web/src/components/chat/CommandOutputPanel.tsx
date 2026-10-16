@@ -6,6 +6,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useServerConfigs } from "../../state/entities";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { useEnvironmentQuery } from "../../state/query";
+import type { TerminalOutputState } from "./TerminalCard";
 
 // Within this many pixels of the end still counts as following the output.
 const FOLLOW_SLACK_PX = 8;
@@ -15,6 +16,32 @@ export function useCommandOutputStreaming(environmentId: EnvironmentId): boolean
   return (
     useServerConfigs().get(environmentId)?.environment.capabilities.commandOutputStreaming === true
   );
+}
+
+/**
+ * Fork: the streamed output as the terminal card's copy state. It reads the
+ * query the panel subscribes to, so the copied transcript is the final output,
+ * and copying stays disabled until the command has finished.
+ */
+export function useStreamedTerminalOutput(props: {
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+}): TerminalOutputState {
+  const { data, error } = useEnvironmentQuery(
+    orchestrationEnvironment.v2.commandOutput({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, itemId: props.itemId },
+    }),
+  );
+  const finished = data !== null && data !== undefined && !data.running;
+  const text = finished ? data.output.text : "";
+  return {
+    output: text.length > 0 ? text : null,
+    pending: !finished && !error,
+    error: error ?? null,
+    empty: finished && text.length === 0,
+  };
 }
 
 /**
