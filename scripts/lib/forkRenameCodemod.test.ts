@@ -38,6 +38,11 @@ describe("renameForkText", () => {
     ],
     ["apps/server/src/x.ts", "const url = env.T3_MCP_URL;", "const url = env.LATHE_MCP_URL;"],
     [
+      "packages/client-runtime/src/authorization/remote.test.ts",
+      '"&client_label=T3+Code+Mobile&client_device_type=mobile"',
+      '"&client_label=Lathe+Mobile&client_device_type=mobile"',
+    ],
+    [
       "apps/mobile/src/a.test.ts",
       'expect(filterProjectScopes(scopes, "  T3 CODE ")).toEqual([code]);',
       'expect(filterProjectScopes(scopes, "  LATHE ")).toEqual([code]);',

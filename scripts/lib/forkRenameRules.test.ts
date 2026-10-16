@@ -101,8 +101,110 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["docs/operations/x.md", "defaults to dark appearance and the `t3-code` palette", "kept"],
     ["README.md", "brew install --cask t3-code", "upstream-reference"],
+    ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-graphite-dark");', "identifier"],
+    [
+      "packages/shared/src/t3McpToolPresentation.ts",
+      'const LEGACY_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);',
+      "kept",
+    ],
+    [
+      "packages/provider-acp/src/server/runtimeModel.ts",
+      "  if (/^t3[-_ ]?code$/i.test(id)) {",
+      "kept",
+    ],
+    [
+      "packages/provider-pi/src/server/mcpExtensionSource.ts",
+      '    const prefixes = ok ? ["mcp__t3-code__", "mcp__t3_code__"] : ["mcp__t3-code__"];',
+      "kept",
+    ],
+    [
+      "apps/desktop/src/app/DesktopLegacyLocalStorage.ts",
+      "// upstream's T3 Code (Alpha) directory",
+      "kept",
+    ],
+    ["apps/mobile/src/a.ts", 'const href = "t3-context://v1/file/a";', "persisted"],
+    [
+      "apps/mobile/src/a.ts",
+      "// oxlint-disable-next-line t3code/no-global-process-runtime",
+      "identifier",
+    ],
+    [
+      "packages/shared/src/composerContextClipboard.ts",
+      'const ATTR = "data-t3-context-fragment";',
+      "kept",
+    ],
+    [
+      "apps/web/src/terminal/ghostty/runtime.ts",
+      "        t3_write_pty: (terminal: number) => {",
+      "kept",
+    ],
+    ["scripts/build-desktop-artifact.ts", '    name: "t3code",', "kept"],
+    [
+      "apps/desktop/src/snapShot/HyprlandSnapShot.test.ts",
+      'hyprlandCaptureShortcut("com.t3tools.T3Code", "/home/test", directory);',
+      "kept",
+    ],
+    [
+      "apps/web/src/terminal/ghostty/runtimeAbi.test.ts",
+      '"\\u001b]8;;https://t3.codes/docs\\u001b\\\\linked",',
+      "upstream-reference",
+    ],
+    [
+      "packages/ssh/src/tunnel.test.ts",
+      'expect(script).toContain("for name in lathe t3; do");',
+      "kept",
+    ],
+    // Upstream credit, its company, and what project sync imports from.
+    [
+      "scripts/build-desktop-artifact.ts",
+      "copyright: `${name} is a fork of T3 Code by T3 Tools.`,",
+      "upstream-reference",
+    ],
+    [
+      "docs/user/telemetry.md",
+      "To share usage data with T3 Tools, the makers of T3 Code, set it",
+      "upstream-reference",
+    ],
+    [
+      "apps/web/src/a.tsx",
+      "Notices for tools used by T3 Code. T3 Tools publishes them.",
+      "display",
+    ],
+    [
+      "apps/web/src/components/settings/ProjectsSettings.tsx",
+      "Sync from another T3 install",
+      "upstream-reference",
+    ],
+    [
+      ".github/SECURITY.md",
+      "affecting T3 Code or T3 Tools-operated infrastructure",
+      "upstream-reference",
+    ],
+    // CLI archives keep their legacy names, and the directory inside keeps t3-*.
+    ["scripts/fork-cli-release-assets.test.ts", '"t3-0.0.1-linux-x64.tar.gz"', "kept"],
+    ["scripts/install.test.ts", "const stem = `t3-${version}-${key}`;", "kept"],
+    ["scripts/lib/forkCliArchive.ts", " * Adds `t3` beside the signed `lathe`", "kept"],
+    ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
+    ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
+    [
+      "packages/shared/src/providerAuthReturnUrl.test.ts",
+      '    "t3code://app/welcome",',
+      "upstream-reference",
+    ],
+    [
+      "packages/client-runtime/src/promptLinks.test.ts",
+      'findPromptLinkProject(projects, { owner: "me", name: "t3code" })',
+      "upstream-reference",
+    ],
   ])("classifies %s: %s as %s", (path, line, expected) => {
     expect(classOf(path, line)).toBe(expected);
+  });
+
+  it("keeps a repository name whose owner sits on the line before", () => {
+    const text = '  owner: "pingdotgg",\n  repo: "t3code",\n';
+    const hit = findRenameOccurrences("scripts/build-desktop-artifact.test.ts", text)[0];
+    if (!hit) throw new Error("no hit");
+    expect(classifyRenameOccurrence(FORK_RENAME_RULES, hit)?.class).toBe("upstream-reference");
   });
 
   it("leaves a name no rule knows unclassified, so the rename stops", () => {

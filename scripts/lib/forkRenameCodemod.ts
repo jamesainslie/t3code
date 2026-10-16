@@ -44,8 +44,8 @@ interface BrandUnit {
  */
 const BRAND_UNITS: ReadonlyArray<BrandUnit> = [
   { pattern: /t3tools(?=\/|")/y, replacement: "lathe", after: /@$/ },
-  { pattern: /T3[ -]CODE\b/y, replacement: "LATHE" },
-  { pattern: /T3[ -][Cc]ode\b/y, replacement: "Lathe" },
+  { pattern: /T3[ +-]CODE\b/y, replacement: "LATHE" },
+  { pattern: /T3[ +-][Cc]ode\b/y, replacement: "Lathe" },
   { pattern: /T3CODE/y, replacement: "LATHE" },
   { pattern: /T3_CODE/y, replacement: "LATHE" },
   { pattern: /T3Code/y, replacement: "Lathe" },
@@ -147,19 +147,24 @@ export const renameForkText = (
 export const renameForkPath = (
   path: string,
   rules: ReadonlyArray<RenameRule> = FORK_RENAME_RULES,
-): string =>
-  path
+): string => {
+  let start = 0;
+  return path
     .split("/")
-    .map((segment) =>
-      /t3/i.test(segment)
+    .map((segment) => {
+      const segmentStart = start;
+      start += segment.length + 1;
+      return /t3/i.test(segment)
         ? renameOccurrences(
             segment,
             findRenameOccurrences(path, segment).map((occurrence) => ({
               ...occurrence,
               line: path,
+              column: segmentStart + occurrence.column,
             })),
             rules,
           ).text
-        : segment,
-    )
+        : segment;
+    })
     .join("/");
+};
