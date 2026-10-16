@@ -123,6 +123,12 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) => o.token[o.offset] === "t" && /[A-Za-z0-9]/.test(before(o)) && !afterEscape(o),
   },
   {
+    id: "kept-rename-rules",
+    class: "kept",
+    reason: "The rename's own rules and report, which must keep naming the old forms.",
+    path: /^scripts\/(?:lib\/forkRenameRules(?:\.test)?\.ts|fork-rename-report\.ts)$/,
+  },
+  {
     id: "fp-encoded-data",
     class: "false-positive",
     reason: "Base64 or hashed data: embedded images, lockfile integrity, signatures.",
