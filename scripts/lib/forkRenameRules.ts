@@ -253,11 +253,18 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /us\.ainslies\.t3code|com\.t3tools\.t3code\.service|t3code-fork\.service/,
   },
   {
-    id: "kept-project-file",
+    id: "kept-project-file-schema",
     class: "kept",
     reason:
-      "t3.json and .t3code/vcs.json live in users' repos, shared with upstream users; the schema is hosted on t3.codes.",
-    token: /(?:^|[^A-Za-z])t3\.json|t3\.codes\/schema|\.t3code\/vcs\.json|T3_PROJECT_FILE_NAME/,
+      "The project file schema hosted on t3.codes, and .t3code/vcs.json read from users' repos and shared with upstream users.",
+    token: /t3\.codes\/schema|\.t3code\/vcs\.json/,
+  },
+  {
+    id: "persisted-project-file",
+    class: "persisted",
+    reason:
+      "The project file in users' repos: Lathe reads lathe.json first and falls back to t3.json, which upstream users share. It never writes either.",
+    token: /(?:^|[^A-Za-z])t3\.json|T3_PROJECT_FILE_NAME/,
   },
   {
     id: "kept-checkpoint-refs",

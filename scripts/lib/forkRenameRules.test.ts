@@ -45,6 +45,11 @@ describe("FORK_RENAME_RULES", () => {
     [
       "packages/contracts/src/t3ProjectFile.ts",
       'export const T3_PROJECT_FILE_NAME = "t3.json";',
+      "persisted",
+    ],
+    [
+      "packages/contracts/src/t3ProjectFile.ts",
+      'const schema = "https://t3.codes/schema/t3.json";',
       "kept",
     ],
     ["apps/server/src/x.ts", '"mcp__t3-code__t3_thread_list",', "agent-facing"],
