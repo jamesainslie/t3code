@@ -139,6 +139,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /metainfo\.xml$/,
   },
   {
+    id: "upstream-agent-artifacts",
+    class: "upstream-reference",
+    reason:
+      "Agent instruction files and skills (.agents, .cursor, .claude, AGENTS.md, CLAUDE.md): upstream ships them and the fork never edits them.",
+    path: /^\.(?:agents|cursor|claude|codex)\/|(?:^|\/)(?:AGENTS|CLAUDE|GEMINI)\.md$/,
+  },
+  {
     id: "upstream-release-workflow",
     class: "upstream-reference",
     reason: "Upstream's own release workflow, disabled in the fork.",
