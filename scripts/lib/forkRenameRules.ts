@@ -50,6 +50,8 @@ export interface RenameOccurrence {
   readonly offset: number;
   /** The full line holding the hit. */
   readonly line: string;
+  /** Offset of the hit in the whole text. */
+  readonly index: number;
 }
 
 export interface RenameRule {
@@ -72,16 +74,17 @@ export const RENAME_TOKEN_PATTERN = /[A-Za-z0-9_$@.:/\\-]*[tT]3[A-Za-z0-9_$@.:/\
 /** Every `t3` hit in `text`, as occurrences. */
 export const findRenameOccurrences = (path: string, text: string): Array<RenameOccurrence> => {
   const occurrences: Array<RenameOccurrence> = [];
-  const lines = text.split("\n");
-  for (const line of lines) {
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
     for (const match of line.matchAll(RENAME_TOKEN_PATTERN)) {
       const token = match[0];
       for (let at = token.search(/t3/i); at !== -1;) {
-        occurrences.push({ path, token, offset: at, line });
+        occurrences.push({ path, token, offset: at, line, index: lineStart + match.index + at });
         const next = token.slice(at + 2).search(/t3/i);
         at = next === -1 ? -1 : at + 2 + next;
       }
     }
+    lineStart += line.length + 1;
   }
   return occurrences;
 };
@@ -117,6 +120,44 @@ const stem = (occurrence: RenameOccurrence) => {
 export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   // false positives: a "t3" that is part of another word or of encoded data
   {
+    id: "upstream-marketing-site",
+    class: "upstream-reference",
+    reason: "apps/marketing is upstream's site and legal pages; the fork does not deploy it.",
+    path: /^apps\/marketing\//,
+  },
+  {
+    id: "upstream-aur-packaging",
+    class: "upstream-reference",
+    reason:
+      "packaging/aur is upstream's AUR package, published only by upstream's release workflow.",
+    path: /^packaging\//,
+  },
+  {
+    id: "upstream-linux-metainfo",
+    class: "upstream-reference",
+    reason: "Upstream's AppStream metainfo, which the fork does not ship.",
+    path: /metainfo\.xml$/,
+  },
+  {
+    id: "upstream-release-workflow",
+    class: "upstream-reference",
+    reason: "Upstream's own release workflow, disabled in the fork.",
+    path: /^\.github\/workflows\/release\.yml$/,
+  },
+  {
+    id: "kept-vendored-dependency-versions",
+    class: "kept",
+    reason:
+      "Version suffixes of vendored dependency tarballs (-t3.13); the version inside each tarball says the same.",
+    token: /-t3\.\d+/,
+  },
+  {
+    id: "upstream-connect-doc",
+    class: "upstream-reference",
+    reason: "The internal doc about upstream's T3 Connect service.",
+    path: /^docs\/internals\/t3-connect\.md$/,
+  },
+  {
     id: "fp-inside-word",
     class: "false-positive",
     reason: "Lowercase t3 inside a word or number: uint32, project3, Object3D.",
@@ -130,6 +171,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       o.token[o.offset] === "T" &&
       /[A-Z]/.test(before(o)) &&
       /\d/.test(o.token[o.offset + 2] ?? ""),
+  },
+  {
+    id: "kept-fork-legacy-compat",
+    class: "kept",
+    reason:
+      "Fork compat modules that read the old names after the rename (files named forkLegacy*).",
+    path: /(?:^|\/)forkLegacy[A-Za-z]*(?:\.test)?\.tsx?$/,
   },
   {
     id: "kept-rename-rules",
@@ -321,15 +369,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       ),
   },
   {
-    id: "persisted-connection-profile",
-    class: "persisted",
+    id: "kept-connection-profile",
+    class: "kept",
     reason: 'The "t3-connect" authorization literal stored in saved connection catalogs.',
     path: /client-runtime\/src\/connection\//,
     token: /^t3-connect$/,
   },
   {
-    id: "persisted-theme-ids",
-    class: "persisted",
+    id: "kept-theme-ids",
+    class: "kept",
     reason:
       "Built-in theme ids stored as the selected theme (and sent to clients as the environment theme).",
     test: (o) =>
@@ -345,15 +393,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /(?:^|[^a-z])t3_session(?!.*dev)/,
   },
   {
-    id: "persisted-cross-version-ipc",
-    class: "persisted",
+    id: "kept-cross-version-ipc",
+    class: "kept",
     reason:
       "Names two different versions must agree on: the desktop control socket, bootstrap token label, clipboard MIME.",
     token: /t3code-app-|t3-desktop-bootstrap|x-t3-context-fragment/,
   },
   {
-    id: "persisted-desktop-state",
-    class: "persisted",
+    id: "kept-desktop-state",
+    class: "kept",
     reason:
       "Desktop and host state read back across runs: preview browser partitions, the AppArmor profile, WSL runtime markers.",
     token: /persist:t3code-preview|t3code-preview-|t3-chrome-headless-shell|\.t3code-wsl-runtime-/,
@@ -365,8 +413,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /t3code\/pr-|t3code-pr-/,
   },
   {
-    id: "persisted-legacy-fork-names",
-    class: "persisted",
+    id: "kept-legacy-fork-names",
+    class: "kept",
     reason:
       "Pre-Lathe fork names the fork already reads as legacy: .t3f, t3f, t3code-fork, t3code/<hex> branches, boot service units.",
     token:
@@ -393,14 +441,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /T3CODE_(?:PROJECT_ROOT|WORKTREE_PATH)/,
   },
   {
-    id: "persisted-stored-output-key",
-    class: "persisted",
+    id: "kept-stored-output-key",
+    class: "kept",
     reason: "The t3McpApp key in stored tool output, matched by SQL LIKE and the output decoder.",
     token: /t3McpApp/,
   },
   {
-    id: "persisted-provider-side-state",
-    class: "persisted",
+    id: "kept-provider-side-state",
+    class: "kept",
     reason:
       "Names other processes keep across upgrades: OpenCode's per-session instruction key, the ACP stale-cgroup prefix, the desktop control socket directory.",
     test: (o) =>
@@ -409,8 +457,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       (/desktopAppControl/.test(o.path) && /t3code-/.test(o.token)),
   },
   {
-    id: "persisted-legacy-home-matchers",
-    class: "persisted",
+    id: "kept-legacy-home-matchers",
+    class: "kept",
     reason:
       "Matchers that recognise worktrees under any of the home directory names (.t3, .lathe, .t3f).",
     line: /\(\?:t3\|lathe\|t3f\)/,
@@ -428,8 +476,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       ),
   },
   {
-    id: "persisted-html-render-bootstrap",
-    class: "persisted",
+    id: "kept-html-render-bootstrap",
+    class: "kept",
     reason:
       "Names baked into stored html_render pages: the t3-theme fragment and style, t3/notifications methods, t3-link ids.",
     token: /t3-theme|t3\/notifications|t3-link-/,
@@ -557,12 +605,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /^["'`]?(?:--filter[= ])?t3code-relay\b/,
   },
   {
-    id: "upstream-linux-metainfo",
-    class: "upstream-reference",
-    reason: "Upstream's AppStream metainfo, which the fork does not ship.",
-    path: /metainfo\.xml$/,
-  },
-  {
     id: "id-temp-and-ci-names",
     class: "identifier",
     reason:
@@ -590,8 +632,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) => o.token === "t3code" && /compile-cache/.test(o.line),
   },
   {
-    id: "persisted-cli-literal",
-    class: "persisted",
+    id: "kept-cli-literal",
+    class: "kept",
     reason:
       "The executable name as a quoted literal in the files that install and run the CLI; forkCliArtifacts.ts keeps the t3 fallback.",
     path: /forkCliArtifacts|cliRelease|build-cli-archive|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|serviceLauncher|npm-launcher/,
@@ -653,15 +695,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /oxlint-plugin-t3code/,
   },
   {
-    id: "upstream-aur-packaging",
-    class: "upstream-reference",
-    reason:
-      "packaging/aur is upstream's AUR package, published only by upstream's release workflow.",
-    path: /^packaging\//,
-  },
-  {
-    id: "persisted-cli-artifacts",
-    class: "persisted",
+    id: "kept-cli-artifacts",
+    class: "kept",
     reason:
       "CLI release archive and executable names (t3-<version>-*, <runtime>/t3); forkCliArtifacts.ts publishes both names.",
     token:
@@ -707,12 +742,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /^https:\/\/t3\.(?:codes|chat)(?:\/[a-z-]+)?\/?$|t3code_web_channel|__t3code\/channel|tree\/t3code\//.test(
         o.token,
       ) || o.path === ".github/workflows/release.yml",
-  },
-  {
-    id: "upstream-marketing-site",
-    class: "upstream-reference",
-    reason: "apps/marketing is upstream's site and legal pages; the fork does not deploy it.",
-    path: /^apps\/marketing\//,
   },
   {
     id: "kept-mobile-app",
