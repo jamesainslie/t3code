@@ -89,6 +89,13 @@ describe("FORK_RENAME_RULES", () => {
     ["apps/mobile/src/a.tsx", 'import { T3Wordmark } from "../../components/T3Wordmark";', "kept"],
     ["apps/mobile/src/a.tsx", '<Text className="font-t3-medium">', "kept"],
     ["apps/mobile/app.config.ts", 'name: "T3 Code",', "kept"],
+    [
+      "apps/mobile/src/features/review/nativeReviewDiffAdapter.test.ts",
+      'createNativeReviewDiffTheme("dark", "t3-code", appTheme("t3-code", "dark"));',
+      "kept",
+    ],
+    ["docs/operations/x.md", "defaults to dark appearance and the `t3-code` palette", "kept"],
+    ["README.md", "brew install --cask t3-code", "upstream-reference"],
   ])("classifies %s: %s as %s", (path, line, expected) => {
     expect(classOf(path, line)).toBe(expected);
   });

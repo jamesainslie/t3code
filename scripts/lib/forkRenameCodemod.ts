@@ -44,6 +44,7 @@ interface BrandUnit {
  */
 const BRAND_UNITS: ReadonlyArray<BrandUnit> = [
   { pattern: /t3tools(?=\/|")/y, replacement: "lathe", after: /@$/ },
+  { pattern: /T3[ -]CODE\b/y, replacement: "LATHE" },
   { pattern: /T3[ -][Cc]ode\b/y, replacement: "Lathe" },
   { pattern: /T3CODE/y, replacement: "LATHE" },
   { pattern: /T3_CODE/y, replacement: "LATHE" },

@@ -32,6 +32,11 @@ describe("renameForkText", () => {
       'Config.String("LATHE_HOME")',
     ],
     ["apps/server/src/x.ts", "const url = env.T3_MCP_URL;", "const url = env.LATHE_MCP_URL;"],
+    [
+      "apps/mobile/src/a.test.ts",
+      'expect(filterProjectScopes(scopes, "  T3 CODE ")).toEqual([code]);',
+      'expect(filterProjectScopes(scopes, "  LATHE ")).toEqual([code]);',
+    ],
     ["apps/server/src/x.ts", '"mcp__t3-code__t3_thread_list",', '"mcp__lathe__lathe_thread_list",'],
     [
       "packages/shared/src/assistantCitations.ts",

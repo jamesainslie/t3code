@@ -447,7 +447,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-      (/[Tt]heme/.test(o.path) && /^t3-[a-z]+(?:-(?:dark|light))?$/.test(o.token)),
+      ((/[Tt]heme/.test(o.path) || /[Tt]heme\(|\bpalettes?\b/.test(o.line)) &&
+        /^t3-[a-z]+(?:-(?:dark|light))?$/.test(o.token)),
+  },
+  {
+    id: "upstream-homebrew-cask",
+    class: "upstream-reference",
+    reason: "Upstream's Homebrew cask; the fork publishes none.",
+    line: /brew install --cask t3-code\b/,
   },
   {
     id: "persisted-session-cookie",
