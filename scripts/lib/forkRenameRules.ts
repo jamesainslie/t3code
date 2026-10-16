@@ -335,7 +335,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason: "~/.t3 as upstream's install, read by project sync and the dev-data scripts.",
     test: (o) =>
       /(?:^|[/~"'`])\.t3(?:$|[/"'`])/.test(o.token) &&
-      /projectSync|migrate-dev-db|t3-sqlite-state|upstream/i.test(o.path + o.line),
+      /projectSync|migrate-dev-db|(?:t3|lathe)-sqlite-state|upstream/i.test(o.path + o.line),
   },
   {
     id: "kept-mobile-sandbox",
@@ -793,7 +793,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "kept-dev-data-scripts",
     class: "kept",
     reason: "The dev-data scripts read upstream's ~/.t3 install.",
-    path: /migrate-dev-db|t3-sqlite-state/,
+    path: /migrate-dev-db|(?:t3|lathe)-sqlite-state/,
     token: /^\.t3\.?$/,
   },
   {
