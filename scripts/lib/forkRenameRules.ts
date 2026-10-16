@@ -165,8 +165,10 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "id-package-scope",
     class: "identifier",
     reason:
-      "Workspace package scope; every package is workspace-local (renamed to @lathe/). First, because upstream-only areas import workspace packages too.",
-    test: (o) => /^@t3tools(?:\/|$)/.test(o.token.slice(Math.max(0, o.offset - 1))),
+      "Workspace package scope and module subpaths; every package is workspace-local (renamed to @lathe/), and a subpath names a module the package renames. First, because upstream-only areas import workspace packages too.",
+    test: (o) =>
+      /^@t3tools(?:\/|$)/.test(o.token.slice(Math.max(0, o.offset - 1))) ||
+      /(?:^|[^A-Za-z0-9])@t3tools\/[a-z-]+\//.test(o.token.slice(0, o.offset)),
   },
   // false positives: a "t3" that is part of another word or of encoded data
   {

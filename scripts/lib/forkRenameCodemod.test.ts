@@ -12,6 +12,11 @@ describe("renameForkText", () => {
       'import { X } from "@lathe/contracts";',
     ],
     [
+      "apps/marketing/src/pages/schema/t3.json.ts",
+      'import { schema } from "@t3tools/shared/t3ProjectFile";',
+      'import { schema } from "@lathe/shared/latheProjectFile";',
+    ],
+    [
       "apps/web/src/a.tsx",
       "export function T3ComposerEditorView() {}",
       "export function LatheComposerEditorView() {}",
