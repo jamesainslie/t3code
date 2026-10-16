@@ -348,10 +348,33 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       ),
   },
   {
+    id: "persisted-exported-env",
+    class: "persisted",
+    reason:
+      "T3CODE_PROJECT_ROOT and T3CODE_WORKTREE_PATH are set for users' project scripts: export both names, not read both.",
+    token: /T3CODE_(?:PROJECT_ROOT|WORKTREE_PATH)/,
+  },
+  {
+    id: "persisted-stored-output-key",
+    class: "persisted",
+    reason: "The t3McpApp key in stored tool output, matched by SQL LIKE and the output decoder.",
+    token: /t3McpApp/,
+  },
+  {
+    id: "persisted-provider-side-state",
+    class: "persisted",
+    reason:
+      "Names other processes keep across upgrades: OpenCode's per-session instruction key, the ACP stale-cgroup prefix, the desktop control socket directory.",
+    test: (o) =>
+      (/opencode\/src\/server\/v2\//.test(o.path) && /INSTRUCTIONS_KEY/.test(o.line)) ||
+      (/AcpSessionRuntime/.test(o.path) && /t3-acp-/.test(o.token)) ||
+      (/desktopAppControl/.test(o.path) && /t3code-/.test(o.token)),
+  },
+  {
     id: "persisted-env",
     class: "persisted",
     reason:
-      "T3CODE_* environment variables users, unit files, shell profiles and docs set; read both, warn on the old name.",
+      "T3CODE_* environment variables users, unit files, shell profiles and docs set; read both, warn on the old name. Installed boot units hold T3CODE_HOME, so the unit parser and its staleness check must accept both too.",
     test: (o) =>
       /^(?:VITE_)?T3CODE_[A-Z0-9_]*/.test(
         o.token.slice(

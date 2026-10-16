@@ -48,6 +48,7 @@ describe("FORK_RENAME_RULES", () => {
       "kept",
     ],
     ["apps/server/src/x.ts", '"mcp__t3-code__t3_thread_list",', "agent-facing"],
+    ["packages/shared/src/mcpApp.ts", 'export const MCP_APP_OUTPUT_KEY = "t3McpApp";', "persisted"],
     ["README.md", "Fork of https://github.com/pingdotgg/t3code", "upstream-reference"],
   ])("classifies %s: %s as %s", (path, line, expected) => {
     expect(classOf(path, line)).toBe(expected);
