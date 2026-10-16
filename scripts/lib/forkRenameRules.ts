@@ -123,6 +123,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) => o.token[o.offset] === "t" && /[A-Za-z0-9]/.test(before(o)) && !afterEscape(o),
   },
   {
+    id: "fp-uppercase-word",
+    class: "false-positive",
+    reason: "Uppercase T3 inside a word and followed by a digit: VT320, INT32.",
+    test: (o) =>
+      o.token[o.offset] === "T" &&
+      /[A-Z]/.test(before(o)) &&
+      /\d/.test(o.token[o.offset + 2] ?? ""),
+  },
+  {
     id: "kept-rename-rules",
     class: "kept",
     reason: "The rename's own rules and report, which must keep naming the old forms.",
@@ -156,6 +165,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /t3-env:|t3-(?:env|cloud|relay)-[a-z-]+\+jwt|x-t3-(?:relay|hook)-|\/api\/t3-connect\b|t3MintCredential|^["'`]?t3-(?:web|mobile)["'`]?[,;)]?$|^["'`]?t3_relay["'`]?|t3-code-relay|^["'`]?t3-relay["'`]?,?$/,
   },
   {
+    id: "wire-relay-type-names",
+    class: "wire-peer",
+    reason: "Relay JWT type names declared in the shared relay constants.",
+    path: /relayJwt\.ts$/,
+    token: /t3-(?:env|cloud|relay)-[a-z-]+/,
+  },
+  {
     id: "wire-upstream-hosts",
     class: "wire-peer",
     reason: "Upstream's Connect hosts and Clerk instance, used as-is.",
@@ -185,7 +201,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "wire-peer",
     reason: 'The credentialOwner literal "t3" in provider auth state that upstream clients decode.',
     path: /ProviderCredentialStore\.ts$|contracts\/src\/providerSetup\.ts$/,
-    token: /^["'`]t3["'`][,;)]?$/,
+    test: (o) => o.token === "t3" && /["'`]t3["'`]/.test(o.line),
   },
   {
     id: "wire-vendor-identities",
@@ -212,6 +228,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "t3sync- thread and t3syncasset- ids are matched by prefix in SQL and the sync planner; renaming duplicates every synced thread.",
     token: /t3sync(?:asset)?-?/,
+  },
+  {
+    id: "kept-capture-data-dir",
+    class: "kept",
+    reason:
+      "The t3code segment of the Linux capture helpers' data directory, which an upstream install also writes; and the WSL tree marker legacy cleanup still reads.",
+    test: (o) =>
+      (/dataHome|extension-backups|capture/.test(o.line) && o.token === "t3code") ||
+      /t3code-wsl-server-tree\.json/.test(o.token),
   },
   {
     id: "kept-cross-version-env",
@@ -247,7 +272,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "SnapShot helpers, desktop file, GNOME extension and portal shortcut ids that an upstream install on the same machine also writes.",
     token:
-      /\/com\/t3tools\/|share\/t3code|t3code\/(?:kde|hyprland)-capture|extension-backups|com\.t3tools\.(?:T3Code\.KdeCapture|KdeCapture|SnapShot|T3Code\.SnapShot|T3Code:capture)|X-T3Code-Capture-Helper|snap-shot@t3\.codes|T3SnapShot|t3-snap-shot-|t3-(?:kde|hyprland)-snap-shot/,
+      /\/com\/t3tools\/|share\/t3code|t3code\/(?:kde|hyprland)-capture|extension-backups|com\.t3tools\.(?:T3Code\.(?:Development\.)?SnapShot|T3Code\.KdeCapture|KdeCapture|SnapShot|T3Code\.SnapShot|T3Code:capture)|X-T3Code-Capture-Helper|snap-shot@t3\.codes|T3SnapShot|t3-snap-shot-|t3-(?:kde|hyprland)-snap-shot/,
   },
   {
     id: "kept-upstream-home",
@@ -273,7 +298,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "persisted",
     reason:
       "Citation, thread and context links stored in message text; upstream clients send the t3 forms too.",
-    token: /t3-(?:citation|thread|context):/,
+    token: /t3-(?:citation|thread|context):|^["'`]?t3-(?:citation|thread|context)["'`]?,?$/,
   },
   {
     id: "persisted-renderer-storage",
@@ -293,7 +318,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "persisted",
     reason: 'The "t3-connect" authorization literal stored in saved connection catalogs.',
     path: /client-runtime\/src\/connection\//,
-    token: /^["'`]t3-connect["'`]/,
+    token: /^t3-connect$/,
   },
   {
     id: "persisted-theme-ids",
@@ -304,7 +329,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-      (/[Tt]heme/.test(o.path) && /^["'`]t3-[a-z]+(?:-(?:dark|light))?["'`],?$/.test(o.token)),
+      (/[Tt]heme/.test(o.path) && /^t3-[a-z]+(?:-(?:dark|light))?$/.test(o.token)),
   },
   {
     id: "persisted-session-cookie",
@@ -377,10 +402,17 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       (/desktopAppControl/.test(o.path) && /t3code-/.test(o.token)),
   },
   {
+    id: "persisted-legacy-home-matchers",
+    class: "persisted",
+    reason:
+      "Matchers that recognise worktrees under any of the home directory names (.t3, .lathe, .t3f).",
+    line: /\(\?:t3\|lathe\|t3f\)/,
+  },
+  {
     id: "persisted-env",
     class: "persisted",
     reason:
-      "T3CODE_* environment variables users, unit files, shell profiles and docs set; read both, warn on the old name. Installed boot units hold T3CODE_HOME, so the unit parser and its staleness check must accept both too.",
+      "T3CODE_* environment variables users, unit files, shell profiles and docs set. LATHE_* becomes the name; T3CODE_* stays an alias that is read with a warning. Installed boot units hold T3CODE_HOME, so the unit parser and its staleness check must accept both too.",
     test: (o) =>
       /^(?:VITE_)?T3CODE_[A-Z0-9_]*/.test(
         o.token.slice(
@@ -418,7 +450,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "agent-mcp-names",
     class: "agent-facing",
-    reason: "MCP server name (t3-code) and tool names (t3_*) that agents call.",
+    reason:
+      "MCP server name (t3-code) and tool names (t3_*) agents call. Renamed to lathe and lathe_*; the old names stay recognised permanently, since stored tool calls and provider transcripts hold them.",
     token:
       /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*/,
   },
@@ -427,7 +460,16 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "agent-facing",
     reason:
       "Matchers that recognise the MCP server under its spellings (t3-code, t3_code, t3code) in stored tool names.",
-    line: /t3\[-_ \]\?code|t3-code MCP|\(t3\[-_ ]/,
+    line: /t3\[-_ \]\?code|t3-code MCP|\(t3\[-_ ]|t3-code\|t3_code\|t3code|T3_MCP_SERVER_ALIASES/,
+  },
+  {
+    id: "agent-mcp-spellings",
+    class: "agent-facing",
+    reason:
+      "The MCP server name in tool ids, matchers and setup commands (t3-code.x, _t3-code, claude mcp add ... t3), and ACP extension methods (_t3/...).",
+    test: (o) =>
+      /t3-code[./\\$-]|_t3-code|t3-code\/|^_t3\//.test(o.token) ||
+      (/mcp add/.test(o.line) && /^t3$/.test(o.token)),
   },
   {
     id: "agent-prompt-tags",
@@ -530,8 +572,23 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Desktop internals rebuilt with the app: dev flags, build keys, Windows shim locals and types, CDP ids, icon files, the compile cache.",
     token:
-      /--t3code-dev-root|t3code(?:CommitHash|WebAuthn)|t3_(?:codepage|exit)|T3\.Env|t3-(?:kernel32|user32|preview|black-windows|electron)|"t3code",? "compile-cache"|^["'`]t3code["'`],?$/,
+      /--t3code-dev-root|t3code(?:CommitHash|WebAuthn)|t3_(?:codepage|exit)|T3\.Env|t3-(?:kernel32|user32|preview|black-windows|electron)|^["'`]t3code["'`],?$/,
     path: /^apps\/desktop\/|^scripts\/|\.vscode\//,
+  },
+  {
+    id: "id-compile-cache",
+    class: "identifier",
+    reason:
+      "The desktop compile cache directory, a throwaway cache (shared with upstream, so the old one is not deleted).",
+    test: (o) => o.token === "t3code" && /compile-cache/.test(o.line),
+  },
+  {
+    id: "persisted-cli-literal",
+    class: "persisted",
+    reason:
+      "The executable name as a quoted literal in the files that install and run the CLI; forkCliArtifacts.ts keeps the t3 fallback.",
+    path: /forkCliArtifacts|cliRelease|build-cli-archive|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|serviceLauncher|npm-launcher/,
+    test: (o) => o.token === "t3" && /["'`]t3["'`]/.test(o.line),
   },
   {
     id: "id-transient-storage",
@@ -556,6 +613,33 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /^t3_(?:home|write_pty|runtime_ready|fetch)$/,
   },
   {
+    id: "id-metric-names",
+    class: "identifier",
+    reason:
+      "OpenTelemetry metric names (t3_*_total); renaming them means updating any dashboard that queries them.",
+    token: /^`?t3_[a-z_]+_(?:total|duration|wait|delay)`?$/,
+  },
+  {
+    id: "id-runtime-ids-and-prefixes",
+    class: "identifier",
+    reason:
+      "Runtime ids, temp and socket prefixes, log tags, MIME types, CSS transition names, asset files and test identities; nothing reads them across versions.",
+    test: (o) =>
+      /t3(?:code)?-\$|t3_\$|t3-(?:host|mermaid|term|orchestrator-v2|preview-clipboard|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin)|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents|^t3_write_pty/.test(
+        o.token,
+      ) ||
+      (/^t3[.:]?$/.test(o.token) &&
+        /otelEnvironment|provider-pi\/src\/server\/adapter|build-cli-archive/.test(o.path)) ||
+      (/^["'`]?t3code["'`]?,?$/.test(o.token) &&
+        /user-agent|DISPLAY|attribution|oxlint-plugin-t3code|name: "t3code"/.test(o.line)),
+  },
+  {
+    id: "display-ui-placeholder",
+    class: "display",
+    reason: "UI placeholder text naming a t3 directory.",
+    token: /\.codex-t3/,
+  },
+  {
     id: "id-oxlint-plugin-package",
     class: "identifier",
     reason: "The repo's oxlint plugin package name.",
@@ -573,8 +657,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "persisted",
     reason:
       "CLI release archive and executable names (t3-<version>-*, <runtime>/t3); forkCliArtifacts.ts publishes both names.",
-    token: /^\(?t3-\*|t3-<version>|t3-\$\{version\}|\/t3`?\)?$|^`?t3-\$|t3\.exe|^["'`]t3["'`]$/,
-    path: /forkCliArtifacts|cliRelease|build-cli-archive|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|fork-cli-release-assets|serviceLauncher|smoke-cli/,
+    token:
+      /^\(?t3-\*|t3-<version>|t3-\$\{version\}|\/t3`?\)?\.?$|^`?t3-\$|t3\.exe|^t3-(?:\.\.\.)?$|^t3;?$/,
+    path: /forkCliArtifacts|cliRelease|build-cli-archive|build-desktop-artifact|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|fork-cli-release-assets|serviceLauncher|smoke-cli|npm-launcher/,
   },
   {
     id: "display-cli-version-spec",
@@ -596,9 +681,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "In-process literals: Pi event types, the ACP unknown-update tag, settings search ids, placeholder hosts, the worktree .t3 dev directory.",
     test: (o) =>
-      /^["'`]?t3\.[a-z_]+["'`]?,?$|_t3_unknown|t3\.invalid|pi-t3-mcp|t3-tree-|^["'`]t3-connect["'`]\)?/.test(
-        o.token,
-      ) ||
+      /^["'`]?t3\.[a-z_]+["'`]?,?$|_t3_unknown|t3\.invalid|pi-t3-mcp|t3-tree-/.test(o.token) ||
       (/(?:^|[/"'`$ ])\.t3(?:$|[/"'`])/.test(o.token) && !/\.mdx?$/.test(o.path)),
   },
   {
@@ -607,6 +690,16 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason: "Upstream's services and accounts named in prose: T3 Connect, T3 account, T3 services.",
     test: (o) =>
       /^T3$/.test(stem(o)) && /T3 (?:Connect|account|services|Environment|App)\b/.test(o.line),
+  },
+  {
+    id: "upstream-links-and-router",
+    class: "upstream-reference",
+    reason:
+      "Links to upstream's site and legal pages, T3 Chat, upstream's web channel router, a vendored dependency's upstream branch, and upstream's own release workflow.",
+    test: (o) =>
+      /^https:\/\/t3\.(?:codes|chat)(?:\/[a-z-]+)?\/?$|t3code_web_channel|__t3code\/channel|tree\/t3code\//.test(
+        o.token,
+      ) || o.path === ".github/workflows/release.yml",
   },
   {
     id: "upstream-marketing-site",
@@ -635,7 +728,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "The CLI command in help text, errors and docs (`t3 serve`, `npx t3`); the fork's CLI is lathe.",
     test: (o) =>
       /^t3$/.test(stem(o)) &&
-      /(?:^|[`'"( ])(?:npx |pnpm dlx |bunx )?t3(?: [a-z][a-z-]+| --?[a-z]|`|'|"|\)|$)/.test(o.line),
+      /(?:^|[`'"( >])(?:npx |pnpm dlx |bunx )?t3(?: [a-z%][a-z-]*| --?[a-z]|`|'|"|\)|<|\\|$)/.test(
+        o.line,
+      ),
   },
   {
     id: "id-binaries-and-scripts",
@@ -644,6 +739,49 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "Bundled helper binaries, shell functions, DOM data attributes and generated id prefixes built with the code.",
     token:
       /t3-resource-monitor|t3-browser-secret|t3_fetch|\$__t3c|data-t3code-|data-t3-context|t3_\$\{|run-t3|t3-runtime|\.notarize-t3|t3-cli-archive|t3-screens/,
+  },
+  {
+    id: "kept-brand-layer-exceptions",
+    class: "kept",
+    reason:
+      "The build-time brand layer's exception list, which names old forms on purpose until the layer is retired.",
+    path: /^scripts\/lib\/forkBrand(?:\.test)?\.ts$/,
+  },
+  {
+    id: "kept-vcs-config-file",
+    class: "kept",
+    reason: ".t3code/vcs.json read from users' repos, shared with upstream users.",
+    test: (o) => o.token === ".t3code" && /vcs\.json/.test(o.line),
+  },
+  {
+    id: "kept-dev-data-scripts",
+    class: "kept",
+    reason: "The dev-data scripts read upstream's ~/.t3 install.",
+    path: /migrate-dev-db|t3-sqlite-state/,
+    token: /^\.t3\.?$/,
+  },
+  {
+    id: "id-small-internals",
+    class: "identifier",
+    reason:
+      "Log tags, the derived message attribution, watcher globs, a replay checkout path and the repo's own skill names.",
+    test: (o) =>
+      /\[t3-cloud\]|\.\{t3,lathe,t3f\}|replay-user\/t3code|test-t3-(?:app|mobile)/.test(o.line) ||
+      (o.token === "t3code" && o.path.endsWith("userMessage.ts")),
+  },
+  {
+    id: "upstream-named-in-comments",
+    class: "upstream-reference",
+    reason: "Comments that name upstream's or pre-rename forms on purpose.",
+    test: (o) =>
+      /^\s*(?:\/\/|\*|\/\*\*?|#)/.test(o.line) &&
+      /upstream|pre-rename|before the Lathe rename|legacy|V1 profiles/i.test(o.line),
+  },
+  {
+    id: "id-comments",
+    class: "identifier",
+    reason: "Other comments; they follow the code they describe.",
+    line: /^\s*(?:\/\/|\*|\/\*\*?|#)/,
   },
   {
     id: "display-docs-prose",
@@ -658,7 +796,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "Test data: replay transcripts, example paths, temp prefixes, ids. Follows the code it tests.",
-    path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|\/testkit\/|\/fixtures\/|__snapshots__|\.ndjson)$|\/testkit\/|\/fixtures\//,
+    path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|\/testkit\/|\/fixtures\/|__snapshots__\/.*|\.snap|\.ndjson)$|\/testkit\/|\/fixtures\//,
   },
 ];
 
