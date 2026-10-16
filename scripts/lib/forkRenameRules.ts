@@ -117,10 +117,6 @@ const stem = (occurrence: RenameOccurrence) => {
   return head + tail;
 };
 
-/** Workspace-package exports mobile imports; they rename with the packages. */
-const MOBILE_SHARED_NAME =
-  /(?:^|[^A-Za-z0-9_$])(?:T3McpTool(?:Logo|Presentation)|resolveT3McpTool(?:Definition|Presentation)|T3_CODE_(?:DARK|LIGHT)_THEME_COLORS|T3_PROJECT_FILE_NAME|parseT3ProjectFile)(?:$|[^A-Za-z0-9_$])/;
-
 let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
 
 /**
@@ -133,7 +129,6 @@ let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
 const mobileFollowsSharedCode = (o: RenameOccurrence): boolean => {
   if (/@t3tools/.test(o.token)) return true;
   if (!/^apps\/mobile\/src\/.*\.tsx?$/.test(o.path)) return false;
-  if (MOBILE_SHARED_NAME.test(o.token)) return true;
   if (o.token === "t3code" && /\battribution\b/.test(o.line)) return true;
   rulesWithoutMobile ??= FORK_RENAME_RULES.filter((rule) => rule.id !== "kept-mobile-app");
   const rule = classifyRenameOccurrence(rulesWithoutMobile, o);
@@ -169,6 +164,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) =>
       /^@t3tools(?:\/|$)/.test(o.token.slice(Math.max(0, o.offset - 1))) ||
       /(?:^|[^A-Za-z0-9])@t3tools\/[a-z-]+\//.test(o.token.slice(0, o.offset)),
+  },
+  {
+    id: "id-imported-workspace-exports",
+    class: "identifier",
+    reason:
+      "Workspace-package exports that the kept mobile app and upstream's site import; they rename with the packages.",
+    path: /^apps\/(?:mobile|marketing)\//,
+    token:
+      /(?:^|[^A-Za-z0-9_$])(?:T3McpTool(?:Logo|Presentation)|resolveT3McpTool(?:Definition|Presentation)|T3_CODE_(?:DARK|LIGHT)_THEME_COLORS|T3_PROJECT_FILE_NAME|parseT3ProjectFile|buildT3ProjectFileJsonSchema)(?:$|[^A-Za-z0-9_$])/,
   },
   // false positives: a "t3" that is part of another word or of encoded data
   {

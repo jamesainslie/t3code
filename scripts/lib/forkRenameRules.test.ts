@@ -81,7 +81,12 @@ describe("FORK_RENAME_RULES", () => {
     ["apps/server/src/provider/x.ts", "satisfies(version, entry.t3CodeRange)", "kept"],
     ["scripts/install.test.ts", 'pack(root, "legacy", { t3: "t3 v1.2.3" })', "kept"],
     // Mobile keeps its own names but follows renamed shared code.
-    ["apps/mobile/src/lib/a.ts", 'import { T3_PROJECT_FILE_NAME } from "x";', "persisted"],
+    ["apps/mobile/src/lib/a.ts", 'import { T3_PROJECT_FILE_NAME } from "x";', "identifier"],
+    [
+      "apps/marketing/src/pages/schema/t3.json.ts",
+      'import { buildT3ProjectFileJsonSchema } from "@t3tools/shared/t3ProjectFile";',
+      "identifier",
+    ],
     ["apps/mobile/src/lib/a.ts", "  resolveT3McpToolPresentation,", "identifier"],
     ["apps/mobile/src/a.tsx", ') : presentation.attribution === "t3code" ? (', "identifier"],
     ["apps/mobile/src/a.tsx", "Sent by T3 Code", "display"],
