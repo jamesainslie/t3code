@@ -110,7 +110,7 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
         return null;
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-      const captureId = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+      const captureId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
       const now = yield* Clock.currentTimeMillis;
       const expiresAtMillis = now + AUTH_RELAY_TIMEOUT_MS;
       const launch: PendingBrowserLaunch = {

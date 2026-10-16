@@ -17,9 +17,6 @@ import {
   type PinnedRuntimeProgress,
 } from "./pinnedRuntime.ts";
 
-// Every install fetches the release archive, checks it against SHA256SUMS,
-// and unpacks it with tar. The fake client serves both files; the fake runner
-// stands in for tar and drops the executable where extraction would.
 const version = "1.2.3";
 // Fork: releases publish each archive as lathe-* and, for older readers, t3-*.
 const archiveName = `lathe-${version}-linux-x64.tar.gz`;

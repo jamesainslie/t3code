@@ -51,7 +51,6 @@ function idFactory() {
 }
 type Ids = ReturnType<typeof idFactory>;
 
-// ---------------------------------------------------------------------------------------
 // Pixel glyphs
 
 /** 3x5 capitals, digits and the punctuation the boot log and signs use. */
@@ -227,7 +226,6 @@ function kanaGlyphs(count: number, seed: number) {
   });
 }
 
-// ---------------------------------------------------------------------------------------
 // Strips
 
 function scrim(ids: Ids, color: string, width: number) {
@@ -550,7 +548,6 @@ export function editionStripSvg(edition: GeneratedEdition) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${STRIP_WIDTH}" height="${STRIP_HEIGHT}" viewBox="0 0 ${STRIP_WIDTH} ${STRIP_HEIGHT}" fill="none">${art}</svg>`;
 }
 
-// ---------------------------------------------------------------------------------------
 // Icons
 
 const ICON_SIZE = 1024;

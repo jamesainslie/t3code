@@ -13,8 +13,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export const MessageCopyButton = memo(function MessageCopyButton({
   text,
-  extraFlavors,
   label = "Copy message",
+  icon = Copy,
+  extraFlavors,
   disabled = false,
   size = "xs",
   variant = "outline",
@@ -22,8 +23,8 @@ export const MessageCopyButton = memo(function MessageCopyButton({
 }: {
   text: string;
   label?: string;
+  icon?: typeof Copy;
   disabled?: boolean;
-  /** Additional clipboard types written beside `text/plain` when the platform allows it. */
   extraFlavors?: Readonly<Record<string, string>>;
   size?: "xs" | "icon-xs";
   variant?: "outline" | "ghost";
@@ -55,7 +56,7 @@ export const MessageCopyButton = memo(function MessageCopyButton({
       >
         <MorphIcon
           className={cn("size-3", isCopied && "text-primary")}
-          icon={isCopied ? Check : Copy}
+          icon={isCopied ? Check : icon}
         />
       </TooltipTrigger>
       <TooltipPopup>

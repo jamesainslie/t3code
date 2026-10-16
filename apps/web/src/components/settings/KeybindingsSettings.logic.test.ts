@@ -89,7 +89,6 @@ describe("KeybindingsSettings.logic", () => {
       "usage.period.month",
       "usage.period.quarter",
     ];
-    // The order must not depend on the order of the configured bindings.
     for (const bindings of [
       DEFAULT_RESOLVED_KEYBINDINGS,
       DEFAULT_RESOLVED_KEYBINDINGS.toReversed(),
@@ -285,6 +284,7 @@ describe("KeybindingsSettings.logic", () => {
     expect(commandLabel("themeEditor.toggle")).toBe("Theme Editor: Toggle");
     expect(commandLabel("view.reopenClosed")).toBe("Reopen Closed Tab");
     expect(commandLabel("thread.snoozeHour")).toBe("Thread: Snooze for 1 Hour or Wake");
+    expect(commandLabel("preview.focusUrl")).toBe("Preview: Focus URL");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
 

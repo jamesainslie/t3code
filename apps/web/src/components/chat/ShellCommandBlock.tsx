@@ -7,8 +7,6 @@ import { Suspense, use, useMemo } from "react";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { HighlightedTokens } from "./HighlightedTokens";
 
-// Shell words wrap as a unit, so `--exclude` or a quoted string is not split
-// at a hyphen; a word longer than the line still breaks anywhere.
 const WORD_CLASS_NAME = "inline-block max-w-full [overflow-wrap:anywhere]";
 
 // The shell parser loads with the first expanded command, not with the timeline.
@@ -20,7 +18,6 @@ function loadEmbeddedScripts() {
 
 /** Same layout as the highlighted version, so the grammar arriving never reflows the block. */
 function PlainWords({ code }: { code: string }) {
-  // split with a capture group alternates words (even) and whitespace (odd).
   return code.split(/(\s+)/u).map((part, index) =>
     index % 2 === 1 || part === "" ? (
       part
@@ -52,16 +49,11 @@ function HighlightedCommand({ code }: { code: string }) {
   );
 }
 
-/**
- * The command a command_execution item ran, syntax highlighted. Scripts inside
- * it, such as a `bash -lc` script or a Python heredoc, get their own grammar.
- */
 export function ShellCommandBlock({ command }: { command: string }) {
   const code = withVisibleControlCharacters(command.trim());
   if (!code) return null;
   const plain = <PlainWords code={code} />;
   return (
-    // The tool body sets the monospace, pre-wrapped text this sits in.
     <div className="text-foreground/85">
       <RenderErrorBoundary fallback={plain} resetKeys={[code]}>
         <Suspense fallback={plain}>

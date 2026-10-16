@@ -1,8 +1,8 @@
 import { memo, useCallback, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppText as Text } from "../../components/AppText";
-import { CopyTextButton } from "../../components/CopyTextButton";
+import { AppText as Text } from "../../components/ui/AppText";
+import { CopyTextButton } from "./CopyTextButton";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import MermaidDom from "./MermaidDom";
 

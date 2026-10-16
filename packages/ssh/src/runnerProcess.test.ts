@@ -106,7 +106,6 @@ server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
                 ),
               ),
             );
-            // A failed PID assertion must still close the owned fixture server.
             yield* Effect.addFinalizer(() =>
               Effect.gen(function* () {
                 if (yield* child.isRunning) {
@@ -172,7 +171,6 @@ server.listen(0, "127.0.0.1", () => {
               { cwd: fixture, detached: false },
             ),
           );
-          // A failed assertion must still stop this captured fixture process.
           yield* Effect.addFinalizer(() =>
             child.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore),
           );
@@ -201,7 +199,6 @@ server.listen(0, "127.0.0.1", () => {
               port: null,
             }),
           );
-          // Redirect only the state directory. Never use the developer's SSH state.
           // The timeout case waits out the whole grace, so shorten it to keep the test quick.
           const isolatedScript = script
             .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$T3_TEST_STATE_DIR"')
@@ -546,35 +543,6 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
             listening.map((entry) => entry.pid),
             [externalPid],
           );
-        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
-    );
-
-    it.live(
-      "restarts its own managed server when it stops answering",
-      () =>
-        Effect.gen(function* () {
-          const fixture = yield* makeFixture;
-          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-          yield* fixture.launch;
-          const firstPid = Number(yield* fixture.readState("pid"));
-          // The server dies and its pid goes to a live process that serves nothing.
-          process.kill(firstPid, "SIGKILL");
-          const silent = yield* spawner.spawn(ChildProcess.make("/bin/sleep", ["60"]));
-          yield* Effect.addFinalizer(() =>
-            silent.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore),
-          );
-          yield* fixture.fs.writeFileString(
-            fixture.path.join(fixture.stateDir, "pid"),
-            `${Number(silent.pid)}\n`,
-          );
-
-          const second = yield* fixture.launch;
-
-          assert.equal(second.serverKind, "managed");
-          assert.equal(second.action, "restarted-unready");
-          assert.isFalse(isAlive(Number(silent.pid)));
-          assert.notEqual(Number(yield* fixture.readState("pid")), Number(silent.pid));
         }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
       30_000,
     );

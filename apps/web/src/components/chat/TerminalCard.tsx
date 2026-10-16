@@ -5,7 +5,7 @@ import {
   terminalTranscript,
   type TerminalSegment,
 } from "@t3tools/client-runtime/work-log/terminal";
-import { memo, useMemo } from "react";
+import { memo, type ReactNode, useMemo } from "react";
 
 import { useTheme } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
@@ -59,6 +59,8 @@ export const TerminalCard = memo(function TerminalCard(
     readonly command: string;
     readonly exitCode: number | undefined;
     readonly className: string;
+    /** Replaces the fetched output, e.g. with a command's live output. */
+    readonly outputSlot?: ReactNode;
   },
 ) {
   const failed = props.exitCode !== undefined && props.exitCode !== 0;
@@ -112,7 +114,9 @@ export const TerminalCard = memo(function TerminalCard(
             <ShellCommandBlock command={props.command} />
           </div>
         </div>
-        {props.output ? (
+        {props.outputSlot ? (
+          props.outputSlot
+        ) : props.output ? (
           <div className="max-h-80 overflow-auto">
             <TerminalText text={props.output} />
           </div>

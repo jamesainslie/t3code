@@ -102,7 +102,6 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("installer arch
   });
 });
 
-// util-linux's script gives the real installer a terminal without a browser or extra packages.
 describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer terminal", () => {
   it.each([false, true])(
     "preserves download and install behavior (HTTP failure: %s)",

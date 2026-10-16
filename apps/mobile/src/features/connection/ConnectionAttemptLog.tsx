@@ -9,7 +9,7 @@ import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Pressable, ScrollView, View } from "react-native";
 
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { environmentCatalog } from "../../connection/catalog";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 

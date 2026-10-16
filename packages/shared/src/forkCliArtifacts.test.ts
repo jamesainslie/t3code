@@ -13,7 +13,7 @@ import {
   forkCliExecutableNames,
   forkCliExecutablePath,
   forkCliExecutableShell,
-  FORK_NPM_LAUNCHER_SCRIPTS,
+  FORK_NPM_LAUNCHER_SCRIPT,
 } from "./forkCliArtifacts.ts";
 import * as HostProcess from "./HostProcess.ts";
 
@@ -100,9 +100,9 @@ describe("forkCliArchiveFileNameIn", () => {
   });
 });
 
-describe("FORK_NPM_LAUNCHER_SCRIPTS", () => {
-  it("publishes bin/lathe.js and still recognises the pre-rename bin/t3.js", () => {
-    expect(FORK_NPM_LAUNCHER_SCRIPTS).toEqual(["bin/lathe.js", "bin/t3.js"]);
+describe("FORK_NPM_LAUNCHER_SCRIPT", () => {
+  it("names the launcher after the fork's CLI", () => {
+    expect(FORK_NPM_LAUNCHER_SCRIPT).toBe("bin/lathe.mjs");
   });
 });
 

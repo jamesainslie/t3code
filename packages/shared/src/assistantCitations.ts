@@ -36,14 +36,12 @@ export function isDocumentCitation(citation: Citation): citation is DocumentCita
   return "kind" in citation && citation.kind === "document";
 }
 
-/** Edits only the user comment, leaving the quote and its source selector unchanged. */
 export function withCitationComment<T extends Citation>(citation: T, comment: string): T {
   const { comment: _previousComment, ...source } = citation;
   const trimmedComment = comment.trim();
   return (trimmedComment ? { ...source, comment: trimmedComment } : source) as T;
 }
 
-/** Self-contained and origin-independent, so draft, clipboard, and sent-message copies agree. */
 export function formatAssistantCitationHref(citation: AssistantCitation): string {
   const path = [citation.environmentId, citation.threadId, citation.messageId]
     .map(encodePathPart)
@@ -186,7 +184,6 @@ export function parseDocumentCitationHref(href: string): DocumentCitation | null
   }
 }
 
-/** Visible chip text: the comment, else the quoted text, collapsed and capped. */
 export function assistantCitationLabel(citation: Citation): string {
   const preview = (citation.comment?.trim() || citation.text).replace(/\s+/g, " ");
   return preview.length > 64 ? `${preview.slice(0, 64)}…` : preview;
@@ -227,7 +224,6 @@ export function collectCitations(text: string) {
   return citations;
 }
 
-/** Titles and previews include the selected text and user comment without Markdown escaping. */
 export function assistantCitationsToPlainText(prompt: string): string {
   return prompt.replace(CITATION_LINK, (source: string, label: string, href: string) => {
     const citation = parseLabeledCitation(label, href);
@@ -250,7 +246,6 @@ function providerCitationBlock(
   return `\n\n<${tag}>\n${description}\n${data}\n</${tag}>`;
 }
 
-/** Provider adapters receive readable quote data; the persisted message keeps its clickable links. */
 export function expandCitationsForProvider(prompt: string): string {
   const matches = collectCitations(prompt);
   if (matches.length === 0) return prompt;
@@ -315,7 +310,6 @@ function citationQuoteHeading(citation: Citation): string {
   return `Quote from ${escapeMarkdownText(citation.filePath)}, ${lines}:`;
 }
 
-/** Native clients display the complete quote and keep the user's comment outside the quote block. */
 export function renderCitationsAsText(prompt: string): string {
   const matches = collectCitations(prompt);
   let text = "";

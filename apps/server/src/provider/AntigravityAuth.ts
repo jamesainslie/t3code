@@ -42,7 +42,6 @@ export interface AntigravityAuthOptions<
   ) => Effect.Effect<void>;
   readonly onSignedOut: Effect.Effect<void>;
   readonly forwardCallback?: (callback: URL) => Effect.Effect<void, ProviderSetupError>;
-  /** False for API key methods, which authenticate without a Google sign-in page. */
   readonly usesBrowser?: boolean;
 }
 

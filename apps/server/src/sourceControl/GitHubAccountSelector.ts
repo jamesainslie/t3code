@@ -10,10 +10,10 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
-import { pullRequestHostOf, type ProjectId } from "@t3tools/contracts";
+import { pullRequestHostOf, SourceControlProviderKind, type ProjectId } from "@t3tools/contracts";
 import { resolveGitHubAccount } from "@t3tools/shared/gitHubAccountRouting";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import * as GitHubApi from "@t3tools/source-control-github/server/GitHubApi";
+import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
 
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -21,7 +21,7 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 
 export type PinnedGitHubCredentialValue = NonNullable<
-  Context.Service.Shape<typeof GitHubApi.PinnedGitHubCredential>
+  Context.Service.Shape<typeof GitHubRequestPolicy.PinnedGitHubCredential>
 >;
 
 /** How long a cwd keeps mapping to the same project before the projection is read again. */
@@ -115,7 +115,7 @@ export const make = Effect.gen(function* () {
     }
     const settings = yield* serverSettings.getSettings.pipe(Effect.option);
     if (settings._tag === "None") return null;
-    const host = pullRequestHostOf(identity, "github");
+    const host = pullRequestHostOf(identity, SourceControlProviderKind.make("github"));
     const [addressedOwner, addressedName] = input.repository?.split("/") ?? [];
     const borrowed =
       addressedOwner !== undefined &&

@@ -4,8 +4,9 @@ Consecutive tool calls appear as an expandable summary. Open it to inspect comma
 status, and exit codes. Use **Open diff** on a file change to review its contents.
 
 A command opens as a small terminal showing the command, its colored output, and its exit code.
-Its copy button copies the command and output as plain text, ready to paste into another agent
-or tool. Failed commands open on their own. To show every command's output without clicking, set
+A running command's output updates live, and long output shows only its most recent part. Its
+copy button copies the command and output as plain text, ready to paste into another agent or
+tool. Failed commands open on their own. To show every command's output without clicking, set
 **Settings > General > Command display** to **Exposed**, or turn on **Expose commands** under
 **Settings > Appearance > Terminal** on mobile.
 

@@ -68,7 +68,6 @@ export interface RpcSession {
 export interface RpcSessionOptions {
   readonly environmentThemes?: boolean;
   readonly usageLimitSources?: boolean;
-  /** This client answers /usage-limits itself, so the server may advertise it. */
   readonly usageLimitsCommand?: boolean;
 }
 

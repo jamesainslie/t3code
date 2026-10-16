@@ -4,7 +4,7 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { runtime } from "../../lib/runtime";
 import { usePreparedConnection } from "../../state/session";
 

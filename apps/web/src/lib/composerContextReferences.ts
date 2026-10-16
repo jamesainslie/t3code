@@ -3,17 +3,7 @@ import {
   collectComposerContextReferences,
   formatComposerContextReference,
   replaceComposerContextReferences,
-  toComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
-
-// Fork: the implementation moved to shared, where thread chips also need it.
-export { toComposerContextId };
-
-/**
- * Prompt-string operations on inline context references, independent of kind. Each context
- * kind's draft record supplies a `ComposerContextReference` (kind, id, label); the prompt owns
- * where the reference sits.
- */
 
 export interface ComposerContextReference {
   kind: ComposerContextKind;
@@ -21,16 +11,6 @@ export interface ComposerContextReference {
   label: string;
 }
 
-/** Raw producer IDs are always scoped, even when they already start with the kind name. */
-export function toKindScopedComposerContextId(
-  kind: ComposerContextKind,
-  producerId: string,
-): ComposerContextId {
-  const prefix = `${kind}_`;
-  return toComposerContextId(`${prefix}${producerId}`);
-}
-
-/** Only for importing canonical records: undo one namespace before rebuilding a draft. */
 export function producerIdFromComposerContextId(
   kind: ComposerContextKind,
   contextId: string,
@@ -47,14 +27,12 @@ export function formatInlineContextReference(reference: ComposerContextReference
   });
 }
 
-/** Payload ids referenced by the prompt, once each in first-occurrence order. */
 export function collectInlineContextIds(prompt: string): string[] {
   return Array.from(
     new Set(collectComposerContextReferences(prompt).map((occurrence) => occurrence.contextId)),
   );
 }
 
-/** Prose without any context link, for "does this prompt say anything" checks. */
 export function stripInlineContextReferences(prompt: string): string {
   return replaceComposerContextReferences(prompt, () => "");
 }
@@ -63,7 +41,6 @@ function isBoundaryWhitespace(char: string | undefined): boolean {
   return char === undefined || char === " " || char === "\n" || char === "\t" || char === "\r";
 }
 
-/** Replaces a selected range with chips, keeping word boundaries and the trailing caret space. */
 export function inlineContextReferenceReplacement(
   prompt: string,
   selection: { start: number; end: number },
@@ -79,7 +56,6 @@ export function inlineContextReferenceReplacement(
   };
 }
 
-/** Inserts a link at the cursor, padding with spaces only where words would otherwise join. */
 export function insertInlineContextReference(
   prompt: string,
   cursorInput: number,
@@ -94,7 +70,6 @@ export function insertInlineContextReference(
   };
 }
 
-/** Appends a link at the end of the prompt: the fallback when the caret is unknown. */
 export function appendInlineContextReference(
   prompt: string,
   reference: ComposerContextReference,
@@ -102,7 +77,6 @@ export function appendInlineContextReference(
   return insertInlineContextReference(prompt, prompt.length, reference).prompt;
 }
 
-/** Removes every reference to `contextId` plus one neighbouring space each so words don't join. */
 export function removeInlineContextReference(
   prompt: string,
   contextId: string,
@@ -127,7 +101,6 @@ export function removeInlineContextReference(
   return { prompt: result, cursor };
 }
 
-/** Appends links for records the prompt does not reference yet, in the order given. */
 export function ensureInlineContextReferences(
   prompt: string,
   references: ReadonlyArray<ComposerContextReference>,

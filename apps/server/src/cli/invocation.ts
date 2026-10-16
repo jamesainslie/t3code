@@ -8,27 +8,13 @@ import type { ServerInstallation } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { isCommandAvailable } from "@t3tools/shared/shell";
 import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
-import {
-  forkCliExecutableNames,
-  FORK_NPM_LAUNCHER_SCRIPTS,
-} from "@t3tools/shared/forkCliArtifacts";
+import { FORK_NPM_LAUNCHER_SCRIPT } from "@t3tools/shared/forkCliArtifacts";
 
 import packageJson from "../../package.json" with { type: "json" };
 
 export type CliRunner = "npx" | "pnpm dlx" | "bunx";
 
-/**
- * How the CLI was launched, judged by where its entry script lives. Each
- * package runner executes out of a distinctive cache/temp layout:
- *
- *   npx      ~/.npm/_npx/<hash>/node_modules/...
- *   pnpm dlx ~/.cache/pnpm/dlx/..., $PNPM_HOME/.pnpm/dlx/...,
- *            or %LOCALAPPDATA%/pnpm-cache/dlx/... on Windows
- *   bunx     ~/.bun/install/cache/... or $TMPDIR/bunx-<uid>-<spec>/...
- *
- * Global installs and repo checkouts match none of these and return null.
- * Detection is best-effort; callers must fail closed to a plain bare command.
- */
+/** Detection is best-effort; callers must fail closed to a plain CLI command. */
 function detectCliRunner(entryPath: string): CliRunner | null {
   const path = entryPath.replaceAll("\\", "/");
   if (path.includes("/_npx/")) {
@@ -51,25 +37,51 @@ const InstallManifest = Schema.Struct({
   name: Schema.String,
   version: Schema.String,
   bin: Schema.optionalKey(Schema.Struct({ [FORK_IDENTITY.cliBin]: Schema.String })),
-  optionalDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 const decodeInstallManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(InstallManifest));
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-// `<prefix>/lib/node_modules/<launcher>/` holding the launcher script or a platform executable.
+// `<prefix>/lib/node_modules/<launcher>/` holding the launcher script, or the
+// `dist/bin.mjs` re-entry that background services from before 0.0.41 start.
 const GLOBAL_INSTALL_ENTRY = new RegExp(
-  `^(.*)/lib/node_modules/${escapeRegExp(FORK_IDENTITY.npmPackageName)}/(?:dist/bin\\.mjs|${FORK_NPM_LAUNCHER_SCRIPTS.map(escapeRegExp).join("|")}|node_modules/${escapeRegExp(FORK_IDENTITY.npm.platformPackageScope)}/${escapeRegExp(FORK_IDENTITY.npm.platformPackagePrefix)}[^/]+/(?:${forkCliExecutableNames("linux").map(escapeRegExp).join("|")}))$`,
+  `^(.*)/lib/node_modules/${escapeRegExp(FORK_IDENTITY.npmPackageName)}/(?:dist/bin\\.mjs|${escapeRegExp(FORK_NPM_LAUNCHER_SCRIPT)})$`,
 );
 
-/** Prove the running package and its global bin belong together before suggesting an update. */
+/**
+ * The script this CLI was started through: the `t3` npm launcher that
+ * downloaded and ran this executable (it names itself in
+ * `T3CODE_NPM_LAUNCHER_PATH`), or the Node entry script of a build run from
+ * source. A standalone executable has none and reports its own path.
+ *
+ * The variable is inherited by everything the server spawns, so a launcher
+ * counts only when its package is this exact version: a different `t3` run
+ * from an agent's shell must not claim to be the npm install.
+ */
+const resolveEntryPath = Effect.gen(function* () {
+  const npmLauncher = (yield* HostProcess.Environment).T3CODE_NPM_LAUNCHER_PATH?.trim();
+  if (npmLauncher) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const manifest = yield* fs
+      .readFileString(path.join(path.dirname(npmLauncher), "../package.json"))
+      .pipe(Effect.flatMap(decodeInstallManifest), Effect.option);
+    if (
+      Option.isSome(manifest) &&
+      manifest.value.name === FORK_IDENTITY.npmPackageName &&
+      manifest.value.version === packageJson.version
+    ) {
+      return npmLauncher;
+    }
+  }
+  if (yield* HostProcess.IsExecutable) return yield* HostProcess.ExecutablePath;
+  return (yield* HostProcess.Arguments)[1] ?? "";
+});
+
 export const resolveServerInstallation = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const args = yield* HostProcess.Arguments;
-  const executable = yield* HostProcess.IsExecutable;
-  const executablePath = yield* HostProcess.ExecutablePath;
   const platform = yield* HostProcess.Platform;
-  const entry = yield* fs.realPath(executable ? executablePath : (args[1] ?? ""));
+  const entry = yield* fs.realPath(yield* resolveEntryPath);
   const match = GLOBAL_INSTALL_ENTRY.exec(entry);
   if (!match) {
     const runner = detectCliRunner(entry);
@@ -77,8 +89,6 @@ export const resolveServerInstallation = Effect.gen(function* () {
       ? null
       : ({ kind: runner === "pnpm dlx" ? "pnpm-dlx" : runner } satisfies ServerInstallation);
   }
-  // A global prefix can contain runner-like names; prove its ownership first.
-  // Windows shims and other package managers need their own ownership proof.
   if (platform === "win32") return null;
   const prefix = match[1] || "/";
   if (
@@ -95,42 +105,20 @@ export const resolveServerInstallation = Effect.gen(function* () {
   if (manifest.name !== FORK_IDENTITY.npmPackageName || !manifest.bin) return null;
   const bin = yield* fs.realPath(path.join(packageRoot, manifest.bin[FORK_IDENTITY.cliBin]));
   const globalBin = yield* fs.realPath(path.join(prefix, "bin", FORK_IDENTITY.cliBin));
-  if (globalBin !== bin) return null;
-  if (executable) {
-    const nativeManifest = yield* fs
-      .readFileString(path.join(path.dirname(entry), "package.json"))
-      .pipe(Effect.flatMap(decodeInstallManifest));
-    if (
-      !FORK_NPM_LAUNCHER_SCRIPTS.some(
-        (script) => manifest.bin?.[FORK_IDENTITY.cliBin] === `./${script}`,
-      ) ||
-      manifest.optionalDependencies?.[nativeManifest.name] !== nativeManifest.version ||
-      nativeManifest.version !== manifest.version
-    )
-      return null;
-  } else if (bin !== entry) {
-    return null;
-  }
+  if (globalBin !== bin || bin !== entry) return null;
   return { kind: "npm-global", prefix } satisfies ServerInstallation;
 }).pipe(Effect.orElseSucceed(() => null));
 
 /**
- * The package spec to suggest. The literal spec the user typed (e.g. the
- * `@nightly` tag) is resolved away before our process starts, so re-derive it
- * from the running version: nightly builds re-suggest the nightly channel,
- * anything else suggests the bare package.
+ * The literal spec the user typed (e.g. `t3@nightly`) is resolved away before
+ * our process starts, so re-derive it from the running version: nightly builds
+ * re-suggest the nightly channel, anything else suggests the bare package.
  */
 function suggestedPackageSpec(version: string): string {
   const channel = /^[^-+]+-(nightly|preview)\./.exec(version)?.[1];
   return channel === undefined ? FORK_IDENTITY.npmPackageName : forkPackageSpec(channel);
 }
 
-/**
- * Render a `<cli> <subcommand>` suggestion that matches how this process was
- * launched, so copy/pasting it actually works: an npx launch suggests an npx
- * command, a global install suggests the bare CLI, and a nightly build keeps
- * the `@nightly` tag.
- */
 export function formatCliCommand(input: {
   readonly subcommand: string;
   readonly entryPath: string;
@@ -143,19 +131,29 @@ export function formatCliCommand(input: {
   return `${runner} ${suggestedPackageSpec(input.version)} ${input.subcommand}`;
 }
 
-/** `formatCliCommand` against this process's real entry path and version. */
 export const resolveCliCommand = (subcommand: string) =>
-  Effect.map(HostProcess.Arguments, (processArguments) =>
-    formatCliCommand({
-      subcommand,
-      entryPath: processArguments[1] ?? "",
-      version: packageJson.version,
-    }),
+  Effect.map(resolveEntryPath, (entryPath) =>
+    formatCliCommand({ subcommand, entryPath, version: packageJson.version }),
   );
 
-/** Quotes `value` for a POSIX shell when it needs it. */
 const shellWord = (value: string) =>
   /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", `'"'"'`)}'`;
+
+/**
+ * Quotes `value` for PowerShell, the default Windows terminal. Always quoted,
+ * so a path reads the same whether or not it holds a space. Inside double
+ * quotes `"` and its typographic forms (which also end the string) double,
+ * and `$` and the backtick are escaped so nothing expands.
+ */
+const powershellWord = (value: string) =>
+  `"${value
+    .replaceAll("`", "``")
+    .replaceAll("$", "`$")
+    .replace(/["\u201C\u201D\u201E]/g, "$&$&")}"`;
+
+/** Quotes a word for the host's shell: POSIX, or PowerShell on Windows. */
+const hostShellWord = (platform: NodeJS.Platform, value: string) =>
+  platform === "win32" ? powershellWord(value) : shellWord(value);
 
 /**
  * The launcher a person can type to run this install when `t3` is not on
@@ -175,27 +173,35 @@ const resolveInstallLauncher = Effect.gen(function* () {
 });
 
 /**
- * `t3 <subcommand>` for a person to run on this host: `t3` when it is on PATH,
- * the package runner this process came from, or else the absolute path of the
- * launcher for this install, such as the one the desktop app installs.
+ * `t3 <subcommand> <args>` for a person to run on this host: `t3` when it is
+ * on PATH, the package runner this process came from, or else the absolute
+ * path of the launcher for this install, such as the one the desktop app
+ * installs. `args` are quoted for the host's shell: POSIX, or PowerShell on
+ * Windows.
  */
-const resolveHostCliCommand = (subcommand: string) =>
+export const resolveHostCliCommand = (subcommand: string, args: ReadonlyArray<string> = []) =>
   Effect.gen(function* () {
+    const platform = yield* HostProcess.Platform;
+    const withArgs = (prefix: string) =>
+      [prefix, ...args.map((arg) => hostShellWord(platform, arg))].join(" ");
     const command = yield* resolveCliCommand(subcommand);
-    if (command !== `${FORK_IDENTITY.cliBin} ${subcommand}`) return { command, launcher: false };
-    if (yield* isCommandAvailable(FORK_IDENTITY.cliBin)) return { command, launcher: false };
+    if (command !== `${FORK_IDENTITY.cliBin} ${subcommand}`)
+      return { command: withArgs(command), launcher: false };
+    if (yield* isCommandAvailable(FORK_IDENTITY.cliBin))
+      return { command: withArgs(command), launcher: false };
     const launcher = yield* resolveInstallLauncher;
-    return Option.isSome(launcher)
-      ? { command: `${shellWord(launcher.value)} ${subcommand}`, launcher: true }
-      : { command, launcher: false };
+    if (Option.isNone(launcher)) return { command: withArgs(command), launcher: false };
+    // PowerShell runs a quoted path only through the call operator.
+    const quoted = hostShellWord(platform, launcher.value);
+    const call = platform === "win32" ? `& ${quoted}` : quoted;
+    return { command: withArgs(`${call} ${subcommand}`), launcher: true };
   });
 
 /**
- * `t3 <subcommand>` as root, for setup a person runs once on the host. `sudo`
- * resets PATH on most distributions, which drops a user-installed Node (nvm,
- * fnm, a tarball) and with it `npx` or a global `t3`, so the command carries
- * PATH through unless Node is on root's PATH too. An absolute launcher needs
- * neither.
+ * `sudo` resets PATH on most distributions, which drops a user-installed Node
+ * (nvm, fnm, a tarball) and with it `npx` or a global `t3`, so the command
+ * carries PATH through unless Node is on root's PATH too. An absolute launcher
+ * needs neither.
  */
 export const resolveRootCliCommand = (subcommand: string) =>
   Effect.gen(function* () {
@@ -208,7 +214,6 @@ export const resolveRootCliCommand = (subcommand: string) =>
     return systemNode ? `sudo ${command}` : `sudo env "PATH=$PATH" ${command}`;
   });
 
-/** Debian and Ubuntu's sudo `secure_path`, minus snap. */
 const ROOT_PATH_DIRECTORIES = [
   "/usr/local/sbin",
   "/usr/local/bin",

@@ -27,7 +27,13 @@ export interface CliEntryLoaders {
 }
 
 export const cliEntryLoaders: CliEntryLoaders = {
-  fullCli: () => import("./binCli.ts"),
+  fullCli: async () => {
+    // Before anything reads stdin: the desktop app's Windows launcher starts
+    // the CLI without one. Never for the fast paths, whose stdin is a pipe.
+    const { attachConsoleStdin } = await import("./cli/consoleStdin.ts");
+    attachConsoleStdin();
+    return import("./binCli.ts");
+  },
   acpMcp: () => import("./mcp/AcpMcpStdioBridge.ts"),
   sshHelper: () => import("./cli/sshHelperFastPath.ts"),
 };

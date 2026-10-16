@@ -437,9 +437,11 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
             if (operation !== "idle") {
               return yield* setupError("start", copy.busy);
             }
-            const flowId = yield* crypto.randomUUIDv4.pipe(
-              Effect.mapError(() => setupError("start", "Could not start sign-in. Try again.")),
-            );
+            const flowId = yield* crypto
+              .randomUUIDv4()
+              .pipe(
+                Effect.mapError(() => setupError("start", "Could not start sign-in. Try again.")),
+              );
             const expiresAtMillis = (yield* Clock.currentTimeMillis) + AUTH_RELAY_TIMEOUT_MS;
             const state: ProviderAuthState = {
               ...emptyState,

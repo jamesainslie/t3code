@@ -148,9 +148,7 @@ export const SNOOZE_REMINDER_NOTICE_TITLE = "Snooze reminder";
 /** Reserved for immutable conversations owned by another T3 environment. */
 export const isSyncedThreadId = (threadId: string): boolean => threadId.startsWith("t3sync-");
 
-// ---------------------------------------------------------------------------
 // Document comments
-// ---------------------------------------------------------------------------
 
 export const THREAD_DOCUMENT_COMMENT_MAX_BODY_LENGTH = 8_000;
 const THREAD_DOCUMENT_COMMENT_MAX_PATH_LENGTH = 4_096;
@@ -285,9 +283,7 @@ export const ThreadDocumentComments = Schema.Struct({
 });
 export type ThreadDocumentComments = typeof ThreadDocumentComments.Type;
 
-// ---------------------------------------------------------------------------
 // Project sync records
-// ---------------------------------------------------------------------------
 
 export const ProjectSyncMapping = Schema.Struct({
   sourceProjectId: ProjectId,

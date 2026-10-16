@@ -1,20 +1,26 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { describe, expect, it } from "@effect/vitest";
-import { DEFAULT_SERVER_SETTINGS, UsageLimitSourceId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ServerConfigStreamEvent,
+  UsageLimitSourceId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as UsageLimitSources from "./UsageLimitSources.ts";
 
+const encodeConfigEvent = Schema.encodeSync(ServerConfigStreamEvent);
 const sourceId = UsageLimitSourceId.make("modelproxy-iris");
 const kimi = { kind: "model", from: "kimi-k3", to: "moonshotai/kimi-k3", provider: "openrouter" };
 
@@ -88,7 +94,7 @@ function harness(
             remove: (name) => Effect.sync(() => void secrets.delete(name)),
           }),
         ),
-        Layer.mock(ServerSettingsService)({
+        Layer.mock(ServerSettings.ServerSettingsService)({
           getSettings: Effect.succeed({
             ...DEFAULT_SERVER_SETTINGS,
             usageLimitSources: {
@@ -255,5 +261,80 @@ describe("UsageLimitSources", () => {
         expect(read?.proxy?.routes).toEqual([kimi]);
       }).pipe(Effect.provide(layer));
     }),
+  );
+
+  it.effect("keeps malformed source URLs encodable for config subscribers", () =>
+    Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.make;
+      yield* sources.refresh;
+      const snapshots = yield* sources.current;
+      expect(snapshots.map((source) => source.label)).toEqual([
+        "local-hub",
+        "opaque-hub",
+        "Named hub",
+        "hub.test:8317",
+        "Usage limit source",
+      ]);
+      expect(() =>
+        encodeConfigEvent({
+          version: 1,
+          type: "usageLimitSourcesUpdated",
+          payload: { sources: snapshots },
+        }),
+      ).not.toThrow();
+      expect(snapshots.every((source) => source.error === "No management key configured.")).toBe(
+        true,
+      );
+    }).pipe(
+      Effect.provide([
+        ServerSettings.layerTest({
+          usageLimitSources: {
+            [UsageLimitSourceId.make("local-hub")]: {
+              kind: "cliproxy",
+              url: "localhost:8317",
+              managementKey: "",
+              enabled: true,
+            },
+            [UsageLimitSourceId.make("opaque-hub")]: {
+              kind: "cliproxy",
+              url: "file:///tmp/hub",
+              managementKey: "",
+              enabled: true,
+            },
+            [UsageLimitSourceId.make("named-hub")]: {
+              kind: "cliproxy",
+              url: "localhost:8317",
+              label: "Named hub",
+              managementKey: "",
+              enabled: true,
+            },
+            [UsageLimitSourceId.make("valid-hub")]: {
+              kind: "cliproxy",
+              url: "https://hub.test:8317",
+              managementKey: "",
+              enabled: true,
+            },
+            [UsageLimitSourceId.make(" ")]: {
+              kind: "cliproxy",
+              url: "localhost:8317",
+              managementKey: "",
+              enabled: true,
+            },
+          },
+        }),
+        Layer.mock(BackgroundPolicy.BackgroundPolicy)({
+          shouldRunScopeWork: () => Effect.succeed(false),
+        }),
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("Unexpected network request")),
+        ),
+        Layer.mock(ServerSecretStore.ServerSecretStore)({
+          get: () => Effect.succeed(Option.none()),
+        }),
+        NodeCrypto.layer,
+      ]),
+      Effect.scoped,
+    ),
   );
 });
