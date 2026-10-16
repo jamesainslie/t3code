@@ -31,6 +31,15 @@ export class ForkRenamePathCollisionError extends Schema.TaggedError<ForkRenameP
   }
 }
 
+export class ForkRenameIgnoredPathError extends Schema.TaggedError<ForkRenameIgnoredPathError>()(
+  "ForkRenameIgnoredPathError",
+  { paths: Schema.Array(Schema.String) },
+) {
+  override get message(): string {
+    return `Renamed paths would be ignored by a gitignore, so git could not add them:\n  ${this.paths.join("\n  ")}\nAdd a kept rule for them instead.`;
+  }
+}
+
 export class ForkRenameGitError extends Schema.TaggedError<ForkRenameGitError>()(
   "ForkRenameGitError",
   { command: Schema.String, exitCode: Schema.Int },
@@ -51,13 +60,17 @@ const collect = <E>(stream: Stream.Stream<Uint8Array, E>) =>
     ),
   );
 
-const git = Effect.fn("git")(function* (repoRoot: string, args: ReadonlyArray<string>) {
+const git = Effect.fn("git")(function* (
+  repoRoot: string,
+  args: ReadonlyArray<string>,
+  okExitCodes: ReadonlyArray<number> = [0],
+) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const child = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: repoRoot }));
   const [output, exitCode] = yield* Effect.all([collect(child.stdout), child.exitCode], {
     concurrency: "unbounded",
   });
-  if (Number(exitCode) !== 0) {
+  if (!okExitCodes.includes(Number(exitCode))) {
     return yield* new ForkRenameGitError({
       command: `git ${args.join(" ")}`,
       exitCode: Number(exitCode),
@@ -103,6 +116,15 @@ export const runForkRenameCodemod = Effect.fn("runForkRenameCodemod")(function* 
     targets.set(to, from);
   }
   if (collisions.length > 0) return yield* new ForkRenamePathCollisionError({ collisions });
+  // A tracked file moved to an ignored path drops out of the commit.
+  // check-ignore exits 1 when no path is ignored.
+  const ignored =
+    moves.length === 0
+      ? ""
+      : yield* git(repoRoot, ["check-ignore", "--no-index", ...moves.map(([, to]) => to)], [0, 1]);
+  if (ignored.trim() !== "") {
+    return yield* new ForkRenameIgnoredPathError({ paths: ignored.trim().split("\n") });
+  }
   if (write) {
     for (const [absolute, text] of rewrites) yield* fs.writeFileString(absolute, text);
     for (const [from, to] of moves) {

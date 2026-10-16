@@ -165,6 +165,22 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /^docs\/internals\/t3-connect\.md$/,
   },
   {
+    id: "kept-mobile-app",
+    class: "kept",
+    reason:
+      "The mobile app keeps upstream's identity and its native module names until its own rename project; only imports of renamed workspace packages change.",
+    path: /^apps\/mobile\/|^\.github\/workflows\/mobile-/,
+    test: (o) => !/@t3tools/.test(o.token),
+  },
+  {
+    id: "kept-mobile-native-modules",
+    class: "kept",
+    reason:
+      "Mobile native module packages and directories (t3-terminal, expo.modules.t3*), referenced from outside apps/mobile; renamed with the mobile project.",
+    token:
+      /expo\.modules\.t3|modules\/t3-|(?:^|[^A-Za-z])t3-(?:terminal|native-controls|source-text|review-diff|composer-editor|widget-expiry|agent-notifications|markdown-text)\b|^t3(?:terminal|nativecontrols|sourcetext|reviewdiff|composereditor|widgetexpiry|agentnotifications)$/,
+  },
+  {
     id: "fp-inside-word",
     class: "false-positive",
     reason: "Lowercase t3 inside a word or number: uint32, project3, Object3D.",
@@ -549,14 +565,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /(?:^|[^A-Za-z])font-t3-|--t3-|t3-file-icon-|t3-(?:assistant-citation|thread-find|document-comment)/,
   },
   {
-    id: "id-native-modules",
-    class: "identifier",
-    reason:
-      "Mobile native module packages and directories built with the app (t3-terminal, expo.modules.t3*).",
-    token:
-      /expo\.modules\.t3|modules\/t3-|(?:^|[^A-Za-z])t3-(?:terminal|native-controls|source-text|review-diff|composer-editor|widget-expiry|agent-notifications|markdown-text)\b|^t3(?:terminal|nativecontrols|sourcetext|reviewdiff|composereditor|widgetexpiry|agentnotifications)$/,
-  },
-  {
     id: "id-lint-plugin",
     class: "identifier",
     reason: "The repo's oxlint plugin and rule names (t3code/no-*).",
@@ -749,13 +757,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /^https:\/\/t3\.(?:codes|chat)(?:\/[a-z-]+)?\/?$|t3code_web_channel|__t3code\/channel|tree\/t3code\//.test(
         o.token,
       ) || o.path === ".github/workflows/release.yml",
-  },
-  {
-    id: "kept-mobile-app",
-    class: "kept",
-    reason: "The mobile app still ships upstream's identity; it gets its own rename project.",
-    path: /^apps\/mobile\/|mobile|^\.github\/workflows\/mobile-|^\.agents\/skills\/test-t3-mobile\//,
-    test: (o) => !/@t3tools/.test(o.token),
   },
   {
     id: "id-workspace-package-t3",

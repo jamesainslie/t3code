@@ -76,7 +76,8 @@ describe("renameForkText", () => {
 
 describe("renameForkPath", () => {
   it.each<readonly [string, string]>([
-    ["apps/mobile/modules/t3-terminal/index.ts", "apps/mobile/modules/lathe-terminal/index.ts"],
+    // Mobile keeps upstream's names until its own rename project.
+    ["apps/mobile/modules/t3-terminal/index.ts", "apps/mobile/modules/t3-terminal/index.ts"],
     [
       "oxlint-plugin-t3code/rules/no-test-in-loop.ts",
       "oxlint-plugin-lathe/rules/no-test-in-loop.ts",
