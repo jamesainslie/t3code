@@ -117,7 +117,57 @@ const stem = (occurrence: RenameOccurrence) => {
   return head + tail;
 };
 
+/** Workspace-package exports mobile imports; they rename with the packages. */
+const MOBILE_SHARED_NAME =
+  /(?:^|[^A-Za-z0-9_$])(?:T3McpTool(?:Logo|Presentation)|resolveT3McpTool(?:Definition|Presentation)|T3_CODE_(?:DARK|LIGHT)_THEME_COLORS|T3_PROJECT_FILE_NAME|parseT3ProjectFile)(?:$|[^A-Za-z0-9_$])/;
+
+let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
+
+/**
+ * Mobile source that must change with shared code even while the mobile app
+ * keeps its names: imports of renamed packages and exports, the attribution
+ * value shared code produces, and the text and agent names shared code renders,
+ * which mobile shows and its tests assert. Native module names, fonts, storage
+ * keys and bundle ids are none of these, so they stay.
+ */
+const mobileFollowsSharedCode = (o: RenameOccurrence): boolean => {
+  if (/@t3tools/.test(o.token)) return true;
+  if (!/^apps\/mobile\/src\/.*\.tsx?$/.test(o.path)) return false;
+  if (MOBILE_SHARED_NAME.test(o.token)) return true;
+  if (o.token === "t3code" && /\battribution\b/.test(o.line)) return true;
+  rulesWithoutMobile ??= FORK_RENAME_RULES.filter((rule) => rule.id !== "kept-mobile-app");
+  const rule = classifyRenameOccurrence(rulesWithoutMobile, o);
+  return rule?.class === "display" || rule?.class === "agent-facing";
+};
+
 export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
+  {
+    id: "kept-rename-rules",
+    class: "kept",
+    reason: "The rename's own rules, codemod and report, which must keep naming the old forms.",
+    path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$/,
+  },
+  {
+    id: "kept-fork-legacy-compat",
+    class: "kept",
+    reason:
+      "Fork compat modules that read the old names after the rename (files named forkLegacy*).",
+    path: /(?:^|\/)forkLegacy[A-Za-z]*(?:\.test)?\.tsx?$/,
+  },
+  {
+    id: "upstream-agent-artifacts",
+    class: "upstream-reference",
+    reason:
+      "Agent instruction files and skills (.agents, .cursor, .claude, AGENTS.md, CLAUDE.md): upstream ships them and the fork never edits them.",
+    path: /^\.(?:agents|cursor|claude|codex)\/|(?:^|\/)(?:AGENTS|CLAUDE|GEMINI)\.md$/,
+  },
+  {
+    id: "id-package-scope",
+    class: "identifier",
+    reason:
+      "Workspace package scope; every package is workspace-local (renamed to @lathe/). First, because upstream-only areas import workspace packages too.",
+    test: (o) => /^@t3tools(?:\/|$)/.test(o.token.slice(Math.max(0, o.offset - 1))),
+  },
   // false positives: a "t3" that is part of another word or of encoded data
   {
     id: "upstream-marketing-site",
@@ -137,13 +187,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "upstream-reference",
     reason: "Upstream's AppStream metainfo, which the fork does not ship.",
     path: /metainfo\.xml$/,
-  },
-  {
-    id: "upstream-agent-artifacts",
-    class: "upstream-reference",
-    reason:
-      "Agent instruction files and skills (.agents, .cursor, .claude, AGENTS.md, CLAUDE.md): upstream ships them and the fork never edits them.",
-    path: /^\.(?:agents|cursor|claude|codex)\/|(?:^|\/)(?:AGENTS|CLAUDE|GEMINI)\.md$/,
   },
   {
     id: "upstream-release-workflow",
@@ -168,9 +211,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "kept-mobile-app",
     class: "kept",
     reason:
-      "The mobile app keeps upstream's identity and its native module names until its own rename project; only imports of renamed workspace packages change.",
+      "The mobile app keeps upstream's identity, native module names, fonts and paths until its own rename project; only what follows renamed shared code changes.",
     path: /^apps\/mobile\/|^\.github\/workflows\/mobile-|^scripts\/mobile-/,
-    test: (o) => !/@t3tools/.test(o.token),
+    test: (o) => !mobileFollowsSharedCode(o),
   },
   {
     id: "kept-mobile-native-modules",
@@ -194,19 +237,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       o.token[o.offset] === "T" &&
       /[A-Z]/.test(before(o)) &&
       /\d/.test(o.token[o.offset + 2] ?? ""),
-  },
-  {
-    id: "kept-fork-legacy-compat",
-    class: "kept",
-    reason:
-      "Fork compat modules that read the old names after the rename (files named forkLegacy*).",
-    path: /(?:^|\/)forkLegacy[A-Za-z]*(?:\.test)?\.tsx?$/,
-  },
-  {
-    id: "kept-rename-rules",
-    class: "kept",
-    reason: "The rename's own rules, codemod and report, which must keep naming the old forms.",
-    path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$/,
   },
   {
     id: "fp-encoded-data",
@@ -254,7 +284,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Server surface upstream clients speak: discovery, the protocol header, the bootstrap token type, telemetry shapes.",
     token:
-      /\/\.well-known\/t3\b|x-t3-orchestration-protocol|urn:t3:params|^["'`]?allT3["'`:]?|unknown-t3|^["'`]?t3_kind["'`]?/,
+      /\/\.well-known\/t3\b|x-t3-orchestration-protocol|urn:t3:params|(?:^|\.)["'`]?allT3(?:["'`:]?$|\.)|unknown-t3|^["'`]?t3_kind["'`]?/,
   },
   {
     id: "wire-telemetry-names",
@@ -262,7 +292,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Names in telemetry sent to upstream's PostHog and relay trace datasets (off by default).",
     test: (o) =>
-      /^t3CodeVersion$|t3\.client\.|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
+      /(?:^|\.)t3CodeVersion:?$|t3\.client\.|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
         o.token,
       ) || /service\.namespace|service\.runtime|serviceName:/.test(o.line),
   },
@@ -270,9 +300,19 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "wire-credential-owner",
     class: "wire-peer",
-    reason: 'The credentialOwner literal "t3" in provider auth state that upstream clients decode.',
-    path: /ProviderCredentialStore\.ts$|contracts\/src\/providerSetup\.ts$/,
-    test: (o) => o.token === "t3" && /["'`]t3["'`]/.test(o.line),
+    reason:
+      'The credential owner literal "t3" in provider auth state and bindings, which upstream clients decode.',
+    test: (o) =>
+      o.token === "t3" &&
+      /(?:\bowner|credentialOwner)\??:/.test(o.line) &&
+      /["'`]t3["'`]/.test(o.line),
+  },
+  {
+    id: "kept-model-manifest-range",
+    class: "kept",
+    reason:
+      "The t3CodeRange field of the model manifest, which released builds fetch from the fork's main branch.",
+    token: /(?:^|\.)["'`]?t3CodeRange["'`:]*$/,
   },
   {
     id: "wire-vendor-identities",
@@ -577,12 +617,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) => /^T3_[A-Z0-9_]/.test(o.token.slice(o.offset)) && !/[A-Za-z0-9]/.test(before(o)),
   },
   {
-    id: "id-package-scope",
-    class: "identifier",
-    reason: "Workspace package scope; every package is workspace-local (renamed to @lathe/).",
-    test: (o) => /^@t3tools(?:\/|$)/.test(o.token.slice(Math.max(0, o.offset - 1))),
-  },
-  {
     id: "id-camel-symbol",
     class: "identifier",
     reason: "camelCase or PascalCase code symbol (T3ComposerEditorView, allT3, t3Home).",
@@ -651,7 +685,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "The executable name as a quoted literal in the files that install and run the CLI; forkCliArtifacts.ts keeps the t3 fallback.",
-    path: /forkCliArtifacts|cliRelease|build-cli-archive|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|serviceLauncher|npm-launcher/,
+    path: /forkCliArtifacts|cliRelease|build-cli-archive|install\.(?:sh|ps1|test\.ts)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|serviceLauncher|npm-launcher/,
     test: (o) => o.token === "t3" && /["'`]t3["'`]/.test(o.line),
   },
   {
@@ -715,8 +749,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "CLI release archive and executable names (t3-<version>-*, <runtime>/t3); forkCliArtifacts.ts publishes both names.",
     token:
-      /^\(?t3-\*|t3-<version>|t3-\$\{version\}|\/t3`?\)?\.?$|^`?t3-\$|t3\.exe|^t3-(?:\.\.\.)?$|^t3;?$/,
-    path: /forkCliArtifacts|cliRelease|build-cli-archive|build-desktop-artifact|install\.(?:sh|ps1)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|fork-cli-release-assets|serviceLauncher|smoke-cli|npm-launcher/,
+      /^\(?t3-\*|t3-<version>|t3-\$\{version\}|\/t3`?\)?\.?$|^`?t3-\$|t3\.exe|^t3-(?:\.\.\.)?$|^t3[;:]?$/,
+    path: /forkCliArtifacts|cliRelease|build-cli-archive|build-desktop-artifact|install\.(?:sh|ps1|test\.ts)|pinnedRuntime|selfUpdate|update\.ts|ForkCliInstall|tunnel\.ts|DesktopWsl|fork-cli-release-assets|serviceLauncher|smoke-cli|npm-launcher/,
   },
   {
     id: "display-cli-version-spec",
