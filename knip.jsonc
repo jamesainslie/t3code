@@ -17,9 +17,15 @@
       "vitest": { "entry": [".github/**/*.test.cjs"] },
     },
     "scripts": {
-      // Knip loads its preprocessor through a CLI option; native verification and
-      // worktree setup (from lathe.json) run directly.
-      "entry": ["knip-schemas.ts", "mobile-native-client.ts", "setup-worktree.ts"],
+      // Knip loads its preprocessor through a CLI option; native verification,
+      // worktree setup (from lathe.json) and the rename tools run directly.
+      "entry": [
+        "knip-schemas.ts",
+        "mobile-native-client.ts",
+        "setup-worktree.ts",
+        "fork-rename-codemod.ts",
+        "fork-rename-report.ts",
+      ],
       // The `lathe` npm package's files: copied into the package, never imported.
       "ignore": ["npm-launcher/**"],
     },
@@ -66,8 +72,9 @@
     "apps/web": {
       // Vitest loads this through the per-file @vitest-environment directive.
       "ignoreDependencies": ["jsdom"],
-      // Worktree setup (scripts/setup-worktree.ts) runs this directly.
-      "entry": ["scripts/warm-dep-cache.ts"],
+      // Worktree setup (scripts/setup-worktree.ts) runs this directly, and index.html
+      // loads the storage migration before the app.
+      "entry": ["scripts/warm-dep-cache.ts", "public/forkLegacyStorage.js"],
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.

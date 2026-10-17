@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-export const LEGACY_PROJECT_FILE_NAME = "t3.json";
+const LEGACY_PROJECT_FILE_NAME = "t3.json";
 
 /** The project file to read in `workspaceRoot`: lathe.json, else an existing t3.json. */
 export const projectFilePath = Effect.fn("projectFilePath")(function* (
