@@ -18,6 +18,7 @@ import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { rpcInitialItems } from "./rpcInitialItems.ts";
+import { readProjectFileWithLegacyFallback } from "./project/forkLegacyProjectFile.ts";
 import { subscribeChatGptHandoff } from "./provider/CodexChatGptHandoff.ts";
 import { subscribeCodexAuthCallback } from "./provider/CodexAuthCallback.ts";
 import {
@@ -2641,7 +2642,7 @@ const layerWsRpc = (
             ),
           ),
         [WS_METHODS.projectsReadFile]: (input) =>
-          workspaceFileSystem.readFile(input).pipe(
+          readProjectFileWithLegacyFallback(input, workspaceFileSystem.readFile).pipe(
             Effect.mapError(
               (cause) =>
                 new ProjectReadFileError({

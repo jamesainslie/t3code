@@ -12,6 +12,7 @@ import {
   remarkCodexDirectives,
 } from "./codexMarkdownDirectives.ts";
 import { isWindowsDrivePathHref } from "./markdownLinks.ts";
+import { withLegacyLinkProtocols } from "./forkLegacyLinks.ts";
 import { THREAD_LINK_PROTOCOL } from "./threadLinks.ts";
 
 type MarkdownImageHastNode = {
@@ -148,11 +149,13 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
     href: [
       ...(defaultSchema.protocols?.href ?? []),
       "file",
-      "lathe-citation",
-      "lathe-context",
-      THREAD_LINK_PROTOCOL,
+      ...withLegacyLinkProtocols(["lathe-citation", "lathe-context", THREAD_LINK_PROTOCOL]),
     ],
-    src: [...(defaultSchema.protocols?.src ?? []), "file", "lathe-context"],
+    src: [
+      ...(defaultSchema.protocols?.src ?? []),
+      "file",
+      ...withLegacyLinkProtocols(["lathe-context"]),
+    ],
   },
 } satisfies Parameters<typeof rehypeSanitize>[0];
 

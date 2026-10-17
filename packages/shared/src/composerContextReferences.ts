@@ -7,13 +7,15 @@ import {
   type KnownComposerContextRecord,
 } from "@lathe/contracts";
 
+import { includesLinkProtocol, latheLinkHref, linkProtocolPattern } from "./forkLegacyLinks.ts";
+
 const CONTEXT_PROTOCOL = "lathe-context:";
 const COMPOSER_CONTEXT_HREF_PREFIX = `${CONTEXT_PROTOCOL}//v1/`;
 const CONTEXT_KIND_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 const CONTEXT_ID_PATTERN = /^[a-z0-9_-]{1,128}$/i;
 const MAX_LINK_LABEL_LENGTH = 512;
 const CONTEXT_LINK = new RegExp(
-  String.raw`(!?)\[([^\]\n]{0,${MAX_LINK_LABEL_LENGTH}})\]\((${COMPOSER_CONTEXT_HREF_PREFIX}[^\s)]{1,200})\)`,
+  String.raw`(!?)\[([^\]\n]{0,${MAX_LINK_LABEL_LENGTH}})\]\((${linkProtocolPattern(CONTEXT_PROTOCOL)}//v1/[^\s)]{1,200})\)`,
   "g",
 );
 
@@ -57,8 +59,9 @@ export function formatComposerContextHref(kind: ComposerContextKind, contextId: 
 export function parseComposerContextHref(
   href: string,
 ): { kind: ComposerContextKind; contextId: ComposerContextId } | null {
-  if (!href.startsWith(COMPOSER_CONTEXT_HREF_PREFIX)) return null;
-  const rest = href.slice(COMPOSER_CONTEXT_HREF_PREFIX.length);
+  const latheHref = latheLinkHref(href);
+  if (!latheHref.startsWith(COMPOSER_CONTEXT_HREF_PREFIX)) return null;
+  const rest = latheHref.slice(COMPOSER_CONTEXT_HREF_PREFIX.length);
   const parts = rest.split("/");
   if (parts.length !== 2) return null;
   const [kind, contextId] = parts as [string, string];
@@ -99,7 +102,7 @@ export function collectComposerContextReferences(
   text: string,
 ): ComposerContextReferenceOccurrence[] {
   const occurrences: ComposerContextReferenceOccurrence[] = [];
-  if (!text.includes("](lathe-context:")) return occurrences;
+  if (!includesLinkProtocol(text, CONTEXT_PROTOCOL)) return occurrences;
   for (const match of text.matchAll(CONTEXT_LINK)) {
     const parsed = parseComposerContextHref(match[3]!);
     if (!parsed) continue;

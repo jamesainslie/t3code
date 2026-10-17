@@ -37,6 +37,7 @@ import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
 import { DeepMutable } from "effect/Types";
+import { linkProtocolPattern } from "@lathe/shared/forkLegacyLinks";
 import { createModelSelection, normalizeModelSlug } from "@lathe/shared/model";
 import { useMemo } from "react";
 import { getLocalStorageItem } from "./hooks/useLocalStorage";
@@ -1877,7 +1878,10 @@ function normalizePersistedDraftsByThreadId(
       }
     }
     const migratedPrompt = promptCandidate.replace(
-      /!?\[([^\]\r\n]*)\]\(lathe-context:\/\/v1\/([a-z-]+)\/([^/()\r\n]+)\)/g,
+      new RegExp(
+        String.raw`!?\[([^\]\r\n]*)\]\(${linkProtocolPattern("lathe-context:")}\/\/v1\/([a-z-]+)\/([^/()\r\n]+)\)`,
+        "g",
+      ),
       (source, label: string, kind: string, id: string) => {
         const contextId = contextIds.get(`${kind}/${id}`);
         return contextId ? formatInlineContextReference({ kind, contextId, label }) : source;

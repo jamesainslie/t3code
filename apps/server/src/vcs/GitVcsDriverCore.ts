@@ -22,7 +22,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
   GitCommandError,
   type GitCommandFailureReason,
-  LATHE_PROJECT_FILE_NAME,
   type ReviewDiffFileContentsInput,
   type ReviewDiffPreviewInput,
   type ReviewDiffFileStat,
@@ -39,6 +38,7 @@ import { resolveProjectFileBackedSetting } from "@lathe/shared/projectSettings";
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../observability/Metrics.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
 import { resolveWorktreesDirectory } from "../worktreesDirectory.ts";
+import { projectFilePath } from "../project/forkLegacyProjectFile.ts";
 import {
   parseRemoteNames,
   parseRemoteNamesInGitOrder,
@@ -3525,8 +3525,8 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           options?.submodules ?? null,
           options?.submodules != null
             ? null
-            : yield* fileSystem
-                .readFileString(path.join(worktreePath, LATHE_PROJECT_FILE_NAME))
+            : yield* projectFilePath(fileSystem, path, worktreePath)
+                .pipe(Effect.flatMap((file) => fileSystem.readFileString(file)))
                 .pipe(
                   Effect.flatMap((contents) => {
                     const file = parseLatheProjectFile(contents);

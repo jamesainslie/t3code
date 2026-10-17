@@ -9,6 +9,8 @@ import * as Schema from "effect/Schema";
 import { LATHE_PROJECT_FILE_NAME, type LatheProjectFile } from "@lathe/contracts";
 import { LatheProjectFileFromJson } from "@lathe/shared/latheProjectFile";
 
+import { projectFilePath } from "./forkLegacyProjectFile.ts";
+
 const decodeLatheProjectFileJson = Schema.decodeEffect(LatheProjectFileFromJson);
 
 export class LatheProjectFileLoadError extends Schema.TaggedError<LatheProjectFileLoadError>()(
@@ -53,7 +55,7 @@ export const make = Effect.gen(function* () {
 
   const load: LatheProjectFileLoader["Service"]["load"] = Effect.fn("LatheProjectFileLoader.load")(
     function* (workspaceRoot) {
-      const filePath = path.join(workspaceRoot, LATHE_PROJECT_FILE_NAME);
+      const filePath = yield* projectFilePath(fileSystem, path, workspaceRoot);
       const raw = yield* fileSystem.readFileString(filePath).pipe(
         Effect.asSome,
         Effect.catchTags({

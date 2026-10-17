@@ -427,6 +427,10 @@
       "types": "./src/forkIdentity.ts",
       "import": "./src/forkIdentity.ts"
     },
+    "./forkLegacyLinks": {
+      "types": "./src/forkLegacyLinks.ts",
+      "import": "./src/forkLegacyLinks.ts"
+    },
     "./forkLegacyEnv": {
       "types": "./src/forkLegacyEnv.ts",
       "import": "./src/forkLegacyEnv.ts"
