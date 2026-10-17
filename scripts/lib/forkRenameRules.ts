@@ -214,7 +214,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "Fork compat modules that read the old names after the rename (files named forkLegacy*).",
-    path: /(?:^|\/)forkLegacy[A-Za-z]*(?:\.test)?\.tsx?$/,
+    path: /(?:^|\/)forkLegacy[A-Za-z]*(?:\.test)?\.(?:tsx?|js)$/,
   },
   {
     id: "upstream-agent-artifacts",
@@ -524,6 +524,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Citation, thread and context links stored in message text; upstream clients send the t3 forms too.",
     token: /t3-(?:citation|thread|context):|^["'`]?t3-(?:citation|thread|context)["'`]?,?$/,
+  },
+  {
+    id: "kept-indexeddb-databases",
+    class: "kept",
+    reason:
+      "IndexedDB databases holding saved connections and the cloud auth key; a database cannot be renamed in place, so they keep their names.",
+    token: /^t3code:(?:connection-runtime|cloud-auth)$/,
   },
   {
     id: "persisted-renderer-storage",

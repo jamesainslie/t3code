@@ -193,6 +193,13 @@ describe("FORK_RENAME_RULES", () => {
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
     [
+      "apps/web/src/connection/storage.ts",
+      'const DATABASE_NAME = "t3code:connection-runtime";',
+      "kept",
+    ],
+    ["apps/web/src/connection/storage.ts", 'const PREFIX = "t3code:github-routing:";', "persisted"],
+    ["apps/web/public/forkLegacyStorage.js", '    ["t3code:", "lathe:"],', "kept"],
+    [
       "scripts/lib/forkCliArchive.test.ts",
       "assert.match(listing.stdout, /^l.* t3-1\\.2\\.3-linux-x64\\/t3 -> lathe$/m);",
       "kept",
