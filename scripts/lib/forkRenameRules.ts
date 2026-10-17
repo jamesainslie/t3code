@@ -502,11 +502,12 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Built-in theme ids stored as the selected theme (and sent to clients as the environment theme).",
     test: (o) =>
-      /^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
+      !/syntax(?:Themes|Highlighting)/i.test(o.path) &&
+      (/^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-      ((/[Tt]heme/.test(o.path) || /[Tt]heme\(|\bpalettes?\b/.test(o.line)) &&
-        /^t3-(?:code|chat|grove|ocean|ember|iris)(?:-(?:dark|light))?$/.test(o.token)),
+        ((/[Tt]heme/.test(o.path) || /[Tt]heme\(|\bpalettes?\b/.test(o.line)) &&
+          /^t3-(?:code|chat|grove|ocean|ember|iris)(?:-(?:dark|light))?$/.test(o.token))),
   },
   {
     id: "upstream-homebrew-cask",
@@ -650,7 +651,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       return (
         (/^t3-(?:\*|<version>|\$|\d+\.\d+\.\d+|\.\.\.|$)/.test(at) &&
           (/^[(/`.]?$/.test(prev) || afterEscape(o))) ||
-        (/^t3(?:`?\)?\.?|[;:])?$/.test(at) && /^\/?$/.test(prev)) ||
+        (/^t3(?:`?\)?\.?|[;:]|\\[rn].*)?$/.test(at) &&
+          /^\/?$/.test(prev) &&
+          !o.token.includes("://")) ||
         /^t3\.exe/.test(at)
       );
     },

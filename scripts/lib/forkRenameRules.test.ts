@@ -186,6 +186,12 @@ describe("FORK_RENAME_RULES", () => {
     ["scripts/lib/forkCliArchive.ts", " * Adds `t3` beside the signed `lathe`", "kept"],
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
+    ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-ember-light");', "identifier"],
+    [
+      "packages/ssh/src/tunnel.test.ts",
+      'assert.include(launch, "mirror https://mirror.example/t3");',
+      "identifier",
+    ],
     [
       "packages/client-runtime/src/a.test.ts",
       'identity("github.com/me/t3code"),',
