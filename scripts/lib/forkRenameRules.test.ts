@@ -193,6 +193,11 @@ describe("FORK_RENAME_RULES", () => {
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
     [
+      "scripts/lib/forkCliArchive.test.ts",
+      "assert.match(listing.stdout, /^l.* t3-1\\.2\\.3-linux-x64\\/t3 -> lathe$/m);",
+      "kept",
+    ],
+    [
       "apps/server/src/orchestration-v2/Adapters/OpenCode2AdapterV2.test.ts",
       '          key: "t3-code",',
       "kept",

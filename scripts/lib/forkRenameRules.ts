@@ -699,7 +699,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       const at = o.token.slice(o.offset);
       const prev = before(o);
       return (
-        (/^t3-(?:\*|<version>|\$|\d+\.\d+\.\d+|\.\.\.|$)/.test(at) &&
+        (/^t3-(?:\*|<version>|\$|\d+\\?\.\d+\\?\.\d+|\.\.\.|$)/.test(at) &&
           (/^[(/`.]?$/.test(prev) || afterEscape(o))) ||
         (/^t3(?:`?\)?\.?|[;:]|\\[rn].*)?$/.test(at) &&
           /^\/?$/.test(prev) &&
