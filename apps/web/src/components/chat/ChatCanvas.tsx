@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ChatCanvasContext } from "./ChatCanvasContext";
 import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
+import { resolveThreadDetailsCardLayout } from "./threadDetailsCardLayout";
 import type { PreviewMiniPlayerObstacles } from "../preview/previewMiniPlayerLayout";
 import { observeResize } from "../../lib/observeResize";
 
@@ -140,6 +141,16 @@ export function ChatCanvas({
     detailsCardTopInset,
   ]);
   const { layout } = context;
+  // Fork: the Iris gateway card portals outside the canvas and stacks under
+  // the details card, so it reads here whether that card has its column.
+  const detailsColumn =
+    resolveThreadDetailsCardLayout({
+      container: context.container,
+      lane: context.lane,
+      frame: layout.frame,
+      overlapsDetailsCard: layout.overlapsDetailsCard,
+      topInset: context.detailsCardTopInset,
+    }) !== null;
   return (
     <ChatCanvasContext value={context}>
       <div
@@ -147,6 +158,7 @@ export function ChatCanvas({
         ref={elementRef}
         data-chat-canvas
         data-preview-overlaps-chat={layout.overlapsChat || undefined}
+        data-details-column={detailsColumn || undefined}
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"
         style={
           {

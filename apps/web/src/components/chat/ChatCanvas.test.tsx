@@ -116,3 +116,15 @@ it("remeasures the open bar when its font size changes without resizing the canv
   expect(canvas?.detailsCardTopInset).toBe(72);
   expect(canvas?.layout.frame?.y).toBe(84);
 });
+
+it("tells cards outside the canvas whether the details card has its column", async () => {
+  await renderFind(false, 1200);
+  const element = container.querySelector("[data-chat-canvas]");
+  expect(element?.hasAttribute("data-details-column")).toBe(true);
+
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(900);
+  await act(() => {
+    for (const callback of resize.callbacks) callback();
+  });
+  expect(element?.hasAttribute("data-details-column")).toBe(false);
+});
