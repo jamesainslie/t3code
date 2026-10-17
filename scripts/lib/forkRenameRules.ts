@@ -1040,13 +1040,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /t3-resource-monitor|t3-browser-secret|t3_fetch|\$__t3c|data-t3code-|data-t3-context|t3_\$\{|run-t3|t3-runtime|\.notarize-t3|t3-cli-archive|t3-screens/,
   },
   {
-    id: "kept-brand-layer-exceptions",
-    class: "kept",
-    reason:
-      "The build-time brand layer's exception list, which names old forms on purpose until the layer is retired.",
-    path: /^scripts\/lib\/forkBrand(?:\.test)?\.ts$/,
-  },
-  {
     id: "kept-vcs-config-file",
     class: "kept",
     reason: ".t3code/vcs.json read from users' repos, shared with upstream users.",
