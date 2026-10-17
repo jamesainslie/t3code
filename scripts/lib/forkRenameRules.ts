@@ -764,14 +764,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) =>
       stem(o) === "T3" &&
       (/\b(?:fork|makers) of $/.test(o.line.slice(0, o.column)) ||
-        (o.path === "docs/user/telemetry.md" && /usage events to T3$/.test(o.line))),
+        (o.path === "docs/user/telemetry.md" && o.line.endsWith("usage events to T3"))),
   },
   {
     id: "kept-upstream-alpha-dir",
     class: "kept",
     reason:
       "Upstream's pre-release user data directory name, T3 Code (Alpha), read as a migration source.",
-    test: (o) => /^T3 Code \(Alpha\)/.test(o.line.slice(o.column)),
+    test: (o) => o.line.slice(o.column).startsWith("T3 Code (Alpha)"),
   },
   {
     id: "upstream-project-sync-source",
@@ -806,7 +806,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) => {
       const rest = o.line.slice(o.column);
       return (
-        /^t3\[-_ \]\?code/.test(rest) ||
+        rest.startsWith("t3[-_ ]?code") ||
         (/t3-code\|t3_code\|t3code/.test(o.line) && /^t3(?:-code|_code|code)[|)]/.test(rest)) ||
         (/_SERVER_ALIASES = new Set\(/.test(o.line) && /^t3(?:-code|_code|code)["'`]/.test(rest))
       );
