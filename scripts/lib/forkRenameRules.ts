@@ -893,9 +893,11 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|__snapshots__\/.*|\.snap)$|\/testkit\/(?!.*\.ndjson$)/,
     test: (o) =>
       /^t3(?:code|tools)$/i.test(stem(o)) &&
-      // Values tests compare with renamed code: attribution, user agents, lint rule names.
-      !/attribution|user-?agent|userAgent/i.test(o.line) &&
+      // Values tests compare with renamed code: attribution, user agents, DISPLAY,
+      // lint rule names and command-line flags.
+      !/attribution|user-?agent|userAgent|DISPLAY/i.test(o.line) &&
       !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
+      !o.token.startsWith("--") &&
       !/^oxlint-plugin-/.test(o.path),
   },
   {

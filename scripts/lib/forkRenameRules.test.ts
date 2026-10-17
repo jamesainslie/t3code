@@ -192,6 +192,12 @@ describe("FORK_RENAME_RULES", () => {
     ["scripts/lib/forkCliArchive.ts", " * Adds `t3` beside the signed `lathe`", "kept"],
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
+    ["packages/ssh/src/auth.test.ts", '      assert.equal(env.DISPLAY, "t3code");', "identifier"],
+    [
+      "apps/desktop/scripts/electron-launcher.test.mjs",
+      '      "exec \x27/repo/Electron\x27 --t3code-dev-root=\x27/repo\x27",',
+      "identifier",
+    ],
     [
       "apps/server/src/orchestration-v2/ProjectCommands.test.ts",
       '    for (const text of ["T3", "é", "किखि"]) {',
