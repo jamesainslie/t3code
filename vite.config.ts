@@ -365,8 +365,8 @@ export default defineConfig({
           "apps/mobile/src/features/threads/thread-list-items.tsx",
           "apps/mobile/src/features/threads/thread-list-v2-items.tsx",
           "apps/mobile/src/lib/useMobileNavigationTheme.ts",
-          "apps/mobile/src/native/LatheComposerEditor.ios.tsx",
-          "apps/mobile/src/native/LatheComposerEditor.native.tsx",
+          "apps/mobile/src/native/T3ComposerEditor.ios.tsx",
+          "apps/mobile/src/native/T3ComposerEditor.native.tsx",
           "apps/mobile/src/native/SelectableMarkdownText.tsx",
         ],
         rules: {

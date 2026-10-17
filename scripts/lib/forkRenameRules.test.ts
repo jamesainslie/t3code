@@ -101,6 +101,22 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["docs/operations/x.md", "defaults to dark appearance and the `t3-code` palette", "kept"],
     ["README.md", "brew install --cask t3-code", "upstream-reference"],
+    ["vite.config.ts", '"apps/mobile/src/native/T3ComposerEditor.ios.tsx",', "kept"],
+    [
+      "apps/mobile/scripts/permissions-service.test.ts",
+      "// oxlint-disable-next-line t3code/no-global-process-runtime -- host Foundation.",
+      "identifier",
+    ],
+    [
+      "apps/mobile/modules/t3-terminal/README.md",
+      "`t3code/custom-io-ordered-feed` branch when vendored, based on VVTerm's",
+      "kept",
+    ],
+    [
+      ".github/scripts/relay-state-output.test.cjs",
+      '"T3CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://example.invalid/traces\\n" +',
+      "upstream-reference",
+    ],
     ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-graphite-dark");', "identifier"],
     [
       "packages/shared/src/t3McpToolPresentation.ts",
