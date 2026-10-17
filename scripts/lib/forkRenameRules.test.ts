@@ -101,6 +101,43 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["docs/operations/x.md", "defaults to dark appearance and the `t3-code` palette", "kept"],
     ["README.md", "brew install --cask t3-code", "upstream-reference"],
+    ["vite.config.ts", '"apps/mobile/src/native/T3ComposerEditor.ios.tsx",', "kept"],
+    [
+      "apps/mobile/scripts/permissions-service.test.ts",
+      "// oxlint-disable-next-line t3code/no-global-process-runtime -- host Foundation.",
+      "identifier",
+    ],
+    [
+      "scripts/build-cli-archive.ts",
+      '  const executableName = input.platform === "win" ? "t3.exe" : "t3";',
+      "identifier",
+    ],
+    ["scripts/build-cli-archive.ts", '    "Invoke-TrustedSigning t3.exe",', "identifier"],
+    [
+      "scripts/build-cli-archive.ts",
+      "  return `t3-${version}-${cliArchivePlatformKey(platform, arch)}`;",
+      "kept",
+    ],
+    [
+      "scripts/build-cli-archive.ts",
+      " * Fork: the archive holds the executable as `lathe` and as `t3` (see",
+      "kept",
+    ],
+    [
+      "scripts/build-cli-archive.ts",
+      "  const peOffset = view.getUint32(0x3c, true);",
+      "false-positive",
+    ],
+    [
+      "apps/mobile/modules/t3-terminal/README.md",
+      "`t3code/custom-io-ordered-feed` branch when vendored, based on VVTerm's",
+      "kept",
+    ],
+    [
+      ".github/scripts/relay-state-output.test.cjs",
+      '"T3CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://example.invalid/traces\\n" +',
+      "upstream-reference",
+    ],
     ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-graphite-dark");', "identifier"],
     [
       "packages/shared/src/t3McpToolPresentation.ts",

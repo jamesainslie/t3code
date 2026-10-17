@@ -203,6 +203,8 @@ let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
  */
 const mobileFollowsSharedCode = (o: RenameOccurrence): boolean => {
   if (/@t3tools/.test(o.token)) return true;
+  // Lint directives name the shared oxlint plugin, in scripts as well as src.
+  if (/^t3code\/[a-z-]+$/.test(o.token) && /lint-(?:disable|enable)/.test(o.line)) return true;
   if (!/^apps\/mobile\/src\/.*\.tsx?$/.test(o.path)) return false;
   if (o.token === "t3code" && /\battribution\b/.test(o.line)) return true;
   rulesWithoutMobile ??= FORK_RENAME_RULES.filter((rule) => rule.id !== "kept-mobile-app");
@@ -279,8 +281,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "upstream-release-workflow",
     class: "upstream-reference",
-    reason: "Upstream's own release workflow, disabled in the fork.",
-    path: /^\.github\/workflows\/release\.yml$/,
+    reason:
+      "Upstream's own release workflow, disabled in the fork, and the test that runs its relay state step.",
+    path: /^\.github\/(?:workflows\/release\.yml|scripts\/relay-state-output\.test\.cjs)$/,
   },
   {
     id: "kept-vendored-dependency-versions",
@@ -310,6 +313,16 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "Mobile native module packages and directories (t3-terminal, expo.modules.t3*), referenced from outside apps/mobile; renamed with the mobile project.",
     token:
       /expo\.modules\.t3|modules\/t3-|(?:^|[^A-Za-z])t3-(?:terminal|native-controls|source-text|review-diff|composer-editor|widget-expiry|agent-notifications|markdown-text)\b|^t3(?:terminal|nativecontrols|sourcetext|reviewdiff|composereditor|widgetexpiry|agentnotifications)$/,
+  },
+  {
+    id: "kept-mobile-paths",
+    class: "kept",
+    reason:
+      "Paths into apps/mobile named from outside it, such as lint config file lists; mobile files keep their names.",
+    test: (o) => {
+      const start = o.token.indexOf("apps/mobile/");
+      return start !== -1 && start < o.offset;
+    },
   },
   {
     id: "fp-inside-word",
@@ -701,6 +714,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /(?:pingdotgg|t3dotgg|T3Tools|t3tools)\/t3code|github\.com\/pingdotgg|t3dotgg\b/i,
   },
 
+  {
+    id: "id-cli-archive-build-input",
+    class: "identifier",
+    reason:
+      "build-cli-archive.ts reads the executable the server build writes (dist-exe/lathe) and names it in hints and logs; only the archive stem and the alias it documents keep t3.",
+    path: /^scripts\/build-cli-archive\.ts$/,
+    test: (o) => stem(o) === "t3" && !/t3-\$\{version\}/.test(o.line) && !/as `t3`/.test(o.line),
+  },
   {
     id: "kept-cli-literal",
     class: "kept",
