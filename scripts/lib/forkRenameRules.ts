@@ -797,7 +797,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason: "Sample text for a grapheme-count test, not the product name.",
     path: /ProjectCommands\.test\.ts$/,
-    line: /\["T3", "é"/,
+    line: /for \(const text of \["T3", "/,
   },
   {
     id: "kept-upstream-alpha-dir",
@@ -885,6 +885,19 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   },
 
   // identifiers: names that never leave the build
+  {
+    id: "upstream-fixture-repo-names",
+    class: "upstream-reference",
+    reason:
+      "Test data naming the t3code repository or its t3tools owner, which tests compare with kept repository names; left as upstream wrote it. Replay transcripts follow the renamed code instead.",
+    path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|__snapshots__\/.*|\.snap)$|\/testkit\/(?!.*\.ndjson$)/,
+    test: (o) =>
+      /^t3(?:code|tools)$/i.test(stem(o)) &&
+      // Values tests compare with renamed code: attribution, user agents, lint rule names.
+      !/attribution|user-?agent|userAgent/i.test(o.line) &&
+      !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
+      !/^oxlint-plugin-/.test(o.path),
+  },
   {
     id: "id-css-names",
     class: "identifier",
@@ -1132,14 +1145,6 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /\.mdx?$/,
   },
 
-  {
-    id: "upstream-fixture-repo-names",
-    class: "upstream-reference",
-    reason:
-      "Test data naming the t3code repository or its t3tools owner, which tests compare with kept repository names; left as upstream wrote it. Replay transcripts follow the renamed code instead.",
-    path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|__snapshots__\/.*|\.snap)$|\/testkit\/(?!.*\.ndjson$)/,
-    test: (o) => /^t3(?:code|tools)$/i.test(stem(o)),
-  },
   // test fixtures: recorded transcripts, example paths and ids
   {
     id: "id-test-fixture",
