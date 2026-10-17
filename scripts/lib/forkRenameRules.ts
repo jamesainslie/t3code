@@ -400,6 +400,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
           stem(o) === "T3" ? "T3" : o.token.replace(/^["'`]|["'`,;:)}]+$/g, ""),
         ) &&
         !o.path.endsWith(".ndjson")) ||
+      // Replay transcripts: only hits inside a clientInfo object, since one frame holds other text too.
+      (o.path.endsWith(".ndjson") && /"clientInfo":\{[^{}]*$/.test(o.line.slice(0, o.column))) ||
       /^["'`]?t3-code-(?:text|provider-setup|acp-cli|provider-auth|provider-test|session-manager|provider-probe|git-text)["'`]?/.test(
         o.token,
       ),
@@ -638,6 +640,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "Names other processes keep across upgrades: OpenCode's per-session instruction key, the ACP stale-cgroup prefix, the desktop control socket directory.",
     test: (o) =>
       (/opencode\/src\/server\/v2\//.test(o.path) && /INSTRUCTIONS_KEY/.test(o.line)) ||
+      (o.token === "t3-code" && /instructions\.entry\.put|^\s*key: "t3-code",?$/.test(o.line)) ||
       (/AcpSessionRuntime/.test(o.path) && /t3-acp-/.test(o.token)) ||
       (/desktopAppControl/.test(o.path) && /t3code-/.test(o.token)),
   },
@@ -798,10 +801,17 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       return (
         /^t3\[-_ \]\?code/.test(rest) ||
         (/t3-code\|t3_code\|t3code/.test(o.line) && /^t3(?:-code|_code|code)[|)]/.test(rest)) ||
-        (/_SERVER_ALIASES = new Set\(/.test(o.line) && /^t3(?:-code|_code|code)["'`]/.test(rest)) ||
-        (/\bprefix(?:es)? ={1,3} /.test(o.line) && /^t3[-_]code__/.test(rest))
+        (/_SERVER_ALIASES = new Set\(/.test(o.line) && /^t3(?:-code|_code|code)["'`]/.test(rest))
       );
     },
+  },
+  {
+    id: "kept-pi-legacy-canonical-tools",
+    class: "kept",
+    reason:
+      "Pi's hidden canonical tool names (mcp__t3_code__*), which reserve ownership against Pi's configured MCP servers and keep pre-rename tool names resolvable; the public names become mcp__lathe__*.",
+    path: /provider-pi\/src\/server\/mcpExtensionSource(?:\.test)?\.ts$/,
+    token: /mcp__t3_code__/,
   },
   {
     id: "agent-mcp-names",

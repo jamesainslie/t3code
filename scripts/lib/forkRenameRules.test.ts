@@ -122,11 +122,7 @@ describe("FORK_RENAME_RULES", () => {
       "  if (/^(?:lathe|t3[-_ ]?code)$/i.test(id)) {",
       "kept",
     ],
-    [
-      "packages/provider-pi/src/server/mcpExtensionSource.ts",
-      '    const prefixes = ok ? ["mcp__t3-code__", "mcp__t3_code__"] : ["mcp__t3-code__"];',
-      "kept",
-    ],
+
     [
       "apps/desktop/src/app/DesktopLegacyLocalStorage.ts",
       "// upstream's T3 Code (Alpha) directory",
@@ -196,6 +192,31 @@ describe("FORK_RENAME_RULES", () => {
     ["scripts/lib/forkCliArchive.ts", " * Adds `t3` beside the signed `lathe`", "kept"],
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
+    [
+      "apps/server/src/orchestration-v2/Adapters/OpenCode2AdapterV2.test.ts",
+      '          key: "t3-code",',
+      "kept",
+    ],
+    [
+      "packages/provider-pi/src/server/mcpExtensionSource.test.ts",
+      '        "mcp__t3_code__orchestrator_capabilities",',
+      "kept",
+    ],
+    [
+      "packages/provider-pi/src/server/mcpExtensionSource.ts",
+      '    const prefixes = ok ? ["mcp__t3-code__", "mcp__t3_code__"] : ["mcp__t3-code__"];',
+      "agent-facing",
+    ],
+    [
+      "apps/server/src/orchestration-v2/testkit/fixtures/x/codex_transcript.ndjson",
+      '{"frame":{"params":{"clientInfo":{"name":"T3 Code","title":"T3 Code"}}}}',
+      "wire-peer",
+    ],
+    [
+      "apps/server/src/orchestration-v2/testkit/fixtures/x/codex_transcript.ndjson",
+      '{"frame":{"params":{"clientInfo":{"name":"x"},"text":"You are running in T3 Code"}}}',
+      "display",
+    ],
     ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-ember-light");', "identifier"],
     [
       "packages/ssh/src/tunnel.test.ts",
