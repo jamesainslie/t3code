@@ -10,7 +10,7 @@ import {
   type OrchestrationV2ThreadProjection,
   ProviderDriverKind,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import {
   ClaudeOrchestratorReplayHarness,
@@ -24,7 +24,7 @@ import {
   makeCursorAgentSdkReplayRunner,
 } from "../Adapters/CursorAdapterV2.testkit.ts";
 import * as CursorAdapterV2Testkit from "../Adapters/CursorAdapterV2.testkit.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { provideDeterministicTestRuntime } from "./DeterministicRuntime.ts";
 import {
@@ -48,12 +48,12 @@ import {
 } from "./fixtures/shared.ts";
 import type { OrchestratorV2ScenarioResult } from "./OrchestratorScenario.ts";
 import { runOrchestratorV2ProviderReplayScenario } from "./ProviderReplayHarness.ts";
-import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
+import { checkpointWorkspace } from "@lathe/provider-testing/replayWorkspace";
 import { materializeReplayTranscriptRuntimeInstructions } from "./ReplayRuntimeInstructions.ts";
 import {
   materializeReplayTranscriptWorkspace,
   readProviderReplayTranscript,
-} from "@t3tools/provider-testing/replayTranscript";
+} from "@lathe/provider-testing/replayTranscript";
 
 const FIRST_FINAL = "provider thread resume fixture first turn complete";
 const SECOND_FINAL = "provider thread resume fixture second turn complete";
@@ -87,7 +87,7 @@ const readClaudeSubagentResumeTranscript = Effect.fn("readClaudeSubagentResumeTr
  * The same session with the math.ts subagent's first run removed: the root
  * turn settles while the subagent still works, and the server restarts
  * before it reports, so recovery cancels it. The resumed turn then carries
- * the restart note, as T3 sends it.
+ * the restart note, as Lathe sends it.
  */
 const readClaudeCancelledSubagentResumeTranscript = Effect.fn(
   "readClaudeCancelledSubagentResumeTranscript",
@@ -130,7 +130,7 @@ const readClaudeCancelledSubagentResumeTranscript = Effect.fn(
             message: {
               ...frame.message.message,
               content: [
-                "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back:",
+                "Note: the Lathe server restarted, and this background work was cancelled before it finished. It will not report back:",
                 "- subagent: Audit src/math.ts",
                 "",
                 "User message:",
@@ -179,7 +179,7 @@ const runCursorRecovery = Effect.fn("runCursorRecovery")(function* (input: {
   const path = yield* Path.Path;
   const tempDir = yield* Effect.acquireRelease(
     fs.makeTempDirectory({
-      prefix: "t3-orchestration-v2-cursor-recovery-",
+      prefix: "lathe-orchestration-v2-cursor-recovery-",
     }),
     (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
   );
@@ -275,7 +275,7 @@ describe("orchestrator replay recovery", () => {
           const path = yield* Path.Path;
           const tempDir = yield* Effect.acquireRelease(
             fs.makeTempDirectory({
-              prefix: "t3-orchestration-v2-recovery-",
+              prefix: "lathe-orchestration-v2-recovery-",
             }),
             (directory) =>
               fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
@@ -383,7 +383,7 @@ describe("orchestrator replay recovery", () => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const tempDir = yield* Effect.acquireRelease(
-          fs.makeTempDirectory({ prefix: "t3-orchestration-v2-claude-recovery-" }),
+          fs.makeTempDirectory({ prefix: "lathe-orchestration-v2-claude-recovery-" }),
           (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
         );
         const materialized = yield* materializeFixtureInput({
@@ -495,7 +495,7 @@ describe("orchestrator replay recovery", () => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const tempDir = yield* Effect.acquireRelease(
-          fs.makeTempDirectory({ prefix: "t3-orchestration-v2-claude-recovery-" }),
+          fs.makeTempDirectory({ prefix: "lathe-orchestration-v2-claude-recovery-" }),
           (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
         );
         const materialized = yield* materializeFixtureInput({

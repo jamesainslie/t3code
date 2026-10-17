@@ -14,8 +14,8 @@ import {
   type PullRequestDetail,
   type PullRequestStack,
   type PullRequestRef,
-} from "@t3tools/contracts";
-import type { ReviewGuideGenerationInput } from "@t3tools/provider-core/server/textGeneration";
+} from "@lathe/contracts";
+import type { ReviewGuideGenerationInput } from "@lathe/provider-core/server/textGeneration";
 
 import * as ServerConfig from "../config.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -59,7 +59,7 @@ const git = (cwd: string, args: ReadonlyArray<string>) =>
 
 const makeRepositories = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-guide-" });
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-review-guide-" });
   const remote = `${root}/remote`;
   const workspace = `${root}/workspace`;
   yield* fs.makeDirectory(remote);
@@ -206,12 +206,12 @@ const makeLayer = (input: {
       } as unknown as TextGeneration.TextGeneration["Service"]),
     ),
     Layer.provide(ServerSettings.layerTest({ reviewGuidesEnabled: input.enabled ?? true })),
-    Layer.provide(ServerConfig.layerTest(input.root, { prefix: "t3-review-guide-config-" })),
+    Layer.provide(ServerConfig.layerTest(input.root, { prefix: "lathe-review-guide-config-" })),
   );
 
 const layerBase = Layer.mergeAll(
   GitVcsDriver.layer.pipe(
-    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-review-guide-git-" })),
+    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "lathe-review-guide-git-" })),
     Layer.provideMerge(VcsProcess.layer),
   ),
   SqlitePersistence.layerMemory,

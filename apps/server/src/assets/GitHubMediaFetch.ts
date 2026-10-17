@@ -1,5 +1,5 @@
 import * as Mime from "effect/http/Mime";
-import { githubMediaFileName } from "@t3tools/shared/githubMedia";
+import { githubMediaFileName } from "@lathe/shared/githubMedia";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -13,7 +13,7 @@ import {
 } from "effect/http";
 
 import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
-import * as GitHubCredentials from "@t3tools/source-control-github/server/GitHubCredentials";
+import * as GitHubCredentials from "@lathe/source-control-github/server/GitHubCredentials";
 
 /**
  * Everything a redirect leads to — the presigned object stores GitHub hands assets off to —

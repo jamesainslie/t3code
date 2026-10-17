@@ -2,7 +2,7 @@
 
 The environment issues its own sessions and enforces their capabilities. Cloud
 identity and relay credentials belong to a separate trust boundary, described in
-[T3 Connect](./t3-connect.md). A relay token is never an environment login.
+[T3 Connect](./lathe-connect.md). A relay token is never an environment login.
 
 ## Authority survives transport changes
 
@@ -25,7 +25,7 @@ vocabulary gives these grants a familiar meaning.
 
 ### MCP clients are a separate audience
 
-Agents T3 Code did not launch sign in to `/mcp` through a narrow OAuth
+Agents Lathe did not launch sign in to `/mcp` through a narrow OAuth
 authorization-code server ([McpOAuth](../../apps/server/src/auth/McpOAuth.ts)).
 It accepts loopback redirect URIs for agents on the user's machine and any
 HTTPS redirect for hosted agents (ChatGPT, bots). An HTTPS redirect means a
@@ -83,7 +83,7 @@ do not follow this replacement rule.
 
 ### Reusable dev credential
 
-Web development environments can accept one `T3CODE_DEV_AUTH_TOKEN` across
+Web development environments can accept one `LATHE_DEV_AUTH_TOKEN` across
 worktrees and ports on one hostname. The token and startup URLs that contain it
 grant administrative access. Desktop and non-development servers ignore it. See
 the [development runbook](../operations/development.md#reusable-dev-credential)

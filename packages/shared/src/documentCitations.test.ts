@@ -5,7 +5,7 @@ import {
   ThreadId,
   type AssistantCitation,
   type DocumentCitation,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   assistantCitationsToPlainText,
   collectCitations,
@@ -58,7 +58,7 @@ describe("document citation references", () => {
   it("round-trips a file quote without a server origin", () => {
     const href = formatDocumentCitationHref(document);
 
-    expect(href).toMatch(/^t3-citation:\/\/v1-document\/environment%2Fremote\/thread%3Aone\?/);
+    expect(href).toMatch(/^lathe-citation:\/\/v1-document\/environment%2Fremote\/thread%3Aone\?/);
     expect(parseDocumentCitationHref(href)).toStrictEqual(document);
     expect(parseCitationHref(href)).toStrictEqual(document);
     expect(serializeCitation(document)).toBe(`[Document quote](${href})`);
@@ -74,14 +74,14 @@ describe("document citation references", () => {
   });
 
   it.each([
-    "t3-citation://v1-document/a/b?path=x.md&startLine=0&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
-    "t3-citation://v1-document/a/b?path=x.md&startLine=3&endLine=2&text=q&start=0&end=1&prefix=&suffix=",
-    "t3-citation://v1-document/a/b?path=&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
-    "t3-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=&start=0&end=1&prefix=&suffix=",
-    "t3-citation://v1-document/a/b/c?path=x.md&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
-    "t3-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=&x=1",
-    "t3-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&start=4&end=2&prefix=&suffix=",
-    "t3-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=0&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=3&endLine=2&text=q&start=0&end=1&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=&start=0&end=1&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b/c?path=x.md&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&start=0&end=1&prefix=&suffix=&x=1",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&start=4&end=2&prefix=&suffix=",
+    "lathe-citation://v1-document/a/b?path=x.md&startLine=1&endLine=1&text=q&prefix=&suffix=",
   ])("rejects malformed document references: %s", (href) => {
     expect(parseDocumentCitationHref(href)).toBeNull();
     expect(collectCitations(`[Document quote](${href})`)).toEqual([]);
@@ -121,7 +121,7 @@ describe("document citation references", () => {
     ]);
     expect(expanded).toContain("workspace files");
     expect(expanded.match(/<\/document_citations>/g)).toHaveLength(1);
-    expect(expanded).not.toContain("t3-citation://");
+    expect(expanded).not.toContain("lathe-citation://");
   });
 
   it("omits the assistant block when only files are quoted", () => {

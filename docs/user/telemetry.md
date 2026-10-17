@@ -2,7 +2,7 @@
 
 Lathe sends no product usage data unless you turn it on.
 
-To share usage data with T3 Tools, the makers of T3 Code, set `T3CODE_TELEMETRY_ENABLED=true` in
+To share usage data with T3 Tools, the makers of T3 Code, set `LATHE_TELEMETRY_ENABLED=true` in
 the server's environment before starting it. The server then sends product usage events to T3
 Tools' PostHog project, associated with a hashed account or installation identifier. Events
 include the provider, model, reasoning effort, permission mode, turn result, duration, and
@@ -25,8 +25,8 @@ saved endpoints are checked when the section opens. Checks send authentication h
 the signal's currently running endpoint and do not follow redirects. To check a new endpoint
 that requires authentication, save it and restart the server first.
 
-`T3CODE_OTLP_*_URL` and standard `OTEL_EXPORTER_OTLP_*` environment variables override the saved
-settings. For endpoints saved here or set with `T3CODE_OTLP_*_URL`, set `T3CODE_OTLP_HEADERS` for
-receivers that need authentication and `T3CODE_OTLP_PROTOCOL=http/protobuf` for receivers that do
+`LATHE_OTLP_*_URL` and standard `OTEL_EXPORTER_OTLP_*` environment variables override the saved
+settings. For endpoints saved here or set with `LATHE_OTLP_*_URL`, set `LATHE_OTLP_HEADERS` for
+receivers that need authentication and `LATHE_OTLP_PROTOCOL=http/protobuf` for receivers that do
 not accept JSON. An endpoint set with `OTEL_EXPORTER_OTLP_*` takes its headers and protocol from
 `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_PROTOCOL` instead.

@@ -1,4 +1,4 @@
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as NodeSqliteClient from "@lathe/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,7 +16,7 @@ export class DatabaseMissingError extends Schema.TaggedError<DatabaseMissingErro
   { path: Schema.String },
 ) {
   override get message() {
-    return "No existing T3 Code database was found in this data directory.";
+    return "No existing Lathe database was found in this data directory.";
   }
 }
 
@@ -25,7 +25,7 @@ export class DatabaseInUseError extends Schema.TaggedError<DatabaseInUseError>()
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message() {
-    return "Stop the T3 Code server and desktop app before compacting the database.";
+    return "Stop the Lathe server and desktop app before compacting the database.";
   }
 }
 
@@ -34,7 +34,7 @@ export class DatabaseProjectionsInvalidError extends Schema.TaggedError<Database
   { path: Schema.String },
 ) {
   override get message() {
-    return "Database projections need repair before compaction. Start T3 Code once so it rebuilds them, then run doctor again. If this CLI is older than the one that wrote the database, update T3 Code first.";
+    return "Database projections need repair before compaction. Start Lathe once so it rebuilds them, then run doctor again. If this CLI is older than the one that wrote the database, update Lathe first.";
   }
 }
 
@@ -56,7 +56,7 @@ export class DatabaseCompactError extends Schema.TaggedError<DatabaseCompactErro
   }
 }
 
-/** Offline inspection and repair of a T3 state database, for `t3 doctor`. */
+/** Offline inspection and repair of a Lathe state database, for `lathe doctor`. */
 export class DatabaseMaintenance extends Context.Service<
   DatabaseMaintenance,
   {
@@ -82,7 +82,7 @@ export class DatabaseMaintenance extends Context.Service<
       | DatabaseCompactError
     >;
   }
->()("t3/persistence/DatabaseMaintenance") {}
+>()("lathe/persistence/DatabaseMaintenance") {}
 
 const isDomainError = Schema.is(
   Schema.Union([DatabaseMissingError, DatabaseInUseError, DatabaseProjectionsInvalidError]),

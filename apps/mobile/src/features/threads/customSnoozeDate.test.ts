@@ -1,4 +1,4 @@
-import { localSnoozeDate, localSnoozeTime } from "@t3tools/client-runtime/state/thread-settled";
+import { localSnoozeDate, localSnoozeTime } from "@lathe/client-runtime/state/thread-settled";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

@@ -1,13 +1,13 @@
 # Relay observability
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using Lathe? See [docs/user](../user/).
 
 The relay Alchemy stack owns a shared Axiom trace setup:
 
 - `t3-code-relay-traces-prod`, the OpenTelemetry trace dataset shared by the Worker, mobile app, and
   first-party relay clients
 - `t3-code-relay-otel-ingest-prod`, the dataset-scoped Worker ingest token
-- `t3-code-mobile-otel-ingest-prod`, the dataset-scoped mobile ingest token
+- `lathe-mobile-otel-ingest-prod`, the dataset-scoped mobile ingest token
 - `t3-code-relay-client-otel-ingest-prod`, the dataset-scoped first-party relay-client ingest token
 - `t3-code-relay-recent-spans-prod`, a view of recent request and endpoint spans
 

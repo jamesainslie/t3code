@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
-import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@lathe/contracts";
 import {
   localSnoozeDate,
   localSnoozeTime,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@lathe/client-runtime/state/thread-settled";
 import {
   resolveDialogReminder,
   resolveDialogSnoozedUntil,

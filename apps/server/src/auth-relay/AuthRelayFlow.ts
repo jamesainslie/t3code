@@ -2,7 +2,7 @@ import {
   ProviderSetupError,
   type ProviderAuthState,
   type ProviderInstanceId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
@@ -39,7 +39,7 @@ export type { AuthorizationCompletion, PendingAuthorization } from "./loopbackCa
  * A browser sign-in started on the environment prints a URL and waits on a
  * loopback listener that the user's browser, on another machine, can never
  * reach. The flow owns the state machine around that gap: it publishes the
- * URL to the one T3 auth session that started the flow, takes the return URL
+ * URL to the one Lathe auth session that started the flow, takes the return URL
  * back from that session, replays it against the listener on this
  * environment, and reports completion only when the driver confirms the
  * native tool finished. A driver supplies how to obtain the URL, how to
@@ -55,7 +55,7 @@ export interface AuthRelaySignInHandle {
   /**
    * The tool asked to open a sign-in page. The same URL may arrive more than
    * once (stdout and a browser hijack, say); a different second URL fails the
-   * flow because T3 can only relay one callback.
+   * flow because Lathe can only relay one callback.
    */
   readonly receiveAuthorizationUrl: (url: string) => Effect.Effect<void, AuthRelayError>;
   /** Device-code sign-in: no callback, the user enters `userCode` on the page. */

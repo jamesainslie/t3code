@@ -9,15 +9,15 @@ import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { createModelSelection } from "@t3tools/shared/model";
+import { createModelSelection } from "@lathe/shared/model";
 import { expect } from "vite-plus/test";
-import { ProviderInstanceId } from "@t3tools/contracts";
-import { GrokSettings } from "@t3tools/provider-grok/settings";
+import { ProviderInstanceId } from "@lathe/contracts";
+import { GrokSettings } from "@lathe/provider-grok/settings";
 
 import * as ServerConfig from "../config.ts";
 import * as TextGeneration from "./TextGeneration.ts";
-import { makeGrokTextGeneration } from "@t3tools/provider-grok/testing";
-import { execScriptSource, writeFakeCli } from "@t3tools/provider-testing/fakeCli";
+import { makeGrokTextGeneration } from "@lathe/provider-grok/testing";
+import { execScriptSource, writeFakeCli } from "@lathe/provider-testing/fakeCli";
 const decodeGrokSettings = Schema.decodeSync(GrokSettings);
 
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
@@ -76,8 +76,8 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
 
     return withFakeAcpGrok(
       {
-        T3_ACP_REQUEST_LOG_PATH: requestLogPath,
-        T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+        LATHE_ACP_REQUEST_LOG_PATH: requestLogPath,
+        LATHE_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
           subject: "Add Grok provider",
           body: "Wire up the ACP runtime and headless text generation path.",
         }),
@@ -116,7 +116,7 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
   it.effect("extracts the JSON object when Grok wraps it in conversational text", () =>
     withFakeAcpGrok(
       {
-        T3_ACP_PROMPT_RESPONSE_TEXT:
+        LATHE_ACP_PROMPT_RESPONSE_TEXT:
           "Sure! Here's a thread title:\n\n" +
           JSON.stringify({ title: "Investigate failing CI" }) +
           "\n\nLet me know if you need anything else.",
@@ -136,7 +136,7 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
   it.effect("surfaces ACP request failures as text generation errors", () =>
     withFakeAcpGrok(
       {
-        T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({ branch: "unreachable" }),
+        LATHE_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({ branch: "unreachable" }),
       },
       (textGeneration) =>
         Effect.gen(function* () {
@@ -159,7 +159,7 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
   it.effect("fails with TextGenerationError when output is empty", () =>
     withFakeAcpGrok(
       {
-        T3_ACP_PROMPT_RESPONSE_TEXT: "   \n  ",
+        LATHE_ACP_PROMPT_RESPONSE_TEXT: "   \n  ",
       },
       (textGeneration) =>
         Effect.gen(function* () {
@@ -179,7 +179,7 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
   it.effect("decodes a structured PR title + body", () =>
     withFakeAcpGrok(
       {
-        T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+        LATHE_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
           title: "feat(grok): wire up session/set_model",
           body: "## Summary\n- Replace `-m` spawn flag with the typed ACP `session/set_model`.\n- Translate `MODEL_SWITCH_INCOMPATIBLE_AGENT` into a validation error.",
         }),
@@ -205,7 +205,7 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
   it.effect("fails with TextGenerationError when output is unparseable JSON", () =>
     withFakeAcpGrok(
       {
-        T3_ACP_PROMPT_RESPONSE_TEXT: "totally not json output from a confused model",
+        LATHE_ACP_PROMPT_RESPONSE_TEXT: "totally not json output from a confused model",
       },
       (textGeneration) =>
         Effect.gen(function* () {

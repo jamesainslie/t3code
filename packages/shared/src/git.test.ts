@@ -1,5 +1,5 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
-import type { VcsStatusRemoteResult, VcsStatusResult } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
+import type { VcsStatusRemoteResult, VcsStatusResult } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -204,7 +204,7 @@ describe("isTemporaryWorktreeBranch", () => {
     expect(isTemporaryWorktreeBranch("t3code/f4ae4e0e-f971-4d48-c4f2-9cf0aa54ab12")).toBe(false);
   });
 
-  it("matches the flat fallback used when a plain t3 branch exists", () => {
+  it("matches the flat fallback used when a plain lathe branch exists", () => {
     const flat = flattenTemporaryWorktreeBranchName(`${WORKTREE_BRANCH_PREFIX}/deadbeef`);
     expect(flat).toBe(`${WORKTREE_BRANCH_PREFIX}-deadbeef`);
     expect(isTemporaryWorktreeBranch(flat)).toBe(true);
@@ -240,7 +240,7 @@ describe("isTemporaryWorktreeBranch", () => {
     },
   );
 
-  it.each(["t3f/deadbeef", "feature/deadbeef", "lathe/add-search", "xlathe/deadbeef"])(
+  it.each(["lathef/deadbeef", "feature/deadbeef", "lathe/add-search", "xlathe/deadbeef"])(
     "does not treat %s as temporary",
     (refName) => {
       expect(isTemporaryWorktreeBranch(refName)).toBe(false);

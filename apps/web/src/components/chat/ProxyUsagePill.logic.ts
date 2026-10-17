@@ -12,8 +12,8 @@ import type {
   UsageLimitSourceAccount,
   UsageLimitSourceAccountLogin,
   UsageLimitSourceSnapshot,
-} from "@t3tools/contracts";
-import { formatDuration } from "@t3tools/shared/usageLimits";
+} from "@lathe/contracts";
+import { formatDuration } from "@lathe/shared/usageLimits";
 
 export type ProxyTone = "ok" | "warn" | "crit" | "muted";
 export type ProxyWindowGlyph = "feather";

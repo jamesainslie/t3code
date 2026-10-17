@@ -19,6 +19,6 @@ export type SshOutputObserverFn = (chunk: SshOutputChunk) => Effect.Effect<void>
  * that opt in through `observe` report anything; the default discards it.
  */
 export const SshOutputObserver = Context.Reference<SshOutputObserverFn>(
-  "@t3tools/ssh/SshOutputObserver",
+  "@lathe/ssh/SshOutputObserver",
   { defaultValue: () => () => Effect.void },
 );

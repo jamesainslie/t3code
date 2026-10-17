@@ -12,7 +12,7 @@ import {
   type OrchestrationV2ConversationMessage,
   type OrchestrationV2ThreadShell,
   type ServerSettings,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -334,7 +334,7 @@ describe("thread history toolkit handlers", () => {
       for (const threadId of [ThreadId.make("thread-unknown"), DELETED_ID]) {
         const error = yield* harness.call("read_thread", { threadId }).pipe(Effect.flip);
         expect(error).toMatchObject({ _tag: "ThreadNotFoundError", threadId });
-        expect(error.message).toBe(`Thread ${threadId} was not found in this T3 Code environment.`);
+        expect(error.message).toBe(`Thread ${threadId} was not found in this Lathe environment.`);
       }
     }),
   );

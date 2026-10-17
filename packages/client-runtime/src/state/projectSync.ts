@@ -1,4 +1,4 @@
-import type { ProjectSyncRequest } from "@t3tools/contracts";
+import type { ProjectSyncRequest } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";

@@ -1,6 +1,6 @@
 import { useNavigation, type NavigationProp } from "@react-navigation/native";
-import { executeProjectSync } from "@t3tools/client-runtime/state/project-sync";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { executeProjectSync } from "@lathe/client-runtime/state/project-sync";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { useState } from "react";
 import { Pressable, View } from "react-native";

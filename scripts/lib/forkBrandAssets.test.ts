@@ -2,7 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import { describe, expect, it } from "vite-plus/test";
 
 import { BRAND_ASSET_PATHS } from "./brand-assets.ts";

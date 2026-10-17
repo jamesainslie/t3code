@@ -1,4 +1,4 @@
-import { ProjectSyncRecord } from "@t3tools/contracts";
+import { ProjectSyncRecord } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";

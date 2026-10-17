@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetchInEffect:off -- The subject binds a real loopback port, so the test drives it with a real browser-shaped request.
 import { it as effectIt } from "@effect/vitest";
-import type { DesktopPreviewAuthRelayCallback } from "@t3tools/contracts";
+import type { DesktopPreviewAuthRelayCallback } from "@lathe/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";

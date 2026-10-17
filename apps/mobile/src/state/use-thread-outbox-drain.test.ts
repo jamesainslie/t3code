@@ -7,7 +7,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { PreparedTurnAttachments } from "../lib/attachmentUpload";
@@ -652,7 +652,7 @@ describe("thread outbox recovery rollback", () => {
       path: "src/Checkout.tsx",
     };
     const context = { version: 1 as const, records: [record] };
-    const text = "[Checkout.tsx](t3-context://v1/mention/setup-file)";
+    const text = "[Checkout.tsx](lathe-context://v1/mention/setup-file)";
     appAtomRegistry.set(composerDrafts.composerDraftsAtom, {
       [targetKey]: { text: message.text, attachments: [] },
       [sourceKey]: { text, context, attachments: [] },

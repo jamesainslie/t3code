@@ -5,7 +5,7 @@ import type {
   DesktopPreviewAuthRelayCallback,
   DesktopPreviewHostAuthRelayInput,
   DesktopPreviewHostAuthRelayResult,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -81,7 +81,7 @@ export class AuthRelayLoopbackHost extends Context.Service<
       listener: AuthRelayCallbackListener,
     ) => Effect.Effect<void, never, Scope.Scope>;
   }
->()("@t3tools/desktop/preview/AuthRelayLoopbackHost") {}
+>()("@lathe/desktop/preview/AuthRelayLoopbackHost") {}
 
 const listen = (server: NodeHttp.Server, hostname: string, port: number) =>
   Effect.callback<boolean>((resume) => {

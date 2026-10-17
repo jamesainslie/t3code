@@ -5,12 +5,12 @@ import {
   ProviderSessionId,
   type RuntimeMode,
   ThreadId,
-} from "@t3tools/contracts";
-import { GrokSettings } from "@t3tools/provider-grok/settings";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
+} from "@lathe/contracts";
+import { GrokSettings } from "@lathe/provider-grok/settings";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { resolveSelfInvocation } from "@lathe/shared/nodeRuntime";
 import * as EffectAcpErrors from "effect-acp/errors";
-import { xAiRateLimitedErrorCode } from "@t3tools/provider-grok/testing";
+import { xAiRateLimitedErrorCode } from "@lathe/provider-grok/testing";
 import { assert, describe, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -20,27 +20,27 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
+import * as TestProviderHost from "@lathe/provider-testing/TestProviderHost";
 import * as ProjectStore from "../ProjectStore.ts";
-import { buildInitialGrokProviderSnapshot } from "@t3tools/provider-grok/testing";
-import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
+import { buildInitialGrokProviderSnapshot } from "@lathe/provider-grok/testing";
+import type { ProviderInstance } from "@lathe/provider-core/server/driver";
 import * as ProviderInstanceRegistry from "../../provider/ProviderInstanceRegistry.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@lathe/provider-core/server/McpProviderSessions";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
-import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
+import { acpPermissionDisposition } from "@lathe/provider-acp/server/clientPolicy";
 import {
   AcpProviderCapabilitiesV2,
   acpCompletedTurnShouldTerminalizeTool,
   acpSubagentStatusBlocksTurnSettlement,
   acpSupportsImagePrompts,
-} from "@t3tools/provider-acp/server/adapter";
+} from "@lathe/provider-acp/server/adapter";
 import {
   makeGrokAcpAdapterFlavor,
   makeGrokAdapterV2,
   GrokProviderCapabilitiesV2,
-} from "@t3tools/provider-grok/testing";
+} from "@lathe/provider-grok/testing";
 
 const LAUNCH_TEST_GROK_SETTINGS = Schema.decodeSync(GrokSettings)({
   binaryPath: "grok-launch-test",

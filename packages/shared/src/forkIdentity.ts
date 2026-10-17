@@ -29,7 +29,7 @@ export const FORK_IDENTITY = Object.freeze({
   defaultPort: 4773,
   /**
    * Upstream's usage telemetry posts to T3 Tools' PostHog project. Lathe sends
-   * none unless `T3CODE_TELEMETRY_ENABLED=true` opts in.
+   * none unless `LATHE_TELEMETRY_ENABLED=true` opts in.
    */
   telemetryEnabledByDefault: false,
   productBaseName: "Lathe",
@@ -44,7 +44,7 @@ export const FORK_IDENTITY = Object.freeze({
   urlHandlerDesktopEntryName: "lathe-url-handler.desktop",
   /**
    * electron-updater's download cache under the OS cache dir. electron-builder
-   * names it after the bundled package.json name, `t3code` in both apps, so the
+   * names it after the bundled package.json name, `lathe` in both apps, so the
    * desktop swaps it in at runtime (`DesktopForkUpdaterCacheDir`).
    */
   updaterCacheDirName: "lathe-updater",

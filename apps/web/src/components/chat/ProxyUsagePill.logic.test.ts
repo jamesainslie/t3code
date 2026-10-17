@@ -1,4 +1,4 @@
-import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@t3tools/contracts";
+import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

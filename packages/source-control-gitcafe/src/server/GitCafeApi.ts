@@ -49,7 +49,7 @@ export class GitCafeApi extends Context.Service<
   {
     readonly request: (input: GitCafeApiRequest) => Effect.Effect<string, GitCafeApiError>;
   }
->()("@t3tools/source-control-gitcafe/server/GitCafeApi") {}
+>()("@lathe/source-control-gitcafe/server/GitCafeApi") {}
 
 const decodeProblem = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -126,7 +126,7 @@ export const make = Effect.gen(function* () {
       `https://${host}/api${input.path}`,
     ).pipe(
       HttpClientRequest.bearerToken(Redacted.value(credential.token)),
-      HttpClientRequest.setHeaders({ accept: "application/json", "user-agent": "t3code" }),
+      HttpClientRequest.setHeaders({ accept: "application/json", "user-agent": "lathe" }),
     );
     const { status, text } = yield* Effect.gen(function* () {
       const response = yield* httpClient

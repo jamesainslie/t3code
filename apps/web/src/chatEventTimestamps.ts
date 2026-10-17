@@ -2,7 +2,7 @@ import type {
   ChatEventTimestampStyle,
   ClientSettings,
   TimestampFormat,
-} from "@t3tools/contracts/settings";
+} from "@lathe/contracts/settings";
 
 import { getTimestampFormatter, parseTimestampDate, timestampLocale } from "./timestampFormat";
 

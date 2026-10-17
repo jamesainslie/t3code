@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/client-runtime",
+  "name": "@lathe/client-runtime",
   "private": true,
   "type": "module",
   "exports": {
@@ -131,9 +131,9 @@
       "types": "./src/voice-input/index.ts",
       "default": "./src/voice-input/index.ts"
     },
-    "./t3ToolSummary": {
-      "types": "./src/t3ToolSummary.ts",
-      "default": "./src/t3ToolSummary.ts"
+    "./latheToolSummary": {
+      "types": "./src/latheToolSummary.ts",
+      "default": "./src/latheToolSummary.ts"
     },
     "./relay": {
       "types": "./src/relay/index.ts",
@@ -457,16 +457,16 @@
     "test": "vp test run"
   },
   "dependencies": {
+    "@lathe/contracts": "workspace:*",
+    "@lathe/shared": "workspace:*",
+    "@lathe/source-control-azure-devops": "workspace:*",
+    "@lathe/source-control-bitbucket": "workspace:*",
+    "@lathe/source-control-core": "workspace:*",
+    "@lathe/source-control-forgejo": "workspace:*",
+    "@lathe/source-control-gitcafe": "workspace:*",
+    "@lathe/source-control-github": "workspace:*",
+    "@lathe/source-control-gitlab": "workspace:*",
     "@pierre/diffs": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/source-control-azure-devops": "workspace:*",
-    "@t3tools/source-control-bitbucket": "workspace:*",
-    "@t3tools/source-control-core": "workspace:*",
-    "@t3tools/source-control-forgejo": "workspace:*",
-    "@t3tools/source-control-gitcafe": "workspace:*",
-    "@t3tools/source-control-github": "workspace:*",
-    "@t3tools/source-control-gitlab": "workspace:*",
     "effect": "catalog:",
     "mermaid": "11.17.2",
     "remark-parse": "^11.0.0",

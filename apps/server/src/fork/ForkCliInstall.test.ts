@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 
 import { findWindowsShim } from "../cli/update.ts";
 import { isForkBootServiceCgroup } from "./ForkCliInstall.ts";
@@ -24,7 +24,7 @@ it.layer(NodeServices.layer)("fork CLI install", (it) => {
 
         const found = yield* findWindowsShim(executable).pipe(
           Effect.provideService(HostProcess.Environment, {
-            T3CODE_INSTALL_BIN_DIR: path.join(root, "bin"),
+            LATHE_INSTALL_BIN_DIR: path.join(root, "bin"),
           }),
         );
 
@@ -39,6 +39,6 @@ it("recognises a process running in the fork's systemd user unit", () => {
 
   assert.isTrue(isForkBootServiceCgroup(inUnit("t3code-fork.service")));
   // Upstream's unit belongs to an upstream install running beside the fork.
-  assert.isFalse(isForkBootServiceCgroup(inUnit("t3code.service")));
+  assert.isFalse(isForkBootServiceCgroup(inUnit("lathe.service")));
   assert.isFalse(isForkBootServiceCgroup("0::/user.slice/user-1000.slice/session-2.scope\n"));
 });

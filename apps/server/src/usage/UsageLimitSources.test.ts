@@ -4,7 +4,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ServerConfigStreamEvent,
   UsageLimitSourceId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -102,7 +102,7 @@ function harness(
                 kind: "modelproxy",
                 url: "https://iris.test",
                 issuer: "https://auth.test/realms/main",
-                clientId: "t3-code",
+                clientId: "lathe",
                 clientSecret: "",
                 enabled: true,
               },

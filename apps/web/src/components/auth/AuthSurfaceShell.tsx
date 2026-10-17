@@ -1,4 +1,4 @@
-import { DEFAULT_EDITION } from "@t3tools/contracts";
+import { DEFAULT_EDITION } from "@lathe/contracts";
 import type { ReactNode } from "react";
 
 import { APP_DISPLAY_NAME } from "../../branding";

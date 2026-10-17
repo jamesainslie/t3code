@@ -3,13 +3,13 @@ import {
   scopedProjectKey,
   scopeProjectRef,
   scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
+} from "@lathe/client-runtime/environment";
 import {
   DEFAULT_SERVER_SETTINGS,
   type ProjectId,
   type ScopedProjectRef,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import {
@@ -27,11 +27,11 @@ import {
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "../logicalProject";
-import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { resolveNewThreadEnvMode, resolveProjectSettings } from "@lathe/shared/projectSettings";
 import {
   buildContinuePrompt,
   buildThreadContextRecord,
-} from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/threadContextReference";
 import {
   readProject,
   readProjects,
@@ -45,7 +45,7 @@ import {
   resolveNewDraftStartFromOrigin,
   resolveNewThreadModelSelectionOverride,
 } from "../lib/chatThreadActions";
-import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
+import { readLatheProjectFile } from "../lib/latheProjectFileDefaults";
 import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
@@ -193,7 +193,7 @@ export function useNewThreadHandler() {
         const consultProjectFile =
           project !== undefined && projectSettings.settings.defaultThreadEnvMode === null;
         const projectFile = consultProjectFile
-          ? await readT3ProjectFile(project.environmentId, project.workspaceRoot)
+          ? await readLatheProjectFile(project.environmentId, project.workspaceRoot)
           : null;
         return resolveNewThreadEnvMode({
           projectSettings: resolveProjectSettings(

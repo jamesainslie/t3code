@@ -1,4 +1,4 @@
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import type { EnvironmentConnectionPhase } from "@lathe/client-runtime/connection";
 
 export type FloatingWorkingStatus =
   | { readonly kind: "working"; readonly startedAt: string }

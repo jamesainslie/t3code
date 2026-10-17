@@ -11,9 +11,9 @@ import * as Schema from "effect/Schema";
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import * as PlatformError from "effect/PlatformError";
 import { restorePendingRecovery } from "./projectSync/Recovery.ts";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import { DEFAULT_SIGNAL_EXPORT, type SignalExport } from "@t3tools/shared/observability";
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import { DEFAULT_SIGNAL_EXPORT, type SignalExport } from "@lathe/shared/observability";
+import * as OtelEnvironment from "@lathe/shared/otelEnvironment";
 import packageJson from "../package.json" with { type: "json" };
 
 export const DEFAULT_PORT = FORK_IDENTITY.defaultPort;
@@ -89,7 +89,7 @@ export class ServerConfig extends Context.Service<
     readonly tailscaleServeEnabled: boolean;
     readonly tailscaleServePort: number;
   }
->()("t3/config/ServerConfig") {
+>()("lathe/config/ServerConfig") {
   static readonly layerTest = (
     cwd: string,
     baseDirOrPrefix: string | { readonly prefix: string },

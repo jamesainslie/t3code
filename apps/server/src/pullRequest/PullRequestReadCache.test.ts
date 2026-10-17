@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { PullRequestOperationError } from "@t3tools/contracts";
+import { PullRequestOperationError } from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -30,7 +30,7 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
   it.effect("prunes entry files written before the max age and keeps fresh ones", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-01T00:00:00Z")));
       const cache = yield* cacheLayer(directory);
       yield* cache.get("old", Effect.succeed("old"), ["pr"]);
@@ -95,14 +95,14 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
       assert.deepStrictEqual(yield* fs.readDirectory(directory), []);
     }).pipe(
       Effect.scoped,
-      Effect.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-pr-cache-layer-" })),
+      Effect.provide(ServerConfig.layerTest(process.cwd(), { prefix: "lathe-pr-cache-layer-" })),
     ),
   );
 
   it.effect("reuses files after restart and respects the original expiry", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       let reads = 0;
       const lookup = Effect.sync(() => String(++reads));
       const first = yield* cacheLayer(directory);
@@ -121,7 +121,7 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
   it.effect("clears in-flight reads before a new service can reuse them", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       const started = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const cache = yield* cacheLayer(directory);
@@ -150,7 +150,7 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
   it.effect("invalidates only the changed scope across restarts and coalesces its next reads", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       let reads = 0;
       const lookup = Effect.sync(() => String(++reads));
       const cache = yield* cacheLayer(directory);
@@ -215,7 +215,7 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
   it.effect("compacts expired scope records without discarding fresh PR data", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       const cache = yield* cacheLayer(directory);
       yield* cache.get("summary", Effect.succeed("old"), ["pr"]);
       yield* cache.invalidate("pr");
@@ -238,7 +238,7 @@ it.layer(NodeServices.layer)("PR filesystem cache", (it) => {
   it.effect("does not persist failed GitHub reads", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pr-cache-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pr-cache-" });
       const cache = yield* cacheLayer(directory);
       const error = new PullRequestOperationError({ operation: "summary", detail: "unavailable" });
       yield* cache.get("summary", Effect.fail(error)).pipe(Effect.flip);

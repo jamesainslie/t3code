@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { parseChecksums } from "@t3tools/shared/cliRelease";
+import { parseChecksums } from "@lathe/shared/cliRelease";
 
 import {
   ForkCliReleaseAssetsMissingError,

@@ -3,8 +3,8 @@
  * project's "Agent thread history" setting. Upstream's session manager grants
  * the rest and adds these through one call.
  */
-import type { ServerSettings, ThreadId } from "@t3tools/contracts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import type { ServerSettings, ThreadId } from "@lathe/contracts";
+import { resolveProjectSettings } from "@lathe/shared/projectSettings";
 import * as Effect from "effect/Effect";
 
 import type { McpCapability } from "../../mcp/McpInvocationContext.ts";

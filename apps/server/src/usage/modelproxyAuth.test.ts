@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { UsageLimitSourceId } from "@t3tools/contracts";
+import { UsageLimitSourceId } from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -18,7 +18,7 @@ const config = {
   kind: "modelproxy",
   url: "https://iris.test",
   issuer: "https://auth.test/realms/main",
-  clientId: "t3-code",
+  clientId: "lathe",
   clientSecret: "client-secret",
   enabled: true,
 } as const;

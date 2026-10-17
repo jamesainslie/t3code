@@ -1,11 +1,11 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentThreadShell } from "@lathe/client-runtime/state/shell";
 import {
   generateSpreadPinOrderKeys,
   pinOrderKeyBetween,
   planPinnedReorder,
-} from "@t3tools/client-runtime/state/thread-sort";
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
-import type { EnvironmentId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/thread-sort";
+import { effectiveSnoozed } from "@lathe/client-runtime/state/thread-settled";
+import type { EnvironmentId } from "@lathe/contracts";
 
 export type ThreadMoveDestination =
   | "up"

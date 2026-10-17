@@ -1,7 +1,7 @@
 import {
   createPullRequestEnvironmentAtoms,
   createPullRequestStackAtomFamily,
-} from "@t3tools/client-runtime/state/pull-requests";
+} from "@lathe/client-runtime/state/pull-requests";
 import { connectionAtomRuntime } from "../connection/runtime";
 
 export const composerPullRequests = createPullRequestEnvironmentAtoms(connectionAtomRuntime);

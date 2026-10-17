@@ -1,9 +1,5 @@
-import {
-  ProviderSetupError,
-  type ClaudeSettings,
-  type ProviderInstanceId,
-} from "@t3tools/contracts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { ProviderSetupError, type ClaudeSettings, type ProviderInstanceId } from "@lathe/contracts";
+import { resolveSpawnCommand } from "@lathe/shared/shell";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -15,7 +11,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { buildBrowserLaunchCommand } from "../auth-relay/browserLaunchCapture.ts";
 import { CLAUDE_AUTH_BROWSER_MARKER, type ClaudeLoginProcess } from "./ClaudeAuth.ts";
 import { makeClaudeEnvironment } from "./Drivers/ClaudeHome.ts";
-import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
+import { spawnAndCollect } from "@lathe/provider-core/server/snapshotProbe";
 
 const LOGOUT_TIMEOUT = "30 seconds";
 

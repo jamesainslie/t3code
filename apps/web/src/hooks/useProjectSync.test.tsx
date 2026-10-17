@@ -1,6 +1,6 @@
 import { act, useSyncExternalStore } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
@@ -22,7 +22,7 @@ vi.mock("../state/session", () => ({
     return ready ? Option.some(connection.prepared) : Option.none();
   },
 }));
-vi.mock("@t3tools/client-runtime/state/project-sync", () => ({
+vi.mock("@lathe/client-runtime/state/project-sync", () => ({
   executeProjectSync: () => ({ defaultSourceHome: "/main-install" }),
 }));
 vi.mock("../lib/runtime", () => ({ runtime: { runPromise: async (value: unknown) => value } }));

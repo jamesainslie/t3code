@@ -1,9 +1,9 @@
-import { AuthSettingsWriteScope } from "@t3tools/contracts";
+import { AuthSettingsWriteScope } from "@lathe/contracts";
 import { useEnvironmentsWithScope } from "../../state/session";
 import {
   requiredScopesForServerSettingsPatch,
   EnvironmentAuthorizationError,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { readEnvironmentScope } from "../../state/session";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
@@ -11,7 +11,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   type ProjectScopedServerSettingKey,
   type UnifiedSettings,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useCallback, useMemo } from "react";
 
 import {

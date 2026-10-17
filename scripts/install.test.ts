@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - Drives the real shell installer through a PTY and a gated HTTP fixture.
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
@@ -35,7 +35,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("installer arch
     ["a current release", true, "lathe v1.2.3", "lathe"],
     ["a release from before the rename", false, "t3 v1.2.3", "t3"],
   ] as const)("installs from %s", async (_, current, expectedOutput, linkedName) => {
-    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-install-names-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-install-names-"));
     const assets = new Map<string, Buffer>();
     assets.set(`t3-${version}-${key}.tar.gz`, await pack(root, "legacy", { t3: "t3 v1.2.3" }));
     if (current) {
@@ -69,10 +69,10 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("installer arch
           env: {
             ...process.env,
             NO_COLOR: "1",
-            T3CODE_VERSION: version,
-            T3CODE_HOME: NodePath.join(root, "home"),
-            T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
-            T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
+            LATHE_VERSION: version,
+            LATHE_HOME: NodePath.join(root, "home"),
+            LATHE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
+            LATHE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
           },
           stdio: ["ignore", "pipe", "pipe"],
         },
@@ -106,7 +106,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer term
   it.each([false, true])(
     "preserves download and install behavior (HTTP failure: %s)",
     async (fail) => {
-      const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-install-progress-"));
+      const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-install-progress-"));
       const version = "1.2.3";
       const stem = `t3-${version}-linux-${HostProcess.Architecture.defaultValue()}`;
       const archiveName = `${stem}.tar.gz`;
@@ -153,10 +153,10 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer term
           ...process.env,
           TERM: "xterm",
           NO_COLOR: "1",
-          T3CODE_VERSION: version,
-          T3CODE_HOME: NodePath.join(root, "home"),
-          T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
-          T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
+          LATHE_VERSION: version,
+          LATHE_HOME: NodePath.join(root, "home"),
+          LATHE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
+          LATHE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
         },
         stdio: ["ignore", "pipe", "pipe"],
       });

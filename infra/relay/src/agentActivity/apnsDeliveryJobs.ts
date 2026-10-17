@@ -5,8 +5,8 @@ import {
   RelayAgentActivityAggregateState,
   RelayAgentAwarenessPhase,
   type RelayDeliveryKind,
-} from "@t3tools/contracts/relay";
-import { stableStringify } from "@t3tools/shared/relaySigning";
+} from "@lathe/contracts/relay";
+import { stableStringify } from "@lathe/shared/relaySigning";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";

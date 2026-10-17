@@ -5,7 +5,7 @@ import type {
   ProviderApprovalOption,
   ProviderRequestKind,
   RuntimeRequestId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import { questionLeadIn } from "../work-log/thinking.ts";
 

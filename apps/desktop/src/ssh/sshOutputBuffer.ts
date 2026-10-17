@@ -1,6 +1,6 @@
-import type { DesktopSshOutputEntry } from "@t3tools/contracts";
-import { redactSshOutput } from "@t3tools/ssh/command";
-import type { SshOutputChunk } from "@t3tools/ssh/output";
+import type { DesktopSshOutputEntry } from "@lathe/contracts";
+import { redactSshOutput } from "@lathe/ssh/command";
+import type { SshOutputChunk } from "@lathe/ssh/output";
 
 export interface SshOutputBufferOptions {
   readonly maxLines?: number;

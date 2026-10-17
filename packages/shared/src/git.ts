@@ -6,7 +6,7 @@ import type {
   VcsStatusRemoteResult,
   VcsStatusResult,
   VcsStatusStreamEvent,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import { FORK_IDENTITY } from "./forkIdentity.ts";
@@ -118,8 +118,8 @@ export function buildTemporaryWorktreeBranchName(
 }
 
 /**
- * Git stores refs as paths, so a plain `t3` branch makes every `t3/<hex>`
- * ref impossible. This moves a temporary name to the flat `t3-<hex>` sibling.
+ * Git stores refs as paths, so a plain `lathe` branch makes every `lathe/<hex>`
+ * ref impossible. This moves a temporary name to the flat `lathe-<hex>` sibling.
  */
 export function flattenTemporaryWorktreeBranchName(refName: string): string {
   const normalized = refName.trim().toLowerCase();

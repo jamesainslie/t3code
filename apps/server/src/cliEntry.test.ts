@@ -4,7 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NetService from "@t3tools/shared/Net";
+import * as NetService from "@lathe/shared/Net";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestConsole from "effect/testing/TestConsole";
@@ -83,7 +83,7 @@ describe("runCliEntry", () => {
 
   it("runs runtime-port without loading the full CLI", async () => {
     const fullCli = fullCliMustNotLoad();
-    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-cli-entry-test-"));
+    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-cli-entry-test-"));
     const runtimeFile = NodePath.join(dir, "runtime.json");
     NodeFS.writeFileSync(
       runtimeFile,
@@ -103,7 +103,7 @@ describe("runCliEntry", () => {
 
   it.effect("matches the full CLI's runtime-port output and exit code", () =>
     Effect.gen(function* () {
-      const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-cli-entry-test-"));
+      const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-cli-entry-test-"));
       const runtimeFile = NodePath.join(dir, "runtime.json");
       NodeFS.writeFileSync(
         runtimeFile,

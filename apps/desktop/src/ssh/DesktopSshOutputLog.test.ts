@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import type { DesktopSshOutputBatch } from "@t3tools/contracts";
+import type { DesktopSshOutputBatch } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -37,13 +37,13 @@ describe("DesktopSshOutputLog", () => {
       const observe = log.observerFor(target);
 
       yield* log.mark(target, "Connecting to devbox");
-      yield* observe({ source: "launch", stream: "stderr", text: "installing t3\n" });
+      yield* observe({ source: "launch", stream: "stderr", text: "installing lathe\n" });
       assert.deepEqual(sent, []);
 
       const snapshot = yield* log.subscribe(target);
       assert.deepEqual(
         snapshot.entries.map((entry) => entry.text),
-        ["Connecting to devbox", "installing t3"],
+        ["Connecting to devbox", "installing lathe"],
       );
 
       yield* observe({ source: "tunnel", stream: "stderr", text: "Connection refused\n" });

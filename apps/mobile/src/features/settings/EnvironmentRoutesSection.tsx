@@ -9,9 +9,9 @@ import {
   connectionRouteLabel,
   connectionRoutes,
   isLearned,
-} from "@t3tools/client-runtime/connection";
-import { type EnvironmentId, sessionGrantsScope } from "@t3tools/contracts";
-import { AUTH_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
+} from "@lathe/client-runtime/connection";
+import { type EnvironmentId, sessionGrantsScope } from "@lathe/contracts";
+import { AUTH_SCOPE_OPTIONS } from "@lathe/shared/authScopeOptions";
 import { AsyncResult } from "effect/reactivity";
 import * as Option from "effect/Option";
 import { useState } from "react";

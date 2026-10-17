@@ -48,7 +48,7 @@ jobs:
           run-install: true
 
       - name: Ensure Electron runtime is installed
-        run: vp run --filter @t3tools/desktop ensure:electron
+        run: vp run --filter @lathe/desktop ensure:electron
 
       # Files/dependencies are repo-wide; export checks cover clean workspaces only.
       - name: Check unused code
@@ -69,7 +69,7 @@ jobs:
       - name: Verify preload bundle output
         run: node apps/desktop/scripts/verify-preload-bundle.mjs
 
-  # Every package except t3 (apps/server) and the web app, which get their own jobs.
+  # Every package except lathe (apps/server) and the web app, which get their own jobs.
   test:
     name: Test
     runs-on: ubuntu-24.04
@@ -91,7 +91,7 @@ jobs:
           run-install: true
 
       - name: Ensure Electron runtime is installed
-        run: vp run --filter @t3tools/desktop ensure:electron
+        run: vp run --filter @lathe/desktop ensure:electron
 
       - name: Install browser secret helper build libraries
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
@@ -100,7 +100,7 @@ jobs:
         run: node --test .github/scripts/check-nightly-release.test.cjs
 
       - name: Test
-        run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+        run: vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test
 
   test_web:
     name: Test Web
@@ -123,7 +123,7 @@ jobs:
           run-install: true
 
       - name: Test
-        run: vp run --filter @t3tools/web test
+        run: vp run --filter @lathe/web test
 
   # apps/server runs its files one at a time (fileParallelism: false), so shards
   # spread them over runners. Files split by recorded duration
@@ -156,7 +156,7 @@ jobs:
         run: node apps/server/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
 
       - name: Test
-        run: vp run --filter t3 test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: vp run --filter lathe test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
   release_smoke:
     name: Release Smoke
@@ -178,7 +178,7 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@t3tools/scripts...
+              - --filter=@lathe/scripts...
 
       - name: Exercise release-only workflow steps
         run: node scripts/release-smoke.ts

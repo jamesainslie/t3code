@@ -2,12 +2,12 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
   type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   terminalBrowserLaunchRelayMode,
   type TerminalBrowserLaunch,
-} from "@t3tools/client-runtime/state/terminal";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/terminal";
+import type { ScopedThreadRef } from "@lathe/contracts";
 import { useState } from "react";
 
 import { useHostedAuthRelay } from "~/browser/useHostedAuthRelay";
@@ -142,13 +142,13 @@ export function TerminalBrowserLaunchBanner({
       </div>
       {relayMode === "hosted" ? (
         <p className="text-muted-foreground">
-          Sign in there. T3 Code returns the result to this terminal on its own, even if you switch
+          Sign in there. Lathe returns the result to this terminal on its own, even if you switch
           threads meanwhile.
         </p>
       ) : null}
       {relayMode === "unreachable" ? (
         <p className="text-muted-foreground [overflow-wrap:anywhere]">
-          This sign-in posts its result to a page only this computer&apos;s T3 Code desktop app can
+          This sign-in posts its result to a page only this computer&apos;s Lathe desktop app can
           catch. Open the link from the desktop app, or use the command&apos;s device-code option if
           it has one.
         </p>

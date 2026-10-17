@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import {
   DesktopBackendPortUnavailableError,
@@ -27,6 +27,6 @@ describe("DesktopApp errors", () => {
   it("reports the required development port", () => {
     const error = new DesktopDevelopmentBackendPortRequiredError();
 
-    assert.equal(error.message, "T3CODE_PORT is required in desktop development.");
+    assert.equal(error.message, "LATHE_PORT is required in desktop development.");
   });
 });

@@ -6,16 +6,13 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as EffectAcpSchema from "effect-acp/compat";
 import * as EffectAcpSchemaV1 from "effect-acp/schema-v1";
-import {
-  deriveToolActivityPresentation,
-  mergeToolActivityData,
-} from "@t3tools/shared/toolActivity";
-import { T3_MCP_TOOL_NAMES } from "@t3tools/shared/t3McpToolPresentation";
+import { deriveToolActivityPresentation, mergeToolActivityData } from "@lathe/shared/toolActivity";
+import { LATHE_MCP_TOOL_NAMES } from "@lathe/shared/latheMcpToolPresentation";
 import type {
   OrchestrationV2ProviderThreadNativeMetadata,
   ThreadTokenUsageSnapshot,
   ToolLifecycleItemType,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -324,7 +321,7 @@ export function acpContentBlockDisplayText(
       const mimeType = boundedContentMetadata(content.mimeType, 256) || "unknown type";
       return `[ACP audio (${mimeType})]`;
     }
-    case "_t3_unknown":
+    case "_lathe_unknown":
       return `[Unsupported ACP content: ${boundedContentMetadata(content.originalType, 128) || "unknown"}]`;
   }
 }
@@ -358,9 +355,9 @@ function sanitizeAcpToolCallContent(
         };
       case "terminal":
         return { type: "terminal", terminalId: entry.terminalId };
-      case "_t3_unknown":
+      case "_lathe_unknown":
         return {
-          type: "_t3_unknown",
+          type: "_lathe_unknown",
           originalType: boundedContentMetadata(entry.originalType, 128) || "unknown",
           raw: null,
         };
@@ -1046,30 +1043,30 @@ function acpMcpFallbackInput(value: string | undefined): Record<string, unknown>
 }
 
 /**
- * T3 always injects its server as "t3-code", and matches are additionally gated on the known T3
+ * Lathe always injects its server as "lathe", and matches are additionally gated on the known Lathe
  * tool inventory, so the separator match can stay loose.
  */
-const T3_MCP_TITLE_CALL =
-  /^(?:mcp[-_]{1,2})?t3[-_ ]?code[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
+const LATHE_MCP_TITLE_CALL =
+  /^(?:mcp[-_]{1,2})?(?:lathe|t3[-_ ]?code)[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
 
 /**
  * Gemini CLI titles injected MCP calls "<tool> (<server> MCP Server)" and
  * qwen-code appends ": <args json>" to the same template; Auggie namespaces
- * tool-first as "<tool>_t3-code".
+ * tool-first as "<tool>_lathe".
  */
-const T3_MCP_TITLE_SUFFIX_CALL =
-  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \(t3[-_ ]?code MCP Server\)(?::|$)|[-_.]t3[-_ ]?code$)/i;
+const LATHE_MCP_TITLE_SUFFIX_CALL =
+  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \((?:lathe|t3[-_ ]?code) MCP Server\)(?::|$)|[-_.](?:lathe|t3[-_ ]?code)$)/i;
 
 /**
  * glm-acp-agent and Kimi CLI register injected MCP tools under their bare
  * names; Kimi additionally appends ": <raw args json>". Safe only because the
- * match is gated on the known T3 tool inventory.
+ * match is gated on the known Lathe tool inventory.
  */
-const T3_MCP_BARE_TITLE_CALL = /^(?<tool>[A-Za-z0-9_]+)(?::\s|$)/;
+const LATHE_MCP_BARE_TITLE_CALL = /^(?<tool>[A-Za-z0-9_]+)(?::\s|$)/;
 
 /**
  * ACP has no typed MCP tool-call item, so agents surface MCP calls in agent-specific shapes:
- * codex-acp tags execute calls with `rawInput.server`/`rawInput.tool`, while agents on T3's
+ * codex-acp tags execute calls with `rawInput.server`/`rawInput.tool`, while agents on Lathe's
  * terminal fallback run the `acp-mcp-call <tool>` CLI through their command or an embedded client
  * terminal.
  */
@@ -1094,8 +1091,8 @@ export function extractMcpToolCallIdentity(
     : undefined;
   const metaServerId = typeof meta?.serverId === "string" ? meta.serverId.trim() : "";
   const metaToolName = typeof meta?.toolName === "string" ? meta.toolName.trim() : "";
-  if (/^t3[-_ ]?code$/i.test(metaServerId) && metaToolName.length > 0) {
-    for (const knownTool of T3_MCP_TOOL_NAMES) {
+  if (/^(?:lathe|t3[-_ ]?code)$/i.test(metaServerId) && metaToolName.length > 0) {
+    for (const knownTool of LATHE_MCP_TOOL_NAMES) {
       const boundary = metaToolName.length - knownTool.length - 1;
       if (
         metaToolName === knownTool ||
@@ -1103,15 +1100,15 @@ export function extractMcpToolCallIdentity(
           boundary >= 0 &&
           !/[A-Za-z0-9]/.test(metaToolName.charAt(boundary)))
       ) {
-        return { server: "t3-code", tool: knownTool };
+        return { server: "lathe", tool: knownTool };
       }
     }
   }
   const gooseExtension =
     typeof gooseToolCall?.extensionName === "string" ? gooseToolCall.extensionName.trim() : "";
   const assertsForeignOrigin =
-    (metaServerId.length > 0 && !/^t3[-_ ]?code$/i.test(metaServerId)) ||
-    (gooseExtension.length > 0 && !/^t3[-_ ]?code$/i.test(gooseExtension));
+    (metaServerId.length > 0 && !/^(?:lathe|t3[-_ ]?code)$/i.test(metaServerId)) ||
+    (gooseExtension.length > 0 && !/^(?:lathe|t3[-_ ]?code)$/i.test(gooseExtension));
   // qwen's serverId marks a real MCP server, but goose reports its built-in
   // extensions (developer__shell, edits) the same way as user MCP servers, so
   // goose stays unclassified and keeps its command and file-change projections.
@@ -1132,15 +1129,15 @@ export function extractMcpToolCallIdentity(
   for (const candidate of candidates) {
     const trimmed = candidate.trim();
     const qualified = /^mcp__(.+?)__(.+)$/i.exec(trimmed);
-    if (qualified?.[1] && qualified[2] && !/^t3[-_ ]?code$/i.test(qualified[1]))
+    if (qualified?.[1] && qualified[2] && !/^(?:lathe|t3[-_ ]?code)$/i.test(qualified[1]))
       return { server: qualified[1], tool: qualified[2] };
     const match =
-      T3_MCP_TITLE_CALL.exec(trimmed) ??
-      T3_MCP_TITLE_SUFFIX_CALL.exec(trimmed) ??
-      T3_MCP_BARE_TITLE_CALL.exec(trimmed);
+      LATHE_MCP_TITLE_CALL.exec(trimmed) ??
+      LATHE_MCP_TITLE_SUFFIX_CALL.exec(trimmed) ??
+      LATHE_MCP_BARE_TITLE_CALL.exec(trimmed);
     const candidateTool = match?.groups?.tool;
-    if (candidateTool !== undefined && T3_MCP_TOOL_NAMES.has(candidateTool)) {
-      return { server: "t3-code", tool: candidateTool };
+    if (candidateTool !== undefined && LATHE_MCP_TOOL_NAMES.has(candidateTool)) {
+      return { server: "lathe", tool: candidateTool };
     }
   }
   const commands = [
@@ -1153,7 +1150,7 @@ export function extractMcpToolCallIdentity(
     const match = ACP_MCP_FALLBACK_CALL.exec(command);
     if (match?.[1] !== undefined) {
       const input = acpMcpFallbackInput(match[2]);
-      return { server: "t3-code", tool: match[1], ...(input === undefined ? {} : { input }) };
+      return { server: "lathe", tool: match[1], ...(input === undefined ? {} : { input }) };
     }
   }
   return undefined;
@@ -1297,7 +1294,7 @@ export function syntheticLoadSessionResponseFromInitialize(
   return {
     ...(modes ? { modes } : {}),
     _meta: {
-      t3SessionLoadReady: "replay_idle",
+      latheSessionLoadReady: "replay_idle",
     },
   };
 }
@@ -1572,7 +1569,7 @@ export function parseSessionUpdateEvent(params: EffectAcpSchema.SessionNotificat
       });
       break;
     }
-    case "_t3_unknown": {
+    case "_lathe_unknown": {
       events.push({
         _tag: "UnknownUpdate",
         updateType: boundedContentMetadata(upd.originalSessionUpdate, 128) || "unknown",

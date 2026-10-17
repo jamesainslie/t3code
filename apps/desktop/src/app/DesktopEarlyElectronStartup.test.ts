@@ -2,7 +2,7 @@
 import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 
-import { forkDesktopIds, FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { forkDesktopIds, FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import {
   resolveEarlyLinuxElectronOptions,
@@ -15,11 +15,11 @@ describe("DesktopEarlyElectronStartup", () => {
 
   it("reads the persisted linux password-store preference before Electron is ready", () => {
     const preference = resolveEarlyLinuxPasswordStorePreference({
-      env: { T3CODE_HOME: "/home/user/.t3-test" },
+      env: { LATHE_HOME: "/home/user/.lathe-test" },
       homeDirectory: "/home/user",
       joinPath,
       readFileString: (path) => {
-        assert.equal(path, "/home/user/.t3-test/userdata/desktop-settings.json");
+        assert.equal(path, "/home/user/.lathe-test/userdata/desktop-settings.json");
         return JSON.stringify({ linuxPasswordStore: "kwallet6" });
       },
     });
@@ -29,7 +29,7 @@ describe("DesktopEarlyElectronStartup", () => {
 
   it("accepts JSONC in the early desktop settings file", () => {
     const preference = resolveEarlyLinuxPasswordStorePreference({
-      env: { T3CODE_HOME: "/home/user/.t3-test" },
+      env: { LATHE_HOME: "/home/user/.lathe-test" },
       homeDirectory: "/home/user",
       joinPath,
       readFileString: () => `{
@@ -56,7 +56,7 @@ describe("DesktopEarlyElectronStartup", () => {
 
   it("preserves absolute root paths when resolving early settings", () => {
     const preference = resolveEarlyLinuxPasswordStorePreference({
-      env: { T3CODE_HOME: "/" },
+      env: { LATHE_HOME: "/" },
       homeDirectory: "/home/user",
       joinPath,
       readFileString: (path) => {
@@ -71,14 +71,14 @@ describe("DesktopEarlyElectronStartup", () => {
   it("resolves the early linux Electron switches", () => {
     const options = resolveEarlyLinuxElectronOptions({
       env: {
-        T3CODE_HOME: "/home/user/.t3-test",
+        LATHE_HOME: "/home/user/.lathe-test",
         XDG_CURRENT_DESKTOP: "niri",
         VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
       },
       homeDirectory: "/home/user",
       joinPath,
       readFileString: (path) => {
-        assert.equal(path, "/home/user/.t3-test/userdata/desktop-settings.json");
+        assert.equal(path, "/home/user/.lathe-test/userdata/desktop-settings.json");
         return JSON.stringify({ linuxPasswordStore: "auto" });
       },
     });
@@ -91,7 +91,7 @@ describe("DesktopEarlyElectronStartup", () => {
     });
   });
 
-  it(`keeps implicit development state under ~/${FORK_IDENTITY.baseDirName}/dev when T3CODE_HOME is unset`, () => {
+  it(`keeps implicit development state under ~/${FORK_IDENTITY.baseDirName}/dev when LATHE_HOME is unset`, () => {
     const preference = resolveEarlyLinuxPasswordStorePreference({
       env: {
         VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
@@ -107,10 +107,10 @@ describe("DesktopEarlyElectronStartup", () => {
     assert.equal(preference, "kwallet");
   });
 
-  it("treats whitespace-only T3CODE_HOME as unconfigured in development", () => {
+  it("treats whitespace-only LATHE_HOME as unconfigured in development", () => {
     const preference = resolveEarlyLinuxPasswordStorePreference({
       env: {
-        T3CODE_HOME: "   ",
+        LATHE_HOME: "   ",
         VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
       },
       homeDirectory: "/home/user",

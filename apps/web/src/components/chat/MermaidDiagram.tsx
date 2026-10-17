@@ -10,9 +10,9 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { renderMermaid } from "@t3tools/client-runtime/mermaid-renderer";
-import { mountDiagramViewport } from "@t3tools/client-runtime/mermaid-viewport";
-import { mermaidRepairPrompt } from "@t3tools/client-runtime/mermaid";
+import { renderMermaid } from "@lathe/client-runtime/mermaid-renderer";
+import { mountDiagramViewport } from "@lathe/client-runtime/mermaid-viewport";
+import { mermaidRepairPrompt } from "@lathe/client-runtime/mermaid";
 import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTrigger } from "../ui/dialog";
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";

@@ -1,10 +1,10 @@
 /**
  * Which Claude instances offer a modelproxy gateway's routed models. Fork-only;
- * the merge itself lives in `@t3tools/shared/gatewayRoutedModels`.
+ * the merge itself lives in `@lathe/shared/gatewayRoutedModels`.
  *
  * @module usage/gatewayRoutedInstances
  */
-import type { ProviderInstanceId, ServerSettings } from "@t3tools/contracts";
+import type { ProviderInstanceId, ServerSettings } from "@lathe/contracts";
 
 import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
 

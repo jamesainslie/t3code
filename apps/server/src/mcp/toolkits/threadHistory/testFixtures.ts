@@ -17,7 +17,7 @@ import {
   type OrchestrationV2PlanArtifact,
   type OrchestrationV2Run,
   type OrchestrationV2TurnItem,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 
 import type { HistoryThread } from "./turns.ts";

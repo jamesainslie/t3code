@@ -1,7 +1,7 @@
 /**
  * serve-sim's preview drives its "Simulator" panel by sending shell commands over a token-gated
  * socket. Proxying that would hand any environment session arbitrary command execution on the
- * host, so T3 runs the same underlying commands itself, typed per action: `xcrun simctl ui` and
+ * host, so Lathe runs the same underlying commands itself, typed per action: `xcrun simctl ui` and
  * `simctl privacy` for iOS, the `serve-sim-ax-settings` helper that serve-sim bundles for the
  * accessibility toggles, and `adb shell` for Android.
  */
@@ -15,7 +15,7 @@ import {
   type DevicePlatform,
   type DeviceSettings,
   type DeviceTextSize,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 

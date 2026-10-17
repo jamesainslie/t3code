@@ -1,7 +1,7 @@
 import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { parseDiffFromFile } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/types";
-import type { SyntaxTheme } from "@t3tools/contracts";
+import type { SyntaxTheme } from "@lathe/contracts";
 
 import { resolveSyntaxThemeName, type SyntaxThemeName } from "./syntaxThemes";
 

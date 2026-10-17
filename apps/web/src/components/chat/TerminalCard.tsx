@@ -4,7 +4,7 @@ import {
   terminalColorHex,
   terminalTranscript,
   type TerminalSegment,
-} from "@t3tools/client-runtime/work-log/terminal";
+} from "@lathe/client-runtime/work-log/terminal";
 import { memo, type ReactNode, useMemo } from "react";
 
 import { useTheme } from "../../hooks/useTheme";

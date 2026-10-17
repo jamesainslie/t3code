@@ -1,4 +1,4 @@
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -35,7 +35,7 @@ export class DesktopAssets extends Context.Service<
       fileName: string,
     ) => Effect.Effect<Option.Option<string>, DesktopAssetProbeError>;
   }
->()("@t3tools/desktop/app/DesktopAssets") {}
+>()("@lathe/desktop/app/DesktopAssets") {}
 
 const resolveResourcePath = Effect.fn("desktop.assets.resolveResourcePath")(function* (
   fileName: string,
@@ -69,7 +69,7 @@ const sourceTreeIconFileNames = {
     universalPng: "blueprint-universal-1024.png",
   },
   prod: {
-    ico: "t3-black-windows.ico",
+    ico: "lathe-black-windows.ico",
     macPng: "black-macos-1024.png",
     universalPng: "black-universal-1024.png",
   },

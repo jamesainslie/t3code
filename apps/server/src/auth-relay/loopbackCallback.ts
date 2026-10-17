@@ -67,7 +67,7 @@ export const CALLBACK_FORWARDING_FAILED_MESSAGE =
  * Reads a `redirect_uri` a tool advertised for its own loopback listener.
  * Only `http://127.0.0.1:<port>` and `http://localhost:<port>` on an
  * unprivileged port qualify, with a path and nothing else. Anything else is
- * not a listener T3 can replay a callback against.
+ * not a listener Lathe can replay a callback against.
  */
 export function parseLoopbackRedirectUri(value: string): URL | null {
   if (value.length > MAX_CALLBACK_URL_LENGTH || /\s/.test(value)) return null;
@@ -94,7 +94,7 @@ export function parseLoopbackRedirectUri(value: string): URL | null {
 
 /**
  * The listener an authorization request names in its own query, when it is
- * one T3 can replay to. `state` rides along only with such a listener, since
+ * one Lathe can replay to. `state` rides along only with such a listener, since
  * it is only checked against that listener's callback. `responseMode` is how
  * the listener asked for its response; only `form_post` changes anything,
  * because the browser then posts the result instead of loading a URL a user
@@ -128,7 +128,7 @@ export const parseLoopbackAuthorizationUrl = Effect.fn("parseLoopbackAuthorizati
   const invalid = () =>
     new AuthRelayError({
       operation: "start",
-      detail: "The sign-in link is not one T3 Code can finish from another device.",
+      detail: "The sign-in link is not one Lathe can finish from another device.",
     });
   if (authorizationUrl.length > MAX_CALLBACK_URL_LENGTH || /\s/.test(authorizationUrl)) {
     return yield* invalid();

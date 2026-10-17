@@ -47,7 +47,7 @@ during replay. Preserve both protections when changing retention or renderer cod
 
 The user is at a client, never at the environment, so a browser opened by a
 terminal command is always wrong even when the environment has a display. Every
-T3 terminal gets `BROWSER` pointed at the
+Lathe terminal gets `BROWSER` pointed at the
 [capture helper](../../apps/server/src/auth-relay/browserLaunchSocket.ts), overriding
 any value in the user's environment. The helper cannot report through the PTY: its
 stderr is the terminal, and ConPTY re-flows long lines. It connects to a private

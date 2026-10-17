@@ -1,6 +1,6 @@
-import type { ClientSettings } from "@t3tools/contracts/settings";
-import type { Citation, ResolvedKeybindingsConfig } from "@t3tools/contracts";
-import { serializeCitation, withCitationComment } from "@t3tools/shared/assistantCitations";
+import type { ClientSettings } from "@lathe/contracts/settings";
+import type { Citation, ResolvedKeybindingsConfig } from "@lathe/contracts";
+import { serializeCitation, withCitationComment } from "@lathe/shared/assistantCitations";
 import {
   splitPromptIntoComposerSegments,
   type ComposerPromptSegment,

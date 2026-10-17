@@ -2,7 +2,7 @@ import {
   applyThreadDependenciesRemoved,
   applyThreadDependencyAdded,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -11,7 +11,7 @@ import {
   WS_METHODS,
   type EnvironmentId,
   type OrchestrationV2ShellSnapshot,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
 import { resolveSnoozeReminder } from "./threadSettled.ts";

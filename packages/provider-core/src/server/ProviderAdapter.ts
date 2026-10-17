@@ -1,4 +1,4 @@
-import type { OrchestrationV2HistoricalMessage } from "@t3tools/contracts";
+import type { OrchestrationV2HistoricalMessage } from "@lathe/contracts";
 import {
   ChatAttachment,
   CheckpointId,
@@ -33,7 +33,7 @@ import {
   RunId,
   ThreadId,
   TurnItemId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import type * as Effect from "effect/Effect";
@@ -355,7 +355,7 @@ export class ProviderAdapterEventStreamError extends Schema.TaggedError<Provider
 }
 
 /**
- * Ends a run's event stream when T3 released the session on purpose, for
+ * Ends a run's event stream when Lathe released the session on purpose, for
  * example a workspace handoff or a sign-out. The run is cancelled, not failed.
  */
 export class ProviderAdapterSessionReleasedError extends Schema.TaggedError<ProviderAdapterSessionReleasedError>()(
@@ -662,4 +662,4 @@ export class ProviderAdapterV2 extends Context.Service<
       input: ProviderAdapterV2OpenSessionInput,
     ) => Effect.Effect<ProviderAdapterV2SessionRuntime, ProviderAdapterV2Error, Scope.Scope>;
   }
->()("@t3tools/provider-core/server/ProviderAdapter/ProviderAdapterV2") {}
+>()("@lathe/provider-core/server/ProviderAdapter/ProviderAdapterV2") {}

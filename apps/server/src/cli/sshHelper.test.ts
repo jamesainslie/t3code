@@ -2,7 +2,7 @@ import * as NodeNet from "node:net";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -45,7 +45,7 @@ describe("__ssh-helper pick-port", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pick-port-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pick-port-" });
         yield* fs.writeFileString(`${root}/preload.cjs`, MACOS_BIND_PRELOAD);
         const holder = yield* holdWildcardPort;
         const heldPort = (holder.address() as NodeNet.AddressInfo).port;

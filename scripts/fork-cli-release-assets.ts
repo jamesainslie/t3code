@@ -19,8 +19,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/cli";
 
-import { CLI_ARCHIVE_PLATFORM_KEYS, CLI_RELEASE_CHECKSUMS_FILE } from "@t3tools/shared/cliRelease";
-import { forkCliArchiveFileNames } from "@t3tools/shared/forkCliArtifacts";
+import { CLI_ARCHIVE_PLATFORM_KEYS, CLI_RELEASE_CHECKSUMS_FILE } from "@lathe/shared/cliRelease";
+import { forkCliArchiveFileNames } from "@lathe/shared/forkCliArtifacts";
 
 export class ForkCliReleaseAssetsMissingError extends Schema.TaggedError<ForkCliReleaseAssetsMissingError>()(
   "ForkCliReleaseAssetsMissingError",

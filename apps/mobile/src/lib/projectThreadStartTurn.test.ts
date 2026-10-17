@@ -4,12 +4,12 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-} from "@t3tools/contracts";
-import { serializeCitation } from "@t3tools/shared/assistantCitations";
+} from "@lathe/contracts";
+import { serializeCitation } from "@lathe/shared/assistantCitations";
 import {
   buildContinuePrompt,
   buildThreadContextRecord,
-} from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/threadContextReference";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

@@ -3,8 +3,8 @@ import {
   attemptLogToText,
   describeAttemptLogEntry,
   type AttemptLogTone,
-} from "@t3tools/client-runtime/connection";
-import type { EnvironmentId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/connection";
+import type { EnvironmentId } from "@lathe/contracts";
 import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Pressable, ScrollView, View } from "react-native";

@@ -50,7 +50,7 @@ and other phone-only settings ignore the filter.
 
 In **Settings → Source Control → Worktree branch naming**, choose a static prefix,
 a model-selected semantic prefix such as `feat/` or `fix/`, or custom instructions
-for the complete name. The static prefix defaults to `t3/`; a trailing slash is
+for the complete name. The static prefix defaults to `lathe/`; a trailing slash is
 optional, and an empty prefix adds nothing. Invalid characters in a static prefix
 are replaced with hyphens. Custom instructions are appended to
 the naming prompt and can specify issue IDs, namespaces, and casing.
@@ -120,10 +120,10 @@ connected machine that supports them; choose one machine to give it rules of its
 The Project category, shown while a project is selected, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
 on each selected environment, and reset returns to the environment's shared list. A project's
-`t3.json` actions can be imported there.
+`lathe.json` actions can be imported there.
 
-Settings a repository can also declare in `t3.json`, such as the workspace for new threads,
-resolve in one order: a project override, then the environment setting, then `t3.json`, then the
+Settings a repository can also declare in `lathe.json`, such as the workspace for new threads,
+resolve in one order: a project override, then the environment setting, then `lathe.json`, then the
 built-in default. Leave a setting on **Inherit** to let the next tier decide.
 Browser access changes apply when an agent session next starts.
 
@@ -131,7 +131,7 @@ New worktrees initialize git submodules recursively. If that step is slow becaus
 declares many nested submodules, set **Submodules** in **Settings → General** (with the project
 selected to override it there) to **Top level only** to stop at the ones the repository declares
 itself, or **Skip** to leave them for a setup script. It resolves in the same order as the
-workspace default: a `"worktreeSubmodules"` value in the `t3.json` of the branch being checked out
+workspace default: a `"worktreeSubmodules"` value in the `lathe.json` of the branch being checked out
 applies when the project and environment are both on **Inherit**.
 
 ## Agent thread history
@@ -159,7 +159,7 @@ specific ones in full.
 
 ## Worktree location
 
-New worktrees go in the `worktrees` folder of the T3 home directory. To put them somewhere else,
+New worktrees go in the `worktrees` folder of the Lathe home directory. To put them somewhere else,
 such as another drive, set **Settings → Storage → Worktree location** to an absolute path like
 `D:\worktrees` or `~/worktrees`. The setting is per machine. Existing worktrees stay where they
 are, and cleanup covers both the default folder and the custom one.
@@ -177,7 +177,7 @@ captures and log retention remain machine-wide.
 
 Worktrees can be removed after a chosen number of inactive days, after a thread settles, after
 merging, or when they have no commits beyond the default branch. Set settled retention to 0 days
-to remove a worktree at the next cleanup after settlement. Only T3-managed worktrees are eligible.
+to remove a worktree at the next cleanup after settlement. Only Lathe-managed worktrees are eligible.
 Active sessions and shared worktrees prevent removal. **Keep worktrees with local changes** defaults
 to **Uncommitted changes**, which protects tracked edits and untracked files but deletes ignored
 files such as `.env` and build output. **Any local files** also protects ignored files other than
@@ -199,12 +199,12 @@ Results also list folders in the worktree folder that no thread uses, with their
 Browser captures and rotated logs have separate retention periods. Expired capture links stop
 working. Current logs, message attachments, and browser profiles are kept.
 
-## Sync from another T3 install
+## Sync from another Lathe install
 
 On web or desktop, open **Settings → Projects & threads** and keep **All projects** selected in the
 breadcrumb. Choose the environment running your fork in the breadcrumb, or use **Destination
 machine** in the sync section; with a single connected environment it is selected for you. Enter
-the main install's T3 home on that machine, usually `~/.t3`, then choose **Preview import**. The
+the main install's Lathe home on that machine, usually `~/.lathe`, then choose **Preview import**. The
 fork must use a separate home, usually `~/.lathe` (or `~/.t3f` from before the rename).
 
 Review each project and choose an existing destination, a separate project, or **Skip**.
@@ -220,7 +220,7 @@ when the environment runs again. New source projects are discovered automaticall
 you skipped stay skipped. Active conversations are deferred until a later sync. **Sync now**
 retries immediately after a reported failure, and **Pause sync** stops automatic runs.
 
-Newly imported conversations start archived and have a **T3** indicator. You can reopen, settle,
+Newly imported conversations start archived and have a **Lathe** indicator. You can reopen, settle,
 archive, or delete the local copy. These choices survive later syncs and undo without changing the
 main install. Deleting an imported copy keeps that source conversation out of future imports.
 Conversation content stays read-only. **Continue in fork**, available
@@ -240,7 +240,7 @@ main install from either before or after that update.
 Use **Recovery backups** for a full rewind of this environment's database, attachments, and settings.
 The seven most recent automatic backups are retained. Preparing a restore pauses sync; quit and
 restart the destination environment to apply it, or choose **Cancel restore** before restarting.
-Recovery rewinds work recorded since the backup and retains the current state under the T3 home's
+Recovery rewinds work recorded since the backup and retains the current state under the Lathe home's
 `sync-recovery/before-restore-*` directory. It does not rewind files in your Git working directories.
 A backup taken before the orchestrator update restores the older database, which is upgraded again
 when the environment starts. The main install remains unchanged.
@@ -249,7 +249,7 @@ when the environment starts. The main install remains unchanged.
 
 Select the project and open Project to choose an icon, emoji, monogram, or image. The choice applies to
 every checkout in the project group and appears on connected clients. Choose **Automatic** to let
-T3 Code detect an icon again.
+Lathe detect an icon again.
 
 Choose **Monogram** in the icon picker to set one or two letters or numbers and a color.
 
@@ -263,6 +263,6 @@ In Source Control, enable **Automatically pull** to keep the default-branch chec
 with its configured upstream. Choose an environment to set the default or a project to override it.
 On mobile, use **Settings → Source control** to change selected environment defaults or project overrides.
 
-T3 Code only pulls when it can fast-forward and the checkout has no changed files, untracked files,
+Lathe only pulls when it can fast-forward and the checkout has no changed files, untracked files,
 or local commits. It skips checkouts on another branch or without an upstream. If a checkout has
 local work, resolve it yourself before automatic pulls can resume.

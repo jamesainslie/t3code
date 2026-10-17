@@ -1,4 +1,4 @@
-import type { ThreadHighlightPalette } from "@t3tools/contracts";
+import type { ThreadHighlightPalette } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

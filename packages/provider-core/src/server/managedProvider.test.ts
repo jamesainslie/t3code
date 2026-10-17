@@ -4,8 +4,8 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerProvider,
-} from "@t3tools/contracts";
-import { createModelCapabilities } from "@t3tools/shared/model";
+} from "@lathe/contracts";
+import { createModelCapabilities } from "@lathe/shared/model";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -105,10 +105,10 @@ function layerProviderHost(input: {
     ProviderHost.ProviderHost.of({
       paths: {
         cwd: process.cwd(),
-        baseDir: "/t3",
-        stateDir: "/t3/userdata",
-        providerStatusCacheDir: "/t3/caches",
-        attachmentsDir: "/t3/userdata/attachments",
+        baseDir: "/lathe",
+        stateDir: "/lathe/userdata",
+        providerStatusCacheDir: "/lathe/caches",
+        attachmentsDir: "/lathe/userdata/attachments",
       },
       settings: input.settings ?? {
         get: Effect.succeed(DEFAULT_SERVER_SETTINGS),

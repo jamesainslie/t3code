@@ -8,7 +8,7 @@ import {
   ProjectId,
   RunId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   act,
   createRef,
@@ -961,15 +961,15 @@ describe("MessagesTimeline", () => {
         {...buildProps()}
         timelineEntries={[
           buildUserTimelineEntry(
-            '<script>globalThis.__t3Xss = 1</script><img src="x" onerror="globalThis.__t3Xss = 2">',
+            '<script>globalThis.__latheXss = 1</script><img src="x" onerror="globalThis.__latheXss = 2">',
           ),
         ]}
       />,
     );
 
-    expect(markup).toContain("&lt;script&gt;globalThis.__t3Xss = 1&lt;/script&gt;");
+    expect(markup).toContain("&lt;script&gt;globalThis.__latheXss = 1&lt;/script&gt;");
     expect(markup).toContain(
-      "&lt;img src=&quot;x&quot; onerror=&quot;globalThis.__t3Xss = 2&quot;&gt;",
+      "&lt;img src=&quot;x&quot; onerror=&quot;globalThis.__latheXss = 2&quot;&gt;",
     );
     expect(markup).not.toMatch(/<script(?:\s|>)/i);
     expect(markup).not.toMatch(/<img(?:\s|>)/i);
@@ -999,11 +999,11 @@ describe("MessagesTimeline", () => {
         timelineEntries={[
           buildAssistantTimelineEntry(
             [
-              '<details open onclick="globalThis.__t3Xss = 1">',
+              '<details open onclick="globalThis.__latheXss = 1">',
               "<summary>Safe details</summary>",
-              "<script>globalThis.__t3Xss = 2</script>",
-              '<img src="x" onerror="globalThis.__t3Xss = 3">',
-              '<a href="javascript:globalThis.__t3Xss = 4">Unsafe link</a>',
+              "<script>globalThis.__latheXss = 2</script>",
+              '<img src="x" onerror="globalThis.__latheXss = 3">',
+              '<a href="javascript:globalThis.__latheXss = 4">Unsafe link</a>',
               "</details>",
             ].join(""),
           ),
@@ -1017,7 +1017,7 @@ describe("MessagesTimeline", () => {
     expect(markup).not.toContain("onclick=");
     expect(markup).not.toContain("onerror=");
     expect(markup).not.toContain("javascript:");
-    expect(markup).not.toContain("globalThis.__t3Xss");
+    expect(markup).not.toContain("globalThis.__latheXss");
   });
   it("renders progressive history controls ahead of the bounded timeline", () => {
     const markup = renderToStaticMarkup(
@@ -2472,11 +2472,11 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("Received 1 update and ran 1 command");
   });
 
-  it("renders T3 MCP dynamic tools with the product logo and pretty name", async () => {
+  it("renders Lathe MCP dynamic tools with the product logo and pretty name", async () => {
     activityTestState.expanded = true;
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const item = {
-      id: "tool-t3-thread-read",
+      id: "tool-lathe-thread-read",
       threadId: "thread-source",
       runId: null,
       nodeId: null,
@@ -2491,7 +2491,7 @@ describe("MessagesTimeline", () => {
       completedAt: null,
       updatedAt: {},
       type: "dynamic_tool",
-      toolName: "mcp__t3-code__t3_thread_read",
+      toolName: "mcp__lathe__lathe_thread_read",
       input: { threadId: "thread-child" },
       output: { messages: [] },
     } as const;
@@ -2541,10 +2541,10 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    // The product mark (the fork's Lathe caret) replaces the generic tool icon for T3 MCP calls.
+    // The product mark (the fork's Lathe caret) replaces the generic tool icon for Lathe MCP calls.
     expect(markup).toContain('d="M462 162H562V820H520L462 762Z"');
-    expect(markup).toContain("Read a T3 thread");
-    expect(markup).not.toContain("mcp__t3-code__t3_thread_read");
+    expect(markup).toContain("Read a Lathe thread");
+    expect(markup).not.toContain("mcp__lathe__lathe_thread_read");
   });
 
   it("formats changed file paths from the workspace root", async () => {

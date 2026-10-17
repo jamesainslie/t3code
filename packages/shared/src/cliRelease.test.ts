@@ -35,8 +35,8 @@ describe("cliRelease", () => {
     expect(cliReleaseDownloadBaseUrl("1.2.3")).toBe(
       `https://github.com/${FORK_IDENTITY.releaseRepository}/releases/download/v1.2.3`,
     );
-    expect(cliReleaseDownloadBaseUrl("1.2.3", "https://mirror.example/t3/")).toBe(
-      "https://mirror.example/t3/v1.2.3",
+    expect(cliReleaseDownloadBaseUrl("1.2.3", "https://mirror.example/lathe/")).toBe(
+      "https://mirror.example/lathe/v1.2.3",
     );
   });
 

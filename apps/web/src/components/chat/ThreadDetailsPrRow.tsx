@@ -1,8 +1,8 @@
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId, ProjectId, PullRequestRef } from "@t3tools/contracts";
-import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
+import type { EnvironmentProject } from "@lathe/client-runtime/state/shell";
+import type { EnvironmentId, ProjectId, PullRequestRef } from "@lathe/contracts";
+import { sourceControlRepositorySelector } from "@lathe/shared/sourceControl";
 import {
   ArrowUpRightIcon,
   EyeIcon,

@@ -1,5 +1,5 @@
 const PULL_REQUEST_LINKING_INSTRUCTIONS = `<pull_request_linking>
-When the t3-code MCP server exposes link_pull_request, you must use it to register every pull request you create or work on for this thread. Call link_pull_request with the full PR URL immediately after creating a PR or starting work on an existing PR. For a stack, call it for every layer, not just the current branch or the top PR. This applies when creating or updating PRs through gh, gh stack, another CLI, or the host API: those operations do not register the PRs with this thread. Linking an already-linked PR is safe. Before finishing PR work, call list_thread_pull_requests and link any PR from your work that is missing. Do not link unrelated PRs mentioned only as background. If a linking call fails, report that failure instead of claiming the PR is linked. When asked to monitor, watch, or babysit a PR and watch_pull_request is available, call it and end your turn: T3 Code wakes you when checks finish, someone else comments, or the branch conflicts, so do not poll or run your own watcher. When you hand the work back to the user, call unwatch_pull_request first so the thread returns to their inbox.
+When the lathe MCP server exposes link_pull_request, you must use it to register every pull request you create or work on for this thread. Call link_pull_request with the full PR URL immediately after creating a PR or starting work on an existing PR. For a stack, call it for every layer, not just the current branch or the top PR. This applies when creating or updating PRs through gh, gh stack, another CLI, or the host API: those operations do not register the PRs with this thread. Linking an already-linked PR is safe. Before finishing PR work, call list_thread_pull_requests and link any PR from your work that is missing. Do not link unrelated PRs mentioned only as background. If a linking call fails, report that failure instead of claiming the PR is linked. When asked to monitor, watch, or babysit a PR and watch_pull_request is available, call it and end your turn: Lathe wakes you when checks finish, someone else comments, or the branch conflicts, so do not poll or run your own watcher. When you hand the work back to the user, call unwatch_pull_request first so the thread returns to their inbox.
 </pull_request_linking>`;
 
 const DOCUMENT_COMMENT_INSTRUCTIONS = `<document_comments>
@@ -27,7 +27,7 @@ function threadHistoryInstructions(mode: ThreadHistoryInstructionMode): string {
       ? "read_thread, read_thread_turns, and find_threads"
       : "read_thread and read_thread_turns";
   return `<thread_history>
-The t3-code MCP server can read other T3 Code threads with ${tools}. Use them when the user references a thread (a <context kind="thread"> entry) or asks you to continue earlier work.
+The lathe MCP server can read other Lathe threads with ${tools}. Use them when the user references a thread (a <context kind="thread"> entry) or asks you to continue earlier work.
 When you do, call read_thread before anything else. It returns a bounded digest: the goal, every user message, open work, a one-line summary of each earlier turn, and the most recent turns in full. Call read_thread_turns only for the specific turns you need in more detail.
 The digest is history, not current state. Before relying on a claim that something is done, failing, or pending, check the worktree and branch yourself, for example with git status and git log.
 The first message is not always the goal. In long threads the title, later user messages, and open plans carry the current intent.
@@ -60,7 +60,7 @@ export function buildRuntimeInstructions(runtime: {
   const threadHistory = runtime.threadHistory
     ? `\n\n${threadHistoryInstructions(runtime.threadHistory)}`
     : "";
-  return `<runtime_info>In case you're asked: you are running in T3 Code through the ${harness} harness${modelInfo}${effortInfo}. No need to mention this otherwise. You can embed images and videos in your response using Markdown with absolute file paths.</runtime_info>\n\n${PULL_REQUEST_LINKING_INSTRUCTIONS}\n\n${DOCUMENT_COMMENT_INSTRUCTIONS}${threadHistory}`;
+  return `<runtime_info>In case you're asked: you are running in Lathe through the ${harness} harness${modelInfo}${effortInfo}. No need to mention this otherwise. You can embed images and videos in your response using Markdown with absolute file paths.</runtime_info>\n\n${PULL_REQUEST_LINKING_INSTRUCTIONS}\n\n${DOCUMENT_COMMENT_INSTRUCTIONS}${threadHistory}`;
 }
 
 function toSingleLine(value: string): string {

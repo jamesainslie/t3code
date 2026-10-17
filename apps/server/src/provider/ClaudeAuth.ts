@@ -1,4 +1,4 @@
-import { ProviderSetupError, type ProviderInstanceId } from "@t3tools/contracts";
+import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -18,7 +18,7 @@ import {
   type PendingAuthorization,
 } from "../auth-relay/loopbackCallback.ts";
 
-export const CLAUDE_AUTH_BROWSER_MARKER = "__T3_CLAUDE_AUTH_URL__";
+export const CLAUDE_AUTH_BROWSER_MARKER = "__LATHE_CLAUDE_AUTH_URL__";
 const isSetupError = Schema.is(ProviderSetupError);
 const decoder = new TextDecoder();
 
@@ -53,7 +53,7 @@ export const parseClaudeAuthorizationUrl = Effect.fn("parseClaudeAuthorizationUr
   const invalid = () =>
     new AuthRelayError({
       operation: "start",
-      detail: "Claude returned a sign-in link T3 Code cannot relay.",
+      detail: "Claude returned a sign-in link Lathe cannot relay.",
     });
   if (authorizationUrl.length > MAX_CALLBACK_URL_LENGTH || /\s/.test(authorizationUrl)) {
     return yield* invalid();

@@ -8,13 +8,13 @@ import {
   type RuntimeMode,
   type ProviderInteractionMode,
   type ServerSettings,
-} from "@t3tools/contracts";
-import { parseMaxDeliveryAge } from "@t3tools/client-runtime/scheduled-task-webhook";
+} from "@lathe/contracts";
+import { parseMaxDeliveryAge } from "@lathe/client-runtime/scheduled-task-webhook";
 
 import {
   resolveProjectSettings,
   type LegacyProjectSettingsFields,
-} from "@t3tools/shared/projectSettings";
+} from "@lathe/shared/projectSettings";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 
 import type { ResolvedSettingsScope } from "./settingsScope";

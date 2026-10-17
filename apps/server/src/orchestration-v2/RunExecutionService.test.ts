@@ -26,7 +26,7 @@ import {
   ServerSettingsError,
   ThreadId,
   TurnItemId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as DateTime from "effect/DateTime";
@@ -42,8 +42,8 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as CheckpointService from "./CheckpointService.ts";
 import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
@@ -3737,7 +3737,7 @@ it.effect("refreshes pull requests after a provider stream exits with an error",
   }),
 );
 
-it.effect("cancels the run when T3 closes its provider session on purpose", () =>
+it.effect("cancels the run when Lathe closes its provider session on purpose", () =>
   Effect.gen(function* () {
     const { written, observed } = yield* captureRootRunTermination({
       key: "session-released",

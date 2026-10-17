@@ -37,7 +37,7 @@ const ALLOWED_PREVIEW_PERMISSIONS: ReadonlySet<string> = new Set([
   "geolocation",
   // `DesktopWindow` disables HTML fullscreen window resizing for the app window
   // and every preview guest, so a page that goes fullscreen fills its own
-  // webview instead of taking over the whole T3 window.
+  // webview instead of taking over the whole Lathe window.
   "fullscreen",
   // Deliberately NOT local-fonts: preview sessions run untrusted web content,
   // and silently granting it would hand every page the user's installed-font
@@ -155,7 +155,7 @@ export class BrowserSession extends Context.Service<
       partitions?: ReadonlyArray<string>,
     ) => Effect.Effect<void, BrowserSessionCacheClearError>;
   }
->()("@t3tools/desktop/preview/BrowserSession") {}
+>()("@lathe/desktop/preview/BrowserSession") {}
 
 const selectSessions = (
   sessions: ReadonlyMap<string, Session>,

@@ -4,7 +4,7 @@ import {
   OrchestrationSearchThreadsInput,
   PositiveInt,
   TrimmedNonEmptyString,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Schema from "effect/Schema";
 import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
@@ -41,7 +41,7 @@ export class ThreadNotFoundError extends Schema.TaggedError<ThreadNotFoundError>
   { threadId: Schema.String },
 ) {
   override get message(): string {
-    return `Thread ${this.threadId} was not found in this T3 Code environment.`;
+    return `Thread ${this.threadId} was not found in this Lathe environment.`;
   }
 }
 
@@ -114,7 +114,7 @@ const ThreadIdInput = TrimmedNonEmptyString.annotate({
 
 const ReadThreadTool = Tool.make("read_thread", {
   description:
-    "Call this first to pick up another T3 Code thread's work. Returns a bounded summary as tagged text: the thread's goal, the user's later steering, open work (todos, plans, comments, pull requests), one-line outcomes of earlier turns, and the most recent turns in detail. Turns are numbered; read_thread_turns returns earlier turns in full, and find_threads locates a thread you have no id for.",
+    "Call this first to pick up another Lathe thread's work. Returns a bounded summary as tagged text: the thread's goal, the user's later steering, open work (todos, plans, comments, pull requests), one-line outcomes of earlier turns, and the most recent turns in detail. Turns are numbered; read_thread_turns returns earlier turns in full, and find_threads locates a thread you have no id for.",
   parameters: Schema.Struct({
     threadId: ThreadIdInput,
     recentTurns: Schema.optional(
@@ -138,7 +138,7 @@ const ReadThreadTool = Tool.make("read_thread", {
 
 const ReadThreadTurnsTool = Tool.make("read_thread_turns", {
   description:
-    "Returns turns of another T3 Code thread in full, oldest first, ending just before beforeTurn. Use it after read_thread when a summarized earlier turn matters; the result ends with the beforeTurn to pass for the page before it. Omit beforeTurn for the latest turns.",
+    "Returns turns of another Lathe thread in full, oldest first, ending just before beforeTurn. Use it after read_thread when a summarized earlier turn matters; the result ends with the beforeTurn to pass for the page before it. Omit beforeTurn for the latest turns.",
   parameters: Schema.Struct({
     threadId: ThreadIdInput,
     beforeTurn: Schema.optional(
@@ -167,7 +167,7 @@ const ReadThreadTurnsTool = Tool.make("read_thread_turns", {
 
 const FindThreadsTool = Tool.make("find_threads", {
   description:
-    "Search the message text of other T3 Code threads (titles are not searched). Returns one line per matching thread with its id, title, project, branch, last activity, and status; pass an id to read_thread to pick up its work. Only available when the user allows thread history for this project or all projects.",
+    "Search the message text of other Lathe threads (titles are not searched). Returns one line per matching thread with its id, title, project, branch, last activity, and status; pass an id to read_thread to pick up its work. Only available when the user allows thread history for this project or all projects.",
   parameters: Schema.Struct({
     query: OrchestrationSearchThreadsInput.fields.query.annotate({
       description: "Words to look for, 2 to 200 characters.",

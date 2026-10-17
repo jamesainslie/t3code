@@ -4,9 +4,9 @@ import {
   type RepositoryIdentity,
   SourceControlProviderKind,
   type ThreadPullRequestKey,
-} from "@t3tools/contracts";
-import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
-import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+} from "@lathe/contracts";
+import { sourceControlRepositorySelector } from "@lathe/shared/sourceControl";
+import { normalizeThreadPullRequestKey } from "@lathe/shared/threadPullRequests";
 
 export function pullRequestSyncKey(
   reference: PullRequestRef,

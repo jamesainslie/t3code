@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - Serves a fake GitHub Release over real HTTP to the published launcher.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -13,7 +13,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeEvents from "node:events";
 import * as NodeHttp from "node:http";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import { buildNpmLauncher } from "./build-npm-launcher.ts";
 
@@ -47,7 +47,7 @@ const run = Effect.fn("test.run")(function* (
   return { stdout, stderr, exitCode };
 }, Effect.scoped);
 
-const STUB_EXECUTABLE = '#!/bin/sh\necho "stub $* launcher=$T3CODE_NPM_LAUNCHER_PATH"\nexit 7\n';
+const STUB_EXECUTABLE = '#!/bin/sh\necho "stub $* launcher=$LATHE_NPM_LAUNCHER_PATH"\nexit 7\n';
 
 /**
  * A release archive for this host with a stub executable that echoes its args
@@ -118,7 +118,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-npm-launcher-test-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-npm-launcher-test-" });
         const output = yield* buildNpmLauncher({
           version: VERSION,
           outputDir: path.join(root, "out"),
@@ -148,8 +148,8 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         const home = path.join(root, "home");
         const env = {
           PATH: process.env.PATH,
-          T3CODE_HOME: home,
-          T3CODE_RELEASE_BASE_URL: release.baseUrl,
+          LATHE_HOME: home,
+          LATHE_RELEASE_BASE_URL: release.baseUrl,
         };
         const launcher = path.join(packageDir, "bin/lathe.mjs");
         const first = yield* run(process.execPath, [launcher, "serve", "a b"], {
@@ -204,7 +204,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         const raceHome = path.join(root, "race-home");
         const launch = run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: raceHome },
+          env: { ...env, LATHE_HOME: raceHome },
         });
         const [one, two] = yield* Effect.all([launch, launch], { concurrency: "unbounded" });
         assert.equal(one.exitCode, 7, one.stderr);
@@ -217,7 +217,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         release.corruptChecksum();
         const corrupt = yield* run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: path.join(root, "other-home") },
+          env: { ...env, LATHE_HOME: path.join(root, "other-home") },
         });
         assert.equal(corrupt.exitCode, 1);
         assert.include(corrupt.stderr, "checksum mismatch");
@@ -233,7 +233,10 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const source = yield* fs.readFileString(
-        path.join(yield* path.fromFileUrl(new URL("./npm-launcher/", import.meta.url)), "t3.mjs"),
+        path.join(
+          yield* path.fromFileUrl(new URL("./npm-launcher/", import.meta.url)),
+          "lathe.mjs",
+        ),
       );
       assert.include(
         source,
@@ -267,7 +270,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-npm-launcher-test-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-npm-launcher-test-" });
         const launcher = yield* installLauncher(root);
         const release = yield* serveFakeRelease(root, {
           prefix: "t3",
@@ -277,8 +280,8 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
           cwd: root,
           env: {
             PATH: process.env.PATH,
-            T3CODE_HOME: path.join(root, "home"),
-            T3CODE_RELEASE_BASE_URL: release.baseUrl,
+            LATHE_HOME: path.join(root, "home"),
+            LATHE_RELEASE_BASE_URL: release.baseUrl,
           },
         });
         assert.equal(result.stdout.trim(), `stub serve launcher=${launcher}`, result.stderr);
@@ -292,7 +295,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-npm-launcher-test-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-npm-launcher-test-" });
         const launcher = yield* installLauncher(root);
         // An interpreter that does not exist fails exec with ENOENT, as a
         // glibc executable does on NixOS.
@@ -308,8 +311,8 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
           cwd: root,
           env: {
             PATH: process.env.PATH,
-            T3CODE_HOME: path.join(root, "home"),
-            T3CODE_RELEASE_BASE_URL: release.baseUrl,
+            LATHE_HOME: path.join(root, "home"),
+            LATHE_RELEASE_BASE_URL: release.baseUrl,
           },
         });
         assert.equal(result.stdout.trim(), "bundle serve a b", result.stderr);
@@ -323,13 +326,13 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-npm-launcher-test-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-npm-launcher-test-" });
         const launcher = yield* installLauncher(root);
         const release = yield* serveFakeRelease(root);
         const launchWithHome = (home: string) =>
           run(process.execPath, [launcher, "--version"], {
             cwd: root,
-            env: { PATH: process.env.PATH, HOME: home, T3CODE_RELEASE_BASE_URL: release.baseUrl },
+            env: { PATH: process.env.PATH, HOME: home, LATHE_RELEASE_BASE_URL: release.baseUrl },
           });
 
         const fresh = path.join(root, "fresh");

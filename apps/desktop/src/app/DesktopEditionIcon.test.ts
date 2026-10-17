@@ -9,7 +9,7 @@ import * as Path from "effect/Path";
 
 import type * as Electron from "electron";
 
-import { DEFAULT_CLIENT_SETTINGS, Edition } from "@t3tools/contracts";
+import { DEFAULT_CLIENT_SETTINGS, Edition } from "@lathe/contracts";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";

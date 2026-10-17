@@ -1,5 +1,5 @@
-import { forkDesktopIds } from "@t3tools/shared/forkIdentity";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import { forkDesktopIds } from "@lathe/shared/forkIdentity";
+import { fromLenientJson } from "@lathe/shared/schemaJson";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -55,17 +55,17 @@ function resolveEarlyDesktopSettingsPath(input: {
   readonly homeDirectory: string;
   readonly joinPath: JoinPath;
 }): string {
-  const t3Home = Option.fromUndefinedOr(input.env.T3CODE_HOME);
+  const latheHome = Option.fromUndefinedOr(input.env.LATHE_HOME);
   const baseDir = resolveDesktopBaseDir({
     homeDirectory: input.homeDirectory,
     joinPath: input.joinPath,
-    t3Home,
+    latheHome,
   });
   const stateDir = resolveDesktopStateDir({
     baseDir,
     isDevelopment: isDevelopmentEnvironment(input.env),
     joinPath: input.joinPath,
-    t3Home,
+    latheHome,
   });
   return input.joinPath(stateDir, "desktop-settings.json");
 }

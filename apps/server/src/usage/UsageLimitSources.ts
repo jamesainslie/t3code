@@ -28,8 +28,8 @@ import {
   type UsageLimitSourceConfig,
   type UsageLimitSourceId,
   type UsageLimitSourceSnapshot,
-} from "@t3tools/contracts";
-import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
+} from "@lathe/contracts";
+import { resolveServerBackgroundActivitySettings } from "@lathe/shared/backgroundActivitySettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -66,7 +66,7 @@ export class UsageLimitSources extends Context.Service<
       input: UsageLimitSourceAccountLoginInput,
     ) => Effect.Effect<UsageLimitSourceAccountLoginResult, UsageLimitSourceError>;
   }
->()("t3/usage/UsageLimitSources") {}
+>()("lathe/usage/UsageLimitSources") {}
 
 function sourceLabel(id: string, config: UsageLimitSourceConfig): string {
   if (config.label) return config.label;
@@ -79,7 +79,7 @@ function sourceLabel(id: string, config: UsageLimitSourceConfig): string {
 }
 
 /**
- * A gateway T3 cannot read right now still serves its routed models, and a
+ * A gateway Lathe cannot read right now still serves its routed models, and a
  * routed model that left the picker would reset every thread that selected
  * it. A failed read therefore keeps the last routes the gateway published;
  * only removing or disabling the source takes them away.

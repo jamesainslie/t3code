@@ -6,7 +6,7 @@ import {
   EnvironmentId,
   FILL_PREVIEW_VIEWPORT,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { act, createElement, Profiler } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -69,7 +69,7 @@ vi.mock("~/state/session", async (importOriginal) => ({
 }));
 
 vi.mock("~/assets/assetUrls", async () => {
-  const { resolveAssetUrl } = await import("@t3tools/client-runtime/state/assets");
+  const { resolveAssetUrl } = await import("@lathe/client-runtime/state/assets");
   return { resolveAssetUrl };
 });
 

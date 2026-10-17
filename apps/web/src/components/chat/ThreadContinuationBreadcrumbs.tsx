@@ -1,5 +1,5 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@lathe/client-runtime/environment";
+import type { ScopedThreadRef, ThreadId } from "@lathe/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, HistoryIcon } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";

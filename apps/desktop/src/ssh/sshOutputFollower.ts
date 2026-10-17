@@ -1,4 +1,4 @@
-import type { DesktopSshOutputBatch, DesktopSshOutputEntry } from "@t3tools/contracts";
+import type { DesktopSshOutputBatch, DesktopSshOutputEntry } from "@lathe/contracts";
 
 /**
  * Follows one target's SSH output in the renderer: the snapshot from subscribing, then each

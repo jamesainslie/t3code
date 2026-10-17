@@ -1,4 +1,4 @@
-import type { ThreadDocumentComment, ThreadDocumentCommentAnchor } from "@t3tools/contracts";
+import type { ThreadDocumentComment, ThreadDocumentCommentAnchor } from "@lathe/contracts";
 import {
   CircleCheckIcon,
   MessageSquareIcon,
@@ -32,8 +32,8 @@ export interface DocumentCommentActions {
   reopen: (commentId: string) => void;
 }
 
-const HIGHLIGHT_NAME = "t3-document-comment";
-const ACTIVE_HIGHLIGHT_NAME = "t3-document-comment-active";
+const HIGHLIGHT_NAME = "lathe-document-comment";
+const ACTIVE_HIGHLIGHT_NAME = "lathe-document-comment-active";
 const ESTIMATED_CARD_HEIGHT = 64;
 const MARKER_HEIGHT = 22;
 

@@ -4,7 +4,7 @@ import {
   type OrchestrationV2ProviderThread,
   type OrchestrationV2Run,
   type ThreadDocumentComment,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
 import { buildThreadDigest, DIGEST_LIMITS } from "./digest.ts";

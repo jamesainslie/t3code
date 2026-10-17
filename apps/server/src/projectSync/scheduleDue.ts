@@ -1,4 +1,4 @@
-import type { ProjectSyncConfiguration } from "@t3tools/contracts";
+import type { ProjectSyncConfiguration } from "@lathe/contracts";
 
 /** Calendar buckets avoid double runs on clock changes and allow a missed night to catch up. */
 export function isSyncDue(

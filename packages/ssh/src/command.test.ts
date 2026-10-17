@@ -135,13 +135,13 @@ describe("ssh command", () => {
         "ControlMaster=no",
         "ControlPath=none",
       ]);
-      assert.deepEqual(controlOptions({ mode: "client", socketPath: "/t3/ssh/a.sock" }), [
+      assert.deepEqual(controlOptions({ mode: "client", socketPath: "/lathe/ssh/a.sock" }), [
         "ControlMaster=no",
-        "ControlPath=/t3/ssh/a.sock",
+        "ControlPath=/lathe/ssh/a.sock",
       ]);
-      assert.deepEqual(controlOptions({ mode: "master", socketPath: "/t3/ssh/a.sock" }), [
+      assert.deepEqual(controlOptions({ mode: "master", socketPath: "/lathe/ssh/a.sock" }), [
         "ControlMaster=yes",
-        "ControlPath=/t3/ssh/a.sock",
+        "ControlPath=/lathe/ssh/a.sock",
       ]);
     }),
   );
@@ -174,7 +174,7 @@ describe("ssh command", () => {
       yield* resolveSshTarget("devbox", { multiplex: { mode: "direct" } });
       yield* runSshCommand(
         { alias: "devbox", hostname: "devbox.example.com", username: null, port: null },
-        { multiplex: { mode: "client", socketPath: "/home/julius/.t3/ssh/711bc738.sock" } },
+        { multiplex: { mode: "client", socketPath: "/home/julius/.lathe/ssh/711bc738.sock" } },
       );
 
       assert.deepEqual(controlOptions(spawned[0], "julius@devbox"), []);
@@ -185,7 +185,7 @@ describe("ssh command", () => {
       ]);
       assert.deepEqual(controlOptions(spawned[3], "devbox"), [
         "ControlMaster=no",
-        "ControlPath=/home/julius/.t3/ssh/711bc738.sock",
+        "ControlPath=/home/julius/.lathe/ssh/711bc738.sock",
       ]);
     }).pipe(Effect.provide(layerProcess));
   });

@@ -7,7 +7,7 @@ import {
   ScheduledTaskId,
   WS_METHODS,
   WsRpcGroup,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -85,7 +85,7 @@ const requestCount = (
   snapshots.find(
     (snapshot): snapshot is Extract<Metric.Metric.Snapshot, { readonly type: "Counter" }> =>
       snapshot.type === "Counter" &&
-      snapshot.id === "t3_rpc_requests_total" &&
+      snapshot.id === "lathe_rpc_requests_total" &&
       snapshot.attributes?.["method"] === method &&
       snapshot.attributes?.["outcome"] === outcome,
   )?.state;
@@ -94,7 +94,7 @@ const requestDuration = (snapshots: ReadonlyArray<Metric.Metric.Snapshot>, metho
   snapshots.find(
     (snapshot): snapshot is Extract<Metric.Metric.Snapshot, { readonly type: "Histogram" }> =>
       snapshot.type === "Histogram" &&
-      snapshot.id === "t3_rpc_request_duration" &&
+      snapshot.id === "lathe_rpc_request_duration" &&
       snapshot.attributes?.["method"] === method,
   )?.state;
 

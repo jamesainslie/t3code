@@ -3,7 +3,7 @@ import {
   localSnoozeTime,
   resolveCustomSnooze,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@lathe/client-runtime/state/thread-settled";
 
 /** The wake time a custom snooze sheet submits. The picker only holds whole
     minutes, so while it still shows the thread's current wake minute the exact

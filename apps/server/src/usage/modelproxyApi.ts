@@ -2,7 +2,7 @@
  * modelproxy's dashboard status API, read as the signed-in operator, and its
  * mapping onto the usage-limit source shape clients already render. The
  * per-account vocabulary (live, ready, cooling, spent) is derived here the
- * same way modelproxy's own dashboard derives it, so T3 and the gateway
+ * same way modelproxy's own dashboard derives it, so Lathe and the gateway
  * never disagree about what an account is doing.
  *
  * @module usage/modelproxyApi
@@ -15,7 +15,7 @@ import {
   type UsageLimitSourceAccount,
   type UsageLimitSourceProxyAccountState,
   type UsageLimitSourceProxyStatus,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -24,7 +24,7 @@ import {
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
-} from "@t3tools/provider-core/server/usageLimits";
+} from "@lathe/provider-core/server/usageLimits";
 
 const Runway = Schema.Struct({
   kind: Schema.Literals(["at", "idle", "beyondHorizon", "resetsFirst", "unknown", "disabled"]),
@@ -60,7 +60,7 @@ const Route = Schema.Struct({
   to: TrimmedNonEmptyString,
   provider: TrimmedNonEmptyString,
 });
-/** Only the fields T3 reads; the payload carries much more and may grow. */
+/** Only the fields Lathe reads; the payload carries much more and may grow. */
 export const ModelproxyStatus = Schema.Struct({
   current: Schema.String,
   threshold: Schema.Number,

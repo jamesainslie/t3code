@@ -2,14 +2,14 @@ import type {
   EnvironmentId,
   PullRequestLinkedThreadsResult,
   ScopedThreadRef,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 export interface CommandPaletteLinkedThreads {
   readonly environmentId: EnvironmentId;
   readonly threads: PullRequestLinkedThreadsResult["threads"];
 }
 
-const COMMAND_PALETTE_OPEN_EVENT = "t3code:open-command-palette";
+const COMMAND_PALETTE_OPEN_EVENT = "lathe:open-command-palette";
 
 export interface CommandPaletteOpenDetail {
   readonly open?: "add-project" | "new-thread-in" | "depends-on";

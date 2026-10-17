@@ -5,11 +5,11 @@ import {
   type Citation,
   DOCUMENT_CITATION_MAX_PATH_LENGTH,
   DocumentCitation,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-const CITATION_PROTOCOL = "t3-citation:";
+const CITATION_PROTOCOL = "lathe-citation:";
 const CITATION_HREF_PREFIX = `${CITATION_PROTOCOL}//v1/`;
 const DOCUMENT_CITATION_HREF_PREFIX = `${CITATION_PROTOCOL}//v1-document/`;
 // Percent encoding needs up to nine characters per UTF-16 code unit; 16k covers selectors.

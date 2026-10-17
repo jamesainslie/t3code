@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, UnifiedSettings, UsageLimitSourceSnapshot } from "@t3tools/contracts";
+import type { EnvironmentId, UnifiedSettings, UsageLimitSourceSnapshot } from "@lathe/contracts";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 

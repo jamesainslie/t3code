@@ -3,8 +3,8 @@ import {
   AuthRelayWriteScope,
   EnvironmentId,
   type EnvironmentCloudLinkStateResult,
-} from "@t3tools/contracts";
-import type { RelayManagedEndpointProviderKind } from "@t3tools/contracts/relay";
+} from "@lathe/contracts";
+import type { RelayManagedEndpointProviderKind } from "@lathe/contracts/relay";
 import { AsyncResult } from "effect/reactivity";
 import { act, useLayoutEffect } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";

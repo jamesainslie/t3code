@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeChildProcess from "node:child_process";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -23,7 +23,7 @@ const workspaceFiles = [
   "apps/mobile/modules/t3-terminal/package.json",
   "apps/marketing/package.json",
   "infra/relay/package.json",
-  "oxlint-plugin-t3code/package.json",
+  "oxlint-plugin-lathe/package.json",
   "packages/client-runtime/package.json",
   "packages/contracts/package.json",
   "packages/shared/package.json",
@@ -83,13 +83,13 @@ function writeMacManifestFixtures(targetRoot: string): { arm64Path: string; x64P
     arm64Path,
     `version: 9.9.9-smoke.0
 files:
-  - url: T3-Code-9.9.9-smoke.0-arm64.zip
+  - url: Lathe-9.9.9-smoke.0-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: T3-Code-9.9.9-smoke.0-arm64.dmg
+  - url: Lathe-9.9.9-smoke.0-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: T3-Code-9.9.9-smoke.0-arm64.zip
+path: Lathe-9.9.9-smoke.0-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-08T10:32:14.587Z'
 `,
@@ -99,13 +99,13 @@ releaseDate: '2026-03-08T10:32:14.587Z'
     x64Path,
     `version: 9.9.9-smoke.0
 files:
-  - url: T3-Code-9.9.9-smoke.0-x64.zip
+  - url: Lathe-9.9.9-smoke.0-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: T3-Code-9.9.9-smoke.0-x64.dmg
+  - url: Lathe-9.9.9-smoke.0-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: T3-Code-9.9.9-smoke.0-x64.zip
+path: Lathe-9.9.9-smoke.0-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-08T10:36:07.540Z'
 `,
@@ -128,13 +128,13 @@ function writeWindowsManifestFixtures(
     arm64Path,
     `version: 9.9.9-smoke.0
 files:
-  - url: T3-Code-9.9.9-smoke.0-arm64.exe
+  - url: Lathe-9.9.9-smoke.0-arm64.exe
     sha512: arm64exe
     size: 126621344
-  - url: T3-Code-9.9.9-smoke.0-arm64.exe.blockmap
+  - url: Lathe-9.9.9-smoke.0-arm64.exe.blockmap
     sha512: arm64blockmap
     size: 152344
-path: T3-Code-9.9.9-smoke.0-arm64.exe
+path: Lathe-9.9.9-smoke.0-arm64.exe
 sha512: arm64exe
 releaseDate: '2026-03-08T10:32:14.587Z'
 `,
@@ -144,13 +144,13 @@ releaseDate: '2026-03-08T10:32:14.587Z'
     x64Path,
     `version: 9.9.9-smoke.0
 files:
-  - url: T3-Code-9.9.9-smoke.0-x64.exe
+  - url: Lathe-9.9.9-smoke.0-x64.exe
     sha512: x64exe
     size: 132000112
-  - url: T3-Code-9.9.9-smoke.0-x64.exe.blockmap
+  - url: Lathe-9.9.9-smoke.0-x64.exe.blockmap
     sha512: x64blockmap
     size: 160112
-path: T3-Code-9.9.9-smoke.0-x64.exe
+path: Lathe-9.9.9-smoke.0-x64.exe
 sha512: x64exe
 releaseDate: '2026-03-08T10:36:07.540Z'
 `,
@@ -209,7 +209,7 @@ function assertMissing(path: string, message: string): void {
   }
 }
 
-const tempRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-release-smoke-"));
+const tempRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-release-smoke-"));
 
 try {
   NodeChildProcess.execFileSync(
@@ -306,12 +306,12 @@ try {
   const mergedManifest = NodeFS.readFileSync(arm64Path, "utf8");
   assertContains(
     mergedManifest,
-    "T3-Code-9.9.9-smoke.0-arm64.zip",
+    "Lathe-9.9.9-smoke.0-arm64.zip",
     "Merged manifest is missing the arm64 asset.",
   );
   assertContains(
     mergedManifest,
-    "T3-Code-9.9.9-smoke.0-x64.zip",
+    "Lathe-9.9.9-smoke.0-x64.zip",
     "Merged manifest is missing the x64 asset.",
   );
 
@@ -371,12 +371,12 @@ try {
   const mergedWindowsManifest = NodeFS.readFileSync(mergedWindowsManifestPath, "utf8");
   assertContains(
     mergedWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-arm64.exe",
+    "Lathe-9.9.9-smoke.0-arm64.exe",
     "Merged Windows manifest is missing the arm64 asset.",
   );
   assertContains(
     mergedWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-x64.exe",
+    "Lathe-9.9.9-smoke.0-x64.exe",
     "Merged Windows manifest is missing the x64 asset.",
   );
   const mergedNightlyWindowsManifest = NodeFS.readFileSync(
@@ -385,12 +385,12 @@ try {
   );
   assertContains(
     mergedNightlyWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-arm64.exe",
+    "Lathe-9.9.9-smoke.0-arm64.exe",
     "Merged nightly Windows manifest is missing the arm64 asset.",
   );
   assertContains(
     mergedNightlyWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-x64.exe",
+    "Lathe-9.9.9-smoke.0-x64.exe",
     "Merged nightly Windows manifest is missing the x64 asset.",
   );
   const mergedPreviewWindowsManifest = NodeFS.readFileSync(
@@ -399,12 +399,12 @@ try {
   );
   assertContains(
     mergedPreviewWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-arm64.exe",
+    "Lathe-9.9.9-smoke.0-arm64.exe",
     "Merged preview Windows manifest is missing the arm64 asset.",
   );
   assertContains(
     mergedPreviewWindowsManifest,
-    "T3-Code-9.9.9-smoke.0-x64.exe",
+    "Lathe-9.9.9-smoke.0-x64.exe",
     "Merged preview Windows manifest is missing the x64 asset.",
   );
   assertMissing(

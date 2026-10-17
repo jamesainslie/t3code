@@ -11,7 +11,7 @@ import {
   type ProjectSyncProjectSnapshot,
   type ProjectSyncRequest,
   type ProjectSyncResponse,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -22,7 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import { ServerConfig } from "../config.ts";
-import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import { writeFileStringAtomically } from "@lathe/shared/atomicWrite";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
@@ -69,7 +69,7 @@ export class ProjectSyncService extends Context.Service<
       request: ProjectSyncRequest | { operation: "scheduled" },
     ) => Effect.Effect<ProjectSyncResponse, ProjectSyncError>;
   }
->()("t3/projectSync/Service/ProjectSyncService") {
+>()("lathe/projectSync/Service/ProjectSyncService") {
   static readonly layer = Layer.effect(
     ProjectSyncService,
     Effect.gen(function* () {
@@ -361,7 +361,7 @@ export class ProjectSyncService extends Context.Service<
           const threadId = yield* provideWriters(
             continueSyncedThread(
               request.threadId,
-              ThreadId.make(`t3continue-${NodeCrypto.randomUUID()}`),
+              ThreadId.make(`lathecontinue-${NodeCrypto.randomUUID()}`),
             ),
           );
           return { ...(yield* status), threadId };

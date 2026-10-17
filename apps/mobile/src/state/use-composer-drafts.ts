@@ -19,11 +19,11 @@ import {
   type ProviderOptionSelection,
   type RuntimeMode,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   buildContinuePrompt,
   buildThreadContextRecord,
-} from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/threadContextReference";
 import * as Schema from "effect/Schema";
 import { useEffect } from "react";
 import { Atom } from "effect/reactivity";
@@ -36,9 +36,9 @@ import {
   formatComposerContextReference,
   sanitizeComposerContextLabel,
   replaceComposerContextReferences,
-} from "@t3tools/shared/composerContextReferences";
-import { imageMimeType } from "@t3tools/shared/image";
-import { videoMimeType } from "@t3tools/shared/video";
+} from "@lathe/shared/composerContextReferences";
+import { imageMimeType } from "@lathe/shared/image";
+import { videoMimeType } from "@lathe/shared/video";
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import {
   composerAttachmentFileReferenceKey,

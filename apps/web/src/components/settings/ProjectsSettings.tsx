@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@lathe/contracts";
 
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { useEnvironments } from "../../state/environments";

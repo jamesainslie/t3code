@@ -1,4 +1,4 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@lathe/contracts";
 import {
   Fragment,
   useCallback,
@@ -15,7 +15,7 @@ import {
   splitMarkdownDocument,
   type MarkdownDocumentSection,
 } from "~/markdown-document";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { resolvePathLinkTarget } from "@lathe/shared/fileLinks";
 
 type TaskListChange = (input: { readonly markerOffset: number; readonly checked: boolean }) => void;
 

@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_MAX_TEXT_LENGTH, type Citation } from "@t3tools/contracts";
+import { ASSISTANT_CITATION_MAX_TEXT_LENGTH, type Citation } from "@lathe/contracts";
 import { MessageSquarePlusIcon, QuoteIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

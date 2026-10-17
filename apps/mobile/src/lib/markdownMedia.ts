@@ -1,14 +1,14 @@
 import {
   classifyMarkdownImageSource,
   markdownImageSourceFragment,
-} from "@t3tools/client-runtime/markdown-images";
-import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
+} from "@lathe/client-runtime/markdown-images";
+import { splitFilePathPosition } from "@lathe/shared/fileLinks";
 import {
   mediaFileReference,
   mediaUrlReference,
   mediaReferenceFileName,
-} from "@t3tools/client-runtime/media-reference";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/media-reference";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import { normalizeNativeMarkdownUrl } from "./markdownLinks";
 import { resolveMobileMarkdownMediaSource } from "./markdownMediaSource";
 

@@ -6,7 +6,7 @@ import {
   EnvironmentId,
   type AgentThreadHistoryAccess,
   type OrchestrationMessageContext,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
 import { canReadThread, canSearchThreads, collectReferencedThreadIds } from "./scope.ts";
@@ -126,7 +126,7 @@ describe("thread history scope", () => {
             ],
           },
           // Thread ids in message text, linked or raw, are not references.
-          `See [Other](t3-context://v1/thread/${TEXT_THREAD_ID}) and ${TEXT_THREAD_ID}`,
+          `See [Other](lathe-context://v1/thread/${TEXT_THREAD_ID}) and ${TEXT_THREAD_ID}`,
         ),
       ],
     });

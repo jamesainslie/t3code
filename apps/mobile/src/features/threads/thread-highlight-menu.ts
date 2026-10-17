@@ -1,5 +1,5 @@
 import type { MenuAction } from "@react-native-menu/menu";
-import type { ThreadHighlightPalette } from "@t3tools/contracts";
+import type { ThreadHighlightPalette } from "@lathe/contracts";
 
 const HIGHLIGHT_ID_PREFIX = "highlight:";
 const HIGHLIGHT_DEFAULT_ID = `${HIGHLIGHT_ID_PREFIX}default`;

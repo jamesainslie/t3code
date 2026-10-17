@@ -2,9 +2,9 @@
  * Each event carries a uuid, so PostHog can tell a retried copy from a new
  * event.
  */
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import type { ClientOs } from "@t3tools/contracts";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import type { ClientOs } from "@lathe/contracts";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -54,17 +54,17 @@ export function retryDelayMs(failures: number, random: number): number {
 }
 
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(
+  posthogKey: Config.String("LATHE_POSTHOG_KEY").pipe(
     Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
   ),
-  posthogHost: Config.String("T3CODE_POSTHOG_HOST").pipe(
+  posthogHost: Config.String("LATHE_POSTHOG_HOST").pipe(
     Config.withDefault("https://us.i.posthog.com"),
   ),
-  enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(
+  enabled: Config.Boolean("LATHE_TELEMETRY_ENABLED").pipe(
     Config.withDefault(FORK_IDENTITY.telemetryEnabledByDefault),
   ),
-  flushBatchSize: Config.Number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
-  maxBufferedEvents: Config.Number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
+  flushBatchSize: Config.Number("LATHE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
+  maxBufferedEvents: Config.Number("LATHE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
     Config.withDefault(1_000),
   ),
   wslDistroName: Config.String("WSL_DISTRO_NAME").pipe(Config.option),
@@ -80,7 +80,7 @@ export class AnalyticsService extends Context.Service<
 
     readonly flush: Effect.Effect<void>;
   }
->()("t3/telemetry/AnalyticsService") {
+>()("lathe/telemetry/AnalyticsService") {
   static readonly layerTest = Layer.succeed(
     AnalyticsService,
     AnalyticsService.of({

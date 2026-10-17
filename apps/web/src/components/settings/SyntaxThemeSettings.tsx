@@ -1,4 +1,4 @@
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 import { useEffect } from "react";
 
 import { previewSyntaxTheme } from "../../lib/syntaxThemePreview";

@@ -5,7 +5,7 @@ import {
   ProjectMonogramText,
   type ProjectIconColor,
   type ProjectIconOverride,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import {
   filterProjectIconNames,

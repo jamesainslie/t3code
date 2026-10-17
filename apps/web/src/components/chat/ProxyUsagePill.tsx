@@ -3,7 +3,7 @@ import type {
   EnvironmentId,
   ProxyLedgerSummaryStyle,
   UsageLimitSourceSnapshot,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";

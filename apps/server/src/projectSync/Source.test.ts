@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const home = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-source-"));
+  const home = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-source-"));
   homes.push(home);
   await NodeFSP.mkdir(NodePath.join(home, "userdata"));
   const db = new NodeSqlite.DatabaseSync(NodePath.join(home, "userdata/state.sqlite"));
@@ -115,7 +115,7 @@ it("preserves historical tools and plans without creating actionable approvals",
 });
 
 async function v2Fixture() {
-  const home = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-source-v2-"));
+  const home = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-source-v2-"));
   homes.push(home);
   await NodeFSP.mkdir(NodePath.join(home, "userdata"));
   // A v1 database beside it is ignored once the install has moved to v2.

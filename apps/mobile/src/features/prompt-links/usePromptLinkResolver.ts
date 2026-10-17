@@ -1,23 +1,23 @@
 import * as Dialog from "../../components/ui/Dialog";
 import { StackActions, useNavigation } from "@react-navigation/native";
-import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
+import { availableScratchWorkspaceRoot } from "@lathe/client-runtime/operations/projects";
 import {
   findPromptLinkProject,
   findPromptLinkPullRequestThread,
   resolvePromptLinkModelSelection,
-} from "@t3tools/client-runtime/prompt-links";
+} from "@lathe/client-runtime/prompt-links";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/runtime";
+import type { EnvironmentProject } from "@lathe/client-runtime/state/shell";
+import type { EnvironmentId } from "@lathe/contracts";
 import {
   parseNewThreadLink,
   type LinkedPrompt,
   type PromptLinkPullRequest,
   type PromptLinkRepository,
-} from "@t3tools/shared/promptLinks";
+} from "@lathe/shared/promptLinks";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { scopedThreadKey } from "../../lib/scopedEntities";

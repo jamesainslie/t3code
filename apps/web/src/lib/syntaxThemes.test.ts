@@ -1,4 +1,4 @@
-import { SyntaxTheme } from "@t3tools/contracts";
+import { SyntaxTheme } from "@lathe/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const { registerCustomTheme, resolveTheme } = vi.hoisted(() => ({
@@ -44,25 +44,27 @@ describe("resolveSyntaxThemeName", () => {
   });
 
   it("registers a custom theme once, the first time it is resolved", () => {
-    expect(resolveSyntaxThemeName("dark", "graphite")).toBe("t3-graphite-dark");
-    expect(resolveSyntaxThemeName("dark", "graphite")).toBe("t3-graphite-dark");
-    expect(resolveSyntaxThemeName("light", "graphite")).toBe("t3-graphite-light");
+    expect(resolveSyntaxThemeName("dark", "graphite")).toBe("lathe-graphite-dark");
+    expect(resolveSyntaxThemeName("dark", "graphite")).toBe("lathe-graphite-dark");
+    expect(resolveSyntaxThemeName("light", "graphite")).toBe("lathe-graphite-light");
 
     expect(registerCustomTheme.mock.calls.map(([name]) => name)).toEqual([
-      "t3-graphite-dark",
-      "t3-graphite-light",
+      "lathe-graphite-dark",
+      "lathe-graphite-light",
     ]);
   });
 
   it("registers a loader that builds the theme on Pierre's workbench colors", async () => {
     resolveTheme.mockResolvedValue({ colors: { "gitDecoration.addedResourceForeground": "#0f0" } });
     resolveSyntaxThemeName("light", "ember");
-    const loader = registerCustomTheme.mock.calls.find(([name]) => name === "t3-ember-light")?.[1];
+    const loader = registerCustomTheme.mock.calls.find(
+      ([name]) => name === "lathe-ember-light",
+    )?.[1];
 
     const theme = await loader();
 
     expect(resolveTheme).toHaveBeenCalledWith("pierre-light");
-    expect(theme.name).toBe("t3-ember-light");
+    expect(theme.name).toBe("lathe-ember-light");
     expect(theme.type).toBe("light");
     expect(theme.colors["gitDecoration.addedResourceForeground"]).toBe("#0f0");
     expect(theme.colors["editor.background"]).toBe(SYNTAX_THEME_CODE_BACKGROUNDS.light);

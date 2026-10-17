@@ -1,8 +1,8 @@
-import { EnvironmentId, ORCHESTRATION_PROTOCOL_VERSION } from "@t3tools/contracts";
-import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
+import { EnvironmentId, ORCHESTRATION_PROTOCOL_VERSION } from "@lathe/contracts";
+import type { RelayEnvironmentStatusResponse } from "@lathe/contracts/relay";
 import { describe, expect, it } from "vite-plus/test";
 
-import { RELAY_TUNNEL_RELEASED_MESSAGE } from "@t3tools/client-runtime/relay";
+import { RELAY_TUNNEL_RELEASED_MESSAGE } from "@lathe/client-runtime/relay";
 
 import { availableCloudEnvironmentPresentation } from "./cloudEnvironmentPresentation";
 

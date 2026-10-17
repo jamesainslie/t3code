@@ -1,12 +1,12 @@
-import { fileBasename } from "@t3tools/shared/path";
-import { formatFilePathPosition } from "@t3tools/shared/fileLinks";
+import { fileBasename } from "@lathe/shared/path";
+import { formatFilePathPosition } from "@lathe/shared/fileLinks";
 import {
   inlineCodeFilePathCandidate,
   normalizeMarkdownLinkDestination,
   parseMarkdownFileLink,
-} from "@t3tools/shared/markdownLinks";
-import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
-import { videoMimeType } from "@t3tools/shared/video";
+} from "@lathe/shared/markdownLinks";
+import { parseThreadLinkHref } from "@lathe/shared/threadLinks";
+import { videoMimeType } from "@lathe/shared/video";
 
 import type { MARKDOWN_FILE_ICON_SOURCES } from "./markdownFileIcons.generated";
 

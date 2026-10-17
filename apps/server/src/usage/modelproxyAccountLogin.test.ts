@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { UsageLimitSourceId, type UsageLimitSourceAccountLogin } from "@t3tools/contracts";
+import { UsageLimitSourceId, type UsageLimitSourceAccountLogin } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as TestClock from "effect/testing/TestClock";

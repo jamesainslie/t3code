@@ -14,9 +14,9 @@ import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as NetService from "@t3tools/shared/Net";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { forkCliExecutableNames } from "@t3tools/shared/forkCliArtifacts";
+import * as NetService from "@lathe/shared/Net";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { forkCliExecutableNames } from "@lathe/shared/forkCliArtifacts";
 import { windowsSystemTar } from "./build-cli-archive.ts";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
@@ -68,7 +68,7 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
   const path = yield* Path.Path;
   const platform = yield* HostProcess.Platform;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const scratch = yield* fs.makeTempDirectory({ prefix: "t3-cli-smoke-" });
+  const scratch = yield* fs.makeTempDirectory({ prefix: "lathe-cli-smoke-" });
   // Windows can keep t3.exe locked (EBUSY) for a moment after the server
   // exits. A leftover scratch directory on a CI runner is harmless, so
   // cleanup retries briefly and never fails a smoke test that passed.
@@ -155,7 +155,7 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
           USERPROFILE: home,
           TMPDIR: scratch,
           TEMP: scratch,
-          T3CODE_HOME: home,
+          LATHE_HOME: home,
         },
         extendEnv: false,
       },

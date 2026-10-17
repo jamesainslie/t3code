@@ -3,8 +3,8 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
   type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import type { ProviderAuthResponse, ServerProvider } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/runtime";
+import type { ProviderAuthResponse, ServerProvider } from "@lathe/contracts";
 import { useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

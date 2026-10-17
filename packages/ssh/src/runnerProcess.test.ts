@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -16,7 +16,7 @@ import {
   buildRemoteLaunchScript,
   buildRemotePairingScript,
   buildRemoteStopScript,
-  buildRemoteT3RunnerScript,
+  buildRemoteLatheRunnerScript,
   REMOTE_LAUNCH_ACTIONS,
 } from "./tunnel.ts";
 
@@ -35,7 +35,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "t3-runner-" });
+        const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-runner-" });
         const bin = path.join(fixture, "bin");
         const cliPath = path.join(fixture, "installed cli.mjs");
         yield* fs.makeDirectory(bin);
@@ -51,7 +51,7 @@ const server = net.createServer((socket) => {
 process.on("SIGTERM", () => server.close(() => {
   process.stdout.write("graceful shutdown\\n");
 }));
-server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
+server.listen(Number(process.env.LATHE_TEST_PORT ?? 0), "127.0.0.1", () => {
   process.stdout.write(JSON.stringify({
     pid: process.pid,
     port: server.address().port,
@@ -69,11 +69,13 @@ server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
                 cwd: fixture,
                 env: {
                   PATH: bin,
-                  T3_TEST_PORT: String(port),
+                  LATHE_TEST_PORT: String(port),
                 },
                 detached: false,
                 stdin: Stream.make(
-                  new TextEncoder().encode(buildRemoteT3RunnerScript({ nodeScriptPath: cliPath })),
+                  new TextEncoder().encode(
+                    buildRemoteLatheRunnerScript({ nodeScriptPath: cliPath }),
+                  ),
                 ),
               }),
             );
@@ -145,7 +147,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
           const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-          const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "t3-stop-" });
+          const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-stop-" });
           const signalPath = path.join(fixture, "signals");
           const child = yield* spawner.spawn(
             ChildProcess.make(
@@ -201,15 +203,15 @@ server.listen(0, "127.0.0.1", () => {
           );
           // The timeout case waits out the whole grace, so shorten it to keep the test quick.
           const isolatedScript = script
-            .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$T3_TEST_STATE_DIR"')
+            .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$LATHE_TEST_STATE_DIR"')
             .replace(/^STOP_WAIT_SECONDS=15$/mu, "STOP_WAIT_SECONDS=2");
-          assert.include(isolatedScript, 'STATE_DIR="$T3_TEST_STATE_DIR"');
+          assert.include(isolatedScript, 'STATE_DIR="$LATHE_TEST_STATE_DIR"');
           assert.include(isolatedScript, "STOP_WAIT_SECONDS=2\n");
           const runStop = Effect.fn("test.remoteStop")(function* () {
             const stop = yield* spawner.spawn(
               ChildProcess.make("/bin/sh", ["-s"], {
                 cwd: fixture,
-                env: { T3_TEST_STATE_DIR: fixture },
+                env: { LATHE_TEST_STATE_DIR: fixture },
                 stdin: Stream.make(new TextEncoder().encode(isolatedScript)),
               }),
             );
@@ -261,7 +263,7 @@ server.listen(0, "127.0.0.1", () => {
 
 // The launch script is generated shell, so reuse is proven by running it with
 // real sh against a fake node-script server. HOME and both state directories
-// point at the fixture; nothing touches the developer's T3 home.
+// point at the fixture; nothing touches the developer's Lathe home.
 describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
   "remote launch server reuse",
   () => {
@@ -284,7 +286,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
 import * as http from "node:http";
 import * as path from "node:path";
 const log = (entry) =>
-  fs.appendFileSync(process.env.T3_TEST_LOG, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
+  fs.appendFileSync(process.env.LATHE_TEST_LOG, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
 const args = process.argv.slice(2);
 const option = (name) => args[args.indexOf(name) + 1];
 if (args[0] === "auth") {
@@ -335,11 +337,11 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "t3-launch-" });
+      const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-launch-" });
       const bin = path.join(fixture, "bin");
       const cliPath = path.join(fixture, "fake server.mjs");
       const logPath = path.join(fixture, "events.log");
-      const serverHome = path.join(fixture, "home", ".t3");
+      const serverHome = path.join(fixture, "home", ".lathe");
       const stateDir = path.join(serverHome, "ssh-launch", "fixture");
       yield* fs.makeDirectory(bin);
       yield* fs.makeDirectory(stateDir, { recursive: true });
@@ -349,9 +351,9 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
       const env = {
         HOME: path.join(fixture, "home"),
         PATH: `${bin}:/usr/bin:/bin`,
-        T3_TEST_LOG: logPath,
-        T3_TEST_STATE_DIR: stateDir,
-        T3_TEST_SERVER_HOME: serverHome,
+        LATHE_TEST_LOG: logPath,
+        LATHE_TEST_STATE_DIR: stateDir,
+        LATHE_TEST_SERVER_HOME: serverHome,
       };
 
       const events = Effect.map(fs.readFileString(logPath), (text) =>
@@ -376,10 +378,10 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
 
       const isolate = (script: string) => {
         const isolated = script
-          .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$T3_TEST_STATE_DIR"')
-          .replace(/^DEFAULT_SERVER_HOME=.*$/mu, 'DEFAULT_SERVER_HOME="$T3_TEST_SERVER_HOME"');
-        assert.include(isolated, 'STATE_DIR="$T3_TEST_STATE_DIR"');
-        assert.include(isolated, 'DEFAULT_SERVER_HOME="$T3_TEST_SERVER_HOME"');
+          .replace(/^STATE_DIR=.*$/mu, 'STATE_DIR="$LATHE_TEST_STATE_DIR"')
+          .replace(/^DEFAULT_SERVER_HOME=.*$/mu, 'DEFAULT_SERVER_HOME="$LATHE_TEST_SERVER_HOME"');
+        assert.include(isolated, 'STATE_DIR="$LATHE_TEST_STATE_DIR"');
+        assert.include(isolated, 'DEFAULT_SERVER_HOME="$LATHE_TEST_SERVER_HOME"');
         return isolated;
       };
 
@@ -554,7 +556,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
           const fixture = yield* makeFixture;
           yield* fixture.launch;
           const firstPid = Number(yield* fixture.readState("pid"));
-          const runnerPath = fixture.path.join(fixture.stateDir, "run-t3.sh");
+          const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
           yield* fixture.fs.writeFileString(
             runnerPath,
             `${yield* fixture.fs.readFileString(runnerPath)}\n# older runner\n`,
@@ -587,7 +589,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
       () =>
         Effect.gen(function* () {
           const fixture = yield* makeFixture;
-          const runnerPath = fixture.path.join(fixture.stateDir, "run-t3.sh");
+          const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
           const heldPath = fixture.path.join(fixture.stateDir, "held-runner");
           const pair = Effect.gen(function* () {
             const result = yield* fixture.runScript(
@@ -611,7 +613,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
           assert.deepEqual((yield* fixture.fs.readDirectory(fixture.stateDir)).toSorted(), [
             "held-runner",
             "port",
-            "run-t3.sh",
+            "run-lathe.sh",
           ]);
 
           yield* pair;

@@ -1,4 +1,4 @@
-import { ThreadId, type ThreadDocumentComment } from "@t3tools/contracts";
+import { ThreadId, type ThreadDocumentComment } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { applyThreadDocumentCommentEvent } from "./threadDocumentComments.ts";

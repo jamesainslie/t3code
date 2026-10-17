@@ -2,11 +2,11 @@ import type {
   DesktopDiscoveredSshHost,
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
-} from "@t3tools/contracts";
-import * as NetService from "@t3tools/shared/Net";
-import * as SshAuth from "@t3tools/ssh/auth";
-import { resolveSshTarget } from "@t3tools/ssh/command";
-import { discoverSshHosts } from "@t3tools/ssh/config";
+} from "@lathe/contracts";
+import * as NetService from "@lathe/shared/Net";
+import * as SshAuth from "@lathe/ssh/auth";
+import { resolveSshTarget } from "@lathe/ssh/command";
+import { discoverSshHosts } from "@lathe/ssh/config";
 import {
   SshCommandError,
   SshHostDiscoveryError,
@@ -15,9 +15,9 @@ import {
   SshPairingError,
   SshPasswordPromptError,
   SshReadinessError,
-} from "@t3tools/ssh/errors";
-import * as SshOutput from "@t3tools/ssh/output";
-import * as SshTunnel from "@t3tools/ssh/tunnel";
+} from "@lathe/ssh/errors";
+import * as SshOutput from "@lathe/ssh/output";
+import * as SshTunnel from "@lathe/ssh/tunnel";
 import * as Context from "effect/Context";
 import type * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -66,10 +66,10 @@ export class DesktopSshEnvironment extends Context.Service<
       target: DesktopSshEnvironmentTarget,
     ) => Effect.Effect<void, DesktopSshEnvironmentOperationError>;
   }
->()("@t3tools/desktop/ssh/DesktopSshEnvironment") {}
+>()("@lathe/desktop/ssh/DesktopSshEnvironment") {}
 
 export interface DesktopSshEnvironmentLayerOptions {
-  readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteT3RunnerOptions>;
+  readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteLatheRunnerOptions>;
   /** Where owned ssh ControlMaster sockets live; see `SshEnvironmentManagerOptions`. */
   readonly controlSocketDirectory?: string;
 }
@@ -101,7 +101,7 @@ export function toSshPasswordPromptError(
       break;
     case "DesktopSshPromptWindowUnavailableError":
     case "DesktopSshPromptPresentationError":
-      message = "T3 Code window is not available for SSH authentication.";
+      message = "Lathe window is not available for SSH authentication.";
       break;
     case "DesktopSshPromptTimedOutError":
       message = `SSH authentication timed out for ${cause.destination}.`;

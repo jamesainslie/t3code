@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/shared",
+  "name": "@lathe/shared",
   "private": true,
   "type": "module",
   "exports": {
@@ -159,9 +159,9 @@
       "types": "./src/gitHubAccountRouting.ts",
       "import": "./src/gitHubAccountRouting.ts"
     },
-    "./t3ProjectFile": {
-      "types": "./src/t3ProjectFile.ts",
-      "import": "./src/t3ProjectFile.ts"
+    "./latheProjectFile": {
+      "types": "./src/latheProjectFile.ts",
+      "import": "./src/latheProjectFile.ts"
     },
     "./orchestrationTiming": {
       "types": "./src/orchestrationTiming.ts",
@@ -403,9 +403,9 @@
       "types": "./src/orchestrationV2Timeline.ts",
       "import": "./src/orchestrationV2Timeline.ts"
     },
-    "./t3McpToolPresentation": {
-      "types": "./src/t3McpToolPresentation.ts",
-      "import": "./src/t3McpToolPresentation.ts"
+    "./latheMcpToolPresentation": {
+      "types": "./src/latheMcpToolPresentation.ts",
+      "import": "./src/latheMcpToolPresentation.ts"
     },
     "./Array": {
       "types": "./src/Array.ts",
@@ -525,9 +525,9 @@
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@lathe/contracts": "workspace:*",
     "@noble/curves": "catalog:",
     "@noble/hashes": "catalog:",
-    "@t3tools/contracts": "workspace:*",
     "effect": "catalog:",
     "jose": "catalog:",
     "mdast-util-directive": "catalog:",

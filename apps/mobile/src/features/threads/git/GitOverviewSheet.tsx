@@ -5,12 +5,12 @@ import {
   buildMenuItems,
   getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
-} from "@t3tools/client-runtime/state/vcs";
+} from "@lathe/client-runtime/state/vcs";
 import {
   resolveThreadPullRequestChains,
   threadPullRequestKeyOf,
-} from "@t3tools/shared/threadPullRequests";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@lathe/shared/threadPullRequests";
+import { EnvironmentId, ThreadId } from "@lathe/contracts";
 import {
   CommonActions,
   StackActions,

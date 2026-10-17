@@ -1,4 +1,4 @@
-import type { ThreadDocumentComment } from "@t3tools/contracts";
+import type { ThreadDocumentComment } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 
 import * as DocumentComments from "../../../fork/DocumentComments.ts";
@@ -38,7 +38,7 @@ const make = Effect.gen(function* () {
     // Comments belong to the calling thread; a caller outside a thread has none.
     if (invocation.thread === undefined) {
       return yield* new Failure({
-        cause: "Document comments are read from the calling T3 thread.",
+        cause: "Document comments are read from the calling Lathe thread.",
       });
     }
     const scope = { threadId: invocation.thread.threadId };

@@ -10,4 +10,4 @@ export const AUTH_RELAY_RETURN_PAGE_HTML =
   "<!doctype html><title>Returning to your environment</title>" +
   '<body style="font:16px system-ui;margin:3rem;color:#333">' +
   '<h1 style="font-size:1.25rem">Returning to your environment</h1>' +
-  "<p>T3 Code is passing this sign-in back to the command that started it. You can close this tab.</p>";
+  "<p>Lathe is passing this sign-in back to the command that started it. You can close this tab.</p>";

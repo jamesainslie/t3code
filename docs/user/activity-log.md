@@ -10,7 +10,7 @@ tool. Failed commands open on their own. To show every command's output without 
 **Settings > General > Command display** to **Exposed**, or turn on **Expose commands** under
 **Settings > Appearance > Terminal** on mobile.
 
-T3 Orchestrator summaries describe the actions taken, such as **Ran 2 commands and sent messages
+Lathe Orchestrator summaries describe the actions taken, such as **Ran 2 commands and sent messages
 to 3 threads**. Repeated messages to the same destinations show both counts: **Sent 5 messages to
 2 threads**. Thread creation counts the threads returned by the tool, including batches.
 

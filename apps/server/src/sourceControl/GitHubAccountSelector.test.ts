@@ -10,8 +10,8 @@ import {
   VcsProcessExitError,
   type RepositoryIdentity,
   type ServerSettings,
-} from "@t3tools/contracts";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+} from "@lathe/contracts";
+import * as NodeSqliteClient from "@lathe/shared/nodeSqliteClient";
 
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";

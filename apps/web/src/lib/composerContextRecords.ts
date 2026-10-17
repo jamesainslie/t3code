@@ -1,7 +1,7 @@
 import {
   COMPOSER_CONTEXT_REVIEW_DIFF_MAX_CHARS,
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import type {
   ComposerContextId,
   ComposerContextRecord,
@@ -18,14 +18,14 @@ import type {
   TerminalContextRecord,
   ThreadContextRecord,
   ThreadId,
-} from "@t3tools/contracts";
-import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
-import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
+} from "@lathe/contracts";
+import { upgradeLegacyContextMessage } from "@lathe/shared/composerContextLegacy";
+import { encodeComposerContextFragment } from "@lathe/shared/composerContextClipboard";
 import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
   toKindScopedComposerContextId,
-} from "@t3tools/shared/composerContextReferences";
+} from "@lathe/shared/composerContextReferences";
 
 import {
   type ComposerContextReference,

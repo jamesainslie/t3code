@@ -4,9 +4,9 @@ import {
   threadRuntimeIsActive,
   type EnvironmentProject,
   type EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
-import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
-import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+} from "@lathe/client-runtime/state/shell";
+import type { AtomCommandResult } from "@lathe/client-runtime/state/runtime";
+import { deriveThreadTitleSeed } from "@lathe/client-runtime/operations";
 import {
   AuthOrchestrationOperateScope,
   CommandId,
@@ -14,8 +14,8 @@ import {
   DEFAULT_RUNTIME_MODE,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   type MessageId,
-} from "@t3tools/contracts";
-import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
+} from "@lathe/contracts";
+import { buildTemporaryWorktreeBranchName } from "@lathe/shared/git";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { useCallback, useEffect, useRef, useState } from "react";

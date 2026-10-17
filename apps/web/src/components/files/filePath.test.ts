@@ -31,10 +31,10 @@ describe("fileBreadcrumbs", () => {
   });
 
   it("starts host paths outside the workspace at the filesystem root", () => {
-    expect(fileBreadcrumbs("t3code", "/tmp/t3-cleanup/report.md")).toEqual([
+    expect(fileBreadcrumbs("t3code", "/tmp/lathe-cleanup/report.md")).toEqual([
       { label: "tmp", path: "/tmp", kind: "directory" },
-      { label: "t3-cleanup", path: "/tmp/t3-cleanup", kind: "directory" },
-      { label: "report.md", path: "/tmp/t3-cleanup/report.md", kind: "file" },
+      { label: "lathe-cleanup", path: "/tmp/lathe-cleanup", kind: "directory" },
+      { label: "report.md", path: "/tmp/lathe-cleanup/report.md", kind: "file" },
     ]);
     expect(fileBreadcrumbs("t3code", "C:\\Temp\\report.md")).toEqual([
       { label: "C:", path: "C:\\", kind: "directory" },
@@ -55,7 +55,7 @@ describe("breadcrumbPathOf", () => {
     ["src", "src"],
     ["src/", "src"],
     ["src//components", "src/components"],
-    ["/tmp/t3-demo/", "/tmp/t3-demo"],
+    ["/tmp/lathe-demo/", "/tmp/lathe-demo"],
     ["/", "/"],
     ["C:\\Users\\me\\", "C:\\Users\\me"],
     ["C:\\", "C:\\"],

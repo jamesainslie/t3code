@@ -1,4 +1,4 @@
-import type { OrchestrationV2CheckpointFileSummary, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationV2CheckpointFileSummary, ThreadId } from "@lathe/contracts";
 
 import {
   DIGEST_LIMITS,

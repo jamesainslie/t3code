@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { type OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import { type OrchestrationV2ThreadShell, ThreadId } from "@lathe/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

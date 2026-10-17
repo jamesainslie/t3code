@@ -1,4 +1,4 @@
-import type { ThreadDocumentComment } from "@t3tools/contracts";
+import type { ThreadDocumentComment } from "@lathe/contracts";
 
 import type { ReviewCommentContext } from "~/reviewCommentContext";
 

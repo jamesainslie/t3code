@@ -1,4 +1,4 @@
-import type { OrchestrationV2TurnItem } from "@t3tools/contracts";
+import type { OrchestrationV2TurnItem } from "@lathe/contracts";
 
 /**
  * Fork: thinking is presented apart from tool calls. A thought never shares a

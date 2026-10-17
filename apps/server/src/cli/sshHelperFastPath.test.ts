@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { matchSshHelperFastPath, pickPort, runtimePort, waitReady } from "./sshHelperFastPath.ts";
 
-const makeTempDir = () => NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-ssh-helper-test-"));
+const makeTempDir = () =>
+  NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-ssh-helper-test-"));
 
 const writeFile = (contents: string) => {
   const file = NodePath.join(makeTempDir(), "runtime.json");

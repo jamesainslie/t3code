@@ -1,4 +1,4 @@
-import type { GitHubAccountRule } from "@t3tools/contracts";
+import type { GitHubAccountRule } from "@lathe/contracts";
 
 /** `*` matches any run of characters; everything else is literal. Case-insensitive, whole-owner match. */
 export function matchesOwnerPattern(pattern: string, owner: string): boolean {

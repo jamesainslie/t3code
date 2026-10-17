@@ -1,17 +1,17 @@
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import { makeProviderFailure } from "@lathe/provider-core/server/failure";
 import {
   XAiPromptFailureText,
   isXAiTaskCompletedWakeNotification,
   xAiRateLimitedErrorCode,
 } from "./xaiAcpExtension.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { resolveSelfInvocation, type SelfInvocation } from "@lathe/shared/nodeRuntime";
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   type OrchestrationV2ProviderCapabilities,
   type RuntimeMode,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { GrokSettings } from "../settings.ts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -23,9 +23,9 @@ import type * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
 
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
+import * as McpProviderSessions from "@lathe/provider-core/server/McpProviderSessions";
+import * as ProviderHost from "@lathe/provider-core/server/ProviderHost";
+import { makeAcpNativeLoggerFactory } from "@lathe/provider-acp/server/nativeLogging";
 import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,
@@ -54,25 +54,25 @@ import {
   XAiAskUserQuestionRequest,
   XAiExitPlanModeRequest,
 } from "./xaiAcpExtension.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { mergeProviderInstanceEnvironment } from "@lathe/provider-core/server/instanceEnvironment";
+import { acpPermissionDisposition } from "@lathe/provider-acp/server/clientPolicy";
+import * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
+import * as ProviderEventLoggers from "@lathe/provider-core/server/ProviderEventLoggers";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as ProviderContinuationRequests from "@lathe/provider-core/server/ProviderContinuationRequests";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
-} from "@t3tools/provider-core/server/adapterDriver";
+} from "@lathe/provider-core/server/adapterDriver";
 import {
   AcpProviderCapabilitiesV2,
   makeAcpAdapterV2,
   type AcpAdapterV2ExtensionContext,
   type AcpAdapterV2Flavor,
   type AcpAdapterV2RuntimeInput,
-} from "@t3tools/provider-acp/server/adapter";
+} from "@lathe/provider-acp/server/adapter";
 
 export const GROK_PROVIDER = ProviderDriverKind.make("grok");
 const GROK_DRIVER_KIND = GROK_PROVIDER;
@@ -150,7 +150,7 @@ const registerGrokAcpExtensions: NonNullable<AcpAdapterV2Flavor["registerExtensi
 
 /**
  * Grok intercepts exit_plan_mode and reverse-requests client approval. Capture
- * the plan into T3's proposed-plan card and abandon the native gate so the turn
+ * the plan into Lathe's proposed-plan card and abandon the native gate so the turn
  * does not hang (#8358; mirrors the Claude ExitPlanMode pattern).
  */
 const registerGrokExitPlanModeExtensions = ({
@@ -213,7 +213,7 @@ const registerGrokAskUserQuestionExtensions = ({
 
 /**
  * Grok's permission mode is fixed at launch. Explicit approval or sandbox
- * overrides launch it asking, so every mutating prompt reaches T3's policy
+ * overrides launch it asking, so every mutating prompt reaches Lathe's policy
  * check instead of being bypassed by always-approve or Grok's auto classifier.
  */
 export function grokLaunchRuntimeMode(

@@ -2,7 +2,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
-import type { ChatAttachment, ProjectSyncMapping } from "@t3tools/contracts";
+import type { ChatAttachment, ProjectSyncMapping } from "@lathe/contracts";
 import { attachmentRelativePath } from "../attachmentStore.ts";
 import { contentHash, type SyncSource } from "./Source.ts";
 

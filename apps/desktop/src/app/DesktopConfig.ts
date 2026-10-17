@@ -1,4 +1,4 @@
-import { OtlpHeadersFromString, OtlpProtocol } from "@t3tools/shared/observability";
+import { OtlpHeadersFromString, OtlpProtocol } from "@lathe/shared/observability";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Option from "effect/Option";
@@ -37,33 +37,33 @@ export const DesktopConfig = Config.all({
   appDataDirectory: trimmedString("APPDATA"),
   xdgConfigHome: trimmedString("XDG_CONFIG_HOME"),
   xdgDataHome: trimmedString("XDG_DATA_HOME"),
-  t3Home: trimmedString("T3CODE_HOME"),
+  latheHome: trimmedString("LATHE_HOME"),
   devServerUrl: Config.URL("VITE_DEV_SERVER_URL").pipe(Config.option),
-  appUserModelIdOverride: trimmedString("T3CODE_DESKTOP_APP_USER_MODEL_ID"),
-  devRemoteT3ServerEntryPath: trimmedString("T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH"),
-  configuredBackendPort: Config.Port("T3CODE_PORT").pipe(Config.option),
-  commitHashOverride: trimmedString("T3CODE_COMMIT_HASH"),
-  desktopLanHostOverride: trimmedString("T3CODE_DESKTOP_LAN_HOST"),
-  desktopHttpsEndpointUrls: commaSeparatedStrings("T3CODE_DESKTOP_HTTPS_ENDPOINTS"),
-  otlpTracesUrl: trimmedString("T3CODE_OTLP_TRACES_URL"),
-  otlpMetricsUrl: trimmedString("T3CODE_OTLP_METRICS_URL"),
-  otlpLogsUrl: trimmedString("T3CODE_OTLP_LOGS_URL"),
-  otlpExportIntervalMs: Config.Int("T3CODE_OTLP_EXPORT_INTERVAL_MS").pipe(
+  appUserModelIdOverride: trimmedString("LATHE_DESKTOP_APP_USER_MODEL_ID"),
+  devRemoteLatheServerEntryPath: trimmedString("LATHE_DEV_REMOTE_LATHE_SERVER_ENTRY_PATH"),
+  configuredBackendPort: Config.Port("LATHE_PORT").pipe(Config.option),
+  commitHashOverride: trimmedString("LATHE_COMMIT_HASH"),
+  desktopLanHostOverride: trimmedString("LATHE_DESKTOP_LAN_HOST"),
+  desktopHttpsEndpointUrls: commaSeparatedStrings("LATHE_DESKTOP_HTTPS_ENDPOINTS"),
+  otlpTracesUrl: trimmedString("LATHE_OTLP_TRACES_URL"),
+  otlpMetricsUrl: trimmedString("LATHE_OTLP_METRICS_URL"),
+  otlpLogsUrl: trimmedString("LATHE_OTLP_LOGS_URL"),
+  otlpExportIntervalMs: Config.Int("LATHE_OTLP_EXPORT_INTERVAL_MS").pipe(
     Config.withDefault(10_000),
   ),
-  otlpHeaders: Config.schema(OtlpHeadersFromString, "T3CODE_OTLP_HEADERS").pipe(Config.option),
-  otlpProtocol: Config.schema(OtlpProtocol, "T3CODE_OTLP_PROTOCOL").pipe(
+  otlpHeaders: Config.schema(OtlpHeadersFromString, "LATHE_OTLP_HEADERS").pipe(Config.option),
+  otlpProtocol: Config.schema(OtlpProtocol, "LATHE_OTLP_PROTOCOL").pipe(
     Config.withDefault("http/json"),
   ),
   appImagePath: trimmedString("APPIMAGE"),
-  disableAutoUpdate: optionalBoolean("T3CODE_DISABLE_AUTO_UPDATE"),
-  mockUpdates: optionalBoolean("T3CODE_DESKTOP_MOCK_UPDATES"),
-  mockUpdateServerPort: Config.Port("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
+  disableAutoUpdate: optionalBoolean("LATHE_DISABLE_AUTO_UPDATE"),
+  mockUpdates: optionalBoolean("LATHE_DESKTOP_MOCK_UPDATES"),
+  mockUpdateServerPort: Config.Port("LATHE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
     Config.withDefault(3000),
   ),
   // Same variables and defaults as the server, so one setting raises both.
-  logLevel: Config.LogLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
-  traceMinLevel: Config.LogLevel("T3CODE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
+  logLevel: Config.LogLevel("LATHE_LOG_LEVEL").pipe(Config.withDefault("Info")),
+  traceMinLevel: Config.LogLevel("LATHE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
 });
 
 export const layerTest = (env: Readonly<Record<string, string | undefined>>) =>

@@ -3,7 +3,7 @@ import {
   TERMINAL_PALETTE,
   terminalColorHex,
   terminalTranscript,
-} from "@t3tools/client-runtime/work-log/terminal";
+} from "@lathe/client-runtime/work-log/terminal";
 import { memo, type ReactNode, useMemo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 

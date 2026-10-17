@@ -12,25 +12,25 @@ session or catalog state. For a new driver, start with [adding a provider](./add
 ## Process and account isolation
 
 The `opencode` driver probes the installed version and runs the 1.x or 2.x runtime. OpenCode's MCP
-registrations are directory-scoped, while T3's MCP connection is thread-scoped, so threads in one
-directory must not share one T3 MCP entry.
+registrations are directory-scoped, while Lathe's MCP connection is thread-scoped, so threads in one
+directory must not share one Lathe MCP entry.
 
-- **1.x** uses one T3-managed chat server per thread, so threads cannot replace each other's
+- **1.x** uses one Lathe-managed chat server per thread, so threads cannot replace each other's
   connection. Catalog and text-generation work can share the
   [instance-owned helper](../../packages/provider-opencode/src/server/OpenCodeServerOwner.ts), which closes
   after an idle period. See the [1.x adapter](../../packages/provider-opencode/src/server/adapter.ts).
 - **2.x** serves every directory from one
   [server per instance](../../packages/provider-opencode/src/server/v2/OpenCode2Server.ts). Each thread
-  registers its own `t3-code-<thread>` MCP entry, and session permission rules deny every other
+  registers its own `lathe-<thread>` MCP entry, and session permission rules deny every other
   thread's entry. See the [2.x adapter](../../packages/provider-opencode/src/server/v2/adapter.ts).
 
 External OpenCode servers remain externally owned and can require an external restart to pick up
 configuration changes. OpenCode stores "always" approval grants for the whole project. Automatic
 full-access replies use `once` so they cannot widen a supervised thread's permissions on a shared
-server. On 2.x, a session-wide approval also replies `once` and becomes T3's own rule on that session.
+server. On 2.x, a session-wide approval also replies `once` and becomes Lathe's own rule on that session.
 
 Pi runs the user's own `pi` install in RPC mode and owns native extension, package, and project
-trust discovery. T3 injects only its namespaced MCP bridge, so a Pi session behaves as it does in
+trust discovery. Lathe injects only its namespaced MCP bridge, so a Pi session behaves as it does in
 the Pi TUI. Pi session files back native resume, rollback, and same-instance thread forks.
 Forks use Pi's CLI in the destination directory because RPC session switching retains the source
 session's cwd. Provider switches still use portable handoff summaries.
@@ -76,7 +76,7 @@ explicit setup or model refresh; background checks use initialization only.
 A sign-in started on the environment prints an authorization URL and waits on a loopback listener
 that the user's browser, on another machine, never reaches. The
 [auth relay](../../apps/server/src/auth-relay/AuthRelayFlow.ts) closes that gap for every
-provider the same way: capture the URL on the environment, show it only to the T3 auth session that
+provider the same way: capture the URL on the environment, show it only to the Lathe auth session that
 started the flow, carry the return URL back from that session, and replay it against the listener
 on the environment. Drivers supply how to obtain the URL, how to recognize their own callback, and
 how to sign out; the flow owns ownership, single flight, the deadline, and cancellation.
@@ -183,7 +183,7 @@ before redaction and serialization, so logging a large response does not require
 copies. These limits apply to diagnostics; provider event handling is unchanged.
 
 Codex resumes with metadata-only reads when it needs a thread's identity and update time. Its
-initialization capabilities opt out of `turn/diff/updated`: T3 derives diffs from checkpoints.
+initialization capabilities opt out of `turn/diff/updated`: Lathe derives diffs from checkpoints.
 The logger filters those notifications before traversal when an older provider still sends them.
 
 Model classification has its own [manifest constraints](./model-manifest.md). Assistant-reference

@@ -1,5 +1,5 @@
 import { makeAssistantStreamingFilter } from "./assistantStreaming.ts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { resolveProjectSettings } from "@lathe/shared/projectSettings";
 import {
   isOrchestrationV2WorkActive,
   CommandId,
@@ -23,7 +23,7 @@ import {
   type RunAttemptId,
   type ThreadId,
   type TurnItemId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -40,14 +40,14 @@ import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CheckpointService from "./CheckpointService.ts";
 import * as EventSink from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import type { ProjectionStoreV2Error } from "./ProjectionStore.ts";
 import {
   makeProviderFailure,
   makeProviderFailureTurnItem,
-} from "@t3tools/provider-core/server/failure";
+} from "@lathe/provider-core/server/failure";
 import * as RunFinalizationService from "./RunFinalizationService.ts";
 
 export interface ProviderEventRoutingState {
@@ -523,7 +523,7 @@ const isProviderSessionReleasedError = Schema.is(
   ProviderAdapter.ProviderAdapterSessionReleasedError,
 );
 
-/** Whether the run's event stream ended because T3 released its session on purpose. */
+/** Whether the run's event stream ended because Lathe released its session on purpose. */
 function isSessionReleasedCause(cause: Cause.Cause<unknown>): boolean {
   const error = Cause.squash(cause);
   return isRunExecutionIngestError(error) && isProviderSessionReleasedError(error.cause);
@@ -571,7 +571,7 @@ export interface RunExecutionServiceV2Shape {
 export class RunExecutionServiceV2 extends Context.Service<
   RunExecutionServiceV2,
   RunExecutionServiceV2Shape
->()("t3/orchestration-v2/RunExecutionService/RunExecutionServiceV2") {}
+>()("lathe/orchestration-v2/RunExecutionService/RunExecutionServiceV2") {}
 
 export const layer: Layer.Layer<
   RunExecutionServiceV2,
@@ -885,7 +885,7 @@ export const layer: Layer.Layer<
             failure,
             threadDisposition: "reusable",
           });
-          // T3 released the session on purpose (workspace handoff, sign-out),
+          // Lathe released the session on purpose (workspace handoff, sign-out),
           // so the run is cancelled. A failed run would hold the queue.
           const makeReleasedTerminalEvent = (): ProviderTerminalEvent => ({
             type: "turn.terminal",

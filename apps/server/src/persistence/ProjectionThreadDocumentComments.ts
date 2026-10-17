@@ -3,7 +3,7 @@ import {
   ThreadDocumentCommentAnchor,
   ThreadDocumentCommentId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -59,7 +59,9 @@ export class ProjectionThreadDocumentCommentRepository extends Context.Service<
       input: ProjectionThreadDocumentCommentsInput,
     ) => Effect.Effect<void, ProjectionRepositoryError>;
   }
->()("t3/persistence/ProjectionThreadDocumentComments/ProjectionThreadDocumentCommentRepository") {}
+>()(
+  "lathe/persistence/ProjectionThreadDocumentComments/ProjectionThreadDocumentCommentRepository",
+) {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

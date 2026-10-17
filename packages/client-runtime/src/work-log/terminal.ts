@@ -1,4 +1,4 @@
-import type { CommandDisplayMode } from "@t3tools/contracts";
+import type { CommandDisplayMode } from "@lathe/contracts";
 
 /**
  * Fork: terminal cards for command rows, ported from horde. Commands render as

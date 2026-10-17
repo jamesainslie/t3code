@@ -1,6 +1,6 @@
-import type { ProviderReplayTranscript } from "@t3tools/contracts";
+import type { ProviderReplayTranscript } from "@lathe/contracts";
 
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import { buildRuntimeInstructions } from "@lathe/provider-core/server/runtimeInstructions";
 
 const UPSTREAM_INSTRUCTIONS_END = "</pull_request_linking>";
 

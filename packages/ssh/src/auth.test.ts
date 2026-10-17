@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -36,7 +36,7 @@ describe("ssh auth", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-askpass-test-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-ssh-askpass-test-" });
       const env = yield* buildSshChildEnvironment({
         authSecret: "super-secret",
         interactiveAuth: true,
@@ -47,10 +47,13 @@ describe("ssh auth", () => {
       const askpassPath = path.join(directory, "ssh-askpass.sh");
       assert.equal(env.SSH_ASKPASS, askpassPath);
       assert.equal(env.SSH_ASKPASS_REQUIRE, "force");
-      assert.equal(env.T3_SSH_AUTH_SECRET, "super-secret");
-      assert.equal(env.DISPLAY, "t3code");
+      assert.equal(env.LATHE_SSH_AUTH_SECRET, "super-secret");
+      assert.equal(env.DISPLAY, "lathe");
       assert.equal(yield* fs.exists(askpassPath), true);
-      assert.include(yield* fs.readFileString(askpassPath), 'printf "%s\\n" "$T3_SSH_AUTH_SECRET"');
+      assert.include(
+        yield* fs.readFileString(askpassPath),
+        'printf "%s\\n" "$LATHE_SSH_AUTH_SECRET"',
+      );
     }).pipe(
       Effect.provide(Layer.merge(NodeServices.layer, Layer.succeed(HostProcess.Platform, "linux"))),
       Effect.scoped,
@@ -65,7 +68,7 @@ describe("ssh auth", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-askpass-test-" });
+        const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-ssh-askpass-test-" });
         const env = yield* buildSshChildEnvironment({
           authSecret: "super-secret",
           authSecretDelivery: "file",
@@ -74,8 +77,8 @@ describe("ssh auth", () => {
           baseEnv: {},
         });
 
-        assert.isUndefined(env.T3_SSH_AUTH_SECRET);
-        const secretFile = env.T3_SSH_AUTH_SECRET_FILE;
+        assert.isUndefined(env.LATHE_SSH_AUTH_SECRET);
+        const secretFile = env.LATHE_SSH_AUTH_SECRET_FILE;
         assert.isDefined(secretFile);
         if (secretFile === undefined || env.SSH_ASKPASS === undefined) return;
         assert.equal((yield* fs.stat(secretFile)).mode & 0o777, 0o600);
@@ -93,12 +96,13 @@ describe("ssh auth", () => {
           }).pipe(Effect.scoped);
 
         assert.deepEqual(
-          yield* askpass({ PATH: "/usr/bin:/bin", T3_SSH_AUTH_SECRET_FILE: secretFile }),
+          yield* askpass({ PATH: "/usr/bin:/bin", LATHE_SSH_AUTH_SECRET_FILE: secretFile }),
           { stdout: "super-secret\n", exitCode: 0 },
         );
         yield* fs.remove(secretFile);
         assert.notEqual(
-          (yield* askpass({ PATH: "/usr/bin:/bin", T3_SSH_AUTH_SECRET_FILE: secretFile })).exitCode,
+          (yield* askpass({ PATH: "/usr/bin:/bin", LATHE_SSH_AUTH_SECRET_FILE: secretFile }))
+            .exitCode,
           0,
         );
       }).pipe(

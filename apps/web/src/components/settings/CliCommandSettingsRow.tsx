@@ -1,5 +1,5 @@
-import type { DesktopCliCommandState } from "@t3tools/contracts";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import type { DesktopCliCommandState } from "@lathe/contracts";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "../ui/button";

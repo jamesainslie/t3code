@@ -26,8 +26,8 @@ import {
   localSnoozeDate,
   localSnoozeTime,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
-import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/thread-settled";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@lathe/contracts";
 import { requireNativeModule } from "expo";
 import { useEffect, useState } from "react";
 import { AppState, useWindowDimensions } from "react-native";

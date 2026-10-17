@@ -1,5 +1,5 @@
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import type { DesktopSshEnvironmentTarget } from "@lathe/contracts";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import type * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -197,7 +197,7 @@ export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
   const fallbackDirectory = yield* Effect.cached(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const directory = yield* fs.makeTempDirectory({ prefix: "t3ssh-" });
+      const directory = yield* fs.makeTempDirectory({ prefix: "lathessh-" });
       removeFallbackDirectory = fs.remove(directory, { recursive: true }).pipe(Effect.ignore);
       return directory;
     }),

@@ -1,4 +1,4 @@
-import { ProviderSetupError, type ProviderInstanceId } from "@t3tools/contracts";
+import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -14,7 +14,7 @@ import {
   type AuthRelayFlow,
   type PendingAuthorization,
 } from "../auth-relay/AuthRelayFlow.ts";
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
 import { parseAntigravityAuthorizationUrl } from "./antigravityAuthSupport.ts";
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
 
@@ -73,7 +73,7 @@ function safeAuthFailure(cause: Cause.Cause<unknown>, usesBrowser: boolean): str
 
 /**
  * Owns one instance's explicit sign-in and all process admission around
- * sign-out. The ACP process owns token exchange and storage; T3 only relays
+ * sign-out. The ACP process owns token exchange and storage; Lathe only relays
  * the Google callback to the process's loopback listener.
  */
 export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <

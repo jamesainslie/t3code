@@ -145,7 +145,7 @@ export type ForkThreadInternalUpdateCommand = typeof ForkThreadInternalUpdateCom
  */
 export const SNOOZE_REMINDER_NOTICE_TITLE = "Snooze reminder";
 
-/** Reserved for immutable conversations owned by another T3 environment. */
+/** Reserved for immutable conversations owned by another Lathe environment. */
 export const isSyncedThreadId = (threadId: string): boolean => threadId.startsWith("t3sync-");
 
 // Document comments

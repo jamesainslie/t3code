@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import { resolveUserDataPath } from "./DesktopUserData.ts";
 
@@ -19,7 +19,7 @@ it.effect.each([
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fork-profile-" });
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-fork-profile-" });
     // Upstream's profiles on the same machine are never read or copied.
     yield* fs.makeDirectory(path.join(directory, "t3code-v2"), { recursive: true });
     yield* fs.writeFileString(path.join(directory, "t3code-v2", "Local State"), "upstream");
@@ -40,7 +40,7 @@ it.effect.each([
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fork-profile-" });
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-fork-profile-" });
     const legacy = path.join(directory, input.ids.legacyUserDataDirName);
     yield* fs.makeDirectory(legacy, { recursive: true });
     const resolved = yield* resolveUserDataPath({

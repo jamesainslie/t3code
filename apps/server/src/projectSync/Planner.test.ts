@@ -5,7 +5,7 @@ import {
   ThreadId,
   type ProjectSyncProjectSnapshot,
   type ProjectSyncRecord,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { planImport, planUndo, syncedThreadKey } from "./Planner.ts";
 import type { SyncSource, SyncThread } from "./Source.ts";
 

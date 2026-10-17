@@ -1,4 +1,4 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -11,21 +11,21 @@ import * as Stream from "effect/Stream";
 import {
   SourceControlProviderError,
   type SourceControlProviderDiscoveryItem,
-} from "@t3tools/contracts";
-import type {} from "@t3tools/contracts";
-import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/sourceControl";
+} from "@lathe/contracts";
+import type {} from "@lathe/contracts";
+import { detectSourceControlProviderFromRemoteUrl } from "@lathe/shared/sourceControl";
 
 import * as BuiltInDrivers from "./builtInDrivers.ts";
 import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
-import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
+import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
+import * as SourceControlProvider from "@lathe/source-control-core/server/SourceControlProvider";
 import {
   probeSourceControlProvider,
   refineUnknownRemoteProvider,
   type SourceControlProviderDiscoverySpec,
   type UnknownRemoteVerdict,
-} from "@t3tools/source-control-core/server/discovery";
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+} from "@lathe/source-control-core/server/discovery";
+import * as SourceControlHost from "@lathe/source-control-core/server/SourceControlHost";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -69,7 +69,7 @@ export class SourceControlProviderRegistry extends Context.Service<
     >;
     readonly discover: Effect.Effect<ReadonlyArray<SourceControlProviderDiscoveryItem>>;
   }
->()("t3/sourceControl/SourceControlProviderRegistry") {}
+>()("lathe/sourceControl/SourceControlProviderRegistry") {}
 
 function unsupportedProvider(
   kind: SourceControlProviderKind,

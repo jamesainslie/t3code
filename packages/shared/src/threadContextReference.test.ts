@@ -4,7 +4,7 @@ import {
   EnvironmentId,
   ProjectId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -55,7 +55,7 @@ describe("threadContextReference", () => {
     const record = buildThreadContextRecord(thread);
     expect(record.title).toBe("Fix [login] redirect");
     expect(threadContextMarkdown(record)).toBe(
-      "[Fix login redirect](t3-context://v1/thread/thread-0b7e6f7a-3c1d-4e5f-9a8b-1c2d3e4f5a6b)",
+      "[Fix login redirect](lathe-context://v1/thread/thread-0b7e6f7a-3c1d-4e5f-9a8b-1c2d3e4f5a6b)",
     );
   });
 

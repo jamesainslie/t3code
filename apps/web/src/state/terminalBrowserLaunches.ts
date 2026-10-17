@@ -1,7 +1,7 @@
 import {
   nextTerminalBrowserLaunchExpiry,
   pendingTerminalBrowserLaunches,
-} from "@t3tools/client-runtime/state/terminal";
+} from "@lathe/client-runtime/state/terminal";
 import { useEffect, useMemo, useState } from "react";
 
 /**

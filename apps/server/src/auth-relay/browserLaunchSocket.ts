@@ -3,8 +3,8 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { resolveNodeExecutable } from "@lathe/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -15,7 +15,7 @@ import { AuthRelayError } from "./AuthRelayError.ts";
 /**
  * `BROWSER` capture for processes that run inside a PTY.
  *
- * A tool in a T3 terminal that opens a sign-in page inherits `BROWSER` from
+ * A tool in a Lathe terminal that opens a sign-in page inherits `BROWSER` from
  * the shell. The inline stderr helper in `browserLaunchCapture.ts` cannot be
  * used there: the helper's stderr is the terminal itself, and ConPTY on
  * Windows re-flows long lines, so nothing in-band survives every platform.
@@ -70,8 +70,8 @@ export function parseBrowserLaunchMessage(
 function browserLaunchSocketAddress(platform: NodeJS.Platform, directory: string): string {
   const digest = NodeCrypto.createHash("sha256").update(directory).digest("hex").slice(0, 16);
   return platform === "win32"
-    ? `\\\\.\\pipe\\t3-browser-launch-${digest}`
-    : `${NodeOS.tmpdir()}/t3-browser-launch-${digest}.sock`;
+    ? `\\\\.\\pipe\\lathe-browser-launch-${digest}`
+    : `${NodeOS.tmpdir()}/lathe-browser-launch-${digest}.sock`;
 }
 
 function browserLaunchHelperScript(): string {
@@ -84,7 +84,7 @@ function browserLaunchHelperScript(): string {
     "  if (done) return;",
     "  done = true;",
     "  if (!ok && url) {",
-    "    process.stderr.write(`T3 Code could not send this link to your client. Open it yourself:\\n${url}\\n`);",
+    "    process.stderr.write(`Lathe could not send this link to your client. Open it yourself:\\n${url}\\n`);",
     "  }",
     "  process.exit(0);",
     "};",
@@ -161,7 +161,7 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = input.platform ?? (yield* HostProcess.Platform);
-  // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
+  // A packaged Lathe executable cannot run `-e` helpers; resolve a real Node binary.
   const runtimeExecutablePath =
     input.runtimeExecutablePath ??
     (yield* resolveNodeExecutable("Provider sign-in").pipe(
@@ -180,11 +180,11 @@ export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(func
     path.join(input.directory, LAUNCHER_DIRECTORY_NAME),
     path.join(
       NodeOS.tmpdir(),
-      `t3-browser-launch-${NodeCrypto.createHash("sha256").update(input.directory).digest("hex").slice(0, 16)}`,
+      `lathe-browser-launch-${NodeCrypto.createHash("sha256").update(input.directory).digest("hex").slice(0, 16)}`,
     ),
   ].find((candidate) => isUsableBrowserPath(platform, toBrowserPath(candidate)));
   if (launcherDirectory === undefined) {
-    return yield* failed("The T3 data directory cannot host a BROWSER helper.");
+    return yield* failed("The Lathe data directory cannot host a BROWSER helper.");
   }
 
   yield* fs

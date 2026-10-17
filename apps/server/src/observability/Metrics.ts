@@ -7,76 +7,76 @@ import { dual } from "effect/Function";
 
 import { compactMetricAttributes, outcomeFromExit } from "./Attributes.ts";
 
-export const rpcRequestsTotal = Metric.counter("t3_rpc_requests_total", {
+export const rpcRequestsTotal = Metric.counter("lathe_rpc_requests_total", {
   description: "Total RPC requests handled by the websocket RPC server.",
 });
 
-export const rpcRequestDuration = Metric.timer("t3_rpc_request_duration", {
+export const rpcRequestDuration = Metric.timer("lathe_rpc_request_duration", {
   description: "RPC request handling duration.",
 });
 
 export const orchestrationEffectClaimsTotal = Metric.counter(
-  "t3_orchestration_effect_claims_total",
+  "lathe_orchestration_effect_claims_total",
   {
     description: "Total completed orchestration effect outbox claim attempts by result.",
   },
 );
 
-export const orchestrationEffectQueueWait = Metric.timer("t3_orchestration_effect_queue_wait", {
+export const orchestrationEffectQueueWait = Metric.timer("lathe_orchestration_effect_queue_wait", {
   description:
     "Time from an orchestration effect's temporal availability until claim, including same-thread blocking.",
 });
 
-export const providerSessionsTotal = Metric.counter("t3_provider_sessions_total", {
+export const providerSessionsTotal = Metric.counter("lathe_provider_sessions_total", {
   description: "Total provider session lifecycle operations.",
 });
 
-export const providerTurnsTotal = Metric.counter("t3_provider_turns_total", {
+export const providerTurnsTotal = Metric.counter("lathe_provider_turns_total", {
   description: "Total provider turn lifecycle operations.",
 });
 
-export const providerTurnDuration = Metric.timer("t3_provider_turn_duration", {
+export const providerTurnDuration = Metric.timer("lathe_provider_turn_duration", {
   description: "Time for the provider adapter to start a turn, not how long the turn runs.",
 });
 
-export const gitCommandsTotal = Metric.counter("t3_git_commands_total", {
+export const gitCommandsTotal = Metric.counter("lathe_git_commands_total", {
   description: "Total git commands executed by the server runtime.",
 });
 
-export const gitCommandDuration = Metric.timer("t3_git_command_duration", {
+export const gitCommandDuration = Metric.timer("lathe_git_command_duration", {
   description: "Git command execution duration.",
 });
 
-export const terminalSessionsTotal = Metric.counter("t3_terminal_sessions_total", {
+export const terminalSessionsTotal = Metric.counter("lathe_terminal_sessions_total", {
   description: "Total terminal sessions started.",
 });
 
-export const terminalRestartsTotal = Metric.counter("t3_terminal_restarts_total", {
+export const terminalRestartsTotal = Metric.counter("lathe_terminal_restarts_total", {
   description: "Total terminal restart requests handled.",
 });
 
-export const webhookDeliveriesTotal = Metric.counter("t3_webhook_deliveries_total", {
+export const webhookDeliveriesTotal = Metric.counter("lathe_webhook_deliveries_total", {
   description: "Webhook requests handled, by outcome and source.",
 });
 
-export const webhookDeliveryDuration = Metric.timer("t3_webhook_delivery_duration", {
+export const webhookDeliveryDuration = Metric.timer("lathe_webhook_delivery_duration", {
   description: "Time to verify, log, and enqueue one webhook request.",
 });
 
-export const webhookHeldDelay = Metric.timer("t3_webhook_held_delay", {
+export const webhookHeldDelay = Metric.timer("lathe_webhook_held_delay", {
   description:
     "Time between the relay receiving a webhook request and the environment handling it.",
 });
 
-export const webhookRunsTotal = Metric.counter("t3_webhook_runs_total", {
+export const webhookRunsTotal = Metric.counter("lathe_webhook_runs_total", {
   description: "Runs started from webhook deliveries, by outcome.",
 });
 
-export const secretRequestsTotal = Metric.counter("t3_secret_requests_total", {
+export const secretRequestsTotal = Metric.counter("lathe_secret_requests_total", {
   description: "Secrets agents asked users for, by how each request ended.",
 });
 
-export const secretRefsConsumedTotal = Metric.counter("t3_secret_refs_consumed_total", {
+export const secretRefsConsumedTotal = Metric.counter("lathe_secret_refs_consumed_total", {
   description: "Secret refs tools tried to use, by result.",
 });
 

@@ -5,7 +5,7 @@ import type {
   ThreadDocumentCommentReopenedPayload,
   ThreadDocumentCommentResolvedPayload,
   ThreadDocumentCommentUpdatedPayload,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import { compareDateTimeStrings } from "./dateTime.ts";
 

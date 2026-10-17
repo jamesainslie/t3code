@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import * as Base64 from "effect/encoding/Base64";
 
 import * as GitHubRest from "./GitHubRest.ts";
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+import * as SourceControlHost from "@lathe/source-control-core/server/SourceControlHost";
 
 export interface CascadeLayer {
   readonly number: number;
@@ -48,17 +48,19 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
   const { token } = yield* api.credential(input.host);
   const first = input.layers[0];
   if (first === undefined) return 0;
-  const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-stack-rebase-" }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new GitHubStackRebaseGitError({
-          step: "preparing",
-          number: first.number,
-          completed: 0,
-          cause,
-        }),
-    ),
-  );
+  const directory = yield* fileSystem
+    .makeTempDirectoryScoped({ prefix: "lathe-stack-rebase-" })
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new GitHubStackRebaseGitError({
+            step: "preparing",
+            number: first.number,
+            completed: 0,
+            cause,
+          }),
+      ),
+    );
   // The token rides in a header for this process only: never in the URL, argv, or git config.
   const remote = input.remote ?? remoteUrl(input.host, input.repository);
   const authorization = `AUTHORIZATION: basic ${Base64.encode(`x-access-token:${Redacted.value(token)}`)}`;
@@ -68,9 +70,9 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
     GIT_CONFIG_KEY_0: `http.${remote}.extraheader`,
     GIT_CONFIG_VALUE_0: authorization,
     GIT_CONFIG_KEY_1: "user.name",
-    GIT_CONFIG_VALUE_1: "T3 Code",
+    GIT_CONFIG_VALUE_1: "Lathe",
     GIT_CONFIG_KEY_2: "user.email",
-    GIT_CONFIG_VALUE_2: "noreply@t3.codes",
+    GIT_CONFIG_VALUE_2: "noreply@lathe.codes",
   };
   const git = (args: ReadonlyArray<string>, allowNonZeroExit = false) =>
     process.run({
