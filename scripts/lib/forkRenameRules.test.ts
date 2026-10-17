@@ -108,6 +108,27 @@ describe("FORK_RENAME_RULES", () => {
       "identifier",
     ],
     [
+      "scripts/build-cli-archive.ts",
+      '  const executableName = input.platform === "win" ? "t3.exe" : "t3";',
+      "identifier",
+    ],
+    ["scripts/build-cli-archive.ts", '    "Invoke-TrustedSigning t3.exe",', "identifier"],
+    [
+      "scripts/build-cli-archive.ts",
+      "  return `t3-${version}-${cliArchivePlatformKey(platform, arch)}`;",
+      "kept",
+    ],
+    [
+      "scripts/build-cli-archive.ts",
+      " * Fork: the archive holds the executable as `lathe` and as `t3` (see",
+      "kept",
+    ],
+    [
+      "scripts/build-cli-archive.ts",
+      "  const peOffset = view.getUint32(0x3c, true);",
+      "false-positive",
+    ],
+    [
       "apps/mobile/modules/t3-terminal/README.md",
       "`t3code/custom-io-ordered-feed` branch when vendored, based on VVTerm's",
       "kept",

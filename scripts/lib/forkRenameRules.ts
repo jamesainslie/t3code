@@ -715,6 +715,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   },
 
   {
+    id: "id-cli-archive-build-input",
+    class: "identifier",
+    reason:
+      "build-cli-archive.ts reads the executable the server build writes (dist-exe/lathe) and names it in hints and logs; only the archive stem and the alias it documents keep t3.",
+    path: /^scripts\/build-cli-archive\.ts$/,
+    test: (o) => stem(o) === "t3" && !/t3-\$\{version\}/.test(o.line) && !/as `t3`/.test(o.line),
+  },
+  {
     id: "kept-cli-literal",
     class: "kept",
     reason:
