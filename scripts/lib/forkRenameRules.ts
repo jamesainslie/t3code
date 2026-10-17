@@ -436,6 +436,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /com\.t3tools\.T3Code/,
   },
   {
+    id: "kept-capture-helper-binaries",
+    class: "kept",
+    reason:
+      "The KDE and Hyprland SnapShot helper binaries (t3-<backend>-snap-shot), named by their Cargo packages.",
+    test: (o) => /t3-\$/.test(o.token) && /-snap-shot/.test(o.line),
+  },
+  {
     id: "kept-linux-capture-helpers",
     class: "kept",
     reason:
@@ -550,7 +557,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Pre-Lathe temporary worktree branches (t3code/<hex>, t3code-<hex>) the matcher keeps recognising.",
     path: /^packages\/shared\/src\/git(?:\.test)?\.ts$/,
-    token: /^t3code[/-](?:$|[0-9a-f]{8})/,
+    test: (o) =>
+      /^t3code[/-][0-9a-f]{8}/.test(o.token) || (/^t3code[/-]$/.test(o.token) && /</.test(o.line)),
   },
   {
     id: "id-build-and-test-env",
@@ -635,20 +643,31 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "CLI release archive and executable names (t3-<version>-*, <runtime>/t3); forkCliArtifacts.ts publishes both names.",
-    token:
-      /^\(?t3-\*|t3-<version>|t3-\$\{version\}|\/t3`?\)?\.?$|^`?t3-\$|t3\.exe|^t3-(?:\.\.\.)?$|^t3[;:]?$|^t3-\d+\.\d+\.\d+/,
+    test: (o) => {
+      // Anchored on the hit, so a runtime variable in the same token ($T3_RUNTIME_DIR/t3) still renames.
+      const at = o.token.slice(o.offset);
+      const prev = before(o);
+      return (
+        (/^t3-(?:\*|<version>|\$|\d+\.\d+\.\d+|\.\.\.|$)/.test(at) &&
+          (/^[(/`.]?$/.test(prev) || afterEscape(o))) ||
+        (/^t3(?:`?\)?\.?|[;:])?$/.test(at) && /^\/?$/.test(prev)) ||
+        /^t3\.exe/.test(at)
+      );
+    },
     path: /forkCliArtifacts|forkCliArchive|cliRelease|build-cli-archive|build-desktop-artifact|install\.(?:sh|ps1|test\.ts)|pinnedRuntime|selfUpdate|update(?:\.test)?\.ts|ForkCliInstall|tunnel(?:\.test)?\.ts|DesktopWsl|fork-cli-release-assets|serviceLauncher|smoke-cli|npm-launcher/,
   },
   {
     id: "upstream-repo-fields",
     class: "upstream-reference",
     reason:
-      "GitHub repository names in owner/name pairs (pingdotgg/t3code, and the fork's own t3code repo), which GitHub owns, and upstream's t3tools owner.",
+      "GitHub repository names in owner/name pairs and github.com URLs (pingdotgg/t3code, a fork's t3code repo), which GitHub owns, and upstream's t3tools owner.",
     test: (o) =>
       (o.token === "t3code" &&
         /\b(?:name|repo):\s*["']t3code["']/.test(o.line) &&
         (/\bowner:/.test(o.line) || /^\s*owner:\s*["'][^"']+["'],?$/.test(o.previousLine))) ||
-      (o.token === "t3tools" && /\bowner:\s*["']t3tools["']/.test(o.line)),
+      (o.token === "t3tools" && /\bowner:\s*["']t3tools["']/.test(o.line)) ||
+      (/github\.com\/[A-Za-z0-9_.-]+\/$/.test(o.token.slice(0, o.offset)) &&
+        /^t3code(?![A-Za-z0-9])/i.test(o.token.slice(o.offset))),
   },
   {
     id: "upstream-own-files",

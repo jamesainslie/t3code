@@ -187,6 +187,32 @@ describe("FORK_RENAME_RULES", () => {
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
     [
+      "packages/client-runtime/src/a.test.ts",
+      'identity("github.com/me/t3code"),',
+      "upstream-reference",
+    ],
+    [
+      "packages/shared/src/git.test.ts",
+      '  it.each(["t3code", "t3code/"])("joins static prefix", () => {',
+      "identifier",
+    ],
+    ["packages/ssh/src/tunnel.test.ts", '    "exec \"$T3_RUNTIME_DIR/lathe\"",', "identifier"],
+    [
+      "packages/ssh/src/tunnel.test.ts",
+      "      `tar -czf '${release}/t3-${archiveVersion}-${asset}'`,",
+      "kept",
+    ],
+    [
+      "scripts/build-desktop-artifact.test.ts",
+      "              `release/t3-${backend}-snap-shot`,",
+      "kept",
+    ],
+    [
+      "scripts/build-desktop-artifact.test.ts",
+      '      parseWslRuntimeArchiveMembers("./t3-1.2.3-linux-x64/t3\\r\\nt3-1.2.3-linux-x64/client/"),',
+      "kept",
+    ],
+    [
       "packages/shared/src/providerAuthReturnUrl.test.ts",
       '    "t3code://app/welcome",',
       "upstream-reference",
