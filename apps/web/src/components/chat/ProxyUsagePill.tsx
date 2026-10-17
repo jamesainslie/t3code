@@ -20,10 +20,16 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
 import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
-import { PROXY_PILL_ATTRIBUTE, ProxyStatusCard } from "./ProxyStatusCard";
+import {
+  PROXY_PILL_ATTRIBUTE,
+  ProxyStatusCard,
+  measureProxyCard,
+  useProxyCardPlacement,
+} from "./ProxyStatusCard";
 import {
   deriveProxyPill,
   selectProxySource,
+  startRefreshLoop,
   type ProxyAccountView,
   type ProxyPillView,
   type ProxyTone,
@@ -108,6 +114,28 @@ function useNowSecond(): number {
     return () => window.clearInterval(id);
   }, []);
   return now;
+}
+
+const CARD_REFRESH_MS = 5_000;
+
+/**
+ * Re-reads the gateway while the card is open. The server's own reads follow
+ * the provider health interval, minutes apart, which leaves an open card
+ * stale. A failed read shows on the card itself, so it raises no toast.
+ */
+function useRefreshWhileOpen(environmentId: EnvironmentId, enabled: boolean) {
+  const refreshSources = useAtomCommand(serverEnvironment.usageLimitSourceRefresh, {
+    label: "refresh gateway accounts",
+    reportFailure: false,
+    reportDefect: false,
+  });
+  useEffect(() => {
+    if (!enabled) return;
+    return startRefreshLoop(() => refreshSources({ environmentId, input: {} }), {
+      intervalMs: CARD_REFRESH_MS,
+      isHidden: () => document.hidden,
+    });
+  }, [enabled, environmentId, refreshSources]);
 }
 
 /** A 3px bar with a hairline at the rotation threshold. */
@@ -423,6 +451,7 @@ function Ledger({
     label: "refresh gateway accounts",
   });
   const [refreshing, setRefreshing] = useState(false);
+  useRefreshWhileOpen(environmentId, variant === "card");
   const summaryStyle = useClientSettings((settings) => settings.proxyLedgerSummaryStyle);
   // Rows open independently and stay open while the ledger does.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
@@ -596,16 +625,28 @@ export function ProxyUsagePill({
   // details card, which stays until closed (a login in it sends the user to
   // another window). The peek stands down while the card is open so the
   // ledger is never shown twice.
+  //
+  // Like the details card, the card keeps its column only while there is
+  // room for it. Without room it steps aside, remembering it was open, and a
+  // click opens it over the chat until closed or the room comes back. A login
+  // in progress shows either way.
   const [hovered, setHovered] = useState(false);
   const loginFor = useAtomValue(proxyLoginPanelAtom);
   const setLoginFor = useAtomSet(proxyLoginPanelAtom);
   const cardRequested = useAtomValue(proxyStatusCardOpenAtom);
   const setCardRequested = useAtomSet(proxyStatusCardOpenAtom);
-  const cardOpen = cardRequested || loginFor !== null;
+  const [popoverRequested, setPopoverRequested] = useState(false);
+  const placement = useProxyCardPlacement(cardRequested || popoverRequested || loginFor !== null);
+  const mode = placement?.mode ?? null;
+  const cardOpen =
+    loginFor !== null || (mode === "inline" ? cardRequested : popoverRequested && mode !== null);
+  // Room coming back ends the popover, as it does the details card's.
+  if (mode === "inline" && popoverRequested) setPopoverRequested(false);
   const closeCard = useCallback(() => {
-    setCardRequested(false);
     setLoginFor(null);
-  }, [setCardRequested, setLoginFor]);
+    if (mode === "popover") setPopoverRequested(false);
+    else setCardRequested(false);
+  }, [mode, setCardRequested, setLoginFor]);
   if (!pill) return null;
   const { session, weekly } = windowsOf(pill.current);
   const dim = pill.status !== "live";
@@ -635,6 +676,7 @@ export function ProxyUsagePill({
               onClick={() => {
                 setHovered(false);
                 if (cardOpen) closeCard();
+                else if (measureProxyCard()?.mode === "popover") setPopoverRequested(true);
                 else setCardRequested(true);
               }}
             />
@@ -716,8 +758,8 @@ export function ProxyUsagePill({
           ) : null}
         </PopoverPopup>
       </Popover>
-      {cardOpen && snapshot ? (
-        <ProxyStatusCard onClose={closeCard}>
+      {cardOpen && placement && snapshot ? (
+        <ProxyStatusCard placement={placement} onClose={closeCard}>
           <Ledger
             environmentId={environmentId}
             snapshot={snapshot}

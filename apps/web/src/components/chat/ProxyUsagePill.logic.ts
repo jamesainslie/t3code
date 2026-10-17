@@ -499,3 +499,25 @@ export function deriveProxyPill(
     fallbackText: poolSpent ? fallbackText(snapshot) : null,
   };
 }
+
+/**
+ * Calls `refresh` every `intervalMs` until the returned stop is called. Each
+ * interval starts once the previous read settles, so a slow gateway never
+ * has reads queued behind it, and a hidden window skips its turn.
+ */
+export function startRefreshLoop(
+  refresh: () => Promise<unknown>,
+  options: { readonly intervalMs: number; readonly isHidden: () => boolean },
+): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = async () => {
+    if (!options.isHidden()) await refresh();
+    if (!stopped) timer = setTimeout(tick, options.intervalMs);
+  };
+  timer = setTimeout(tick, options.intervalMs);
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}

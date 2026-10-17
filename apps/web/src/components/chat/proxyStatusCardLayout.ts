@@ -1,9 +1,13 @@
 /**
  * Fork-only: where the Iris gateway card sits. It stacks under the thread
  * details card at the same width, so the two read as one column; with no
- * details card showing it takes that card's place under the header. It never
- * runs off screen: short of room it rises over the details card's foot, but
- * never above the header, and scrolls inside whatever height is left.
+ * details card showing it takes that card's place under the header.
+ *
+ * It yields that column on the details card's own terms. When the canvas is
+ * too narrow for the details card inline, or the details card leaves too
+ * little height below it, the card stops being part of the layout and opens
+ * only on request, under the header and over whatever is there, like the
+ * details card's popover.
  */
 
 /** Matches the thread details card (`--thread-details-panel-width`). */
@@ -12,8 +16,8 @@ export const PROXY_CARD_WIDTH = 280;
 const GAP = 8;
 /** The details card's own inset from the canvas edge. */
 const DETAILS_INSET = 12;
-/** The least height worth showing before the card rises to find more. */
-const MIN_HEIGHT = 240;
+/** The details card's own floor before it leaves the canvas for a popover. */
+const MIN_HEIGHT = 160;
 
 interface Edges {
   readonly top: number;
@@ -22,6 +26,7 @@ interface Edges {
 }
 
 export interface ProxyCardPlacement {
+  readonly mode: "inline" | "popover";
   readonly top: number;
   readonly left: number;
   readonly maxHeight: number;
@@ -33,14 +38,16 @@ export function resolveProxyCardPlacement(input: {
   readonly header: Edges;
   /** The thread details card, when it is showing. */
   readonly details: Edges | null;
+  /** Whether the chat canvas has room for the details card inline. */
+  readonly detailsColumn: boolean;
 }): ProxyCardPlacement {
-  const { viewport, header, details } = input;
+  const { viewport, header, details, detailsColumn } = input;
   const right = details ? details.right : header.right - DETAILS_INSET;
   const left = Math.max(GAP, right - PROXY_CARD_WIDTH);
-  const floor = header.bottom + GAP;
-  let top = details ? details.bottom + GAP : header.bottom + DETAILS_INSET;
-  if (viewport.height - GAP - top < MIN_HEIGHT) {
-    top = Math.max(floor, viewport.height - GAP - MIN_HEIGHT);
+  const below = details ? details.bottom + GAP : header.bottom + DETAILS_INSET;
+  if (detailsColumn && viewport.height - GAP - below >= MIN_HEIGHT) {
+    return { mode: "inline", top: below, left, maxHeight: viewport.height - GAP - below };
   }
-  return { top, left, maxHeight: viewport.height - GAP - top };
+  const top = header.bottom + DETAILS_INSET;
+  return { mode: "popover", top, left, maxHeight: Math.max(0, viewport.height - GAP - top) };
 }
