@@ -164,7 +164,7 @@ const mcpMatcherWidening = (o: RenameOccurrence) => {
 
 /**
  * A t3code repository name in a hosted remote (host/owner/t3code,
- * git@host:owner/t3code.git) or a bare owner/t3code slug. Local paths and the
+ * git@host:owner/t3code.git) or a bare slug (owner/t3code, group/sub/t3code). Local paths and the
  * desktop scheme's MIME type are not repositories.
  */
 const isRepositorySlugName = (o: RenameOccurrence) => {
@@ -174,9 +174,23 @@ const isRepositorySlugName = (o: RenameOccurrence) => {
     (/^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[:/](?:[A-Za-z0-9_.-]+\/)+$/.test(
       head,
     ) ||
-      (/^[A-Za-z0-9_.-]+\/$/.test(head) && head !== "x-scheme-handler/"))
+      (/^(?:[A-Za-z0-9_.-]+\/)+$/.test(head) && head !== "x-scheme-handler/"))
   );
 };
+
+/** Upstream identity values the fork replaces with FORK_IDENTITY. */
+const UPSTREAM_IDENTITY_TOKEN =
+  /com\.t3tools\.(?:t3code|T3Code)|^t3code(?:-dev|-v2)?(?::|:\/\/app)?$|\/t3code\.service|\/usr\/share\/doc\/t3code|node_modules\\?\/t3\\?\/|bin\\?\/t3\\?\.mjs|^manifest\.bin\.t3$|registry\.npmjs\.org\/t3\/|^hello@t3\.codes$|^t3-install$|t3-antigravity-browser-preflight/;
+
+/** Files where upstream names its CLI `t3` and the fork uses FORK_IDENTITY.cliBin. */
+const UPSTREAM_CLI_FILES =
+  /^apps\/server\/src\/cli\/invocation\.ts$|^apps\/desktop\/src\/backend\/DesktopBackendConfiguration\.ts$|^scripts\/(?:install\.(?:sh|ps1)|build-npm-launcher\.ts|npm-launcher\/bin\.mjs)$/;
+
+/** Upstream lines the fork rewrites around FORK_IDENTITY, by path and line. */
+const UPSTREAM_REPLACED_IDENTITY_LINES: ReadonlyArray<readonly [string, RegExp]> = [
+  ["apps/desktop/scripts/electron-launcher.mjs", /com\.t3tools\.t3code|APP_PROTOCOL_SCHEMES/],
+  ["apps/desktop/src/app/DesktopCliShim.ts", /^export const MARKER = "/],
+];
 
 let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
 
@@ -206,8 +220,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "kept-rename-rules",
     class: "kept",
-    reason: "The rename's own rules, codemod and report, which must keep naming the old forms.",
-    path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$/,
+    reason:
+      "The rename's own rules, codemod, report and sync guide, which must keep naming the old forms.",
+    path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$|^docs\/internals\/fork-upstream-sync\.md$/,
   },
   {
     id: "kept-fork-legacy-compat",
@@ -726,7 +741,10 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
         /\b(?:name|repo):\s*["']t3code["']/.test(o.line) &&
         (/\bowner:/.test(o.line) || /^\s*owner:\s*["'][^"']+["'],?$/.test(o.previousLine))) ||
       (o.token === "t3tools" && /\bowner:\s*["']t3tools["']/.test(o.line)) ||
-      isRepositorySlugName(o),
+      isRepositorySlugName(o) ||
+      // An owner segment in a remote or slug (T3Tools/Platform, t3tools/t3code).
+      (/^t3tools$/i.test(stem(o)) && o.token.includes("/") && !o.token.startsWith("@")) ||
+      (o.token === "t3code" && /["'](?:path|name)=$/.test(o.line.slice(0, o.column))),
   },
   {
     id: "upstream-own-files",
@@ -765,6 +783,21 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       stem(o) === "T3" &&
       (/\b(?:fork|makers) of $/.test(o.line.slice(0, o.column)) ||
         (o.path === "docs/user/telemetry.md" && o.line.endsWith("usage events to T3"))),
+  },
+  {
+    id: "upstream-replaced-identity-lines",
+    class: "upstream-reference",
+    reason:
+      "Upstream lines the fork replaces with its identity values (FORK_IDENTITY); they reach the codemod only on the upstream-lathe mirror, which keeps them as upstream wrote them.",
+    test: (o) =>
+      UPSTREAM_REPLACED_IDENTITY_LINES.some(([path, line]) => o.path === path && line.test(o.line)),
+  },
+  {
+    id: "kept-monogram-sample",
+    class: "kept",
+    reason: "Sample text for a grapheme-count test, not the product name.",
+    path: /ProjectCommands\.test\.ts$/,
+    line: /\["T3", "é"/,
   },
   {
     id: "kept-upstream-alpha-dir",
@@ -1099,6 +1132,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /\.mdx?$/,
   },
 
+  {
+    id: "upstream-fixture-repo-names",
+    class: "upstream-reference",
+    reason:
+      "Test data naming the t3code repository or its t3tools owner, which tests compare with kept repository names; left as upstream wrote it. Replay transcripts follow the renamed code instead.",
+    path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|__snapshots__\/.*|\.snap)$|\/testkit\/(?!.*\.ndjson$)/,
+    test: (o) => /^t3(?:code|tools)$/i.test(stem(o)),
+  },
   // test fixtures: recorded transcripts, example paths and ids
   {
     id: "id-test-fixture",
@@ -1106,6 +1147,17 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Test data: replay transcripts, example paths, temp prefixes, ids. Follows the code it tests.",
     path: /(?:\.test\.[cm]?[jt]sx?|\.testkit\.ts|\/testkit\/|\/fixtures\/|__snapshots__\/.*|\.snap|\.ndjson)$|\/testkit\/|\/fixtures\//,
+  },
+  // Last, so it only sees what nothing above classifies.
+  {
+    id: "upstream-replaced-identity",
+    class: "upstream-reference",
+    reason:
+      "Upstream's own app ids, schemes, service and package names in lines the fork replaced with FORK_IDENTITY. Only the upstream-lathe mirror holds them, and keeps them as upstream wrote them.",
+    test: (o) =>
+      UPSTREAM_IDENTITY_TOKEN.test(o.token) ||
+      (UPSTREAM_CLI_FILES.test(o.path) &&
+        /(?:^|\/)t3(?::|\\?\.mjs)?$|^t3\$reset\.?$|\\nt3$/.test(o.token)),
   },
 ];
 

@@ -193,6 +193,67 @@ describe("FORK_RENAME_RULES", () => {
     ["packages/shared/src/git.test.ts", 'isTemporaryWorktreeBranch("t3code/deadbeef")', "kept"],
     ["packages/shared/src/forkIdentity.test.ts", '  scheme: "t3code",', "kept"],
     [
+      "apps/server/src/orchestration-v2/ProjectCommands.test.ts",
+      '    for (const text of ["T3", "é", "किखि"]) {',
+      "kept",
+    ],
+    [
+      "apps/server/src/vcs/VcsProjectConfig.test.ts",
+      '      path.join(root, ".t3code"),',
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/project/RepositoryIdentityResolver.test.ts",
+      'expect(identity?.owner).toBe("t3tools");',
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/orchestration-v2/testkit/fixtures/x/cursor_transcript.ndjson",
+      '{"cwd":"/work/t3code"}',
+      "identifier",
+    ],
+    [
+      "apps/web/src/lib/openPullRequestLink.test.ts",
+      'normalizeGitRemoteUrl("git@ssh.dev.azure.com:v3/T3Tools/Platform/T3Code");',
+      "upstream-reference",
+    ],
+    [
+      "packages/source-control-gitlab/src/server/GitLabCli.test.ts",
+      '        "path=t3code",',
+      "upstream-reference",
+    ],
+    // Upstream lines the fork replaced with FORK_IDENTITY, seen only on the mirror.
+    [
+      "apps/server/src/httpCors.ts",
+      'export const ORIGINS = ["t3code://app", "t3code-dev://app"] as const;',
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/cli/invocation.ts",
+      'const packageRoot = path.join(prefix, "lib/node_modules/t3");',
+      "upstream-reference",
+    ],
+    [
+      "apps/desktop/src/app/DesktopCliShim.ts",
+      'export const MARKER = "Written by T3 Code: runs the bundled t3 CLI.";',
+      "upstream-reference",
+    ],
+    [
+      "packages/client-runtime/src/state/projectGrouping.test.ts",
+      '      makeProject("first", "/work/t3code", { title: "t3code" }),',
+      "upstream-reference",
+    ],
+    [
+      "packages/shared/src/changeRequestUrl.test.ts",
+      '      repository: "acme/platform/_git/t3code",',
+      "upstream-reference",
+    ],
+    [
+      "apps/desktop/scripts/electron-launcher.mjs",
+      'const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];',
+      "upstream-reference",
+    ],
+    [
       "apps/web/src/connection/storage.ts",
       'const DATABASE_NAME = "t3code:connection-runtime";',
       "kept",
@@ -255,7 +316,7 @@ describe("FORK_RENAME_RULES", () => {
       "remote add origin git@github.com:julius/t3code.git",
       "upstream-reference",
     ],
-    ["apps/web/src/a.test.ts", 'const root = "/Users/me/t3code";', "identifier"],
+    ["apps/web/src/a.test.ts", 'const root = "/Users/me/t3code";', "upstream-reference"],
     [
       "packaging/aur/t3code-bin/PKGBUILD",
       "MimeType=x-scheme-handler/t3code;",
@@ -264,7 +325,7 @@ describe("FORK_RENAME_RULES", () => {
     [
       "packages/shared/src/git.test.ts",
       '  it.each(["t3code", "t3code/"])("joins static prefix", () => {',
-      "identifier",
+      "upstream-reference",
     ],
     ["packages/ssh/src/tunnel.test.ts", '    "exec \"$T3_RUNTIME_DIR/lathe\"",', "identifier"],
     [
