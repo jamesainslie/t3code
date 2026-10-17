@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
+import { collectUint8StreamText } from "@lathe/provider-core/server/collectStreamText";
 import {
   browserLaunchHelperSource,
   buildBrowserLaunchCommand,
@@ -14,7 +14,7 @@ import {
   preflightBrowserLaunchCommand,
 } from "./browserLaunchCapture.ts";
 
-const marker = "__T3_TEST_BROWSER_URL__";
+const marker = "__LATHE_TEST_BROWSER_URL__";
 const url =
   "https://example.com/authorize?state=opaque&redirect_uri=http%3A%2F%2F127.0.0.1%3A4567%2F";
 const encodeJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
@@ -30,13 +30,13 @@ describe("browser launch command", () => {
     Effect.gen(function* () {
       const command = yield* buildBrowserLaunchCommand({
         marker,
-        runtimeExecutablePath: "/opt/t3/node",
+        runtimeExecutablePath: "/opt/lathe/node",
         platform: "linux",
       });
-      assert.equal(command.executable, "/opt/t3/node");
+      assert.equal(command.executable, "/opt/lathe/node");
       assert.deepEqual(command.args.slice(0, 1), ["-e"]);
       assert.equal(command.args.at(-1), "%s");
-      assert.isTrue(command.command.startsWith("'/opt/t3/node' '-e' '"));
+      assert.isTrue(command.command.startsWith("'/opt/lathe/node' '-e' '"));
       assert.isTrue(command.command.endsWith("'--' '%s'"));
       assert.notInclude(command.command, ":");
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -57,10 +57,10 @@ describe("browser launch command", () => {
       }
       const windows = yield* buildBrowserLaunchCommand({
         marker,
-        runtimeExecutablePath: "C:\\Program Files\\T3\\node.exe",
+        runtimeExecutablePath: "C:\\Program Files\\Lathe\\node.exe",
         platform: "win32",
       });
-      assert.equal(windows.executable, "C:/Program Files/T3/node.exe");
+      assert.equal(windows.executable, "C:/Program Files/Lathe/node.exe");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
@@ -99,7 +99,7 @@ it.layer(NodeServices.layer)("browser launch helper", (it) => {
       yield* preflightBrowserLaunchCommand(command, {});
       const missing = yield* buildBrowserLaunchCommand({
         marker,
-        runtimeExecutablePath: "/nonexistent/t3-runtime",
+        runtimeExecutablePath: "/nonexistent/lathe-runtime",
         platform: "linux",
       });
       const result = yield* preflightBrowserLaunchCommand(missing, {}).pipe(Effect.exit);

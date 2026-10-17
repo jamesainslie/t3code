@@ -1,4 +1,4 @@
-import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { formatProviderSkillDisplayName } from "@lathe/shared/inlineSkills";
 import {
   Extension,
   findChildren,
@@ -24,12 +24,12 @@ import type {
   Citation,
   ComposerContextClipboardFragment,
   ServerProviderSkill,
-} from "@t3tools/contracts";
-import { serializeCitation, withCitationComment } from "@t3tools/shared/assistantCitations";
+} from "@lathe/contracts";
+import { serializeCitation, withCitationComment } from "@lathe/shared/assistantCitations";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextClipboardHtml,
-} from "@t3tools/shared/composerContextClipboard";
+} from "@lathe/shared/composerContextClipboard";
 import {
   createContext,
   use,

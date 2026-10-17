@@ -14,7 +14,7 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { openReadOnlyDatabase, snapshotDatabase } from "./SqliteSnapshot.ts";
@@ -434,7 +434,7 @@ export async function readSyncSource(sourceHome: string): Promise<SyncSource> {
   const home = await NodeFSP.realpath(expandedHome);
   const filename = await sourceDatabasePath(home);
   const version = NodePath.basename(filename) === "statev2.sqlite" ? 2 : 1;
-  const staging = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-snapshot-"));
+  const staging = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-snapshot-"));
   try {
     await snapshotDatabase(filename, NodePath.join(staging, "state.sqlite"));
     const db = await openReadOnlyDatabase(NodePath.join(staging, "state.sqlite"));

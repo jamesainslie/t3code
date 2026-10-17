@@ -3,7 +3,7 @@ import type {
   OrchestrationMessageContext,
   ProjectId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 export interface ThreadScopeInput {
   readonly callerThreadId: ThreadId;

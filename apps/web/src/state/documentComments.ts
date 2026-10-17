@@ -1,5 +1,5 @@
-import type { ScopedThreadRef, ThreadDocumentComment } from "@t3tools/contracts";
-import { createDocumentCommentEnvironmentAtoms } from "@t3tools/client-runtime/state/document-comments";
+import type { ScopedThreadRef, ThreadDocumentComment } from "@lathe/contracts";
+import { createDocumentCommentEnvironmentAtoms } from "@lathe/client-runtime/state/document-comments";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useEnvironmentQuery } from "./query";

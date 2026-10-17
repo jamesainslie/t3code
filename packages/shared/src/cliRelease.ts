@@ -2,7 +2,7 @@ import { FORK_IDENTITY } from "./forkIdentity.ts";
 
 const CLI_RELEASE_REPOSITORY = FORK_IDENTITY.releaseRepository;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
-export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
+export const CLI_RELEASE_BASE_URL_ENV = "LATHE_RELEASE_BASE_URL";
 
 /**
  * Kept in step with the build_linux_cli matrix, build_windows_arm64_cli, and

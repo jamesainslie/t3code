@@ -1,4 +1,4 @@
-import type { SyntaxTheme } from "@t3tools/contracts";
+import type { SyntaxTheme } from "@lathe/contracts";
 
 import { useTheme } from "../hooks/useTheme";
 import { syntaxThemeSwatches } from "../lib/syntaxThemes";

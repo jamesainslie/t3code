@@ -2,9 +2,9 @@ import * as NodeNet from "node:net";
 
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import * as NetService from "@t3tools/shared/Net";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import * as NetService from "@lathe/shared/Net";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -128,79 +128,79 @@ const NODE_SCRIPT = {
 
 describe("ssh tunnel scripts", () => {
   it("installs and runs the release archive without Node, npm, or npx", () => {
-    const script = SshTunnel.buildRemoteT3RunnerScript(ARCHIVE);
+    const script = SshTunnel.buildRemoteLatheRunnerScript(ARCHIVE);
 
-    assert.include(script, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
-    assert.include(script, "T3_NODE_SCRIPT_PATH=''");
+    assert.include(script, "LATHE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
+    assert.include(script, "LATHE_NODE_SCRIPT_PATH=''");
     assert.include(
       script,
-      "T3_RELEASE_BASE_URL='https://github.com/jamesainslie/t3code/releases/download'",
+      "LATHE_RELEASE_BASE_URL='https://github.com/jamesainslie/t3code/releases/download'",
     );
-    assert.include(script, '/runtime/versions/$T3_ARCHIVE_VERSION"');
+    assert.include(script, '/runtime/versions/$LATHE_ARCHIVE_VERSION"');
     // Fork: the archive name comes from SHA256SUMS (lathe-* first, t3-* for
     // releases before the rename) and the executable from the runtime
     // directory (lathe first, t3 for runtimes an older runner unpacked).
     assert.include(script, "for name in lathe t3; do");
-    assert.include(script, "-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz");
+    assert.include(script, "-$LATHE_ARCHIVE_VERSION-$LATHE_PLATFORM-$LATHE_ARCH.tar.gz");
     assert.include(script, "SHA256SUMS");
     assert.include(
       script,
-      'exec "$(if [ -x "$T3_RUNTIME_DIR/lathe" ]; then printf %s "$T3_RUNTIME_DIR/lathe"; else printf %s "$T3_RUNTIME_DIR/t3"; fi)" "$@"',
+      'exec "$(if [ -x "$LATHE_RUNTIME_DIR/lathe" ]; then printf %s "$LATHE_RUNTIME_DIR/lathe"; else printf %s "$LATHE_RUNTIME_DIR/t3"; fi)" "$@"',
     );
     // A host that cannot load the executable records the fallback once and
     // runs the bundled script with its own Node on every later launch.
-    assert.include(script, 'node "$T3_STAGING/bin.mjs" --version');
-    assert.include(script, `printf 'node\\n' > "$T3_STAGING/.launcher"`);
-    assert.include(script, 'exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"');
+    assert.include(script, 'node "$LATHE_STAGING/bin.mjs" --version');
+    assert.include(script, `printf 'node\\n' > "$LATHE_STAGING/.launcher"`);
+    assert.include(script, 'exec node "$LATHE_RUNTIME_DIR/bin.mjs" "$@"');
     // A host-installed lathe at the exact release is used instead of the archive.
     assert.include(script, "if command -v lathe >/dev/null 2>&1; then");
-    assert.include(script, `*"$T3_ARCHIVE_VERSION"*) exec lathe "$@" ;;`);
-    assert.isBelow(script.indexOf('exec lathe "$@"'), script.indexOf("T3_RUNTIME_DIR="));
+    assert.include(script, `*"$LATHE_ARCHIVE_VERSION"*) exec lathe "$@" ;;`);
+    assert.isBelow(script.indexOf('exec lathe "$@"'), script.indexOf("LATHE_RUNTIME_DIR="));
     assert.isBelow(
-      script.indexOf('else printf %s "$T3_STAGING/t3"; fi)" --version'),
-      script.indexOf('node "$T3_STAGING/bin.mjs" --version'),
+      script.indexOf('else printf %s "$LATHE_STAGING/t3"; fi)" --version'),
+      script.indexOf('node "$LATHE_STAGING/bin.mjs" --version'),
     );
     assert.notInclude(script, "npx");
     assert.notInclude(script, "npm exec");
-    assert.notInclude(script, "t3@latest");
+    assert.notInclude(script, "@jamesainslie/lathe@latest");
     assert.notInclude(script, 'exec t3 "$@"');
-    assert.include(script, '/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"');
-    assert.include(script, 'while ! mkdir "$T3_LOCK" 2>/dev/null; do');
-    assert.include(script, 'mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"');
-    assert.include(script, 'if ! kill -0 "$T3_LOCK_OWNER" 2>/dev/null; then');
-    assert.include(script, 'if [ "$T3_LOCK_UNOWNED" -ge 5 ]; then');
-    assert.include(script, 'if [ "$T3_LOCK_WAITED" -ge 360 ]; then');
-    assert.include(script, '"$T3_STAGING/SHA256SUMS" 30');
-    assert.include(script, '"$T3_STAGING/$T3_ARCHIVE" 240');
-    assert.notInclude(script, "T3_LOCK_CANDIDATE");
+    assert.include(script, '/runtime/versions/.$LATHE_ARCHIVE_VERSION.install.lock"');
+    assert.include(script, 'while ! mkdir "$LATHE_LOCK" 2>/dev/null; do');
+    assert.include(script, 'mv "$LATHE_LOCK/pid.tmp" "$LATHE_LOCK/pid"');
+    assert.include(script, 'if ! kill -0 "$LATHE_LOCK_OWNER" 2>/dev/null; then');
+    assert.include(script, 'if [ "$LATHE_LOCK_UNOWNED" -ge 5 ]; then');
+    assert.include(script, 'if [ "$LATHE_LOCK_WAITED" -ge 360 ]; then');
+    assert.include(script, '"$LATHE_STAGING/SHA256SUMS" 30');
+    assert.include(script, '"$LATHE_STAGING/$LATHE_ARCHIVE" 240');
+    assert.notInclude(script, "LATHE_LOCK_CANDIDATE");
     assert.notInclude(script, "-mmin");
-    assert.equal(script.split("if ! t3_runtime_ready; then").length - 1, 2);
+    assert.equal(script.split("if ! lathe_runtime_ready; then").length - 1, 2);
     assert.isBelow(
-      script.indexOf('else printf %s "$T3_STAGING/t3"; fi)" --version'),
-      script.indexOf('> "$T3_STAGING/.install-complete"'),
+      script.indexOf('else printf %s "$LATHE_STAGING/t3"; fi)" --version'),
+      script.indexOf('> "$LATHE_STAGING/.install-complete"'),
     );
     // Node discovery runs in the node-script branch, and in the archive path
     // only when the executable cannot run and the bundled script is used.
     assert.equal(script.split("ensure_remote_node_path || true").length - 1, 2);
     assert.isBelow(
       script.indexOf("ensure_remote_node_path || true"),
-      script.indexOf('exec node "$T3_NODE_SCRIPT_PATH" "$@"'),
+      script.indexOf('exec node "$LATHE_NODE_SCRIPT_PATH" "$@"'),
     );
     assert.isBelow(
-      script.indexOf('exec node "$T3_NODE_SCRIPT_PATH" "$@"'),
-      script.indexOf("T3_ARCHIVE_VERSION="),
+      script.indexOf('exec node "$LATHE_NODE_SCRIPT_PATH" "$@"'),
+      script.indexOf("LATHE_ARCHIVE_VERSION="),
     );
 
     const launch = SshTunnel.buildRemoteLaunchScript({
       ...ARCHIVE,
-      releaseBaseUrl: "https://mirror.example/t3/",
+      releaseBaseUrl: "https://mirror.example/lathe/",
     });
-    assert.include(launch, "T3_ARCHIVE_MODE=1");
-    assert.include(launch, "T3_RELEASE_BASE_URL='https://mirror.example/t3'");
+    assert.include(launch, "LATHE_ARCHIVE_MODE=1");
+    assert.include(launch, "LATHE_RELEASE_BASE_URL='https://mirror.example/lathe'");
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE"');
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT"');
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"');
-    assert.include(SshTunnel.buildRemoteLaunchScript(NODE_SCRIPT), "T3_ARCHIVE_MODE=0");
+    assert.include(SshTunnel.buildRemoteLaunchScript(NODE_SCRIPT), "LATHE_ARCHIVE_MODE=0");
   });
 
   it("rejects archive versions that are not a single exact version segment", () => {
@@ -213,22 +213,22 @@ describe("ssh tunnel scripts", () => {
       "v1.2.3",
     ]) {
       assert.throws(
-        () => SshTunnel.buildRemoteT3RunnerScript({ archiveVersion }),
+        () => SshTunnel.buildRemoteLatheRunnerScript({ archiveVersion }),
         SshTunnel.SshInvalidArchiveVersionError,
         undefined,
         archiveVersion,
       );
     }
     assert.include(
-      SshTunnel.buildRemoteT3RunnerScript(ARCHIVE),
-      "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
+      SshTunnel.buildRemoteLatheRunnerScript(ARCHIVE),
+      "LATHE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
     );
   });
 
   it("refuses to build a runner with neither an archive version nor a node script", () => {
     for (const input of [undefined, {}, { archiveVersion: "  " }, { nodeScriptPath: null }]) {
       assert.throws(
-        () => SshTunnel.buildRemoteT3RunnerScript(input),
+        () => SshTunnel.buildRemoteLatheRunnerScript(input),
         SshTunnel.SshMissingRunnerError,
       );
     }
@@ -236,26 +236,26 @@ describe("ssh tunnel scripts", () => {
   });
 
   it("does not hard-code a remote node engine range", () => {
-    const script = SshTunnel.buildRemoteT3RunnerScript(NODE_SCRIPT);
+    const script = SshTunnel.buildRemoteLatheRunnerScript(NODE_SCRIPT);
 
-    assert.include(script, "T3_NODE_ENGINE_RANGE=''");
+    assert.include(script, "LATHE_NODE_ENGINE_RANGE=''");
     assert.notInclude(script, TEST_NODE_ENGINE_RANGE);
   });
 
   it("builds the remote t3 runner with a node script override", () => {
-    const script = SshTunnel.buildRemoteT3RunnerScript({
+    const script = SshTunnel.buildRemoteLatheRunnerScript({
       ...NODE_SCRIPT,
       nodeEngineRange: TEST_NODE_ENGINE_RANGE,
     });
 
     assert.include(
       script,
-      "T3_NODE_SCRIPT_PATH='/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs'",
+      "LATHE_NODE_SCRIPT_PATH='/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs'",
     );
-    assert.include(script, 'exec node "$T3_NODE_SCRIPT_PATH" "$@"');
-    assert.include(script, "T3_ARCHIVE_VERSION=''");
+    assert.include(script, 'exec node "$LATHE_NODE_SCRIPT_PATH" "$@"');
+    assert.include(script, "LATHE_ARCHIVE_VERSION=''");
     assert.include(script, 'prepend_path_if_dir "$HOME/.local/bin"');
-    assert.include(script, `T3_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
+    assert.include(script, `LATHE_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(script, "remote_node_satisfies_engine()");
     assert.include(script, "function satisfiesSemverRange");
     assert.include(script, "satisfiesSemverRange(rawVersion, range)");
@@ -269,14 +269,14 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'prepend_path_if_dir "$HOME/.nodenv/shims"');
     assert.include(script, 'NVM_DIR="$HOME/.nvm"');
     assert.include(script, "nvm use --silent default");
-    assert.include(script, 'for T3_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
+    assert.include(script, 'for LATHE_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
     assert.notInclude(script, "ensure $NVM_DIR/nvm.sh is available");
     assert.notInclude(script, "npx");
   });
 
   it("embeds the runner in the launch script byte for byte", () => {
-    const runner = SshTunnel.buildRemoteT3RunnerScript(ARCHIVE);
-    assert.include(runner, 'printf \'%s\\n\' "$$" > "$T3_LOCK/pid.tmp"');
+    const runner = SshTunnel.buildRemoteLatheRunnerScript(ARCHIVE);
+    assert.include(runner, 'printf \'%s\\n\' "$$" > "$LATHE_LOCK/pid.tmp"');
     assert.include(SshTunnel.buildRemoteLaunchScript(ARCHIVE), runner);
   });
 
@@ -295,18 +295,18 @@ describe("ssh tunnel scripts", () => {
     assert.include(launch, "RUNNER_CHANGED=1");
     assert.include(launch, "ensure_remote_node_path()");
     assert.include(launch, "if ! ensure_remote_node_path; then");
-    assert.include(devLaunch, `T3_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
+    assert.include(devLaunch, `LATHE_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(devLaunch, "does not satisfy required range ");
     assert.include(launch, 'kill "$REMOTE_PID" 2>/dev/null || true');
     assert.include(launch, "wait_ready");
     assert.include(launch, '"$RUNNER_FILE" serve --host 127.0.0.1');
     assert.include(launch, '--base-dir "$DEFAULT_SERVER_HOME"');
     assert.notInclude(launch, "server-home");
-    assert.include(launch, "Remote T3 server did not become ready");
+    assert.include(launch, "Remote Lathe server did not become ready");
     assert.include(launch, 'wait_ready "60000"');
     assert.include(launch, 'if [ -s "$LOG_FILE" ]; then');
     assert.include(launch, "It wrote nothing to %s");
-    assert.include(launch, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
+    assert.include(launch, "LATHE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
     assert.include(
       SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
       '"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json',
@@ -318,7 +318,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE), "server-home");
     assert.include(
       SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
-      "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
+      "LATHE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
     );
     assert.include(
       SshTunnel.buildRemoteStopScript(stateKey),
@@ -649,7 +649,7 @@ describe("ssh tunnel scripts", () => {
                 ...makeSuccessfulProcess(""),
                 exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
                 stderr: Stream.make(
-                  new TextEncoder().encode("Remote T3 server did not stop within 2 seconds.\n"),
+                  new TextEncoder().encode("Remote Lathe server did not stop within 2 seconds.\n"),
                 ),
               };
             }
@@ -691,7 +691,7 @@ describe("ssh tunnel scripts", () => {
             assert.instanceOf(disconnected.failure, SshCommandError);
             assert.equal(
               disconnected.failure.message,
-              "Remote T3 server did not stop within 2 seconds.",
+              "Remote Lathe server did not stop within 2 seconds.",
             );
           }
         } else {
@@ -1314,7 +1314,7 @@ describe("remote port picker", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pick-port-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pick-port-" });
       yield* fs.writeFileString(`${root}/preload.cjs`, MACOS_BIND_PRELOAD);
       yield* fs.writeFileString(`${root}/pick-port.cjs`, SshTunnel.REMOTE_PICK_PORT_SCRIPT);
       const holder = yield* holdWildcardPort;
@@ -1436,12 +1436,12 @@ describe("archive runner script", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-archive-runner-" });
         const releaseBaseUrl = yield* makeMirror(root);
-        const runner = `${root}/run-t3.sh`;
+        const runner = `${root}/run-lathe.sh`;
         yield* fs.writeFileString(
           runner,
-          SshTunnel.buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+          SshTunnel.buildRemoteLatheRunnerScript({ archiveVersion, releaseBaseUrl }),
         );
         const home = `${root}/home`;
         yield* fs.makeDirectory(home, { recursive: true });
@@ -1484,12 +1484,12 @@ describe("archive runner script", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-archive-runner-" });
         const releaseBaseUrl = yield* makeMirror(root, "pre-rename");
-        const runner = `${root}/run-t3.sh`;
+        const runner = `${root}/run-lathe.sh`;
         yield* fs.writeFileString(
           runner,
-          SshTunnel.buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+          SshTunnel.buildRemoteLatheRunnerScript({ archiveVersion, releaseBaseUrl }),
         );
         const home = `${root}/home`;
         yield* fs.makeDirectory(home, { recursive: true });
@@ -1509,11 +1509,11 @@ describe("archive runner script", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
-        const runner = `${root}/run-t3.sh`;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-archive-runner-" });
+        const runner = `${root}/run-lathe.sh`;
         yield* fs.writeFileString(
           runner,
-          SshTunnel.buildRemoteT3RunnerScript({
+          SshTunnel.buildRemoteLatheRunnerScript({
             archiveVersion,
             releaseBaseUrl: `file://${root}/no-mirror`,
           }),
@@ -1540,12 +1540,12 @@ describe("archive runner script", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-archive-runner-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-archive-runner-" });
         const releaseBaseUrl = yield* makeMirror(root);
-        const runner = `${root}/run-t3.sh`;
+        const runner = `${root}/run-lathe.sh`;
         yield* fs.writeFileString(
           runner,
-          SshTunnel.buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+          SshTunnel.buildRemoteLatheRunnerScript({ archiveVersion, releaseBaseUrl }),
         );
         const home = `${root}/home`;
         yield* fs.makeDirectory(`${home}/.t3f`, { recursive: true });
@@ -1625,10 +1625,10 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
 
   const prepareLaunch = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-launch-script-" });
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-launch-script-" });
     const home = `${root}/home`;
     const stateDir = `${home}/${FORK_IDENTITY.baseDirName}/ssh-launch/test-state`;
-    const fakeServer = `${root}/fake-t3.cjs`;
+    const fakeServer = `${root}/fake-lathe.cjs`;
     const launch = `${root}/launch.sh`;
     yield* fs.makeDirectory(stateDir, { recursive: true });
     yield* fs.writeFileString(`${stateDir}/port`, `${yield* freeLoopbackPort}\n`);
@@ -1798,7 +1798,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
         const { stateDir, readManagedPid, runLaunch, launchManaged } = yield* prepareLaunch;
         const { pid: previousPid } = yield* launchManaged;
 
-        yield* fs.writeFileString(`${stateDir}/run-t3.sh`, "# previous runner\n");
+        yield* fs.writeFileString(`${stateDir}/run-lathe.sh`, "# previous runner\n");
         assert.equal((yield* runLaunch).serverKind, "managed");
         const replacementPid = yield* readManagedPid;
         assert.notEqual(replacementPid, previousPid);
@@ -1858,7 +1858,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
         const { launched, pid } = yield* launchManaged;
 
         yield* fs.remove(`${stateDir}/managed`);
-        yield* fs.writeFileString(`${stateDir}/run-t3.sh`, "# superseded runner\n");
+        yield* fs.writeFileString(`${stateDir}/run-lathe.sh`, "# superseded runner\n");
         assert.deepEqual(yield* runLaunch, {
           remotePort: launched.remotePort,
           serverKind: "external",

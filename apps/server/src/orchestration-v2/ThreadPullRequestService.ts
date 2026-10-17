@@ -1,7 +1,7 @@
 import {
   canonicalRepositoryKey,
   sourceControlRepositorySelector,
-} from "@t3tools/shared/sourceControl";
+} from "@lathe/shared/sourceControl";
 import {
   CommandId,
   isSyncedThreadId,
@@ -10,9 +10,9 @@ import {
   type OrchestrationV2ThreadShell,
   type ThreadId,
   type ThreadLinkedPullRequest,
-} from "@t3tools/contracts";
-import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+} from "@lathe/contracts";
+import { makeDrainableWorker } from "@lathe/shared/DrainableWorker";
+import * as NodeSqliteClient from "@lathe/shared/nodeSqliteClient";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -39,7 +39,7 @@ class ThreadPullRequestServiceV2 extends Context.Service<
     readonly start: () => Effect.Effect<void, never, Scope.Scope>;
     readonly drain: Effect.Effect<void>;
   }
->()("t3/orchestration-v2/ThreadPullRequestService/ThreadPullRequestServiceV2") {}
+>()("lathe/orchestration-v2/ThreadPullRequestService/ThreadPullRequestServiceV2") {}
 
 function samePullRequest(
   left: ThreadLinkedPullRequest | null | undefined,

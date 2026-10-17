@@ -2,7 +2,7 @@ import { AtomRegistry } from "effect/reactivity";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { afterAll, afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import { npmReleasePublishedAtom } from "./npmRelease";
 

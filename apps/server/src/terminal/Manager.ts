@@ -34,15 +34,15 @@ import {
   ClaudeSettings,
   CodexSettings,
   ProviderInstanceId,
-} from "@t3tools/contracts";
-import { makeKeyedCoalescingWorker } from "@t3tools/shared/KeyedCoalescingWorker";
-import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { AgentScope } from "@t3tools/shared/AgentScope";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { mergePathEntries } from "@t3tools/shared/shell";
+} from "@lathe/contracts";
+import { makeKeyedCoalescingWorker } from "@lathe/shared/KeyedCoalescingWorker";
+import * as KeyedLock from "@lathe/shared/KeyedLock";
+import { AgentScope } from "@lathe/shared/AgentScope";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { mergePathEntries } from "@lathe/shared/shell";
 
-import { acpRegistryManagedBinaryDirectories } from "@t3tools/provider-acp-registry/server";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import { acpRegistryManagedBinaryDirectories } from "@lathe/provider-acp-registry/server";
+import { getTerminalLabel } from "@lathe/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -66,7 +66,7 @@ import {
 import type { LoopbackCallbackForwarder } from "../auth-relay/loopbackCallback.ts";
 import * as ServerConfig from "../config.ts";
 import { makeTerminalBrowserLaunches } from "./browserLaunches.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { mergeProviderInstanceEnvironment } from "@lathe/provider-core/server/instanceEnvironment";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { makeClaudeEnvironment } from "../provider/Drivers/ClaudeHome.ts";
 import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
@@ -76,11 +76,12 @@ import {
   terminalRestartsTotal,
   terminalSessionsTotal,
 } from "../observability/Metrics.ts";
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 import * as ProcessRunner from "../processRunner.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import * as NativeTelemetryClient from "../resourceTelemetry/NativeTelemetryClient.ts";
-import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import * as PtyAdapter from "@lathe/shared/PtyAdapter";
+import { isLegacyEnvName } from "@lathe/shared/forkLegacyEnv";
 
 export {
   TerminalCwdError,
@@ -215,7 +216,7 @@ export class TerminalManager extends Context.Service<
       listener: (event: TerminalMetadataStreamEvent) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
   }
->()("t3/terminal/Manager/TerminalManager") {}
+>()("lathe/terminal/Manager/TerminalManager") {}
 
 interface TerminalSubprocessInspectResult {
   readonly hasRunningSubprocess: boolean;
@@ -1238,7 +1239,7 @@ function toSessionKey(threadId: string, terminalId: string): string {
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
   const normalizedKey = key.toUpperCase();
-  if (normalizedKey.startsWith("T3CODE_")) {
+  if (normalizedKey.startsWith("LATHE_") || isLegacyEnvName(normalizedKey)) {
     return true;
   }
   if (normalizedKey.startsWith("VITE_")) {
@@ -1319,7 +1320,7 @@ function createTerminalSpawnEnv(
     spawnEnv.COLORTERM = "truecolor";
   }
   // The user is at a client, never at the environment, so a browser opened
-  // here is always wrong even when the environment has a display. T3's
+  // here is always wrong even when the environment has a display. Lathe's
   // capture helper wins over any BROWSER the user's own environment sets.
   if (browserCommand) {
     for (const key of Object.keys(spawnEnv)) {

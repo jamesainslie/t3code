@@ -1,4 +1,4 @@
-import { replaceTextRange } from "@t3tools/shared/composerTrigger";
+import { replaceTextRange } from "@lathe/shared/composerTrigger";
 
 import type { PreparedVoiceTranscription, VoiceTranscriber } from "./transcription.ts";
 

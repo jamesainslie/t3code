@@ -1,19 +1,16 @@
-import type {
-  DesktopSshEnvironmentBootstrap,
-  DesktopSshEnvironmentTarget,
-} from "@t3tools/contracts";
+import type { DesktopSshEnvironmentBootstrap, DesktopSshEnvironmentTarget } from "@lathe/contracts";
 import {
   describeReadinessCause,
   waitForHttpReady as waitForHttpReadyShared,
-} from "@t3tools/shared/httpReadiness";
-import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
-import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
-import { forkCliArchiveShell, forkCliExecutableShell } from "@t3tools/shared/forkCliArtifacts";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import * as NetService from "@t3tools/shared/Net";
-import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
+} from "@lathe/shared/httpReadiness";
+import { cliReleaseDownloadBaseUrl } from "@lathe/shared/cliRelease";
+import { FORK_HOME_SHELL } from "@lathe/shared/forkBaseDir";
+import { forkCliArchiveShell, forkCliExecutableShell } from "@lathe/shared/forkCliArtifacts";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import * as KeyedLock from "@lathe/shared/KeyedLock";
+import * as NetService from "@lathe/shared/Net";
+import { extractJsonObject, fromLenientJson } from "@lathe/shared/schemaJson";
+import { satisfiesSemverRange } from "@lathe/shared/semver";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -80,7 +77,7 @@ const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
 // never boots over a server that is still shutting down.
 const REMOTE_SERVER_STOP_WAIT_SECONDS = 15;
 
-export interface RemoteT3RunnerOptions {
+export interface RemoteLatheRunnerOptions {
   readonly nodeScriptPath?: string | null;
   readonly nodeEngineRange?: string | null;
   readonly archiveVersion?: string | null;
@@ -88,7 +85,7 @@ export interface RemoteT3RunnerOptions {
 }
 
 export interface SshEnvironmentManagerOptions {
-  readonly resolveCliRunner?: Effect.Effect<RemoteT3RunnerOptions>;
+  readonly resolveCliRunner?: Effect.Effect<RemoteLatheRunnerOptions>;
   /**
    * Where the manager keeps its owned ssh ControlMaster sockets, normally
    * `<base dir>/ssh`. Without one every command connects directly.
@@ -243,11 +240,11 @@ function summaryErrorFields(cause: Cause.Cause<unknown>) {
   };
 }
 
-function isNodeScriptRunner(runner: RemoteT3RunnerOptions | undefined): boolean {
+function isNodeScriptRunner(runner: RemoteLatheRunnerOptions | undefined): boolean {
   return Boolean(runner?.nodeScriptPath?.trim());
 }
 
-function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
+function sshRunnerLogFields(runner: RemoteLatheRunnerOptions | undefined) {
   if (runner?.nodeScriptPath?.trim()) {
     return { runner: "node-script", nodeScriptPath: runner.nodeScriptPath.trim() };
   }
@@ -501,12 +498,12 @@ const REMOTE_NODE_ENV_SCRIPT = `prepend_path_if_dir() {
 }
 
 remote_node_satisfies_engine() {
-  T3_NODE_ENGINE_RANGE=@@T3_NODE_ENGINE_RANGE@@
-  if [ -z "$T3_NODE_ENGINE_RANGE" ]; then
+  LATHE_NODE_ENGINE_RANGE=@@LATHE_NODE_ENGINE_RANGE@@
+  if [ -z "$LATHE_NODE_ENGINE_RANGE" ]; then
     return 0
   fi
-  node - "$T3_NODE_ENGINE_RANGE" <<'NODE'
-@@T3_NODE_ENGINE_CHECK_SCRIPT@@
+  node - "$LATHE_NODE_ENGINE_RANGE" <<'NODE'
+@@LATHE_NODE_ENGINE_CHECK_SCRIPT@@
 NODE
 }
 
@@ -573,9 +570,9 @@ ensure_remote_node_path() {
   fi
 
   if ! command -v node >/dev/null 2>&1 && [ -d "$NVM_DIR/versions/node" ]; then
-    for T3_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
-      if [ -x "$T3_NODE_BIN/node" ]; then
-        PATH="$T3_NODE_BIN:$PATH"
+    for LATHE_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
+      if [ -x "$LATHE_NODE_BIN/node" ]; then
+        PATH="$LATHE_NODE_BIN:$PATH"
         export PATH
       fi
     done
@@ -587,9 +584,9 @@ ensure_remote_node_path() {
 
 const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
-@@T3_NODE_ENV_SCRIPT@@
-T3_NODE_SCRIPT_PATH=@@T3_NODE_SCRIPT_PATH@@
-if [ -n "$T3_NODE_SCRIPT_PATH" ]; then
+@@LATHE_NODE_ENV_SCRIPT@@
+LATHE_NODE_SCRIPT_PATH=@@LATHE_NODE_SCRIPT_PATH@@
+if [ -n "$LATHE_NODE_SCRIPT_PATH" ]; then
   # Dev mode: a source checkout on the remote. This is the only path that
   # needs Node, so Node discovery runs here and nowhere else.
   ensure_remote_node_path || true
@@ -597,10 +594,10 @@ if [ -n "$T3_NODE_SCRIPT_PATH" ]; then
     printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
-  exec node "$T3_NODE_SCRIPT_PATH" "$@"
+  exec node "$LATHE_NODE_SCRIPT_PATH" "$@"
 fi
-T3_ARCHIVE_VERSION=@@T3_ARCHIVE_VERSION@@
-if [ -z "$T3_ARCHIVE_VERSION" ]; then
+LATHE_ARCHIVE_VERSION=@@LATHE_ARCHIVE_VERSION@@
+if [ -z "$LATHE_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
@@ -609,22 +606,22 @@ fi
 # falls through to the release archive so both sides always match.
 if command -v ${FORK_IDENTITY.cliBin} >/dev/null 2>&1; then
   case "$(${FORK_IDENTITY.cliBin} --version 2>/dev/null)" in
-    *"$T3_ARCHIVE_VERSION"*) exec ${FORK_IDENTITY.cliBin} "$@" ;;
+    *"$LATHE_ARCHIVE_VERSION"*) exec ${FORK_IDENTITY.cliBin} "$@" ;;
   esac
 fi
 # Self-contained release archive: no Node, npm, or compiler on the remote.
 # Unpacked into the pinned-runtime layout so \`t3 service install\` reuses it.
-T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
-T3_RUNTIME_DIR="${FORK_HOME_SHELL}/runtime/versions/$T3_ARCHIVE_VERSION"
-t3_runtime_ready() {
-  [ -x "${forkCliExecutableShell("$T3_RUNTIME_DIR")}" ] && [ "$(cat "$T3_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$T3_ARCHIVE_VERSION" ]
+LATHE_RELEASE_BASE_URL=@@LATHE_RELEASE_BASE_URL@@
+LATHE_RUNTIME_DIR="${FORK_HOME_SHELL}/runtime/versions/$LATHE_ARCHIVE_VERSION"
+lathe_runtime_ready() {
+  [ -x "${forkCliExecutableShell("$LATHE_RUNTIME_DIR")}" ] && [ "$(cat "$LATHE_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$LATHE_ARCHIVE_VERSION" ]
 }
-if ! t3_runtime_ready; then
+if ! lathe_runtime_ready; then
   mkdir -p "${FORK_HOME_SHELL}/runtime/versions"
   # Concurrent launches (two clients, a retry racing a slow first run) must
   # not both install: mkdir is the atomic lock and the ready check repeats
   # under it.
-  T3_LOCK="${FORK_HOME_SHELL}/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"
+  LATHE_LOCK="${FORK_HOME_SHELL}/runtime/versions/.$LATHE_ARCHIVE_VERSION.install.lock"
   # mkdir is the only portable atomic exclusive create (mv would silently
   # nest a candidate inside an existing lock). The owner publishes its pid
   # right after, so a lock with a live owner is never reclaimed however
@@ -632,94 +629,94 @@ if ! t3_runtime_ready; then
   # once. A lock with no pid at all is a crash between mkdir and the pid
   # write; it is reclaimed after a short grace so a live owner has time to
   # publish.
-  T3_LOCK_WAITED=0
-  T3_LOCK_UNOWNED=0
-  while ! mkdir "$T3_LOCK" 2>/dev/null; do
-    T3_LOCK_OWNER="$(cat "$T3_LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$T3_LOCK_OWNER" ]; then
-      T3_LOCK_UNOWNED=0
-      if ! kill -0 "$T3_LOCK_OWNER" 2>/dev/null; then
-        rm -rf "$T3_LOCK"
+  LATHE_LOCK_WAITED=0
+  LATHE_LOCK_UNOWNED=0
+  while ! mkdir "$LATHE_LOCK" 2>/dev/null; do
+    LATHE_LOCK_OWNER="$(cat "$LATHE_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$LATHE_LOCK_OWNER" ]; then
+      LATHE_LOCK_UNOWNED=0
+      if ! kill -0 "$LATHE_LOCK_OWNER" 2>/dev/null; then
+        rm -rf "$LATHE_LOCK"
         continue
       fi
     else
-      T3_LOCK_UNOWNED=$((T3_LOCK_UNOWNED + 1))
-      if [ "$T3_LOCK_UNOWNED" -ge 5 ]; then
-        rm -rf "$T3_LOCK"
+      LATHE_LOCK_UNOWNED=$((LATHE_LOCK_UNOWNED + 1))
+      if [ "$LATHE_LOCK_UNOWNED" -ge 5 ]; then
+        rm -rf "$LATHE_LOCK"
         continue
       fi
     fi
-    if [ "$T3_LOCK_WAITED" -ge @@T3_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
-      printf 'Another t3 %s installation has held %s for too long.\\n' "$T3_ARCHIVE_VERSION" "$T3_LOCK" >&2
+    if [ "$LATHE_LOCK_WAITED" -ge @@LATHE_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
+      printf 'Another t3 %s installation has held %s for too long.\\n' "$LATHE_ARCHIVE_VERSION" "$LATHE_LOCK" >&2
       exit 1
     fi
     sleep 1
-    T3_LOCK_WAITED=$((T3_LOCK_WAITED + 1))
+    LATHE_LOCK_WAITED=$((LATHE_LOCK_WAITED + 1))
   done
-  printf '%s\\n' "$$" > "$T3_LOCK/pid.tmp" && mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"
-  trap 'rm -rf "$T3_LOCK"' EXIT
+  printf '%s\\n' "$$" > "$LATHE_LOCK/pid.tmp" && mv "$LATHE_LOCK/pid.tmp" "$LATHE_LOCK/pid"
+  trap 'rm -rf "$LATHE_LOCK"' EXIT
 fi
-if ! t3_runtime_ready; then
+if ! lathe_runtime_ready; then
   case "$(uname -s)" in
-    Darwin) T3_PLATFORM="darwin" ;;
-    Linux) T3_PLATFORM="linux" ;;
+    Darwin) LATHE_PLATFORM="darwin" ;;
+    Linux) LATHE_PLATFORM="linux" ;;
     *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -s)" >&2; exit 1 ;;
   esac
   case "$(uname -m)" in
-    arm64 | aarch64) T3_ARCH="arm64" ;;
-    x86_64 | amd64) T3_ARCH="x64" ;;
+    arm64 | aarch64) LATHE_ARCH="arm64" ;;
+    x86_64 | amd64) LATHE_ARCH="x64" ;;
     *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
   esac
-  T3_STAGING="$(mktemp -d "${FORK_HOME_SHELL}/runtime/versions/.staging-XXXXXX")"
-  trap 'rm -rf "$T3_STAGING" "$T3_LOCK"' EXIT
-  t3_fetch() {
+  LATHE_STAGING="$(mktemp -d "${FORK_HOME_SHELL}/runtime/versions/.staging-XXXXXX")"
+  trap 'rm -rf "$LATHE_STAGING" "$LATHE_LOCK"' EXIT
+  lathe_fetch() {
     if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
     elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
     else printf 'Remote host needs curl or wget to download %s.\\n' "$1" >&2; exit 1
     fi
   }
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
-  T3_ARCHIVE="${forkCliArchiveShell("$T3_STAGING/SHA256SUMS", "$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz")}"
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
-  T3_EXPECTED="$(grep " \\*\\{0,1\\}$T3_ARCHIVE$" "$T3_STAGING/SHA256SUMS" | cut -d' ' -f1)"
+  lathe_fetch "$LATHE_RELEASE_BASE_URL/v$LATHE_ARCHIVE_VERSION/SHA256SUMS" "$LATHE_STAGING/SHA256SUMS" @@LATHE_ARCHIVE_CHECKSUMS_SECONDS@@
+  LATHE_ARCHIVE="${forkCliArchiveShell("$LATHE_STAGING/SHA256SUMS", "$LATHE_ARCHIVE_VERSION-$LATHE_PLATFORM-$LATHE_ARCH.tar.gz")}"
+  lathe_fetch "$LATHE_RELEASE_BASE_URL/v$LATHE_ARCHIVE_VERSION/$LATHE_ARCHIVE" "$LATHE_STAGING/$LATHE_ARCHIVE" @@LATHE_ARCHIVE_DOWNLOAD_SECONDS@@
+  LATHE_EXPECTED="$(grep " \\*\\{0,1\\}$LATHE_ARCHIVE$" "$LATHE_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
-    T3_ACTUAL="$(sha256sum "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
+    LATHE_ACTUAL="$(sha256sum "$LATHE_STAGING/$LATHE_ARCHIVE" | cut -d' ' -f1)"
   else
-    T3_ACTUAL="$(shasum -a 256 "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
+    LATHE_ACTUAL="$(shasum -a 256 "$LATHE_STAGING/$LATHE_ARCHIVE" | cut -d' ' -f1)"
   fi
-  if [ -z "$T3_EXPECTED" ] || [ "$T3_ACTUAL" != "$T3_EXPECTED" ]; then
-    printf 'Checksum mismatch for %s.\\n' "$T3_ARCHIVE" >&2; exit 1
+  if [ -z "$LATHE_EXPECTED" ] || [ "$LATHE_ACTUAL" != "$LATHE_EXPECTED" ]; then
+    printf 'Checksum mismatch for %s.\\n' "$LATHE_ARCHIVE" >&2; exit 1
   fi
-  tar -xzf "$T3_STAGING/$T3_ARCHIVE" -C "$T3_STAGING" --strip-components=1
-  rm -f "$T3_STAGING/$T3_ARCHIVE" "$T3_STAGING/SHA256SUMS"
+  tar -xzf "$LATHE_STAGING/$LATHE_ARCHIVE" -C "$LATHE_STAGING" --strip-components=1
+  rm -f "$LATHE_STAGING/$LATHE_ARCHIVE" "$LATHE_STAGING/SHA256SUMS"
   # Prove the runtime runs here before marking it ready, or every later launch
   # would exec a broken install instead of retrying. The executable is
   # preferred; a host whose libc cannot load it (NixOS, musl) runs the same
   # bundle with its own Node instead, recorded so later launches skip the probe.
-  if "${forkCliExecutableShell("$T3_STAGING")}" --version >/dev/null 2>&1; then
-    printf 'exe\\n' > "$T3_STAGING/.launcher"
-  elif ensure_remote_node_path && node "$T3_STAGING/bin.mjs" --version >/dev/null 2>&1; then
-    printf 'node\\n' > "$T3_STAGING/.launcher"
+  if "${forkCliExecutableShell("$LATHE_STAGING")}" --version >/dev/null 2>&1; then
+    printf 'exe\\n' > "$LATHE_STAGING/.launcher"
+  elif ensure_remote_node_path && node "$LATHE_STAGING/bin.mjs" --version >/dev/null 2>&1; then
+    printf 'node\\n' > "$LATHE_STAGING/.launcher"
   else
-    printf 'The t3 %s executable does not run on this host, and no compatible node is on PATH to run it as a script.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
+    printf 'The t3 %s executable does not run on this host, and no compatible node is on PATH to run it as a script.\\n' "$LATHE_ARCHIVE_VERSION" >&2; exit 1
   fi
-  printf '%s\\n' "$T3_ARCHIVE_VERSION" > "$T3_STAGING/.install-complete"
-  rm -rf "$T3_RUNTIME_DIR"
-  mv "$T3_STAGING" "$T3_RUNTIME_DIR"
+  printf '%s\\n' "$LATHE_ARCHIVE_VERSION" > "$LATHE_STAGING/.install-complete"
+  rm -rf "$LATHE_RUNTIME_DIR"
+  mv "$LATHE_STAGING" "$LATHE_RUNTIME_DIR"
 fi
-if [ -n "\${T3_LOCK:-}" ]; then
-  rm -rf "$T3_LOCK"
+if [ -n "\${LATHE_LOCK:-}" ]; then
+  rm -rf "$LATHE_LOCK"
   trap - EXIT
 fi
-if [ "$(cat "$T3_RUNTIME_DIR/.launcher" 2>/dev/null)" = "node" ]; then
+if [ "$(cat "$LATHE_RUNTIME_DIR/.launcher" 2>/dev/null)" = "node" ]; then
   ensure_remote_node_path || true
-  exec node "$T3_RUNTIME_DIR/bin.mjs" "$@"
+  exec node "$LATHE_RUNTIME_DIR/bin.mjs" "$@"
 fi
-exec "${forkCliExecutableShell("$T3_RUNTIME_DIR")}" "$@"
+exec "${forkCliExecutableShell("$LATHE_RUNTIME_DIR")}" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
-@@T3_NODE_ENV_SCRIPT@@
+@@LATHE_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
 STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/$STATE_KEY"
 DEFAULT_SERVER_HOME="${FORK_HOME_SHELL}"
@@ -728,15 +725,15 @@ PORT_FILE="$STATE_DIR/port"
 PID_FILE="$STATE_DIR/pid"
 MANAGED_FILE="$STATE_DIR/managed"
 LOG_FILE="$STATE_DIR/server.log"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
-RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
+RUNNER_FILE="$STATE_DIR/run-lathe.sh"
+RUNNER_NEXT="$STATE_DIR/run-lathe.next.$$"
 mkdir -p "$STATE_DIR"
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
-@@T3_RUNNER_SCRIPT@@
+@@LATHE_RUNNER_SCRIPT@@
 SH
 RUNNER_CHANGED=0
 if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
@@ -744,8 +741,8 @@ if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
 fi
 chmod 700 "$RUNNER_NEXT"
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
-T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
-if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+LATHE_ARCHIVE_MODE=@@LATHE_ARCHIVE_MODE@@
+if [ "$LATHE_ARCHIVE_MODE" = "1" ]; then
   # The archive ships the helpers below inside the executable; the remote
   # needs no Node at all. Resolving the runner once here also downloads the
   # archive before the port and readiness probes rely on it.
@@ -755,27 +752,27 @@ elif ! ensure_remote_node_path; then
   exit 1
 fi
 pick_port() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@T3_DEFAULT_REMOTE_PORT@@" "@@T3_REMOTE_PORT_SCAN_WINDOW@@"
+  if [ "$LATHE_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@LATHE_DEFAULT_REMOTE_PORT@@" "@@LATHE_REMOTE_PORT_SCAN_WINDOW@@"
     return
   fi
-  node - "$PORT_FILE" "@@T3_DEFAULT_REMOTE_PORT@@" "@@T3_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
-@@T3_PICK_PORT_SCRIPT@@
+  node - "$PORT_FILE" "@@LATHE_DEFAULT_REMOTE_PORT@@" "@@LATHE_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
+@@LATHE_PICK_PORT_SCRIPT@@
 NODE
 }
 wait_ready() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@T3_READY_PROBE_TIMEOUT_MS@@"
+  if [ "$LATHE_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@LATHE_READY_PROBE_TIMEOUT_MS@@"
     return
   fi
-  node - "$REMOTE_PORT" "$1" "@@T3_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
-@@T3_WAIT_READY_SCRIPT@@
+  node - "$REMOTE_PORT" "$1" "@@LATHE_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
+@@LATHE_WAIT_READY_SCRIPT@@
 NODE
 }
 wait_for_pid_exit() {
   PID_TO_WAIT="$1"
   WAIT_COUNT=0
-  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt $((@@T3_SERVER_STOP_WAIT_SECONDS@@ * 10)) ]; do
+  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt $((@@LATHE_SERVER_STOP_WAIT_SECONDS@@ * 10)) ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
@@ -789,7 +786,7 @@ server_running() {
   esac
 }
 resolve_default_runtime_port() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+  if [ "$LATHE_ARCHIVE_MODE" = "1" ]; then
     "$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"
     return
   fi
@@ -849,7 +846,7 @@ if [ "$DEFAULT_RUNTIME_OWNED" -eq 1 ]; then
   fi
 elif [ -n "$DEFAULT_REMOTE_PORT" ]; then
   REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-  if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
+  if wait_ready "@@LATHE_REUSE_READY_TIMEOUT_MS@@"; then
     ADOPTED_PID="$DEFAULT_RUNTIME_PID"
     if [ "$REMOTE_MANAGED" = "managed" ]; then
       LAUNCH_ACTION="adopted-external"
@@ -884,7 +881,7 @@ if [ "$REMOTE_MANAGED" = "external" ]; then
   # it again could catch a momentary stall and launch a second server beside it.
   if server_running "$ADOPTED_PID"; then
     LAUNCH_ACTION="\${LAUNCH_ACTION:-reused-external}"
-  elif [ -z "$REMOTE_PORT" ] || ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
+  elif [ -z "$REMOTE_PORT" ] || ! wait_ready "@@LATHE_REUSE_READY_TIMEOUT_MS@@"; then
     LAUNCH_ACTION=""
     REMOTE_PID=""
     REMOTE_PORT=""
@@ -902,8 +899,8 @@ elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && server_running "$REMOTE_PI
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
-  elif ! wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
-    printf 'Remote T3 server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
+  elif ! wait_ready "@@LATHE_READY_TIMEOUT_MS@@"; then
+    printf 'Remote Lathe server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
     exit 1
   else
     LAUNCH_ACTION="reused"
@@ -916,20 +913,20 @@ fi
 if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
   if [ -z "$REMOTE_PORT" ]; then
-    if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+    if [ "$LATHE_ARCHIVE_MODE" = "1" ]; then
       printf 'Failed to find an available port on the remote host.\\n' >&2
     else
       printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
     fi
     exit 1
   fi
-  nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
+  nohup env LATHE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
   REMOTE_PID="$!"
   printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
-  if ! wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
-    printf 'Remote T3 server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+  if ! wait_ready "@@LATHE_READY_TIMEOUT_MS@@"; then
+    printf 'Remote Lathe server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
@@ -946,17 +943,17 @@ printf '{"remotePort":%s,"serverKind":"%s","action":"%s"}\\n' "$REMOTE_PORT" "\$
 `;
 
 const REMOTE_PAIRING_SCRIPT = `set -eu
-STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@T3_STATE_KEY@@"
+STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@LATHE_STATE_KEY@@"
 DEFAULT_SERVER_HOME="${FORK_HOME_SHELL}"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
-RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
+RUNNER_FILE="$STATE_DIR/run-lathe.sh"
+RUNNER_NEXT="$STATE_DIR/run-lathe.next.$$"
 mkdir -p "$STATE_DIR"
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
-@@T3_RUNNER_SCRIPT@@
+@@LATHE_RUNNER_SCRIPT@@
 SH
 # A launch may be running the current runner, so replace it only by rename and
 # only when it differs; the launch compares these same bytes to detect changes.
@@ -969,11 +966,11 @@ PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
 `;
 
 const REMOTE_STOP_SCRIPT = `set -eu
-STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@T3_STATE_KEY@@"
+STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@LATHE_STATE_KEY@@"
 PID_FILE="$STATE_DIR/pid"
 PORT_FILE="$STATE_DIR/port"
 MANAGED_FILE="$STATE_DIR/managed"
-STOP_WAIT_SECONDS=@@T3_SERVER_STOP_WAIT_SECONDS@@
+STOP_WAIT_SECONDS=@@LATHE_SERVER_STOP_WAIT_SECONDS@@
 REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
 REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
 if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
@@ -984,7 +981,7 @@ if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMO
     sleep 0.1
   done
   if kill -0 "$REMOTE_PID" 2>/dev/null; then
-    printf 'Remote T3 server with PID %s did not stop within %s seconds. Its ownership files were kept.\\n' "$REMOTE_PID" "$STOP_WAIT_SECONDS" >&2
+    printf 'Remote Lathe server with PID %s did not stop within %s seconds. Its ownership files were kept.\\n' "$REMOTE_PID" "$STOP_WAIT_SECONDS" >&2
     exit 1
   fi
 fi
@@ -993,7 +990,7 @@ printf '{"stopped":true}\\n'
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
-STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@T3_STATE_KEY@@"
+STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/@@LATHE_STATE_KEY@@"
 LOG_FILE="$STATE_DIR/server.log"
 if [ -f "$LOG_FILE" ]; then
   tail -n 80 "$LOG_FILE" 2>/dev/null || true
@@ -1024,7 +1021,7 @@ export class SshMissingRunnerError extends Schema.TaggedError<SshMissingRunnerEr
   }
 }
 
-export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteLatheRunnerScript(input?: RemoteLatheRunnerOptions): string {
   const nodeScriptPath = input?.nodeScriptPath?.trim() || "";
   const archiveVersion = input?.archiveVersion?.trim() || "";
   if (nodeScriptPath === "" && archiveVersion === "") {
@@ -1039,59 +1036,62 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
   );
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
-      T3_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
-      T3_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
-      T3_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
-      T3_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
-      T3_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
-      T3_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
-      T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+      LATHE_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
+      LATHE_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      LATHE_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
+      LATHE_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
+      LATHE_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
+      LATHE_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
+      LATHE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     }),
   );
 }
 
-export function buildRemoteNodeEnvScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteNodeEnvScript(input?: RemoteLatheRunnerOptions): string {
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_NODE_ENV_SCRIPT, {
-      T3_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
-      T3_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
+      LATHE_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
+      LATHE_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
     }),
   );
 }
 
-export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteLaunchScript(input?: RemoteLatheRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
-    T3_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
-    T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
-    T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
-    T3_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
-    T3_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
-    T3_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
-    T3_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
-    T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
-    T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
-    T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
-    T3_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
+    LATHE_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
+    LATHE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+    LATHE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteLatheRunnerScript(input)),
+    LATHE_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
+    LATHE_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
+    LATHE_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
+    LATHE_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
+    LATHE_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
+    LATHE_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
+    LATHE_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    LATHE_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
   });
 }
 
-export function buildRemotePairingScript(stateKey: string, input?: RemoteT3RunnerOptions): string {
+export function buildRemotePairingScript(
+  stateKey: string,
+  input?: RemoteLatheRunnerOptions,
+): string {
   return applyScriptPlaceholders(REMOTE_PAIRING_SCRIPT, {
-    T3_STATE_KEY: stateKey,
-    T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
+    LATHE_STATE_KEY: stateKey,
+    LATHE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteLatheRunnerScript(input)),
   });
 }
 
 export function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
-    T3_STATE_KEY: stateKey,
-    T3_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
+    LATHE_STATE_KEY: stateKey,
+    LATHE_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
   });
 }
 
 function buildRemoteLogTailScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_LOG_TAIL_SCRIPT, {
-    T3_STATE_KEY: stateKey,
+    LATHE_STATE_KEY: stateKey,
   });
 }
 
@@ -1099,7 +1099,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
   function* (
     target: DesktopSshEnvironmentTarget,
     input?: RemoteCommandOptions,
-    runner?: RemoteT3RunnerOptions,
+    runner?: RemoteLatheRunnerOptions,
   ): Effect.fn.Return<
     {
       readonly remotePort: number;
@@ -1202,7 +1202,7 @@ function describeLaunchAction(action: RemoteLaunchAction, port: number): string 
 export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingToken")(function* (
   target: DesktopSshEnvironmentTarget,
   input?: RemoteCommandOptions,
-  runner?: RemoteT3RunnerOptions,
+  runner?: RemoteLatheRunnerOptions,
 ): Effect.fn.Return<
   {
     readonly credential: string;
@@ -1892,7 +1892,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const createTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry.create")(function* (input: {
     readonly key: string;
     readonly resolvedTarget: DesktopSshEnvironmentTarget;
-    readonly runner?: RemoteT3RunnerOptions;
+    readonly runner?: RemoteLatheRunnerOptions;
     readonly runOneShot: RunOneShot;
     readonly summary: SshConnectionSummary;
   }): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
@@ -2064,7 +2064,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     resolvedTarget: DesktopSshEnvironmentTarget,
     runOneShot: RunOneShot,
     summary: SshConnectionSummary,
-    runner?: RemoteT3RunnerOptions,
+    runner?: RemoteLatheRunnerOptions,
   ): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     const entry = tunnels.get(key) ?? null;
     summary.tunnel = exitedTunnels.delete(key) && entry === null ? "pruned-exited" : "created";
@@ -2304,7 +2304,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
 export class SshEnvironmentManager extends Context.Service<
   SshEnvironmentManager,
   SshEnvironmentManagerShape
->()("@t3tools/ssh/tunnel/SshEnvironmentManager") {
+>()("@lathe/ssh/tunnel/SshEnvironmentManager") {
   static readonly layer = (options: SshEnvironmentManagerOptions = {}) =>
     Layer.effect(SshEnvironmentManager, makeSshEnvironmentManager(options));
 }

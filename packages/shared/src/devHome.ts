@@ -1,7 +1,7 @@
 /**
- * A linked git worktree gets its own (gitignored) `.t3`: feature work in a
+ * A linked git worktree gets its own (gitignored) `.lathe`: feature work in a
  * throwaway branch must not share a database with the real app, and an ambient
- * `T3CODE_HOME` counts as an explicit base dir — flipping the state directory
+ * `LATHE_HOME` counts as an explicit base dir — flipping the state directory
  * from `<base>/dev` to `<base>/userdata`, the live production database.
  */
 
@@ -66,7 +66,7 @@ export const resolveGitWorktreePath = (
  * Deliberately does not require the directory to exist yet: falling back
  * because it is missing would send callers at the shared home.
  */
-export const resolveWorktreeT3Home = (
+export const resolveWorktreeLatheHome = (
   cwd: string,
 ): Effect.Effect<string | undefined, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {

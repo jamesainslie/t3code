@@ -1,11 +1,11 @@
 import { ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { AgentElapsed } from "./AgentElapsed";
-import { projectedSubagentsToRuntime } from "@t3tools/client-runtime/state/subagentRuntime";
+import { projectedSubagentsToRuntime } from "@lathe/client-runtime/state/subagentRuntime";
 import type { ReactNode } from "react";
 import { useThreadShell, useProject } from "../../state/entities";
 import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { useAtomValue } from "@effect/atom-react";
-import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef, scopeProjectRef } from "@lathe/client-runtime/environment";
 import { environmentThreadDetails } from "../../state/threads";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import * as DateTime from "effect/DateTime";
@@ -14,8 +14,8 @@ import {
   resolveHandoffEndpoints,
   type HandoffEndpoints,
   type HandoffTimelineRun,
-} from "@t3tools/client-runtime/handoff";
-import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subagent-display";
+} from "@lathe/client-runtime/handoff";
+import { formatSubagentDisplayTitle } from "@lathe/client-runtime/state/subagent-display";
 import {
   ProviderDriverKind,
   type OrchestrationV2Notification,
@@ -27,8 +27,8 @@ import {
   type EnvironmentId,
   type NodeId,
   type ScopedThreadRef,
-} from "@t3tools/contracts";
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+} from "@lathe/contracts";
+import type { TimestampFormat } from "@lathe/contracts/settings";
 import {
   BotIcon,
   ChevronRightIcon,
@@ -48,7 +48,7 @@ import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon"
 import { cn } from "~/lib/utils";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { Button, InlineButton } from "../ui/button";
-import { LatheMark as T3Wordmark } from "../LatheWordmark";
+import { LatheMark as LatheWordmark } from "../LatheWordmark";
 
 const LIFECYCLE_TYPES = new Set<OrchestrationV2TurnItem["type"]>([
   "run_interrupt_request",
@@ -64,7 +64,7 @@ export function isV2LifecycleItem(item: OrchestrationV2TurnItem): boolean {
   return LIFECYCLE_TYPES.has(item.type);
 }
 
-export type { HandoffTimelineRun } from "@t3tools/client-runtime/handoff";
+export type { HandoffTimelineRun } from "@lathe/client-runtime/handoff";
 
 export function V2LifecycleRow(props: {
   readonly item: OrchestrationV2TurnItem;
@@ -170,7 +170,7 @@ export function V2LifecycleRow(props: {
     return (
       <WorkLogRow
         data-v2-item-type={item.type}
-        icon={<T3Wordmark className="size-4 text-icon-muted" aria-hidden />}
+        icon={<LatheWordmark className="size-4 text-icon-muted" aria-hidden />}
         label={<>Created thread{item.title ? ` · ${item.title}` : ""}</>}
         trailing={
           <InlineButton

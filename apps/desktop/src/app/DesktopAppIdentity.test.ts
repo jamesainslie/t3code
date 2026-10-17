@@ -9,7 +9,7 @@ import * as PlatformError from "effect/PlatformError";
 
 import type * as Electron from "electron";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
@@ -24,9 +24,9 @@ const defaultEnvironmentInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "1.2.3",
-  appPath: "/Applications/T3 Code.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Lathe.app/Contents/Resources/app.asar",
   isPackaged: true,
-  resourcesPath: "/Applications/T3 Code.app/Contents/Resources",
+  resourcesPath: "/Applications/Lathe.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -43,7 +43,7 @@ interface ElectronAppCalls {
 const layerElectronApp = (calls: ElectronAppCalls) =>
   Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
-    name: Effect.succeed("T3 Code"),
+    name: Effect.succeed("Lathe"),
     systemLocale: Effect.succeed("en-US"),
     whenReady: Effect.void,
     quit: Effect.void,
@@ -138,7 +138,7 @@ const withIdentity = <A, E, R>(
                     input.legacyPathExists === true && /\/t3code-fork(-dev)?$/.test(path),
                   ),
             readFileString: () =>
-              Effect.succeed(input.packageJson ?? '{"t3codeCommitHash":"abcdef1234567890"}'),
+              Effect.succeed(input.packageJson ?? '{"latheCommitHash":"abcdef1234567890"}'),
           }),
         ),
         Layer.provideMerge(layerAssets(input.pngIconPath ?? Option.none())),
@@ -237,7 +237,7 @@ describe("DesktopAppIdentity", () => {
         calls,
         environment: {
           env: {
-            T3CODE_COMMIT_HASH: "0123456789abcdef",
+            LATHE_COMMIT_HASH: "0123456789abcdef",
           },
         },
         pngIconPath: Option.some("/icon.png"),

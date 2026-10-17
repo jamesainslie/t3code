@@ -1,4 +1,4 @@
-import type { TerminalBrowserLaunchResponseMode } from "@t3tools/contracts";
+import type { TerminalBrowserLaunchResponseMode } from "@lathe/contracts";
 
 /**
  * How a terminal sign-in banner can carry the result back to the waiting

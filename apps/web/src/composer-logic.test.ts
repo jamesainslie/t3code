@@ -1,16 +1,16 @@
-import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
-import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
+import { resolveComposerDispatchMode } from "@lathe/client-runtime/state/composer-dispatch";
+import { filterComposerPullRequestMatches } from "@lathe/shared/composerPullRequestMatches";
+import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@lathe/contracts";
 import {
   collectCitations,
   expandCitationsForProvider,
   serializeCitation,
-} from "@t3tools/shared/assistantCitations";
+} from "@lathe/shared/assistantCitations";
 import {
   DEFAULT_RESOLVED_KEYBINDINGS,
   compileResolvedKeybindingsConfig,
   mergeWithDefaultKeybindings,
-} from "@t3tools/shared/keybindings";
+} from "@lathe/shared/keybindings";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

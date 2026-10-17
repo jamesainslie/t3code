@@ -2,13 +2,13 @@
 /**
  * Builds the `t3` npm package behind `npx t3` / `npm i -g t3`: a launcher
  * with no dependencies that downloads this exact version's CLI archive from
- * the GitHub Release on first run (scripts/npm-launcher/t3.mjs).
+ * the GitHub Release on first run (scripts/npm-launcher/lathe.mjs).
  * The executables are not published to npm. npm's publish-time scanning held
  * 250 MB platform packages back for up to an hour after the launcher went
  * live, and every install in that window ran a launcher with nothing to
  * launch.
  *
- * Output: `<output-dir>/t3/` (the package tree) and `<output-dir>/t3.tgz`,
+ * Output: `<output-dir>/lathe/` (the package tree) and `<output-dir>/lathe.tgz`,
  * which is what gets published.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -22,10 +22,10 @@ import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
-import { FORK_NPM_LAUNCHER_SCRIPT } from "@t3tools/shared/forkCliArtifacts";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { fromJsonStringPretty } from "@lathe/shared/schemaJson";
+import { FORK_NPM_LAUNCHER_SCRIPT } from "@lathe/shared/forkCliArtifacts";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
 import { windowsSystemTar } from "./build-cli-archive.ts";
@@ -78,7 +78,10 @@ export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: 
     path.join(stageDir, "package.json"),
     `${yield* encodePackageJson(npmLauncherPackageManifest(input.version))}\n`,
   );
-  yield* fs.copyFile(path.join(sourceDir, "t3.mjs"), path.join(stageDir, FORK_NPM_LAUNCHER_SCRIPT));
+  yield* fs.copyFile(
+    path.join(sourceDir, "lathe.mjs"),
+    path.join(stageDir, FORK_NPM_LAUNCHER_SCRIPT),
+  );
   yield* fs.chmod(path.join(stageDir, FORK_NPM_LAUNCHER_SCRIPT), 0o755);
   yield* fs.copyFile(path.join(sourceDir, "bin.mjs"), path.join(stageDir, "dist/bin.mjs"));
   const readme = yield* path.fromFileUrl(new URL("../apps/server/README.md", import.meta.url));

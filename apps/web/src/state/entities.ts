@@ -3,21 +3,17 @@ import type {
   EnvironmentProject,
   EnvironmentThread,
   EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+} from "@lathe/client-runtime/state/shell";
 import {
   EMPTY_THREAD_HISTORY_META,
   type EnvironmentThreadStatus,
   type ThreadContinuation,
   type ThreadHistoryMeta,
-} from "@t3tools/client-runtime/state/threads";
-import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
-import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
-import type {
-  EnvironmentId,
-  OrchestrationV2ProjectedTurnItem,
-  ProjectId,
-} from "@t3tools/contracts";
-import { canContinueThread } from "@t3tools/shared/threadContextReference";
+} from "@lathe/client-runtime/state/threads";
+import { supportsSnoozeReminder } from "@lathe/client-runtime/state/thread-settled";
+import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@lathe/contracts";
+import type { EnvironmentId, OrchestrationV2ProjectedTurnItem, ProjectId } from "@lathe/contracts";
+import { canContinueThread } from "@lathe/shared/threadContextReference";
 import { Atom } from "effect/reactivity";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentProjects } from "./projects";

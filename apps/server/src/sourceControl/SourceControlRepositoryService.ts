@@ -18,18 +18,18 @@ import {
   type SourceControlRepositoryCloneUrls,
   type SourceControlRepositoryInfo,
   type SourceControlRepositoryLookupInput,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import * as ServerConfig from "../config.ts";
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 import {
   parseGitCloneProgressLine,
   type GitCloneProgressLine,
 } from "../project/gitCloneProgress.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
+import * as BitbucketApi from "@lathe/source-control-bitbucket/server/BitbucketApi";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 const isSourceControlRepositoryError = Schema.is(SourceControlRepositoryError);
 const isSourceControlProviderError = Schema.is(SourceControlProviderError);
 const isBitbucketRepositoryLocatorError = Schema.is(BitbucketApi.BitbucketRepositoryLocatorError);
@@ -54,7 +54,7 @@ export class SourceControlRepositoryService extends Context.Service<
       input: SourceControlPublishRepositoryInput,
     ) => Effect.Effect<SourceControlPublishRepositoryResult, SourceControlRepositoryError>;
   }
->()("t3/sourceControl/SourceControlRepositoryService") {}
+>()("lathe/sourceControl/SourceControlRepositoryService") {}
 
 export interface SourceControlPreparedClone {
   readonly destinationPath: string;

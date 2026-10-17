@@ -9,7 +9,7 @@ import { makeModelproxyApi, mapModelproxyStatus, ModelproxyStatus } from "./mode
 const now = Date.parse("2026-09-23T12:00:00Z");
 const iso = (offsetMs: number) => DateTime.formatIso(DateTime.makeUnsafe(now + offsetMs));
 
-/** The wire payload as modelproxy sends it, including fields T3 ignores. */
+/** The wire payload as modelproxy sends it, including fields Lathe ignores. */
 const raw = {
   current: "james-max",
   threshold: 0.9,

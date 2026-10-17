@@ -1,10 +1,10 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { Citation } from "@t3tools/contracts";
+import { scopeThreadRef } from "@lathe/client-runtime/environment";
+import type { Citation } from "@lathe/contracts";
 import {
   assistantCitationLabel,
   isDocumentCitation,
   serializeCitation,
-} from "@t3tools/shared/assistantCitations";
+} from "@lathe/shared/assistantCitations";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowUpRightIcon, FileTextIcon, PencilIcon, QuoteIcon } from "lucide-react";
 import {

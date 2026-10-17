@@ -1,1 +1,1 @@
-export { sanitizeThreadErrorMessage } from "@t3tools/client-runtime/errors";
+export { sanitizeThreadErrorMessage } from "@lathe/client-runtime/errors";

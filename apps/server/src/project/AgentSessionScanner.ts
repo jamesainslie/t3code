@@ -12,7 +12,7 @@ import {
   type AgentSessionProjectGit,
   type AgentSessionScanResult,
   type ProviderInstanceConfig,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -28,14 +28,14 @@ import {
   normalizeGitRemoteUrl,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
   parseOriginUrlFromGitConfig,
-} from "@t3tools/shared/git";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
+} from "@lathe/shared/git";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { normalizeProjectPathForComparison } from "@lathe/shared/path";
 
 import * as ServerConfig from "../config.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   createTranscriptJsonReader,
@@ -159,7 +159,7 @@ export class AgentSessionScanner extends Context.Service<
       completedSources?: ReadonlyArray<AgentSessionImportSource>,
     ) => Stream.Stream<AgentSessionRecentThread, AgentSessionScanError>;
   }
->()("t3/project/AgentSessionScanner") {}
+>()("lathe/project/AgentSessionScanner") {}
 
 type AgentSessionSource = AgentSessionProjectCandidate["sources"][number];
 
@@ -500,7 +500,7 @@ function normalizeForWorktreeMatch(value: string, caseFold: boolean): string {
   return caseFold ? normalized.toLowerCase() : normalized;
 }
 
-function isT3ManagedWorktree(
+function isLatheManagedWorktree(
   candidatePath: string,
   worktreesDir: string,
   caseFold: boolean,
@@ -599,7 +599,7 @@ export const make = Effect.gen(function* () {
     normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
       normalizeForWorktreeMatch(baseDir, foldWorktreeCase),
     ) ||
-    isT3ManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase);
+    isLatheManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase);
 
   const listDirectory = (directory: string) =>
     fileSystem.readDirectory(directory).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));

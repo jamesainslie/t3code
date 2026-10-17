@@ -1,6 +1,6 @@
-import type { ThreadContextRecord, UserInputQuestion } from "@t3tools/contracts";
-import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { formatThreadLink } from "@t3tools/shared/threadLinks";
+import type { ThreadContextRecord, UserInputQuestion } from "@lathe/contracts";
+import { replaceComposerContextReferences } from "@lathe/shared/composerContextReferences";
+import { formatThreadLink } from "@lathe/shared/threadLinks";
 
 export function projectPendingUserInputAnswer(
   answer: unknown,

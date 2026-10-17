@@ -4,11 +4,11 @@ import {
   type AuthEnvironmentScope,
   type AuthPairingLink,
   type ServerAuthBootstrapMethod,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   DESKTOP_BOOTSTRAP_TOKEN_WINDOW_MS,
   isValidDesktopBootstrapToken,
-} from "@t3tools/shared/desktopBootstrapToken";
+} from "@lathe/shared/desktopBootstrapToken";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -230,7 +230,7 @@ export class PairingGrantStore extends Context.Service<
       },
     ) => Effect.Effect<BootstrapGrant, BootstrapCredentialError>;
   }
->()("t3/auth/PairingGrantStore") {}
+>()("lathe/auth/PairingGrantStore") {}
 
 interface StoredBootstrapGrant extends BootstrapGrant {
   readonly remainingUses: number | "unbounded";

@@ -1,9 +1,9 @@
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 import {
   SourceControlProviderKind,
   type GitHubAccountRules,
   type SourceControlDiscoveryResult,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { act, StrictMode, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";

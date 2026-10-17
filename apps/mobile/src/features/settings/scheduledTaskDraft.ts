@@ -6,14 +6,14 @@ import type {
   ScheduledTask,
   ScheduledTaskUpsertSchedule,
   ScheduledTaskWebhookSignature,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
-import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
-import { parseMaxDeliveryAge } from "@t3tools/client-runtime/scheduled-task-webhook";
+import { DEFAULT_SERVER_SETTINGS } from "@lathe/contracts";
+import { parseMaxDeliveryAge } from "@lathe/client-runtime/scheduled-task-webhook";
 import {
   resolveProjectSettings,
   type LegacyProjectSettingsFields,
-} from "@t3tools/shared/projectSettings";
+} from "@lathe/shared/projectSettings";
 import {
   buildModelOptions,
   resolveDefaultableModelSelection,

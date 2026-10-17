@@ -1,7 +1,4 @@
-import {
-  type ChatEventTimestampStyle,
-  DEFAULT_UNIFIED_SETTINGS,
-} from "@t3tools/contracts/settings";
+import { type ChatEventTimestampStyle, DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 
 import { formatChatEventTimestamp } from "../../chatEventTimestamps";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";

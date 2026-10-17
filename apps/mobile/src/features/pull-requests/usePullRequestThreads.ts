@@ -1,16 +1,16 @@
 import * as Dialog from "../../components/ui/Dialog";
 import { useNavigation, useNavigationState, useRoute } from "@react-navigation/native";
-import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
+import { threadPullRequestLinkMode } from "@lathe/client-runtime/thread-pull-request-compatibility";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   ThreadId,
   type PullRequestDetail,
   type PullRequestLinkedThreadsResult,
-} from "@t3tools/contracts";
-import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
-import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
-import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+} from "@lathe/contracts";
+import { formatComposerContextReference } from "@lathe/shared/composerContextReferences";
+import { parseChangeRequestUrl } from "@lathe/shared/changeRequestUrl";
+import { normalizeThreadPullRequestKey } from "@lathe/shared/threadPullRequests";
 import { useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useAndroidWorkspaceSelection } from "../workspace/useAndroidWorkspaceSelection";

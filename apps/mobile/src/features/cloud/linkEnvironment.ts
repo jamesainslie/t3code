@@ -9,14 +9,14 @@ import {
   EnvironmentHttpForbiddenError,
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   type RelayEnvironmentLinkResponse as RelayEnvironmentLinkResponseType,
   type RelayManagedEndpointProviderKind,
-} from "@t3tools/contracts/relay";
-import { findErrorTraceId } from "@t3tools/client-runtime/errors";
-import { ManagedRelay, relayRequestFailureDetail } from "@t3tools/client-runtime/relay";
-import { makeEnvironmentHttpApiClient } from "@t3tools/client-runtime/rpc";
+} from "@lathe/contracts/relay";
+import { findErrorTraceId } from "@lathe/client-runtime/errors";
+import { ManagedRelay, relayRequestFailureDetail } from "@lathe/client-runtime/relay";
+import { makeEnvironmentHttpApiClient } from "@lathe/client-runtime/rpc";
 
 import type { SavedRemoteConnection } from "../../lib/connection";
 import * as MobileStorage from "../../persistence/mobile-storage";

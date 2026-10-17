@@ -11,7 +11,7 @@ import {
   ProviderInstanceId,
   ThreadId,
   TurnItemId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -244,7 +244,7 @@ const withHomes = <A, E>(
 it.effect(
   "keeps a locally deleted conversation deleted across sync, source updates, restart, and undo",
   () =>
-    withHomes("t3-sync-lifecycle-", ({ root, source, target, restart }) =>
+    withHomes("lathe-sync-lifecycle-", ({ root, source, target, restart }) =>
       Effect.gen(function* () {
         const sourceThreadId = ThreadId.make("source-thread");
         yield* createProject(source, "source-project", root, "Source");
@@ -301,7 +301,7 @@ it.effect(
 it.effect(
   "previews, imports, continues independently, and undoes while preserving the continuation",
   () =>
-    withHomes("t3-sync-service-", ({ root, source, target, restart }) =>
+    withHomes("lathe-sync-service-", ({ root, source, target, restart }) =>
       Effect.gen(function* () {
         const sourceThreadId = ThreadId.make("source-thread");
         yield* Effect.promise(() =>
@@ -373,7 +373,7 @@ it.effect(
           service.execute({ operation: "continue", threadId: mirrorId }),
         );
         const continuedId = continued.threadId!;
-        expect(continuedId.startsWith("t3continue-")).toBe(true);
+        expect(continuedId.startsWith("lathecontinue-")).toBe(true);
         expect((yield* getThread(target(), continuedId)).historyOrigin).toBe("v1_import");
 
         yield* localAction(target(), mirrorId, "thread.unarchive");

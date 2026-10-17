@@ -6,10 +6,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/process";
-import { VcsProcessExitError, VcsProcessSpawnError } from "@t3tools/contracts";
+import { VcsProcessExitError, VcsProcessSpawnError } from "@lathe/contracts";
 
-import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
+import type * as SourceControlHost from "@lathe/source-control-core/server/SourceControlHost";
+import * as TestSourceControlHost from "@lathe/source-control-testing/TestSourceControlHost";
 import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 
 const processOutput = (stdout: string): SourceControlHost.SourceControlProcessOutput => ({

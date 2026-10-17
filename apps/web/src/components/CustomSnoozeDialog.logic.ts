@@ -1,7 +1,7 @@
 import {
   resolveCustomSnooze,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@lathe/client-runtime/state/thread-settled";
 
 /** A snooze pick. `reminder` follows thread.snooze: absent keeps any note, "" clears it. */
 export interface SnoozeChoice {

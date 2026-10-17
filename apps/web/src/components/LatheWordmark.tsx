@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 
 /**
- * Fork-only. The Lathe brand in place of upstream's T3 wordmark. Geometry comes from the brand
+ * Fork-only. The Lathe brand in place of upstream's Lathe wordmark. Geometry comes from the brand
  * kit's `lockup-*-notag.svg` and `mark.svg`: the caret ground to a 45 degree point with an ember
  * tip, and "lathe" outlined from IBM Plex Mono SemiBold so it needs no font. The word and caret
  * take `currentColor`; only the tip keeps its ember.

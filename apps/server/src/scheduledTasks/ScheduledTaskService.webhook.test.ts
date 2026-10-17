@@ -3,7 +3,7 @@ import * as NodeCrypto from "node:crypto";
 
 import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { ScheduledTaskUpsertInput, SecretRequestError } from "@t3tools/contracts";
+import { ScheduledTaskUpsertInput, SecretRequestError } from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -141,11 +141,11 @@ it("builds the relay hook URL from the managed tunnel's key, never the environme
   assert.equal(
     ScheduledTaskService.relayHookBaseUrl({
       relayUrl,
-      tunnelName: "t3coderelay-managedendpoint-dev-julius-0123456789abcdef",
+      tunnelName: "latherelay-managedendpoint-dev-julius-0123456789abcdef",
     }),
     "https://relay.example.com/v1/hooks/0123456789abcdef",
   );
-  for (const tunnelName of [undefined, "t3coderelay-managedendpoint", "x-0123456789ABCDEF"]) {
+  for (const tunnelName of [undefined, "latherelay-managedendpoint", "x-0123456789ABCDEF"]) {
     assert.isNull(ScheduledTaskService.relayHookBaseUrl({ relayUrl, tunnelName }));
   }
 });
@@ -810,7 +810,7 @@ const deliveriesCounted = (outcome: string, source: "relay" | "direct") =>
     Effect.map((snapshots) => {
       const found = snapshots.find(
         (snapshot) =>
-          snapshot.id === "t3_webhook_deliveries_total" &&
+          snapshot.id === "lathe_webhook_deliveries_total" &&
           snapshot.attributes?.outcome === outcome &&
           snapshot.attributes?.source === source,
       );

@@ -1,5 +1,5 @@
 /**
- * Fork-only: logging a modelproxy gateway's pooled account in again from T3
+ * Fork-only: logging a modelproxy gateway's pooled account in again from Lathe
  * Code. The gateway runs the OAuth flow and keeps the verifier and every
  * token (`/api/accounts/{name}/login`); this module relays its session view,
  * keeps the latest one per account for the published snapshot, and polls a
@@ -19,7 +19,7 @@ import {
   type UsageLimitSourceAccountLoginResult,
   type UsageLimitSourceAccountLoginState,
   type UsageLimitSourceId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

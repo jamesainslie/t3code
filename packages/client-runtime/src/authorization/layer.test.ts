@@ -2,11 +2,11 @@ import {
   AuthAdministrativeScopes,
   AuthStandardClientScopes,
   EnvironmentId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   RelayEnvironmentConnectScope,
   type RelayEnvironmentConnectResponse,
-} from "@t3tools/contracts/relay";
+} from "@lathe/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -212,7 +212,7 @@ const makeHarness = Effect.fn("TestRemoteAuthorization.makeHarness")(function* (
           ClientCapabilities.ClientPresentation,
           ClientCapabilities.ClientPresentation.of({
             metadata: {
-              label: "T3 Code Test",
+              label: "Lathe Test",
               deviceType: "mobile",
               os: "test",
             },
@@ -562,7 +562,7 @@ describe("RemoteEnvironmentAuthorization", () => {
         for (const [, init] of exchanges) {
           expect(Object.fromEntries(tokenFields(init))).toMatchObject({
             subject_token: BOOTSTRAP.credential,
-            client_label: "T3 Code Test",
+            client_label: "Lathe Test",
             client_device_type: "mobile",
             client_os: "test",
           });

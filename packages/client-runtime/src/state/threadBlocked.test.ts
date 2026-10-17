@@ -1,4 +1,4 @@
-import { ThreadId, TurnId, type ThreadDependency } from "@t3tools/contracts";
+import { ThreadId, TurnId, type ThreadDependency } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

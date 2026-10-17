@@ -10,10 +10,10 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
-import { pullRequestHostOf, SourceControlProviderKind, type ProjectId } from "@t3tools/contracts";
-import { resolveGitHubAccount } from "@t3tools/shared/gitHubAccountRouting";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
+import { pullRequestHostOf, SourceControlProviderKind, type ProjectId } from "@lathe/contracts";
+import { resolveGitHubAccount } from "@lathe/shared/gitHubAccountRouting";
+import { resolveProjectSettings } from "@lathe/shared/projectSettings";
+import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
 
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -64,7 +64,7 @@ export class GitHubAccountSelector extends Context.Service<
     /** Forget a cached token so the next pin asks `gh` again, for example after an auth failure. */
     readonly invalidate: (selection: GitHubAccountSelection) => Effect.Effect<void>;
   }
->()("t3/sourceControl/GitHubAccountSelector") {}
+>()("lathe/sourceControl/GitHubAccountSelector") {}
 
 const tokenKey = (selection: GitHubAccountSelection) =>
   `${selection.host.toLowerCase()}\0${selection.login}`;

@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthSessionId, EnvironmentAuthenticatedPrincipal } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentAuthenticatedPrincipal } from "@lathe/contracts";
 import { executeProjectSyncRequest } from "./http.ts";
 import { ProjectSyncService } from "./Service.ts";
 

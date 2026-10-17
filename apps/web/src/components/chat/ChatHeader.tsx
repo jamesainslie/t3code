@@ -1,14 +1,10 @@
-import {
-  AuthOrchestrationOperateScope,
-  type EnvironmentId,
-  type ThreadId,
-} from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { AuthOrchestrationOperateScope, type EnvironmentId, type ThreadId } from "@lathe/contracts";
+import { scopeThreadRef } from "@lathe/client-runtime/environment";
+import type { EnvironmentProject } from "@lathe/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import { ChevronDownIcon } from "lucide-react";
 import {
   memo,

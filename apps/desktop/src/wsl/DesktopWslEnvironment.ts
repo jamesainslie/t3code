@@ -9,10 +9,10 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
-import { FORK_HOME_SHELL } from "@t3tools/shared/forkBaseDir";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
+import { buildRemoteNodeEnvScript } from "@lathe/ssh/tunnel";
+import { FORK_HOME_SHELL } from "@lathe/shared/forkBaseDir";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import { satisfiesSemverRange } from "@lathe/shared/semver";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { parseWslDistroList, type WslDistro } from "./wslPathParsing.ts";
@@ -123,7 +123,7 @@ export class DesktopWslEnvironment extends Context.Service<
       options?: EnsureWslNodePtyOptions,
     ) => Effect.Effect<EnsureWslNodePtyResult>;
   }
->()("@t3tools/desktop/wsl/DesktopWslEnvironment") {}
+>()("@lathe/desktop/wsl/DesktopWslEnvironment") {}
 
 const buildDistroArgs = (distro: string | null): ReadonlyArray<string> =>
   distro ? ["-d", distro] : [];
@@ -442,7 +442,7 @@ const NODE_PTY_BINARY_MISSING_EXIT_CODE = 4;
 
 const formatNodePtyProbeFailureReason = (exitCode: number): string | null =>
   exitCode === NODE_PTY_BINARY_MISSING_EXIT_CODE
-    ? "WSL support is missing from this T3 Code build: the packaged Linux node-pty binary was not included. Install a build that includes WSL support."
+    ? "WSL support is missing from this Lathe build: the packaged Linux node-pty binary was not included. Install a build that includes WSL support."
     : null;
 
 // Captures the login-shell PATH as `resolvedPath:` so the launch can forward the

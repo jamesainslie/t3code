@@ -8,8 +8,8 @@ import type {
   SettingSource,
   ToolCall,
 } from "@cursor/sdk";
-import { formatReadToolLabel, formatSearchToolLabel } from "@t3tools/shared/toolActivity";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { formatReadToolLabel, formatSearchToolLabel } from "@lathe/shared/toolActivity";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import {
   isOrchestrationV2WorkActive,
   defaultInstanceIdForDriver,
@@ -28,7 +28,7 @@ import {
   type OrchestrationV2TurnItem,
   type ProviderInstanceId,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { CursorSettings } from "../settings.ts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -41,10 +41,10 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import * as ProviderHost from "@lathe/provider-core/server/ProviderHost";
+import { mcpToolPresentation } from "@lathe/provider-core/server/mcpToolPresentation";
+import * as McpProviderSessions from "@lathe/provider-core/server/McpProviderSessions";
+import * as McpProviderSession from "@lathe/provider-core/server/mcpSession";
 import { CursorTransportFailure } from "./transportFailure.ts";
 import { cursorSdkModelSelection } from "./sdkModel.ts";
 import {
@@ -52,27 +52,27 @@ import {
   hasCursorSkillMention,
   rewriteCursorSkillMentions,
 } from "./skills.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { t3OrchestrationPromptForFirstRun } from "@t3tools/provider-core/server/orchestrationInstructions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import { mergeProviderInstanceEnvironment } from "@lathe/provider-core/server/instanceEnvironment";
+import { latheOrchestrationPromptForFirstRun } from "@lathe/provider-core/server/orchestrationInstructions";
+import { buildRuntimeInstructions } from "@lathe/provider-core/server/runtimeInstructions";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import { makeProviderFailure } from "@lathe/provider-core/server/failure";
+import { turnScopedSelectionTransition } from "@lathe/provider-core/server/selectionTransition";
 import {
   isProviderNativeImageAttachment,
   providerMessageTextWithAttachmentPaths,
-} from "@t3tools/provider-core/server/attachmentPrompt";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+} from "@lathe/provider-core/server/attachmentPrompt";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
-} from "@t3tools/provider-core/server/adapterDriver";
+} from "@lathe/provider-core/server/adapterDriver";
 import {
   makeSubagentChildThread,
   makeSubagentConversationArtifacts,
   subagentThreadTitle,
-} from "@t3tools/provider-core/server/subagentProjection";
+} from "@lathe/provider-core/server/subagentProjection";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
 export { cursorSdkModelSelection } from "./sdkModel.ts";
 
@@ -208,7 +208,7 @@ export function cursorMcpServers(
     return undefined;
   }
   return {
-    "t3-code": {
+    lathe: {
       type: "http",
       url: session.endpoint,
       headers: {
@@ -310,7 +310,7 @@ export function makeCursorAgentOptions(input: {
   const mcpServers = cursorMcpServers(input.mcpSession);
   return {
     model: cursorSdkModelSelection(input.modelSelection),
-    name: `T3 Code ${input.threadId}`,
+    name: `Lathe ${input.threadId}`,
     mode: input.runtimePolicy.interactionMode === "plan" ? "plan" : "agent",
     ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
     local: {
@@ -2138,7 +2138,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
                 .map((skill) => skill.name),
             );
           }
-          const userText = t3OrchestrationPromptForFirstRun({
+          const userText = latheOrchestrationPromptForFirstRun({
             prompt: providerMessageTextWithAttachmentPaths({
               text:
                 cursorSkillNames === undefined
@@ -2148,7 +2148,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               resolveAttachmentPath: host.resolveAttachmentPath,
             }),
             runOrdinal: turnInput.runOrdinal,
-            hasT3Mcp: mcpServers !== undefined,
+            hasLatheMcp: mcpServers !== undefined,
           });
           const images = yield* Effect.forEach(
             turnInput.message.attachments.filter(isProviderNativeImageAttachment),

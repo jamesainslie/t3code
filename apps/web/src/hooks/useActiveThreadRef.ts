@@ -1,5 +1,5 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@lathe/client-runtime/environment";
+import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@lathe/contracts";
 import { useMemo } from "react";
 
 /**

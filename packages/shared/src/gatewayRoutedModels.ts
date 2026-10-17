@@ -3,7 +3,7 @@
  * by OpenRouter) and the Claude instances that should offer them. Fork-only:
  * the gateway publishes its routes on the usage-limit source snapshot, and
  * the server merges them into the provider catalog it sends clients, so a
- * route added on the gateway reaches the picker with no T3 configuration
+ * route added on the gateway reaches the picker with no Lathe configuration
  * beyond the per-instance opt-in.
  *
  * @module gatewayRoutedModels
@@ -14,7 +14,7 @@ import type {
   ServerProviderModel,
   UsageLimitSourceProxyRoute,
   UsageLimitSourceSnapshots,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 const CLAUDE_DRIVER = "claudeAgent";
 

@@ -5,11 +5,13 @@ import {
   type Citation,
   DOCUMENT_CITATION_MAX_PATH_LENGTH,
   DocumentCitation,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-const CITATION_PROTOCOL = "t3-citation:";
+import { latheLinkHref, linkProtocolPattern } from "./forkLegacyLinks.ts";
+
+const CITATION_PROTOCOL = "lathe-citation:";
 const CITATION_HREF_PREFIX = `${CITATION_PROTOCOL}//v1/`;
 const DOCUMENT_CITATION_HREF_PREFIX = `${CITATION_PROTOCOL}//v1-document/`;
 // Percent encoding needs up to nine characters per UTF-16 code unit; 16k covers selectors.
@@ -19,7 +21,7 @@ const MAX_DOCUMENT_CITATION_HREF_LENGTH =
   MAX_CITATION_HREF_LENGTH + 9 * DOCUMENT_CITATION_MAX_PATH_LENGTH;
 // The label says which kind the link holds; a link under the other label is left as text.
 const CITATION_LINK = new RegExp(
-  String.raw`\[(Assistant|Document) quote\]\((${CITATION_PROTOCOL}//v1(?:-document)?/[^\s)]{1,${MAX_DOCUMENT_CITATION_HREF_LENGTH}})\)`,
+  String.raw`\[(Assistant|Document) quote\]\((${linkProtocolPattern(CITATION_PROTOCOL)}//v1(?:-document)?/[^\s)]{1,${MAX_DOCUMENT_CITATION_HREF_LENGTH}})\)`,
   "g",
 );
 const decodeCitation = Schema.decodeUnknownOption(AssistantCitation);
@@ -114,13 +116,14 @@ const DECIMAL = /^\d{1,16}$/;
 
 export function parseAssistantCitationHref(href: string): AssistantCitation | null {
   try {
-    const read = readCitationUrl(href, CITATION_HREF_PREFIX, MAX_CITATION_HREF_LENGTH, "v1", 3, [
-      "text",
-      "start",
-      "end",
-      "prefix",
-      "suffix",
-    ]);
+    const read = readCitationUrl(
+      latheLinkHref(href),
+      CITATION_HREF_PREFIX,
+      MAX_CITATION_HREF_LENGTH,
+      "v1",
+      3,
+      ["text", "start", "end", "prefix", "suffix"],
+    );
     if (!read) return null;
     const { parts, params, comment } = read;
     const start = params.get("start") ?? "";
@@ -148,7 +151,7 @@ export function parseAssistantCitationHref(href: string): AssistantCitation | nu
 export function parseDocumentCitationHref(href: string): DocumentCitation | null {
   try {
     const read = readCitationUrl(
-      href,
+      latheLinkHref(href),
       DOCUMENT_CITATION_HREF_PREFIX,
       MAX_DOCUMENT_CITATION_HREF_LENGTH,
       "v1-document",
@@ -194,7 +197,7 @@ export function serializeAssistantCitation(citation: AssistantCitation): string 
 }
 
 export function parseCitationHref(href: string): Citation | null {
-  return href.startsWith(DOCUMENT_CITATION_HREF_PREFIX)
+  return latheLinkHref(href).startsWith(DOCUMENT_CITATION_HREF_PREFIX)
     ? parseDocumentCitationHref(href)
     : parseAssistantCitationHref(href);
 }

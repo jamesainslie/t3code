@@ -1,16 +1,12 @@
-import { PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
-import {
-  makeLocalFileTracer,
-  makeTraceSink,
-  type SignalExport,
-} from "@t3tools/shared/observability";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as SharedObservability from "@t3tools/shared/observability";
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import { PRIMARY_LOCAL_ENVIRONMENT_ID } from "@lathe/contracts";
+import { makeLocalFileTracer, makeTraceSink, type SignalExport } from "@lathe/shared/observability";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import * as SharedObservability from "@lathe/shared/observability";
+import * as OtelEnvironment from "@lathe/shared/otelEnvironment";
 import {
   parsePersistedServerObservabilitySettings,
   type PersistedServerObservabilitySettings,
-} from "@t3tools/shared/serverSettings";
+} from "@lathe/shared/serverSettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -59,7 +55,7 @@ export class DesktopBackendOutputLogFactory extends Context.Service<
   {
     readonly forInstance: (id: string) => Effect.Effect<DesktopBackendOutputLogShape>;
   }
->()("@t3tools/desktop/app/DesktopObservability/DesktopBackendOutputLogFactory") {}
+>()("@lathe/desktop/app/DesktopObservability/DesktopBackendOutputLogFactory") {}
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -684,7 +680,7 @@ const layerTelemetry = Layer.unwrap(
   }),
 );
 
-// Info unless T3CODE_LOG_LEVEL or T3CODE_TRACE_MIN_LEVEL says otherwise. The
+// Info unless LATHE_LOG_LEVEL or LATHE_TRACE_MIN_LEVEL says otherwise. The
 // primary backend inherits the same environment and applies it itself.
 const layerLevels = Layer.unwrap(
   Effect.gen(function* () {

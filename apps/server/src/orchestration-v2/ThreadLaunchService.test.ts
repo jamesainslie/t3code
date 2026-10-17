@@ -26,9 +26,9 @@ import {
   ScheduledTaskId,
   type ServerProvider,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 // Fork: temporary worktree branches use the fork prefix (`lathe/<hash>`).
-import { WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
+import { WORKTREE_BRANCH_PREFIX } from "@lathe/shared/git";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as DateTime from "effect/DateTime";
@@ -57,7 +57,7 @@ import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ThreadLaunch from "./ThreadLaunchService.ts";
 import * as OrchestratorMcpService from "../mcp/OrchestratorMcpService.ts";
@@ -65,7 +65,7 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 import * as ThreadTitleRegeneration from "./ThreadTitleRegenerationService.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import type * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 
 const projectId = ProjectId.make("project:launch-test");
 const otherProjectId = ProjectId.make("project:launch-other");
@@ -1343,7 +1343,7 @@ it.effect.each(
   ),
 );
 
-it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
+it.effect("provisions under lathe-<hash> when a plain lathe branch blocks lathe/*", () =>
   Effect.gen(function* () {
     const harness = makeHarness({
       hasCommit: (input) =>
@@ -1461,7 +1461,7 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           message: "Build the feature",
           workspace: {
             type: "existing_worktree",
-            worktreePath: "/repo-worktrees/t3-abcd1234",
+            worktreePath: "/repo-worktrees/lathe-abcd1234",
             branch: `${WORKTREE_BRANCH_PREFIX}/abcd1234`,
           },
         }),
@@ -1472,7 +1472,7 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
       );
       assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
-        cwd: "/repo-worktrees/t3-abcd1234",
+        cwd: "/repo-worktrees/lathe-abcd1234",
         oldBranch: `${WORKTREE_BRANCH_PREFIX}/abcd1234`,
         newBranch: "generated-branch",
       });
@@ -2356,9 +2356,9 @@ it.effect("creates a strong provider-thread mapping for an imported native sessi
 
 it.effect("shared intake preserves durable attachment bytes after a lost launch result", () => {
   const harness = makeHarness();
-  const layerFiles = ServerConfig.layerTest(process.cwd(), { prefix: "t3-message-intake-" }).pipe(
-    Layer.provideMerge(NodeServices.layer),
-  );
+  const layerFiles = ServerConfig.layerTest(process.cwd(), {
+    prefix: "lathe-message-intake-",
+  }).pipe(Layer.provideMerge(NodeServices.layer));
   return Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
     const fs = yield* FileSystem.FileSystem;
@@ -2384,7 +2384,7 @@ it.effect("shared intake preserves durable attachment bytes after a lost launch 
       ...launchInput({ command: "intake-launch", thread: "intake-thread" }),
       initialMessage: {
         messageId: MessageId.make("intake-first"),
-        text: "First [file](t3-context://v1/file/intake-file)",
+        text: "First [file](lathe-context://v1/file/intake-file)",
         context: {
           version: 1 as const,
           records: [
@@ -2663,10 +2663,10 @@ it.effect.each([0, 1])("releases an async setup before its completion with exit 
 );
 
 it.effect.each([
-  { name: "is missing", baseRef: "t3/renamed", startFromOrigin: false, origin: true },
+  { name: "is missing", baseRef: "lathe/renamed", startFromOrigin: false, origin: true },
   {
     name: "has no origin to come from",
-    baseRef: "t3/renamed",
+    baseRef: "lathe/renamed",
     startFromOrigin: true,
     origin: false,
   },
@@ -2763,7 +2763,7 @@ it.effect.each([
 
 it.effect("replays an accepted send after the project disables the instance", () => {
   const harness = makeHarness();
-  const layerFiles = ServerConfig.layerTest(process.cwd(), { prefix: "t3-send-retry-" }).pipe(
+  const layerFiles = ServerConfig.layerTest(process.cwd(), { prefix: "lathe-send-retry-" }).pipe(
     Layer.provideMerge(NodeServices.layer),
   );
   return Effect.gen(function* () {
@@ -2811,9 +2811,9 @@ it.effect("replays an accepted send after the project disables the instance", ()
 
 it.effect("replays an accepted message.dispatch after the project disables the instance", () => {
   const harness = makeHarness();
-  const layerFiles = ServerConfig.layerTest(process.cwd(), { prefix: "t3-dispatch-retry-" }).pipe(
-    Layer.provideMerge(NodeServices.layer),
-  );
+  const layerFiles = ServerConfig.layerTest(process.cwd(), {
+    prefix: "lathe-dispatch-retry-",
+  }).pipe(Layer.provideMerge(NodeServices.layer));
   return Effect.gen(function* () {
     const launches = yield* ThreadLaunch.ThreadLaunchService;
     const settings = yield* ServerSettings.ServerSettingsService;

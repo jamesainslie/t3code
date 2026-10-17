@@ -21,9 +21,9 @@ import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { fromYaml } from "@t3tools/shared/schemaYaml";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { fromYaml } from "@lathe/shared/schemaYaml";
+import { resolveSpawnCommand } from "@lathe/shared/shell";
 import rootPackageJson from "../package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
@@ -177,7 +177,7 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
   yield* fs.writeFileString(
     path.join(input.stageDir, "package.json"),
     `${yield* encodeJsonString({
-      name: "t3-runtime",
+      name: "lathe-runtime",
       version: input.version,
       private: true,
       packageManager: rootPackageJson.packageManager,
@@ -272,7 +272,7 @@ const stageWebClient = Effect.fn("stageWebClient")(function* (source: string, ta
 });
 
 const MacSigningConfig = Config.all({
-  identity: Config.String("T3CODE_CLI_MAC_SIGN_IDENTITY").pipe(Config.option),
+  identity: Config.String("LATHE_CLI_MAC_SIGN_IDENTITY").pipe(Config.option),
   appleApiKey: Config.String("APPLE_API_KEY").pipe(Config.option),
   appleApiKeyId: Config.String("APPLE_API_KEY_ID").pipe(Config.option),
   appleApiIssuer: Config.String("APPLE_API_ISSUER").pipe(Config.option),
@@ -302,7 +302,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
         entry.endsWith(".node") ||
         entry.endsWith(".dylib") ||
         entry.endsWith("spawn-helper") ||
-        entry.endsWith("t3-resource-monitor"),
+        entry.endsWith("lathe-resource-monitor"),
     )
     .map((entry) => path.join(input.contentDir, entry));
 
@@ -320,7 +320,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
     );
   }
   if (identity === "-") {
-    yield* Effect.log("[cli-archive] Signed ad hoc (no T3CODE_CLI_MAC_SIGN_IDENTITY).");
+    yield* Effect.log("[cli-archive] Signed ad hoc (no LATHE_CLI_MAC_SIGN_IDENTITY).");
     return;
   }
 
@@ -335,7 +335,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
   }
   // notarytool only accepts archives, and a bare executable cannot be stapled,
   // so notarize a zip of the binary and rely on the online ticket lookup.
-  const notarizeZip = path.join(path.dirname(input.executablePath), ".notarize-t3.zip");
+  const notarizeZip = path.join(path.dirname(input.executablePath), ".notarize-lathe.zip");
   yield* runCommand(
     ChildProcess.make("ditto", ["-c", "-k", "--keepParent", input.executablePath, notarizeZip]),
     "ditto (notarization zip)",
@@ -450,7 +450,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   const repoRoot = yield* RepoRoot;
   const serverDir = path.join(repoRoot, "apps/server");
   const executableName = input.platform === "win" ? "t3.exe" : "t3";
-  // tsdown suffixes cross-built executables with their target (t3-darwin-x64);
+  // tsdown suffixes cross-built executables with their target (lathe-darwin-x64);
   // a host build is plain t3. Prefer the exact target when both exist.
   const targetKey = `${input.platform === "mac" ? "darwin" : input.platform}-${input.arch}`;
   const targetExecutable = path.join(
@@ -486,7 +486,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   );
 
   const stem = cliArchiveStem(input.version, input.platform, input.arch);
-  const stageRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-cli-archive-" });
+  const stageRoot = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-cli-archive-" });
   const contentDir = path.join(stageRoot, stem);
   yield* fs.makeDirectory(contentDir, { recursive: true });
 

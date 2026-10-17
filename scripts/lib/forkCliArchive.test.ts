@@ -6,7 +6,7 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 
 import {
   forkArchiveExecutableName,

@@ -2,9 +2,9 @@ import type {
   DesktopSshEnvironmentTarget,
   DesktopSshOutputBatch,
   DesktopSshOutputEntry,
-} from "@t3tools/contracts";
-import { targetConnectionKey } from "@t3tools/ssh/command";
-import type { SshOutputObserverFn } from "@t3tools/ssh/output";
+} from "@lathe/contracts";
+import { targetConnectionKey } from "@lathe/ssh/command";
+import type { SshOutputObserverFn } from "@lathe/ssh/output";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -31,7 +31,7 @@ export class DesktopSshOutputLog extends Context.Service<
     ) => Effect.Effect<DesktopSshOutputBatch>;
     readonly unsubscribe: (target: DesktopSshEnvironmentTarget) => Effect.Effect<void>;
   }
->()("@t3tools/desktop/ssh/DesktopSshOutputLog") {}
+>()("@lathe/desktop/ssh/DesktopSshOutputLog") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

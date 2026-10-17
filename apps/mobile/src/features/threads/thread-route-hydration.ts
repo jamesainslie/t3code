@@ -1,6 +1,6 @@
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
-import type { EnvironmentShellStatus } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
+import type { EnvironmentConnectionPhase } from "@lathe/client-runtime/connection";
+import type { EnvironmentShellStatus } from "@lathe/client-runtime/state/shell";
+import type { EnvironmentThreadStatus } from "@lathe/client-runtime/state/threads";
 
 export function threadRouteIsHydrating(input: {
   readonly isLoadingConnections: boolean;

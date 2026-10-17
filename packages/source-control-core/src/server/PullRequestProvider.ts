@@ -36,8 +36,8 @@ import type {
   PullRequestUpdateMethod,
   PullRequestViewerPermissions,
   SourceControlProviderKind,
-} from "@t3tools/contracts";
-import { SourceControlProviderKind as SourceControlProviderKindSchema } from "@t3tools/contracts";
+} from "@lathe/contracts";
+import { SourceControlProviderKind as SourceControlProviderKindSchema } from "@lathe/contracts";
 
 export class PullRequestProviderError extends Schema.TaggedError<PullRequestProviderError>()(
   "PullRequestProviderError",

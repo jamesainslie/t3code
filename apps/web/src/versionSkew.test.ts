@@ -1,6 +1,6 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { forkPackageSpec } from "@t3tools/shared/forkIdentity";
-import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { EnvironmentId } from "@lathe/contracts";
+import { forkPackageSpec } from "@lathe/shared/forkIdentity";
+import type { ServerUpdateState } from "@lathe/client-runtime/state/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const branding = vi.hoisted(() => ({ APP_VERSION: "0.0.34" }));
@@ -23,7 +23,7 @@ import {
 } from "./versionSkew";
 
 const MISMATCH_HINT =
-  "Version mismatch. Try syncing the client and server to the same T3 Code version.";
+  "Version mismatch. Try syncing the client and server to the same Lathe version.";
 
 describe("versionSkew", () => {
   it("updates only the proven npm prefix and safely quotes its path", () => {

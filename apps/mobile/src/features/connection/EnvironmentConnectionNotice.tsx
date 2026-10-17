@@ -4,8 +4,8 @@ import { ConnectionTraceId } from "./ConnectionTraceId";
 import {
   type EnvironmentConnectionPhase,
   type EnvironmentConnectionPresentation,
-} from "@t3tools/client-runtime/connection";
-import type { EnvironmentId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/connection";
+import type { EnvironmentId } from "@lathe/contracts";
 import { useState } from "react";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { Pressable, View } from "react-native";

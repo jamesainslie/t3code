@@ -1,4 +1,4 @@
-import type { Edition } from "@t3tools/contracts";
+import type { Edition } from "@lathe/contracts";
 
 import { getEdition } from "./editions";
 

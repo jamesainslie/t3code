@@ -4,7 +4,7 @@ import {
   type ProjectId,
   type ProjectSyncPreview,
   type ProjectSyncRequest,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { newProjectId } from "../../lib/utils";
 import { useProjectSync } from "../../hooks/useProjectSync";
 import { Button } from "../ui/button";

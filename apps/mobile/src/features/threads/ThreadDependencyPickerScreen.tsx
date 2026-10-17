@@ -1,7 +1,7 @@
 import type { StaticScreenProps } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
-import { isDependencyCandidate } from "@t3tools/client-runtime/state/thread-settled";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { isDependencyCandidate } from "@lathe/client-runtime/state/thread-settled";
+import { EnvironmentId, ThreadId } from "@lathe/contracts";
 import * as Haptics from "expo-haptics";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";

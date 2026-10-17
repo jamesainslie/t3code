@@ -16,7 +16,7 @@ import {
   ProjectId,
   type OrchestrationV2ThreadProjection,
   OrchestrationV2DomainEvent,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -34,10 +34,10 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as ContextHandoffService from "./ContextHandoffService.ts";
 import * as EventSink from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@lathe/provider-core/server/ProviderAdapter";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
@@ -593,7 +593,7 @@ effectIt.effect.each(["cleanup-first", "startup-first"])(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const workspaceRoot = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-start-" });
+      const workspaceRoot = yield* fileSystem.makeTempDirectoryScoped({ prefix: "lathe-start-" });
       const worktreePath = path.join(workspaceRoot, "worktree");
       yield* fileSystem.makeDirectory(worktreePath);
       const release = yield* Deferred.make<void>();

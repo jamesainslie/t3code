@@ -11,7 +11,6 @@ import {
   isExternalCliDependency,
   shouldBundleCliDependency,
 } from "../../scripts/lib/cli-external-packages.ts";
-import { forkBrandPlugin } from "../../scripts/lib/forkBrand.ts";
 
 export { shouldBundleCliDependency };
 
@@ -24,7 +23,7 @@ const cliBuildChannel = /^[^-+]+-(?:nightly|preview)\./.test(packageJson.version
 // step refuses multi-chunk output and counts the sourcemap as a chunk, and the
 // executable needs a host Node that supports `--build-sea` (25.7+), so this is
 // a separate mode rather than a second entry in the default build.
-const packExecutable = process.env.T3CODE_PACK_EXE === "1";
+const packExecutable = process.env.LATHE_PACK_EXE === "1";
 const SEA_NODE_VERSION = "26.8.2";
 const SEA_TARGETS = {
   "darwin-arm64": { platform: "darwin", arch: "arm64" },
@@ -34,10 +33,10 @@ const SEA_TARGETS = {
   "win-arm64": { platform: "win", arch: "arm64" },
   "win-x64": { platform: "win", arch: "x64" },
 } as const;
-const packExecutableTarget = process.env.T3CODE_PACK_EXE_TARGET?.trim();
+const packExecutableTarget = process.env.LATHE_PACK_EXE_TARGET?.trim();
 if (packExecutableTarget && !Object.hasOwn(SEA_TARGETS, packExecutableTarget)) {
   throw new Error(
-    `T3CODE_PACK_EXE_TARGET must be one of ${Object.keys(SEA_TARGETS).join(", ")}, got "${packExecutableTarget}".`,
+    `LATHE_PACK_EXE_TARGET must be one of ${Object.keys(SEA_TARGETS).join(", ")}, got "${packExecutableTarget}".`,
   );
 }
 const packExecutableTargets = packExecutableTarget
@@ -56,7 +55,7 @@ export default mergeConfig(
       tasks: {
         build: {
           command: "node scripts/cli.ts build",
-          dependsOn: ["@t3tools/web#build"],
+          dependsOn: ["@lathe/web#build"],
           cache: false,
         },
       },
@@ -68,11 +67,10 @@ export default mergeConfig(
       outDir: packExecutable ? "dist-exe" : "dist",
       sourcemap: !packExecutable,
       clean: true,
-      plugins: [forkBrandPlugin()],
       ...(packExecutable
         ? {
             exe: {
-              fileName: "t3",
+              fileName: "lathe",
               outDir: "dist-exe",
               ...(packExecutableTargets ? { targets: packExecutableTargets } : {}),
               // Node's SEA docs: `import()` does not work when useCodeCache is
@@ -94,22 +92,22 @@ export default mergeConfig(
         js: "#!/usr/bin/env node\n",
       },
       define: {
-        __T3CODE_BUILD_CHANNEL__: JSON.stringify(cliBuildChannel),
-        __T3CODE_BUILD_RELAY_URL__: JSON.stringify(repoEnv.T3CODE_RELAY_URL?.trim() ?? ""),
-        __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
-          repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",
+        __LATHE_BUILD_CHANNEL__: JSON.stringify(cliBuildChannel),
+        __LATHE_BUILD_RELAY_URL__: JSON.stringify(repoEnv.LATHE_RELAY_URL?.trim() ?? ""),
+        __LATHE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
+          repoEnv.LATHE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",
         ),
-        __T3CODE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__: JSON.stringify(
-          repoEnv.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() ?? "",
+        __LATHE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__: JSON.stringify(
+          repoEnv.LATHE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() ?? "",
         ),
-        __T3CODE_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__: JSON.stringify(
-          repoEnv.T3CODE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() ?? "",
+        __LATHE_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__: JSON.stringify(
+          repoEnv.LATHE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() ?? "",
         ),
-        __T3CODE_BUILD_RELAY_CLIENT_OTLP_TRACES_DATASET__: JSON.stringify(
-          repoEnv.T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() ?? "",
+        __LATHE_BUILD_RELAY_CLIENT_OTLP_TRACES_DATASET__: JSON.stringify(
+          repoEnv.LATHE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() ?? "",
         ),
-        __T3CODE_BUILD_RELAY_CLIENT_OTLP_TRACES_TOKEN__: JSON.stringify(
-          repoEnv.T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() ?? "",
+        __LATHE_BUILD_RELAY_CLIENT_OTLP_TRACES_TOKEN__: JSON.stringify(
+          repoEnv.LATHE_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() ?? "",
         ),
       },
     },

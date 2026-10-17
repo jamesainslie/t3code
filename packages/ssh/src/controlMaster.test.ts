@@ -1,8 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - the fake ssh child acts synchronously inside the spawner.
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as NetService from "@t3tools/shared/Net";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import * as NetService from "@lathe/shared/Net";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -32,8 +32,8 @@ describe("control socket path", () => {
 
   it("names the socket after the target's state key", () => {
     assert.equal(
-      controlSocketPath({ directory: "/Users/julius/.t3/ssh/", stateKey, platform: "darwin" }),
-      "/Users/julius/.t3/ssh/711bc738002d72fd.sock",
+      controlSocketPath({ directory: "/Users/julius/.lathe/ssh/", stateKey, platform: "darwin" }),
+      "/Users/julius/.lathe/ssh/711bc738002d72fd.sock",
     );
   });
 
@@ -63,7 +63,7 @@ describe("control socket path", () => {
   });
 
   it("never multiplexes on Windows", () => {
-    assert.isNull(controlSocketPath({ directory: "C:\\t3\\ssh", stateKey, platform: "win32" }));
+    assert.isNull(controlSocketPath({ directory: "C:\\lathe\\ssh", stateKey, platform: "win32" }));
   });
 });
 
@@ -206,7 +206,7 @@ const makeHarness = (input: {
           }
           if (behavior._tag === "ready" && socket !== undefined) {
             pendingSockets.set(socket, () => {
-              const secretFile = env.T3_SSH_AUTH_SECRET_FILE;
+              const secretFile = env.LATHE_SSH_AUTH_SECRET_FILE;
               if (secretFile !== undefined && NodeFS.existsSync(secretFile)) {
                 secretFilesSeen.push({
                   path: secretFile,
@@ -520,7 +520,7 @@ describe("owned control master", () => {
       assert.equal(harness.prompts(), 1);
       assert.equal(harness.count("master"), 2);
       const [, authenticated] = harness.argsOf("master");
-      assert.isUndefined(authenticated?.env.T3_SSH_AUTH_SECRET);
+      assert.isUndefined(authenticated?.env.LATHE_SSH_AUTH_SECRET);
       assert.deepEqual(
         harness.secretFilesSeen.map((file) => file.contents),
         ["hunter2\n"],
@@ -718,14 +718,15 @@ describe("owned control master", () => {
       "has a socket path that is too long",
       {
         _tag: "exits",
-        stderr: 'unix_listener: path "/t3/ssh/711bc738.sock.Xy" too long for Unix domain socket\n',
+        stderr:
+          'unix_listener: path "/lathe/ssh/711bc738.sock.Xy" too long for Unix domain socket\n',
       },
     ],
     [
       "disables multiplexing and connects anyway",
       {
         _tag: "refuses",
-        stderr: "ControlSocket /t3/ssh/711bc738.sock already exists, disabling multiplexing\n",
+        stderr: "ControlSocket /lathe/ssh/711bc738.sock already exists, disabling multiplexing\n",
       },
     ],
   ] as const)("falls back to direct commands for good when the master %s", ([, behavior]) => {

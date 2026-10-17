@@ -1,4 +1,4 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useProjectSync } from "../../hooks/useProjectSync";
 import { buildThreadRouteParams } from "../../threadRoutes";

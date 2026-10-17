@@ -1,9 +1,9 @@
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentProject } from "@lathe/client-runtime/state/shell";
 import {
   repositoryGroupingKeyOf,
   type EnvironmentId,
   type ScopedThreadRef,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import type { HomeProjectScope } from "../home/homeThreadList";

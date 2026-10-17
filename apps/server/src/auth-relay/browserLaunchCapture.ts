@@ -1,5 +1,5 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { resolveNodeExecutable } from "@lathe/shared/nodeRuntime";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
+import { collectUint8StreamText } from "@lathe/provider-core/server/collectStreamText";
 import { AuthRelayError } from "./AuthRelayError.ts";
 
 /**
@@ -23,7 +23,7 @@ import { AuthRelayError } from "./AuthRelayError.ts";
 
 export const BROWSER_LAUNCH_URL_MAX_LENGTH = 16_384;
 const PREFLIGHT_TIMEOUT = "5 seconds";
-const PREFLIGHT_URL = "https://example.invalid/t3-browser-launch-preflight";
+const PREFLIGHT_URL = "https://example.invalid/lathe-browser-launch-preflight";
 const MAX_MARKER_LINE_LENGTH = 128 + BROWSER_LAUNCH_URL_MAX_LENGTH + 2;
 const decodeHelperUrl = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String));
 
@@ -58,7 +58,7 @@ function quoteShellArgument(value: string): string {
 }
 
 /**
- * Builds the `BROWSER` value that runs the inline helper through the T3
+ * Builds the `BROWSER` value that runs the inline helper through the Lathe
  * runtime (Node, or Electron with `ELECTRON_RUN_AS_NODE`). Fails when the
  * runtime path cannot survive Python's `BROWSER` splitting.
  */
@@ -68,7 +68,7 @@ export const buildBrowserLaunchCommand = Effect.fn("buildBrowserLaunchCommand")(
   readonly platform?: NodeJS.Platform;
 }): Effect.fn.Return<BrowserLaunchCommand, AuthRelayError, FileSystem.FileSystem | Path.Path> {
   const platform = input.platform ?? (yield* HostProcess.Platform);
-  // A packaged T3 executable cannot run `-e` helpers; resolve a real Node binary.
+  // A packaged Lathe executable cannot run `-e` helpers; resolve a real Node binary.
   const runtimeExecutablePath =
     input.runtimeExecutablePath ??
     (yield* resolveNodeExecutable("Provider sign-in").pipe(
@@ -96,7 +96,7 @@ export const buildBrowserLaunchCommand = Effect.fn("buildBrowserLaunchCommand")(
   ) {
     return yield* new AuthRelayError({
       operation: "browser",
-      detail: "The T3 runtime path cannot be used to suppress browser launches.",
+      detail: "The Lathe runtime path cannot be used to suppress browser launches.",
     });
   }
   return { marker: input.marker, executable, args, command };

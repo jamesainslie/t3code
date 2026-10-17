@@ -16,8 +16,8 @@ import {
   replaceCatalogValue,
   Persistence,
   makeStoredShellSnapshotEncoder,
-} from "@t3tools/client-runtime/platform";
-import { TokenStore } from "@t3tools/client-runtime/authorization";
+} from "@lathe/client-runtime/platform";
+import { TokenStore } from "@lathe/client-runtime/authorization";
 import {
   ConnectionTransientError,
   ConnectionBlockedError,
@@ -27,8 +27,8 @@ import {
   StoredGitHubRoutingPermission,
   gitHubRoutingConnectionKey,
   gitHubRoutingPermissionFor,
-} from "@t3tools/client-runtime/connection";
-import { EnvironmentId, ServerConfig, ThreadId, VcsListRefsResult } from "@t3tools/contracts";
+} from "@lathe/client-runtime/connection";
+import { EnvironmentId, ServerConfig, ThreadId, VcsListRefsResult } from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -496,8 +496,8 @@ export const makeCatalogStore = Effect.fn("web.connectionStorage.makeCatalogStor
   return { read, update } satisfies CatalogStore;
 });
 
-const GITHUB_ROUTING_KEY_PREFIX = "t3code:github-routing:";
-const GITHUB_ROUTING_CHANGED = "t3code:github-routing-changed";
+const GITHUB_ROUTING_KEY_PREFIX = "lathe:github-routing:";
+const GITHUB_ROUTING_CHANGED = "lathe:github-routing-changed";
 const isStoredGitHubRoutingPermission = Schema.is(StoredGitHubRoutingPermission);
 const encodeStoredGitHubRoutingPermission = Schema.encodeSync(
   Schema.fromJsonString(StoredGitHubRoutingPermission),

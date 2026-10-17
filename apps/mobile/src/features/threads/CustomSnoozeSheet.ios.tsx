@@ -30,8 +30,8 @@ import {
   localSnoozeDate,
   localSnoozeTime,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
-import { SNOOZE_REMINDER_MAX_CHARS } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/thread-settled";
+import { SNOOZE_REMINDER_MAX_CHARS } from "@lathe/contracts";
 import { useState, type ReactNode } from "react";
 import { NavigationContainer, NavigationIndependentTree } from "@react-navigation/native";
 import { createV5StackNavigator as createNativeStackNavigator } from "../../native/createV5StackNavigator";

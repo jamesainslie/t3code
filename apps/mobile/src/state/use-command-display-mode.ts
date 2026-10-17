@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { CommandDisplayMode } from "@t3tools/contracts";
+import type { CommandDisplayMode } from "@lathe/contracts";
 import { AsyncResult } from "effect/reactivity";
 
 import { mobilePreferencesAtom } from "./preferences";

@@ -2,7 +2,7 @@ import {
   SourceControlProviderKind,
   type GitHubAccountRule,
   type SourceControlDiscoveryResult,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 

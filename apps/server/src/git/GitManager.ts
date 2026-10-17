@@ -1,4 +1,4 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import * as Arr from "effect/Array";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
@@ -42,11 +42,8 @@ import {
   type ThreadPullRequestKey,
   type VcsCreateWorktreeInput,
   type VcsCreateWorktreeResult,
-} from "@t3tools/contracts";
-import {
-  hasProjectSettingsOverrides,
-  resolveProjectSettings,
-} from "@t3tools/shared/projectSettings";
+} from "@lathe/contracts";
+import { hasProjectSettingsOverrides, resolveProjectSettings } from "@lathe/shared/projectSettings";
 import {
   detectSourceControlProviderFromGitRemoteUrl,
   mergeGitStatusParts,
@@ -54,20 +51,20 @@ import {
   resolveAutoFeatureBranchName,
   sanitizeBranchFragment,
   sanitizeFeatureBranchName,
-} from "@t3tools/shared/git";
+} from "@lathe/shared/git";
 import {
   canonicalRepositoryKey,
   getChangeRequestTerminologyForKind,
   isSshRemoteUrl,
   type ChangeRequestTerminology,
-} from "@t3tools/shared/sourceControl";
-import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
+} from "@lathe/shared/sourceControl";
+import { parseChangeRequestUrl } from "@lathe/shared/changeRequestUrl";
 import {
   normalizeThreadPullRequestKey,
   threadPullRequestKeyOf,
-} from "@t3tools/shared/threadPullRequests";
+} from "@lathe/shared/threadPullRequests";
 
-import { GitManagerError, GitPullRequestMaterializationError } from "@t3tools/contracts";
+import { GitManagerError, GitPullRequestMaterializationError } from "@lathe/contracts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import {
   conventionalCommitsTextGenerationPolicy,
@@ -81,11 +78,11 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import { detachStackFrame } from "./detachStackFrame.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import type { GitManagerServiceError } from "@t3tools/contracts";
+import type { GitManagerServiceError } from "@lathe/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
+import * as SourceControlProvider from "@lathe/source-control-core/server/SourceControlProvider";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
-import type { ChangeRequest } from "@t3tools/contracts";
+import type { ChangeRequest } from "@lathe/contracts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -157,7 +154,7 @@ export class GitManager extends Context.Service<
       Scope.Scope
     >;
   }
->()("t3/git/GitManager") {}
+>()("lathe/git/GitManager") {}
 
 const COMMIT_TIMEOUT_MS = 10 * 60_000;
 const MAX_PROGRESS_TEXT_LENGTH = 500;
@@ -297,7 +294,7 @@ function resolvePullRequestWorktreeLocalBranchName(
 
   const sanitizedHeadBranch = sanitizeBranchFragment(pullRequest.headBranch).trim();
   const suffix = sanitizedHeadBranch.length > 0 ? sanitizedHeadBranch : "head";
-  return `t3code/pr-${pullRequest.number}/${suffix}`;
+  return `lathe/pr-${pullRequest.number}/${suffix}`;
 }
 
 export function parseRepositoryNameWithOwnerFromRemoteUrl(
@@ -2195,7 +2192,7 @@ export const make = Effect.gen(function* () {
 
     const bodyFile = path.join(
       tempDir,
-      `t3code-pr-body-${process.pid}-${yield* randomUUIDv4(cwd)}.md`,
+      `lathe-pr-body-${process.pid}-${yield* randomUUIDv4(cwd)}.md`,
     );
     yield* fileSystem.writeFileString(bodyFile, generated.body).pipe(
       Effect.mapError(
@@ -2288,7 +2285,7 @@ export const make = Effect.gen(function* () {
       ) {
         return remembered.value;
       }
-      // invalidateStatus bumps the epoch. A read that started before a T3 git
+      // invalidateStatus bumps the epoch. A read that started before a Lathe git
       // action, or before a newer read finished, must not replace their state.
       const epoch = prLookupEpoch(cwd);
       const value = yield* read;

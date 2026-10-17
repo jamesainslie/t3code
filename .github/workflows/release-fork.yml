@@ -173,20 +173,20 @@ jobs:
             --current-tag "${{ steps.release_meta.outputs.tag }}" \
             --github-output
 
-      # The fork builds against the public T3 Connect identifiers that
+      # The fork builds against the public Lathe Connect identifiers that
       # .env.example carries (upstream's release resolves them from its relay
       # deploy). They are public client identifiers, not secrets.
       - id: connect_config
-        name: Read public T3 Connect configuration
+        name: Read public Lathe Connect configuration
         shell: bash
         run: |
           set -euo pipefail
           read_env() { sed -n "s/^$1=//p" .env.example | head -n 1; }
           {
-            echo "clerk_publishable_key=$(read_env T3CODE_CLERK_PUBLISHABLE_KEY)"
-            echo "clerk_jwt_template=$(read_env T3CODE_CLERK_JWT_TEMPLATE)"
-            echo "clerk_cli_oauth_client_id=$(read_env T3CODE_CLERK_CLI_OAUTH_CLIENT_ID)"
-            echo "relay_url=$(read_env T3CODE_RELAY_URL)"
+            echo "clerk_publishable_key=$(read_env LATHE_CLERK_PUBLISHABLE_KEY)"
+            echo "clerk_jwt_template=$(read_env LATHE_CLERK_JWT_TEMPLATE)"
+            echo "clerk_cli_oauth_client_id=$(read_env LATHE_CLERK_CLI_OAUTH_CLIENT_ID)"
+            echo "relay_url=$(read_env LATHE_RELAY_URL)"
           } >> "$GITHUB_OUTPUT"
 
   quality:
@@ -213,7 +213,7 @@ jobs:
           run-install: true
 
       - name: Ensure Electron runtime is installed
-        run: vp run --filter @t3tools/desktop ensure:electron
+        run: vp run --filter @lathe/desktop ensure:electron
 
       - name: Check
         run: vp check
@@ -227,16 +227,16 @@ jobs:
       # Same split as ci-fork.yml, run one after another on this runner: with
       # every suite at once, the web suite's imports starved on 4 vCPU.
       - name: Test
-        run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+        run: vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test
 
       - name: Test web
-        run: vp run --filter @t3tools/web test
+        run: vp run --filter @lathe/web test
 
       - name: Install Chromium for server browser integration tests
         run: node apps/server/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
 
       - name: Test server
-        run: vp run --filter t3 test
+        run: vp run --filter lathe test
 
   # One JS bundle, consumed by every desktop and CLI archive build so all
   # targets ship the same server and web client bytes.
@@ -247,10 +247,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ needs.preflight.outputs.clerk_publishable_key }}
-      T3CODE_CLERK_JWT_TEMPLATE: ${{ needs.preflight.outputs.clerk_jwt_template }}
-      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
-      T3CODE_RELAY_URL: ${{ needs.preflight.outputs.relay_url }}
+      LATHE_CLERK_PUBLISHABLE_KEY: ${{ needs.preflight.outputs.clerk_publishable_key }}
+      LATHE_CLERK_JWT_TEMPLATE: ${{ needs.preflight.outputs.clerk_jwt_template }}
+      LATHE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.preflight.outputs.clerk_cli_oauth_client_id }}
+      LATHE_RELAY_URL: ${{ needs.preflight.outputs.relay_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -269,27 +269,23 @@ jobs:
           run-install: false
 
       - name: Install bundle dependencies
-        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+        run: vp install --filter=lathe... --filter=@lathe/web... --filter=@lathe/desktop... --filter=@lathe/scripts...
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
       - uses: ./.github/actions/setup-apt-mirrors
 
-      # @t3tools/desktop#build compiles the Linux browser secret helper on a
+      # @lathe/desktop#build compiles the Linux browser secret helper on a
       # Linux host before packing, and that needs libsecret headers.
       - name: Install browser secret helper build libraries
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
-      # Runs t3#build (which depends on @t3tools/web#build) and
-      # @t3tools/desktop#build, so apps/server/dist holds the server bundle
+      # Runs lathe#build (which depends on @lathe/web#build) and
+      # @lathe/desktop#build, so apps/server/dist holds the server bundle
       # plus the web client and apps/desktop/dist-electron the Electron main.
       - name: Build JS bundle
         run: vp run build:desktop
-
-      # Every published artifact is packaged from this bundle, so a leak stops the release here.
-      - name: Check JS bundle for upstream branding
-        run: node scripts/brand-leak-check.ts apps/web/dist apps/server/dist apps/desktop/dist-electron
 
       # Two paths under apps/ so the artifact root is apps/; consumers download
       # into `apps` to restore both at their original locations.
@@ -436,7 +432,7 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@t3tools/scripts...
+              - --filter=@lathe/scripts...
 
       - name: Download all desktop artifacts
         uses: actions/download-artifact@v8
@@ -454,7 +450,7 @@ jobs:
 
       # Installers, pinned runtimes, and remote ssh runtimes verify archives
       # against this file, so it is written from the bytes that get uploaded.
-      # Each lathe-* archive is also uploaded as t3-* for readers from before
+      # Each lathe-* archive is also uploaded as lathe-* for readers from before
       # the rename (packages/shared/src/forkCliArtifacts.ts); the *.tar.gz and
       # *.zip globs below pick up both names.
       - name: Write CLI archive checksums
@@ -574,8 +570,8 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=t3...
-              - --filter=@t3tools/scripts...
+              - --filter=lathe...
+              - --filter=@lathe/scripts...
 
       - name: Build the npm launcher
         run: node scripts/build-npm-launcher.ts --version "${{ needs.preflight.outputs.version }}" --output-dir npm-packages

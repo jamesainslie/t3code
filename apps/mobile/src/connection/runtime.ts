@@ -1,10 +1,10 @@
-import { Connection } from "@t3tools/client-runtime/connection";
-import { ShellSnapshotLoader } from "@t3tools/client-runtime/state/shell";
-import { PullRequestDiffLoader } from "@t3tools/client-runtime/state/pull-requests";
+import { Connection } from "@lathe/client-runtime/connection";
+import { ShellSnapshotLoader } from "@lathe/client-runtime/state/shell";
+import { PullRequestDiffLoader } from "@lathe/client-runtime/state/pull-requests";
 import {
   BoundedThreadSnapshotLoader,
   ThreadHistoryController,
-} from "@t3tools/client-runtime/state/threads";
+} from "@lathe/client-runtime/state/threads";
 import * as Layer from "effect/Layer";
 import { Atom } from "effect/reactivity";
 

@@ -12,15 +12,15 @@ import {
   WorktreeSetupCard,
   type WorktreeSetupCardProps,
 } from "./worktree-setup-card";
-import { splitMermaidMarkdown } from "@t3tools/client-runtime/mermaid";
+import { splitMermaidMarkdown } from "@lathe/client-runtime/mermaid";
 import { MermaidDiagram } from "./MermaidDiagram";
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
-import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
-import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
+import { scopeThreadRef } from "@lathe/client-runtime/environment";
+import type { HandoffEndpoints } from "@lathe/client-runtime/handoff";
+import { resolveUserMessagePresentation } from "@lathe/client-runtime/user-message";
+import { canForkProjectedAssistantItem } from "@lathe/client-runtime/state/thread-workflows";
 import {
   type OrchestrationMessageContext,
   ThreadId,
@@ -31,39 +31,39 @@ import {
   type MessageId,
   type OrchestrationV2ProjectedTurnItem,
   type RunId,
-} from "@t3tools/contracts";
-import { renderCitationsAsText } from "@t3tools/shared/assistantCitations";
-import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
-import { PROMPT_LINK_MAX_PROMPT_LENGTH } from "@t3tools/shared/promptLinks";
+} from "@lathe/contracts";
+import { renderCitationsAsText } from "@lathe/shared/assistantCitations";
+import { encodeComposerContextFragment } from "@lathe/shared/composerContextClipboard";
+import { parseThreadLinkHref } from "@lathe/shared/threadLinks";
+import { PROMPT_LINK_MAX_PROMPT_LENGTH } from "@lathe/shared/promptLinks";
 import {
   parseComposerContextHref,
   collectComposerContextReferences,
   replaceComposerContextReferences,
   formatComposerContextReference,
-} from "@t3tools/shared/composerContextReferences";
+} from "@lathe/shared/composerContextReferences";
 import { ComposerContextSheet } from "../../components/ComposerContextSheet";
 import { writeComposerContextClipboard } from "../../lib/composerContextClipboard";
 import {
   codexArtifactTemplatePresentationLabel,
   type CodexArtifactTemplate,
-} from "@t3tools/shared/codexArtifactTemplates";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
-import { isMarkdownFileLinkLabel } from "@t3tools/shared/markdownLinks";
-import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/shared/codexArtifactTemplates";
+import { resolveAssetUrl } from "@lathe/client-runtime/state/assets";
+import { isMarkdownFileLinkLabel } from "@lathe/shared/markdownLinks";
+import { formatAttachmentSize } from "@lathe/client-runtime/state/attachments";
+import { squashAtomCommandFailure } from "@lathe/client-runtime/state/runtime";
 import {
   classifyMarkdownImageSource,
   markdownImageSourceFragment,
-} from "@t3tools/client-runtime/markdown-images";
-import { resolveViewedImageAsset } from "@t3tools/client-runtime/work-log/presentation";
+} from "@lathe/client-runtime/markdown-images";
+import { resolveViewedImageAsset } from "@lathe/client-runtime/work-log/presentation";
 import {
   renderCodexInlineDirectivesAsMarkdown,
   splitCodexArtifactTemplateMarkdown,
-} from "@t3tools/shared/codexMarkdownDirectives";
-import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
-import { imageMimeType } from "@t3tools/shared/image";
-import { videoMimeType } from "@t3tools/shared/video";
+} from "@lathe/shared/codexMarkdownDirectives";
+import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@lathe/shared/chatList";
+import { imageMimeType } from "@lathe/shared/image";
+import { videoMimeType } from "@lathe/shared/video";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { HeaderHeightContext } from "@react-navigation/elements";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -117,7 +117,7 @@ import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
 import { hasWideMarkdownBlock } from "../../lib/wideMarkdownBlocks";
-import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
+import { faviconUrlForOrigin } from "@lathe/shared/favicon";
 import {
   SelectableMarkdownText,
   type MarkdownFileContextMenu,
@@ -202,7 +202,7 @@ import {
 import { appendPendingThreadMessages, type PendingThreadFeedEntry } from "./pending-thread-feed";
 import type { QueuedThreadMessage } from "../../state/thread-outbox-model";
 import { resolveThreadFeedFixedItemSize } from "./thread-feed-item-size";
-import { htmlRenderFrameHeight } from "@t3tools/shared/htmlRender";
+import { htmlRenderFrameHeight } from "@lathe/shared/htmlRender";
 import { htmlRenderRowHeight, ThreadHtmlRender } from "./HtmlRenderWebView";
 import { ThreadMcpApp } from "./McpAppWebView";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
@@ -1229,9 +1229,9 @@ function renderFeedEntry(
             <Text className="mb-1 pr-1 font-t3-medium text-2xs text-foreground-muted opacity-60">
               Sent by automation
             </Text>
-          ) : presentation.attribution === "t3code" ? (
+          ) : presentation.attribution === "lathe" ? (
             <Text className="mb-1 pr-1 font-t3-medium text-2xs text-foreground-muted opacity-60">
-              Sent by T3 Code
+              Sent by Lathe
             </Text>
           ) : presentation.attribution === "agent" ? (
             <AgentMessageAttribution
@@ -1532,7 +1532,7 @@ function UserMessageContent(props: UserMessageContentProps) {
   const liveText = useLiveThreadLinkLabels(props.text, props.environmentId);
   const text = replaceComposerContextReferences(liveText, (ref) => {
     const available = props.context?.records.some((record) => record.contextId === ref.contextId);
-    return `[${ref.label}${available ? "" : " (unavailable)"}](t3-context://v1/${ref.kind}/${ref.contextId})`;
+    return `[${ref.label}${available ? "" : " (unavailable)"}](lathe-context://v1/${ref.kind}/${ref.contextId})`;
   });
   const onLinkPress = (href: string) => {
     const reference = parseComposerContextHref(href);

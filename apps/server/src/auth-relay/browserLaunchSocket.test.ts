@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -10,7 +10,7 @@ import * as Scope from "effect/Scope";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
+import { collectUint8StreamText } from "@lathe/provider-core/server/collectStreamText";
 import {
   browserLaunchWrapperScript,
   makeBrowserLaunchSocket,
@@ -40,13 +40,13 @@ describe("browser launch socket protocol", () => {
   it("quotes the runtime path in the POSIX wrapper", () => {
     const script = browserLaunchWrapperScript({
       platform: "linux",
-      runtimeExecutablePath: '/opt/T3 "Code"/node',
+      runtimeExecutablePath: '/opt/Lathe "Code"/node',
       helperPath: "/state/auth-relay/browser-launch.mjs",
-      address: "/tmp/t3.sock",
+      address: "/tmp/lathe.sock",
       token: "token-1",
     });
-    assert.include(script, 'ELECTRON_RUN_AS_NODE=1 exec "/opt/T3 \\"Code\\"/node"');
-    assert.include(script, '"/tmp/t3.sock" "token-1" "$@"');
+    assert.include(script, 'ELECTRON_RUN_AS_NODE=1 exec "/opt/Lathe \\"Code\\"/node"');
+    assert.include(script, '"/tmp/lathe.sock" "token-1" "$@"');
   });
 });
 
@@ -76,7 +76,7 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
       if (platform === "win32") return;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-browser-launch-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-browser-launch-" });
       {
         const socket = yield* makeBrowserLaunchSocket({
           directory: path.join(directory, "auth-relay"),
@@ -115,7 +115,7 @@ it.layer(NodeServices.layer)("browser launch socket", (it) => {
       if (platform === "win32") return;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-browser-launch-" });
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-browser-launch-" });
       {
         const scope = yield* Scope.make();
         const socket = yield* makeBrowserLaunchSocket({

@@ -2,7 +2,7 @@ import {
   ClientCapabilities,
   PlatformConnectionSource,
   Persistence,
-} from "@t3tools/client-runtime/platform";
+} from "@lathe/client-runtime/platform";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -17,11 +17,11 @@ import {
   PrimaryConnectionRegistration,
   PrimaryConnectionTarget,
   Wakeups,
-} from "@t3tools/client-runtime/connection";
-import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
-import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
-import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
+} from "@lathe/client-runtime/connection";
+import { bootstrapRemoteBearerSession } from "@lathe/client-runtime/authorization";
+import { fetchRemoteEnvironmentDescriptor } from "@lathe/client-runtime/environment";
+import { managedRelayAccountChanges, managedRelaySessionAtom } from "@lathe/client-runtime/relay";
+import { EnvironmentRpcRequestObserver } from "@lathe/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   type DesktopBridge,
@@ -30,7 +30,7 @@ import {
   type DesktopSshEnvironmentTarget,
   type EnvironmentId,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

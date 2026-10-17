@@ -1,5 +1,5 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { EnvironmentId } from "@lathe/contracts";
+import { type EnvironmentConnectionPhase } from "@lathe/client-runtime/connection";
 
 export interface SavedRemoteConnection {
   readonly environmentId: EnvironmentId;

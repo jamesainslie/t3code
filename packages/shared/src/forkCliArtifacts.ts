@@ -20,7 +20,7 @@
  *   - Readers download whichever name SHA256SUMS lists, `lathe-` first, and
  *     run `<dir>/lathe`, falling back to `<dir>/t3` for runtimes unpacked
  *     before the rename.
- *   - The npm launcher (`bin/lathe.mjs`, built from scripts/npm-launcher/t3.mjs)
+ *   - The npm launcher (`bin/lathe.mjs`, built from scripts/npm-launcher/lathe.mjs)
  *     downloads its exact version's archive from the release like the
  *     installers do, so it is a reader too: `lathe-` first, then `<dir>/lathe`
  *     or `<dir>/t3`.
@@ -41,7 +41,7 @@
  *     scripts/build-cli-archive.ts, `wslRuntimeArchiveStem` in
  *     scripts/build-desktop-artifact.ts), and first make install.ps1 move the
  *     archive's single top-level directory instead of looking up `$stem`.
- *   - npm: drop the `t3` candidates from scripts/npm-launcher/t3.mjs.
+ *   - npm: drop the `t3` candidates from scripts/npm-launcher/lathe.mjs.
  *   - Executables: keep the `t3` fallback in `forkCliExecutableNames` and both
  *     installers' executable pickers for as long as a `runtime/versions/<v>`
  *     unpacked before phase 1 can still start (service rollback, an existing
@@ -106,7 +106,7 @@ export const FORK_NPM_LAUNCHER_SCRIPT = `bin/${FORK_IDENTITY.cliBin}.mjs`;
 
 /**
  * `forkCliExecutablePath` as a POSIX shell expression for a non-Windows
- * runtime directory `dir` (a shell word such as `$T3_RUNTIME_DIR`). Expands to
+ * runtime directory `dir` (a shell word such as `$LATHE_RUNTIME_DIR`). Expands to
  * `<dir>/lathe` when that is executable, otherwise `<dir>/t3`. Evaluate it
  * inside double quotes.
  */

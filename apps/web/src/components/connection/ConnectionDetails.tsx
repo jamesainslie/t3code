@@ -3,8 +3,8 @@ import {
   attemptLogToText,
   describeAttemptLogEntry,
   type AttemptLogTone,
-} from "@t3tools/client-runtime/connection";
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
+} from "@lathe/client-runtime/connection";
+import type { DesktopSshEnvironmentTarget } from "@lathe/contracts";
 import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useLayoutEffect, useRef, type ReactNode } from "react";

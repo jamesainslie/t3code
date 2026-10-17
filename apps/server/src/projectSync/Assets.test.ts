@@ -6,7 +6,7 @@ import { expect, it } from "vite-plus/test";
 import { copySyncAttachment } from "./Assets.ts";
 
 it("copies an attachment into immutable storage and refuses missing or escaping files", async () => {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-assets-"));
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-assets-"));
   try {
     const source = NodePath.join(root, "source");
     const target = NodePath.join(root, "target");

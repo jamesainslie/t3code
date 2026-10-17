@@ -6,16 +6,13 @@ import type {
   ServerProvider,
   ThreadId,
   ThreadPullRequestLink,
-} from "@t3tools/contracts";
-import { matchComposerThreadItems } from "@t3tools/client-runtime/composerThreadItems";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+} from "@lathe/contracts";
+import { matchComposerThreadItems } from "@lathe/client-runtime/composerThreadItems";
+import type { EnvironmentThreadShell } from "@lathe/client-runtime/state/models";
 
 const EMPTY_THREAD_SHELLS: ReadonlyArray<EnvironmentThreadShell> = [];
-import {
-  COMPOSER_CONTEXT_MAX_RECORDS,
-  PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS,
-} from "@t3tools/contracts";
-import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
+import { COMPOSER_CONTEXT_MAX_RECORDS, PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS } from "@lathe/contracts";
+import { formatComposerContextReference } from "@lathe/shared/composerContextReferences";
 import { pullRequestComposerContext, threadComposerContext } from "../../lib/composerContext";
 import { uuidv4 } from "../../lib/uuid";
 import {
@@ -23,18 +20,18 @@ import {
   readComposerDraftSelection,
   setComposerDraftContext,
 } from "../../state/use-composer-drafts";
-import { USAGE_LIMITS_COMMAND } from "@t3tools/shared/usageLimits";
+import { USAGE_LIMITS_COMMAND } from "@lathe/shared/usageLimits";
 import {
   detectComposerTrigger,
   replaceTextRange,
   serializeComposerFileLink,
   type ComposerTrigger,
-} from "@t3tools/shared/composerTrigger";
+} from "@lathe/shared/composerTrigger";
 import {
   insertRankedSearchResult,
   normalizeSearchQuery,
   scoreQueryMatch,
-} from "@t3tools/shared/searchRanking";
+} from "@lathe/shared/searchRanking";
 import {
   dedupeProviderSkillsByName,
   getProviderSkillsForSlashMenu,
@@ -44,7 +41,7 @@ import {
   hasCurrentProviderWorkspaceSnapshot,
   resolveProviderSkillsForCwd,
   resolveProviderSlashCommandsForCwd,
-} from "@t3tools/client-runtime/providerSkills";
+} from "@lathe/client-runtime/providerSkills";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ComposerEditorSelection } from "../../components/ComposerEditor";
@@ -102,7 +99,7 @@ export function buildComposerSlashCommandItems(input: {
     (item) => item.command.includes(query) && (item.command === "model" || allowInteractionMode),
   );
 
-  // Providers expand commands only at the start of a message. T3 commands
+  // Providers expand commands only at the start of a message. Lathe commands
   // change local state and do not have this restriction.
   if (!input.atMessageStart) return items;
   for (const command of input.selectedProviderStatus?.slashCommands ?? []) {

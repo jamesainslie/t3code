@@ -1,9 +1,5 @@
-import {
-  DEFAULT_SERVER_SETTINGS,
-  ProviderDriverKind,
-  ProviderInstanceId,
-} from "@t3tools/contracts";
-import { DEFAULT_CLIENT_SETTINGS, type ClientSettings } from "@t3tools/contracts/settings";
+import { DEFAULT_SERVER_SETTINGS, ProviderDriverKind, ProviderInstanceId } from "@lathe/contracts";
+import { DEFAULT_CLIENT_SETTINGS, type ClientSettings } from "@lathe/contracts/settings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const persistenceMocks = vi.hoisted(() => ({
@@ -26,7 +22,7 @@ import {
   prepareModelPreferencesPatch,
   resolveEnvironmentIdentificationMode,
 } from "./useSettings";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+import { applyServerSettingsPatch } from "@lathe/shared/serverSettings";
 
 beforeEach(() => {
   persistenceMocks.getClientSettings.mockReset().mockResolvedValue(null);

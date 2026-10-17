@@ -1,10 +1,10 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import * as NetService from "@t3tools/shared/Net";
-import { SshCommandError, SshPasswordPromptError } from "@t3tools/ssh/errors";
-import { SshOutputObserver } from "@t3tools/ssh/output";
-import * as SshTunnel from "@t3tools/ssh/tunnel";
+import * as NetService from "@lathe/shared/Net";
+import { SshCommandError, SshPasswordPromptError } from "@lathe/ssh/errors";
+import { SshOutputObserver } from "@lathe/ssh/output";
+import * as SshTunnel from "@lathe/ssh/tunnel";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -18,7 +18,7 @@ import * as DesktopSshPasswordPrompts from "./DesktopSshPasswordPrompts.ts";
 function makeTempHomeDir() {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    return yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-env-test-" });
+    return yield* fs.makeTempDirectoryScoped({ prefix: "lathe-ssh-env-test-" });
   });
 }
 
@@ -34,7 +34,7 @@ describe("sshEnvironment", () => {
     assert.equal(cause.message, "Failed to present SSH password prompt for devbox.");
     assert.equal(
       DesktopSshEnvironment.toSshPasswordPromptError(cause).message,
-      "T3 Code window is not available for SSH authentication.",
+      "Lathe window is not available for SSH authentication.",
     );
   });
 
@@ -149,7 +149,7 @@ describe("sshEnvironment", () => {
         entries.map((entry) => [entry.source, entry.text]),
         [
           ["status", "Connecting to devbox"],
-          ["launch", "installing t3 1.2.3"],
+          ["launch", "installing lathe 1.2.3"],
           ["status", "Failed: SSH command timed out after 90000ms."],
         ],
       );
@@ -164,7 +164,7 @@ describe("sshEnvironment", () => {
                   yield* observe({
                     source: "launch",
                     stream: "stderr",
-                    text: "installing t3 1.2.3\n",
+                    text: "installing lathe 1.2.3\n",
                   });
                   return yield* new SshCommandError({
                     command: ["ssh"],

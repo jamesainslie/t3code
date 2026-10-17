@@ -1,4 +1,4 @@
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 /**
  * Fork-only. Upstream's brand asset paths, moved from `assets/` to the fork's

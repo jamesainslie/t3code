@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it, vi } from "@effect/vitest";
-import { ProjectId } from "@t3tools/contracts";
+import { ProjectId } from "@lathe/contracts";
+import { withLegacyExportedNames } from "@lathe/shared/forkLegacyEnv";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -99,13 +100,17 @@ it.effect("resolves setup scripts through the standalone project service", () =>
       cwd: "/repo-worktree",
     });
     assert.equal(open.mock.calls[0]?.[0].cwd, "/repo-worktree");
-    assert.deepEqual(open.mock.calls[0]?.[0].env, {
-      T3CODE_PROJECT_ROOT: "/repo",
-      T3CODE_WORKTREE_PATH: "/repo-worktree",
-      COLORTERM: "",
-      NO_COLOR: "1",
-      FORCE_COLOR: "0",
-    });
+    assert.deepEqual(
+      open.mock.calls[0]?.[0].env,
+      // Fork-only: the script also sees each variable under its pre-rename name.
+      withLegacyExportedNames({
+        LATHE_PROJECT_ROOT: "/repo",
+        LATHE_WORKTREE_PATH: "/repo-worktree",
+        COLORTERM: "",
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+      }),
+    );
     assert.equal(write.mock.calls[0]?.[0].data, "vp install\r");
     const lines: string[] = [];
     const observed = yield* runner.runForThread({
@@ -149,7 +154,7 @@ it.effect("resolves setup scripts through the standalone project service", () =>
     });
     const observedTerminalId = observedSettle.status === "started" ? observedSettle.terminalId : "";
     assert.notEqual(observedTerminalId, settleTerminalId);
-    const token = /__T3_SETUP_DONE___(\w+):/.exec(write.mock.calls.at(-1)?.[0].data ?? "")?.[1];
+    const token = /__LATHE_SETUP_DONE___(\w+):/.exec(write.mock.calls.at(-1)?.[0].data ?? "")?.[1];
     const settleListener = listeners.at(-1)!;
     const completion = yield* Effect.forkChild(
       observedSettle.status === "started" && observedSettle.completion
@@ -160,7 +165,7 @@ it.effect("resolves setup scripts through the standalone project service", () =>
       type: "output",
       threadId: "thread-1",
       terminalId: observedTerminalId,
-      data: `\r\n__T3_SETUP_DONE___${token}:0\r\n`,
+      data: `\r\n__LATHE_SETUP_DONE___${token}:0\r\n`,
     });
     yield* Effect.yieldNow;
     assert.equal(closeIdle.mock.calls.length, 0);

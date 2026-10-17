@@ -1,9 +1,9 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextFragment,
-} from "@t3tools/shared/composerContextClipboard";
-import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/composerContextClipboard";
+import { buildThreadChipClipboard } from "@lathe/shared/threadContextReference";
 
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";

@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_CONTEXT_LENGTH, type Citation } from "@t3tools/contracts";
+import { ASSISTANT_CITATION_CONTEXT_LENGTH, type Citation } from "@lathe/contracts";
 
 export type AssistantTextSelector = {
   readonly text: string;

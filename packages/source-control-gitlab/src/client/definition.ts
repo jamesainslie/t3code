@@ -1,10 +1,10 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import {
   defineSourceControlClient,
   isChangeRequestInProjectRepository,
   isChangeRequestOnProjectHost,
   isChangeRequestPath,
-} from "@t3tools/source-control-core/client/definition";
+} from "@lathe/source-control-core/client/definition";
 
 const CHECKOUT_COMMAND = /^glab\s+mr\s+checkout\s+(.+)$/i;
 const CHANGE_REQUEST_REFERENCE =

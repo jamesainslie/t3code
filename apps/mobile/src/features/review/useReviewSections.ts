@@ -1,4 +1,4 @@
-import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
+import { resolveFilesystemReadAccess } from "@lathe/client-runtime/state/filesystem";
 import { environmentSession } from "../../state/session";
 import { useCallback, useEffect, useMemo } from "react";
 import * as DateTime from "effect/DateTime";
@@ -6,8 +6,8 @@ import * as DateTime from "effect/DateTime";
 import {
   deriveThreadCheckpointSummaries,
   type ThreadCheckpointSummary,
-} from "@t3tools/client-runtime/state/thread-checkpoints";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/thread-checkpoints";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 
 import { useCheckpointDiff } from "../../state/queries";
 import { useEnvironmentQuery } from "../../state/query";

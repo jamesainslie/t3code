@@ -14,7 +14,7 @@ import {
 } from "./Recovery.ts";
 
 it("restores database, files, and settings while preserving the pre-restore state", async () => {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-recovery-"));
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-recovery-"));
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(NodePath.join(state, "attachments"), { recursive: true });
   try {
@@ -77,7 +77,7 @@ it("restores database, files, and settings while preserving the pre-restore stat
 });
 
 it("refuses a corrupted backup before scheduling restoration", async () => {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-recovery-"));
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-recovery-"));
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(state);
   try {
@@ -97,7 +97,7 @@ it("refuses a corrupted backup before scheduling restoration", async () => {
 });
 
 it("finishes an interrupted directory swap and preserves provider files", async () => {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-interrupted-"));
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-interrupted-"));
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(NodePath.join(state, "providers"), { recursive: true });
   try {
@@ -125,7 +125,7 @@ it("finishes an interrupted directory swap and preserves provider files", async 
 });
 
 it("restores a backup taken before orchestration v2 without a stale v2 database", async () => {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-sync-legacy-"));
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-sync-legacy-"));
   const state = NodePath.join(root, "userdata");
   await NodeFSP.mkdir(state, { recursive: true });
   try {

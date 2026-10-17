@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@lathe/contracts";
 import { useEffect, useState } from "react";
 
 export function useEnvironmentDisconnectDelay(unavailableEnvironmentId: EnvironmentId | null) {

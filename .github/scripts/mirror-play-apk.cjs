@@ -163,7 +163,7 @@ async function main() {
     return;
   }
   const safeName = build.versionName.replace(/[^0-9A-Za-z.]+/g, "-").replace(/^-|-$/g, "");
-  const apkName = `t3code-android-${channel}-${safeName}-${build.versionCode}.apk`;
+  const apkName = `lathe-android-${channel}-${safeName}-${build.versionCode}.apk`;
   const tag = `android-beta-${build.versionCode}`;
   const release = outputDirectory ? undefined : readRelease(tag);
   if (
@@ -195,7 +195,7 @@ async function main() {
       return;
     }
     const notes = [
-      `T3 Code for Android beta, mirrored from Google Play closed testing. Build: ${build.versionName} (${build.versionCode}).`,
+      `Lathe for Android beta, mirrored from Google Play closed testing. Build: ${build.versionName} (${build.versionCode}).`,
       "",
       "These builds have been promoted for wider testing, but may still contain bugs. The beta is optional; the store app also works with Nightly servers.",
     ].join("\n");

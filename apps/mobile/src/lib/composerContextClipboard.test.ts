@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { ComposerContextId, EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
+import { ComposerContextId, EnvironmentId, ThreadId } from "@lathe/contracts";
+import { encodeComposerContextFragment } from "@lathe/shared/composerContextClipboard";
+import { buildThreadChipClipboard } from "@lathe/shared/threadContextReference";
 
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -32,7 +32,7 @@ vi.mock("../state/use-composer-drafts", () => ({
   waitForComposerDraftsLoaded: async () => {},
   findLocalComposerClipboardAttachment: mocks.local,
 }));
-vi.mock("@t3tools/client-runtime/state/runtime", () => ({
+vi.mock("@lathe/client-runtime/state/runtime", () => ({
   executeAtomQuery: mocks.execute,
   squashAtomCommandFailure: () => new Error("offline"),
 }));
@@ -68,7 +68,7 @@ const terminal = {
   text: "Build failed",
 };
 const clipboard = {
-  text: "![Checkout](t3-context://v1/image/image-source) [Build](t3-context://v1/terminal/terminal-source)",
+  text: "![Checkout](lathe-context://v1/image/image-source) [Build](lathe-context://v1/terminal/terminal-source)",
   fragment: encodeComposerContextFragment({
     version: 1,
     source: { environmentId: EnvironmentId.make("source") },

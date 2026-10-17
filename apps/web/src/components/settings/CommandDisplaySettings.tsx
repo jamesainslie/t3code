@@ -1,4 +1,4 @@
-import { type CommandDisplayMode, DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { type CommandDisplayMode, DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";

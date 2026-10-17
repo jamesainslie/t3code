@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH, type Citation } from "@t3tools/contracts";
+import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH, type Citation } from "@lathe/contracts";
 import { useState, type Ref } from "react";
 
 import { Button } from "../ui/button";

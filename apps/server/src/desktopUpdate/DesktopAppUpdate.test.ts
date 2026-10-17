@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import type { DesktopUpdateState, DesktopUpdateStatusReport } from "@t3tools/contracts";
+import type { DesktopUpdateState, DesktopUpdateStatusReport } from "@lathe/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -64,7 +64,7 @@ const makeHarness = Effect.fn("test.make_desktop_app_update_harness")(function* 
   options: HarnessOptions = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-desktop-app-update-test-" });
+  const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-desktop-app-update-test-" });
   const requestIdDeferred = yield* Deferred.make<string>();
   const baseConfig = yield* ServerConfig.ServerConfig.pipe(
     Effect.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
@@ -112,7 +112,7 @@ it.layer(NodeServices.layer)("desktop app update", (it) => {
       const noFd = yield* makeHarness({ controlFd: undefined });
       expect(noFd.service.available).toBe(false);
       expect((yield* noFd.service.run(() => Effect.void).pipe(Effect.flip)).reason).toContain(
-        "not started by the T3 Code desktop app",
+        "not started by the Lathe desktop app",
       );
       const desktop = yield* makeHarness();
       expect(desktop.service.available).toBe(true);
@@ -154,7 +154,7 @@ it.layer(NodeServices.layer)("desktop app update", (it) => {
         ],
       });
       expect((yield* upToDate.service.run(() => Effect.void).pipe(Effect.flip)).reason).toBe(
-        "The T3 Code desktop app on this machine is already up to date on 1.2.3.",
+        "The Lathe desktop app on this machine is already up to date on 1.2.3.",
       );
 
       const failed = yield* makeHarness({

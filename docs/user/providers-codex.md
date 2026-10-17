@@ -1,18 +1,18 @@
 # Codex
 
-Use your ChatGPT plan or an existing Codex CLI login to code in T3 Code.
+Use your ChatGPT plan or an existing Codex CLI login to code in Lathe.
 
 ## Connect with ChatGPT
 
 Connect during onboarding or in **Settings → Providers**. For a remote machine,
-select that environment first. T3 Code handles Codex installation; sign in on
+select that environment first. Lathe handles Codex installation; sign in on
 OpenAI and allow sharing of your ChatGPT plan.
 
-Manage shared usage and credits in ChatGPT through **Manage usage** in T3 Code.
+Manage shared usage and credits in ChatGPT through **Manage usage** in Lathe.
 If a request uses a feature that ChatGPT sharing does not support, use another
 provider for that request.
 
-When reconnecting, choose the same account in T3 Code and on OpenAI's sign-in
+When reconnecting, choose the same account in Lathe and on OpenAI's sign-in
 page. Disconnecting stops running threads but keeps their history and lets you
 reconnect later.
 
@@ -21,33 +21,33 @@ localhost page into the sign-in panel, even if that page could not load.
 
 ## Use an existing Codex login
 
-T3 Code can use your installed Codex and its existing login. Run `codex login`
+Lathe can use your installed Codex and its existing login. Run `codex login`
 on the environment's machine to sign in. [Provider setup](./install.md#providers)
 covers installation and custom configuration.
 
-## Sign in from T3 Code
+## Sign in from Lathe
 
 On web or desktop, open **Settings > Providers**, choose the environment that runs
-your project, open the Codex instance, and choose **Sign in**. T3 Code asks Codex for
+your project, open the Codex instance, and choose **Sign in**. Lathe asks Codex for
 a device code when the installed version offers one: open the sign-in page on the
-device you are using, enter the code shown in settings, and wait for T3 Code to
+device you are using, enter the code shown in settings, and wait for Lathe to
 confirm the account. Nothing needs to be pasted back.
 
 Older Codex versions use a browser sign-in that returns to a `localhost` page on
 the environment. From another device that page does not load; copy its full
 address, including everything after `?`, into the return URL field and choose
-**Continue**. Only the T3 Code client that started the sign-in can finish it, and a
+**Continue**. Only the Lathe client that started the sign-in can finish it, and a
 link is valid for five minutes.
 
 **Sign out** in the same place removes the saved login for that instance and stops
 its running threads. `codex login` and `codex logout` on the environment still work
-and T3 Code picks up the result on the next status refresh.
+and Lathe picks up the result on the next status refresh.
 
 ## Use multiple accounts
 
 Add another ChatGPT account in **Settings → Providers**, then select the account
 from the thread's model picker. Compatible accounts can continue the same thread.
-Connecting accounts through T3 Code leaves your CLI login unchanged.
+Connecting accounts through Lathe leaves your CLI login unchanged.
 
 ### Multiple CLI logins
 
@@ -70,7 +70,7 @@ Then add a second Codex instance in **Settings > Providers**:
 | Codex Work     | `~/.codex`      | Leave empty         |
 | Codex Personal | `~/.codex`      | `~/.codex_personal` |
 
-Both instances must use the same **CODEX_HOME path**. T3 Code prepares the shared
+Both instances must use the same **CODEX_HOME path**. Lathe prepares the shared
 state in the shadow directory; do not populate it by copying your whole Codex
 home.
 
@@ -84,7 +84,7 @@ from the other home.
 
 ## Switch accounts in an existing thread
 
-Choose the other account from the thread's model picker. T3 Code offers compatible
+Choose the other account from the thread's model picker. Lathe offers compatible
 Codex instances that share the thread's **CODEX_HOME path**. Changing accounts does
 not move the conversation into a separate Codex home.
 

@@ -5,11 +5,11 @@ import {
   type KeybindingWhenNode,
   type ResolvedKeybindingRule,
   type ResolvedKeybindingsConfig,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   DEFAULT_RESOLVED_KEYBINDINGS,
   parseKeybindingWhenExpression,
-} from "@t3tools/shared/keybindings";
+} from "@lathe/shared/keybindings";
 
 import { shortcutKeyFromEvent } from "../../keybindings";
 import { isMacPlatform } from "../../lib/utils";

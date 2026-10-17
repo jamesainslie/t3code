@@ -7,7 +7,7 @@ import {
   type ServerSettings,
   type ThreadContextRecord,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import {
   formatComposerContextReference,
@@ -55,7 +55,7 @@ export function buildThreadContextRecord(thread: ThreadChipSource): ThreadContex
   };
 }
 
-/** `[<label>](t3-context://v1/thread/<contextId>)` */
+/** `[<label>](lathe-context://v1/thread/<contextId>)` */
 export function threadContextMarkdown(record: ThreadContextRecord): string {
   return formatComposerContextReference(record);
 }

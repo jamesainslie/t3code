@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopAssets from "./DesktopAssets.ts";
@@ -34,7 +34,7 @@ const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {
     linuxDesktopEntryName: FORK_IDENTITY.desktop.production.desktopEntryName,
     linuxWmClass: FORK_IDENTITY.desktop.production.wmClass,
     linuxApplicationsDir: "/home/alice/.local/share/applications",
-    appImagePath: Option.some("/home/alice/Applications/T3-Code.AppImage"),
+    appImagePath: Option.some("/home/alice/Applications/Lathe.AppImage"),
     path,
     ...overrides,
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
@@ -163,21 +163,21 @@ describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
       displayName: `${FORK_IDENTITY.productBaseName} (Nightly)`,
-      execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
+      execTarget: '/home/al ice/Apps/Lathe "100%" $HOME\\x.AppImage',
       scheme: FORK_IDENTITY.desktop.production.scheme,
-      iconPath: "/home/al ice/icons/T3\\x.png",
+      iconPath: "/home/al ice/icons/Lathe\\x.png",
     });
 
     assert.include(entry, "[Desktop Entry]");
     assert.include(entry, `Name=${FORK_IDENTITY.productBaseName} (Nightly)`);
     assert.include(
       entry,
-      'Exec="/home/al ice/Apps/T3 \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
+      'Exec="/home/al ice/Apps/Lathe \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
     assert.include(entry, `MimeType=x-scheme-handler/${FORK_IDENTITY.desktop.production.scheme};`);
-    assert.include(entry, "Icon=/home/al ice/icons/T3\\\\x.png");
+    assert.include(entry, "Icon=/home/al ice/icons/Lathe\\\\x.png");
   });
 
   it("carries structured context on registration errors", () => {
@@ -223,7 +223,7 @@ describe("DesktopLinuxUrlHandler", () => {
         );
         assert.include(
           recorded.files[0]?.content,
-          'Exec="/home/alice/Applications/T3-Code.AppImage" %U',
+          'Exec="/home/alice/Applications/Lathe.AppImage" %U',
         );
         assert.include(
           recorded.files[0]?.content,
@@ -267,7 +267,7 @@ describe("DesktopLinuxUrlHandler", () => {
       yield* runRegister(recorded, {
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
           displayName: `${FORK_IDENTITY.productBaseName} (Alpha)`,
-          execTarget: "/home/alice/Applications/T3-Code.AppImage",
+          execTarget: "/home/alice/Applications/Lathe.AppImage",
           scheme: FORK_IDENTITY.desktop.production.scheme,
           iconPath: `/home/alice/.local/share/icons/${FORK_IDENTITY.desktop.production.desktopEntryName}.png`,
         }),
@@ -297,17 +297,17 @@ describe("DesktopLinuxUrlHandler", () => {
     const iconPath = `/home/alice/.local/share/icons/${FORK_IDENTITY.desktop.production.desktopEntryName}.png`;
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
-        iconSource: "/tmp/.mount_T3/resources/icon.png",
+        iconSource: "/tmp/.mount_Lathe/resources/icon.png",
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
           displayName: `${FORK_IDENTITY.productBaseName} (Alpha)`,
-          execTarget: "/home/alice/Applications/T3-Code.AppImage",
+          execTarget: "/home/alice/Applications/Lathe.AppImage",
           scheme: FORK_IDENTITY.desktop.production.scheme,
           iconPath,
         }),
       });
       assert.deepEqual(recorded.files, []);
       assert.deepEqual(recorded.copies, [
-        { source: "/tmp/.mount_T3/resources/icon.png", destination: iconPath },
+        { source: "/tmp/.mount_Lathe/resources/icon.png", destination: iconPath },
       ]);
       assert.equal(recorded.commands.at(-1)?.command, "xdg-mime");
     });
@@ -317,7 +317,7 @@ describe("DesktopLinuxUrlHandler", () => {
     const recorded = emptyRecording();
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
-        iconSource: "/tmp/.mount_T3/resources/icon.png",
+        iconSource: "/tmp/.mount_Lathe/resources/icon.png",
         iconCopyError: PlatformError.systemError({
           _tag: "PermissionDenied",
           module: "FileSystem",

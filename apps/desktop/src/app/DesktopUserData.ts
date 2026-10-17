@@ -4,7 +4,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
-import { forkDesktopIds } from "@t3tools/shared/forkIdentity";
+import { forkDesktopIds } from "@lathe/shared/forkIdentity";
 
 export class DesktopUserDataInitializationError extends Schema.TaggedError<DesktopUserDataInitializationError>()(
   "DesktopUserDataInitializationError",

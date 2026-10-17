@@ -1,5 +1,5 @@
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef, SnapShotSource } from "@t3tools/contracts";
+import { scopedThreadKey } from "@lathe/client-runtime/environment";
+import type { ScopedThreadRef, SnapShotSource } from "@lathe/contracts";
 
 import type { DraftId } from "../composerDraftStore";
 import { getDesktopSnapShotBridge } from "./desktopSnapShot";

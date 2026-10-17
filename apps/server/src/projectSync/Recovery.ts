@@ -2,7 +2,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
-import { ProjectSyncError } from "@t3tools/contracts";
+import { ProjectSyncError } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { openReadOnlyDatabase, snapshotDatabase } from "./SqliteSnapshot.ts";

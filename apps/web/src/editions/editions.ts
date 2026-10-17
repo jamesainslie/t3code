@@ -1,4 +1,4 @@
-import { DEFAULT_EDITION, type Edition } from "@t3tools/contracts";
+import { DEFAULT_EDITION, type Edition } from "@lathe/contracts";
 
 import amberIcon from "../assets/editions/amber-icon.png?url";
 import amberStrip from "../assets/editions/amber.svg?url";

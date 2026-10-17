@@ -1,6 +1,6 @@
 # Outside agents
 
-Agents that T3 Code did not start can work with an environment through its MCP
+Agents that Lathe did not start can work with an environment through its MCP
 server. They can read projects and threads, start and message threads, and
 check which providers and models are available. This covers Claude Code or
 Codex in your own terminal, ChatGPT, and bots that support MCP. Each agent signs
@@ -37,7 +37,7 @@ The page names the agent and where its access goes:
   Anyone who runs that service gets the access.
 
 Only approve a sign-in you just started. To approve, enter a pairing code from
-**Settings → Connections** or from `t3 auth pairing create` on the host. A
+**Settings → Connections** or from `lathe auth pairing create` on the host. A
 browser already signed in to the environment as an administrator can approve
 without a code.
 
@@ -52,31 +52,31 @@ Then choose what the agent may do:
 ## Claude Code
 
 ```sh
-claude mcp add --transport http t3 https://<environment-address>/mcp
-claude mcp login t3
+claude mcp add --transport http lathe https://<environment-address>/mcp
+claude mcp login lathe
 ```
 
 `claude mcp login` opens the sign-in page in your browser. On a machine
 without a browser, add `--no-browser`, open the printed URL elsewhere, and
-paste the final URL back when asked. `claude mcp list` shows `t3` as connected
+paste the final URL back when asked. `claude mcp list` shows `lathe` as connected
 once you approve.
 
 ## Codex
 
 ```sh
-codex mcp add t3 --url https://<environment-address>/mcp
-codex mcp login t3
+codex mcp add lathe --url https://<environment-address>/mcp
+codex mcp login lathe
 ```
 
 `codex mcp login --no-browser` prints the sign-in URL instead of opening it.
-`codex mcp list` shows `t3` with OAuth once you approve.
+`codex mcp list` shows `lathe` with OAuth once you approve.
 
 ## ChatGPT
 
 Add the environment as a custom MCP app in ChatGPT's apps settings:
 
 1. Create a new app or plugin with a custom MCP server.
-2. Set the server URL to `https://<environment-address>/mcp`, using the T3
+2. Set the server URL to `https://<environment-address>/mcp`, using the Lathe
    Connect address.
 3. Choose **OAuth** for authentication. ChatGPT discovers the rest; you do not
    need a client ID or secret.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EnvironmentId, ProjectSyncRequest, ProjectSyncResponse } from "@t3tools/contracts";
-import { executeProjectSync } from "@t3tools/client-runtime/state/project-sync";
+import type { EnvironmentId, ProjectSyncRequest, ProjectSyncResponse } from "@lathe/contracts";
+import { executeProjectSync } from "@lathe/client-runtime/state/project-sync";
 import * as Option from "effect/Option";
 import { runtime } from "../lib/runtime";
 import { usePreparedConnection } from "../state/session";

@@ -7,14 +7,14 @@ import {
   type UsageSummary,
   type UsageProviderKind,
   type UsageSummaryInput,
-} from "@t3tools/contracts";
-import { needsCursorKeychainAccess, refreshUsage } from "@t3tools/client-runtime/state/usage";
-import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
+} from "@lathe/contracts";
+import { needsCursorKeychainAccess, refreshUsage } from "@lathe/client-runtime/state/usage";
+import { resolveUsageAccess } from "@lathe/client-runtime/state/usage-access";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useCallback, useMemo, useState } from "react";
 
-import { mergeUsage, type EnvironmentUsage, type MergedUsage } from "@t3tools/shared/usageMerge";
+import { mergeUsage, type EnvironmentUsage, type MergedUsage } from "@lathe/shared/usageMerge";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentPresentations } from "./presentation";
 import { serverEnvironment } from "./server";

@@ -1,22 +1,22 @@
 import { ProcessSignalActions } from "./ProcessSignalActions";
-import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
+import { resolveUsageAccess } from "@lathe/client-runtime/state/usage-access";
 import { environmentSession } from "../../state/session";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope } from "@lathe/contracts";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
-import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
+import { AuthEnvironmentMaintainScope } from "@lathe/contracts";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { AlertTriangleIcon, CopyIcon, FolderOpenIcon, InfoIcon } from "lucide-react";
 import { ChevronDown, ChevronRight } from "lucide";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   ServerProcessDiagnosticsEntry,
   ServerProcessResourceHistorySummary,
   ServerProcessSignal,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
@@ -903,7 +903,7 @@ export function DiagnosticsSettingsPanel() {
               type: "info",
               title: "Process already exited",
               description:
-                "The process is not a child of the T3 Server. It might already have exited.",
+                "The process is not a child of the Lathe Server. It might already have exited.",
             });
             return;
           }
@@ -1031,7 +1031,7 @@ export function DiagnosticsSettingsPanel() {
           <StatBlock
             label="CPU Time"
             value={resourceData ? formatCpuTime(resourceData.totalCpuSecondsApprox) : "..."}
-            tooltip="Approximate active CPU time for the T3 server root process and its descendants during the selected window. It grows only while sampled processes use CPU and older samples leave as the window moves."
+            tooltip="Approximate active CPU time for the Lathe server root process and its descendants during the selected window. It grows only while sampled processes use CPU and older samples leave as the window moves."
           />
           <StatBlock
             label="Samples"

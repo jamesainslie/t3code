@@ -1,10 +1,7 @@
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { VcsRef } from "@t3tools/client-runtime/state/vcs";
-import {
-  type AtomCommandResult,
-  mapAtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import type { VcsSwitchRefInput, VcsSwitchRefResult } from "@t3tools/contracts";
+import type { EnvironmentProject } from "@lathe/client-runtime/state/shell";
+import type { VcsRef } from "@lathe/client-runtime/state/vcs";
+import { type AtomCommandResult, mapAtomCommandResult } from "@lathe/client-runtime/state/runtime";
+import type { VcsSwitchRefInput, VcsSwitchRefResult } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 

@@ -11,7 +11,7 @@ import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpServer from "effect/http/HttpServer";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 
 import * as ServerConfig from "../config.ts";
 import { getTelemetryIdentifier } from "./Identify.ts";
@@ -87,14 +87,14 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       const batches: Array<ReadonlyArray<{ readonly uuid: string }>> = [];
       const layerRuntime = AnalyticsService.layer.pipe(
         Layer.provideMerge(
-          ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "t3-telemetry-retry-" }),
+          ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "lathe-telemetry-retry-" }),
         ),
         Layer.provide(
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
-              T3CODE_TELEMETRY_ENABLED: true,
-              T3CODE_POSTHOG_KEY: "phc_test_key",
-              T3CODE_POSTHOG_HOST: "http://localhost",
+              LATHE_TELEMETRY_ENABLED: true,
+              LATHE_POSTHOG_KEY: "phc_test_key",
+              LATHE_POSTHOG_HOST: "http://localhost",
             }),
           ),
         ),
@@ -128,16 +128,16 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
     Effect.gen(function* () {
       const capturedRequests: Array<RecordedBatchRequest> = [];
       const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-telemetry-base-",
+        prefix: "lathe-telemetry-base-",
       });
 
       const layerTelemetry = AnalyticsService.layer.pipe(Layer.provideMerge(layerServerConfig));
       const layerConfig = ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          T3CODE_TELEMETRY_ENABLED: true,
-          T3CODE_POSTHOG_KEY: "phc_test_key",
-          T3CODE_POSTHOG_HOST: "http://localhost",
-          T3CODE_TELEMETRY_FLUSH_BATCH_SIZE: 20,
+          LATHE_TELEMETRY_ENABLED: true,
+          LATHE_POSTHOG_KEY: "phc_test_key",
+          LATHE_POSTHOG_HOST: "http://localhost",
+          LATHE_TELEMETRY_FLUSH_BATCH_SIZE: 20,
         }),
       );
       const layerBatchServer = HttpServer.serve(
@@ -230,14 +230,14 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
     Effect.gen(function* () {
       const capturedPaths: Array<string> = [];
       const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-telemetry-disabled-",
+        prefix: "lathe-telemetry-disabled-",
       });
       const layerTelemetry = AnalyticsService.layer.pipe(Layer.provideMerge(layerServerConfig));
       const layerConfig = ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          T3CODE_TELEMETRY_ENABLED: false,
-          T3CODE_POSTHOG_KEY: "phc_test_key",
-          T3CODE_POSTHOG_HOST: "http://localhost",
+          LATHE_TELEMETRY_ENABLED: false,
+          LATHE_POSTHOG_KEY: "phc_test_key",
+          LATHE_POSTHOG_HOST: "http://localhost",
         }),
       );
       const layerBatchServer = HttpServer.serve(
@@ -269,18 +269,18 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
     }),
   );
 
-  // Fork: Lathe sends no usage data unless T3CODE_TELEMETRY_ENABLED opts in.
+  // Fork: Lathe sends no usage data unless LATHE_TELEMETRY_ENABLED opts in.
   it.effect("does not send batch requests when telemetry is not configured", () =>
     Effect.gen(function* () {
       const capturedPaths: Array<string> = [];
       const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-telemetry-default-",
+        prefix: "lathe-telemetry-default-",
       });
       const layerTelemetry = AnalyticsService.layer.pipe(Layer.provideMerge(layerServerConfig));
       const layerConfig = ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          T3CODE_POSTHOG_KEY: "phc_test_key",
-          T3CODE_POSTHOG_HOST: "http://localhost",
+          LATHE_POSTHOG_KEY: "phc_test_key",
+          LATHE_POSTHOG_HOST: "http://localhost",
         }),
       );
       const layerBatchServer = HttpServer.serve(

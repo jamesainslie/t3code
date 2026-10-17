@@ -2,11 +2,11 @@ import type {
   ModelCapabilities,
   ProviderOptionDescriptor,
   ProviderOptionSelection,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   buildProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
-} from "@t3tools/shared/model";
+} from "@lathe/shared/model";
 
 export function resolveProviderOptionDescriptors(input: {
   readonly capabilities: ModelCapabilities | null | undefined;

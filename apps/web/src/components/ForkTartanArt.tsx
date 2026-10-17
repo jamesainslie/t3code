@@ -44,7 +44,7 @@ const STRIPES = AINSLIE_SETT.reduce<Array<{ colour: TartanColour; start: number;
   [],
 );
 
-// The tile offset puts a plain red block under the "T3 Code" wordmark (x 12..95, y 18..40) and
+// The tile offset puts a plain red block under the "Lathe" wordmark (x 12..95, y 18..40) and
 // the white-and-black line cross just right of and below it, where the header is still opaque.
 const TILE_OFFSET_X = 42;
 const TILE_OFFSET_Y = -10;

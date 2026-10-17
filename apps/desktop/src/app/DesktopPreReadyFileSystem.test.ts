@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -23,7 +23,7 @@ it.layer(NodeServices.layer)("DesktopPreReadyFileSystem", (it) => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-pre-ready-fs-" });
+      const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "lathe-pre-ready-fs-" });
       const legacy = FORK_IDENTITY.desktop.production.legacyUserDataDirName;
       yield* fileSystem.makeDirectory(path.join(root, legacy));
       yield* fileSystem.writeFileString(path.join(root, legacy, "Local State"), "keys");
@@ -40,7 +40,7 @@ it.layer(NodeServices.layer)("DesktopPreReadyFileSystem", (it) => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-pre-ready-fs-" });
+        const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "lathe-pre-ready-fs-" });
         yield* fileSystem.chmod(root, 0o000);
         yield* Effect.addFinalizer(() => fileSystem.chmod(root, 0o700).pipe(Effect.orDie));
 

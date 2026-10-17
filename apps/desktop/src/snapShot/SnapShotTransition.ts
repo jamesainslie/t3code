@@ -113,7 +113,7 @@ function createWindow(
     resizable: false,
     show: false,
     skipTaskbar: true,
-    title: "T3 Code Snapshot Animation",
+    title: "Lathe Snapshot Animation",
     transparent: true,
     webPreferences: {
       backgroundThrottling: false,
@@ -305,7 +305,7 @@ export class SnapShotTransition {
         }
       }
       if (this.waitForCompositorFrame) {
-        // Cover the source with a composited snapshot before the caller reveals T3.
+        // Cover the source with a composited snapshot before the caller reveals Lathe.
         // Decoding and renderer animation frames alone can leave a transparent gap.
         await Promise.all(
           overlays.map(async (overlay) => {

@@ -3,7 +3,7 @@ import {
   type ServerConfigStreamEvent,
   WsSubscribeServerConfigRpc,
   WS_METHODS,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -78,7 +78,7 @@ export class RpcSessionFactory extends Context.Service<
       connection: PreparedConnection,
     ) => Effect.Effect<RpcSession, ConnectionAttemptError, Scope.Scope>;
   }
->()("@t3tools/client-runtime/rpc/session/RpcSessionFactory") {}
+>()("@lathe/client-runtime/rpc/session/RpcSessionFactory") {}
 
 type InitialConfigError = Effect.Error<
   ReturnType<WsRpcProtocolClient[typeof WS_METHODS.serverGetConfig]>

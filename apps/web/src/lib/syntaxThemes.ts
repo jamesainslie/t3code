@@ -1,10 +1,10 @@
 import { registerCustomTheme, resolveTheme } from "@pierre/diffs";
-import type { SyntaxTheme } from "@t3tools/contracts";
+import type { SyntaxTheme } from "@lathe/contracts";
 
 type Appearance = "light" | "dark";
 type CustomSyntaxTheme = Exclude<SyntaxTheme, "pierre">;
 
-export type SyntaxThemeName = `pierre-${Appearance}` | `t3-${CustomSyntaxTheme}-${Appearance}`;
+export type SyntaxThemeName = `pierre-${Appearance}` | `lathe-${CustomSyntaxTheme}-${Appearance}`;
 
 /**
  * Code surfaces paint their own background from the app palette, so these only
@@ -828,7 +828,7 @@ export function buildSyntaxTheme(
   const palette = SYNTAX_THEMES[theme][appearance];
   const foreground = roleStyle(palette, "fg").color;
   return {
-    name: `t3-${theme}-${appearance}` satisfies SyntaxThemeName,
+    name: `lathe-${theme}-${appearance}` satisfies SyntaxThemeName,
     type: appearance,
     colors: {
       ...workbenchColors,
@@ -857,7 +857,7 @@ export function resolveSyntaxThemeName(
   theme: SyntaxTheme,
 ): SyntaxThemeName {
   if (theme === "pierre") return `pierre-${appearance}`;
-  const name: SyntaxThemeName = `t3-${theme}-${appearance}`;
+  const name: SyntaxThemeName = `lathe-${theme}-${appearance}`;
   if (!registeredThemeNames.has(name)) {
     registeredThemeNames.add(name);
     registerCustomTheme(name, async () => {

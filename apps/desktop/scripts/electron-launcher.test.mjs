@@ -2,7 +2,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import { afterEach, assert, describe, it, vi } from "vite-plus/test";
 
 import {
@@ -20,9 +20,9 @@ describe("electron development launcher", () => {
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const environmentScript = makeDevelopmentEnvironmentScript({
       VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
-      T3CODE_PORT: "16566",
-      T3CODE_HOME: "/tmp/t3",
-      T3CODE_OTLP_PROTOCOL: "http/protobuf",
+      LATHE_PORT: "16566",
+      LATHE_HOME: "/tmp/lathe",
+      LATHE_OTLP_PROTOCOL: "http/protobuf",
     });
 
     assert.include(
@@ -31,7 +31,7 @@ describe("electron development launcher", () => {
     );
     assert.include(
       environmentScript,
-      "if [ -z \"${T3CODE_OTLP_PROTOCOL:-}\" ]; then export T3CODE_OTLP_PROTOCOL='http/protobuf'; fi",
+      "if [ -z \"${LATHE_OTLP_PROTOCOL:-}\" ]; then export LATHE_OTLP_PROTOCOL='http/protobuf'; fi",
     );
     assert.notInclude(environmentScript, "\nexport VITE_DEV_SERVER_URL=");
   });
@@ -51,7 +51,7 @@ describe("electron development launcher", () => {
     assert.notInclude(script, "VITE_DEV_SERVER_URL");
     assert.include(
       script,
-      "exec '/repo/node_modules/electron/Electron' --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
+      "exec '/repo/node_modules/electron/Electron' --lathe-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
     );
   });
 
@@ -77,18 +77,18 @@ describe("electron development launcher", () => {
 
   it("keeps the native Electron executable name inside the branded macOS bundle", () => {
     const paths = resolveMacLauncherPaths(
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app",
-      "T3 Code (Dev)",
+      "/repo/apps/desktop/.electron-runtime/Lathe (Dev).app",
+      "Lathe (Dev)",
     );
 
-    assert.equal(paths.launcherExecutableName, "T3 Code (Dev) Launcher");
+    assert.equal(paths.launcherExecutableName, "Lathe (Dev) Launcher");
     assert.equal(
       paths.launcherBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/T3 Code (Dev) Launcher",
+      "/repo/apps/desktop/.electron-runtime/Lathe (Dev).app/Contents/MacOS/Lathe (Dev) Launcher",
     );
     assert.equal(
       paths.runtimeElectronBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/Electron",
+      "/repo/apps/desktop/.electron-runtime/Lathe (Dev).app/Contents/MacOS/Electron",
     );
 
     const script = makeDevelopmentLauncherScript({
@@ -99,37 +99,37 @@ describe("electron development launcher", () => {
     });
     assert.include(
       script,
-      "exec '/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/Electron'",
+      "exec '/repo/apps/desktop/.electron-runtime/Lathe (Dev).app/Contents/MacOS/Electron'",
     );
     assert.notInclude(script, "node_modules/electron");
   });
 
   it("declares why the macOS app needs protected access", () => {
-    const values = resolveMacBundleInfoPlistStrings("T3 Code (Dev) Launcher");
+    const values = resolveMacBundleInfoPlistStrings("Lathe (Dev) Launcher");
 
     assert.equal(
       values.NSScreenCaptureUsageDescription,
-      "T3 Code captures the active window when you use the snapshot shortcut.",
+      "Lathe captures the active window when you use the snapshot shortcut.",
     );
     assert.equal(
       values.NSDocumentsFolderUsageDescription,
-      "T3 Code reads project files you open in the desktop app.",
+      "Lathe reads project files you open in the desktop app.",
     );
   });
 
   it("ad-hoc signs the complete development app bundle", () => {
-    assert.deepEqual(resolveMacCodeSignArguments("/runtime/T3 Code (Dev).app"), [
+    assert.deepEqual(resolveMacCodeSignArguments("/runtime/Lathe (Dev).app"), [
       "--force",
       "--deep",
       "--sign",
       "-",
       "--timestamp=none",
-      "/runtime/T3 Code (Dev).app",
+      "/runtime/Lathe (Dev).app",
     ]);
   });
 
   it("restores execute permissions on an unchanged launcher", () => {
-    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-launcher-"));
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-launcher-"));
     const launcherPath = NodePath.join(directory, "launcher");
     try {
       writeDevelopmentLauncherScript(launcherPath, "/runtime/Electron");
@@ -182,7 +182,7 @@ describe("electron launcher fork identity", () => {
     );
     assert.include(
       launcher.makeDevelopmentEnvironmentScript({}),
-      `export T3CODE_DESKTOP_APP_USER_MODEL_ID='${values.CFBundleIdentifier}'`,
+      `export LATHE_DESKTOP_APP_USER_MODEL_ID='${values.CFBundleIdentifier}'`,
     );
   });
 

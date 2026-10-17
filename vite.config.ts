@@ -4,9 +4,9 @@ import * as NodeURL from "node:url";
 
 const RESTRICTED_IMPORT_PATHS = [
   {
-    name: "@t3tools/client-runtime",
+    name: "@lathe/client-runtime",
     message:
-      "Import from an explicit @t3tools/client-runtime/* subpath. The package has no root export.",
+      "Import from an explicit @lathe/client-runtime/* subpath. The package has no root export.",
   },
   {
     name: "@pierre/diffs/react",
@@ -56,7 +56,7 @@ export default defineConfig({
     environment: "node",
     exclude: [
       "**/.repos/**",
-      "**/.{t3,lathe,t3f}/**",
+      "**/.{lathe,lathe,t3f}/**",
       "**/node_modules/**",
       "**/dist/**",
       "**/dist-electron/**",
@@ -120,7 +120,7 @@ export default defineConfig({
       "apps/mobile/uniwind-types.d.ts",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
-    jsPlugins: ["./oxlint-plugin-t3code/index.ts", "@shadcn/lint"],
+    jsPlugins: ["./oxlint-plugin-lathe/index.ts", "@shadcn/lint"],
     settings: {
       shadcn: { ui: "~/components/ui" },
     },
@@ -159,24 +159,24 @@ export default defineConfig({
         "error",
         { paths: [...RESTRICTED_IMPORT_PATHS, RESTRICTED_PULL_REQUEST_GLYPH_IMPORTS] },
       ],
-      "t3code/no-global-process-runtime": "error",
-      "t3code/no-inline-schema-compile": "warn",
-      "t3code/no-low-value-comments": "error",
-      "t3code/no-manual-effect-runtime-in-tests": "error",
-      "t3code/no-native-title-tooltip": "error",
-      "t3code/no-raw-mcp-registration": "error",
-      "t3code/no-test-in-loop": "error",
-      "t3code/no-rpc-permission-bypass": ["error", { allowRawClientAccess: true }],
-      "t3code/no-unscoped-has": "error",
-      "t3code/namespace-node-imports": "error",
-      "t3code/prefer-catch-tags": "error",
-      "t3code/require-centered-scroll-gutter": "error",
-      "t3code/require-suppression-reason": "error",
+      "lathe/no-global-process-runtime": "error",
+      "lathe/no-inline-schema-compile": "warn",
+      "lathe/no-low-value-comments": "error",
+      "lathe/no-manual-effect-runtime-in-tests": "error",
+      "lathe/no-native-title-tooltip": "error",
+      "lathe/no-raw-mcp-registration": "error",
+      "lathe/no-test-in-loop": "error",
+      "lathe/no-rpc-permission-bypass": ["error", { allowRawClientAccess: true }],
+      "lathe/no-unscoped-has": "error",
+      "lathe/namespace-node-imports": "error",
+      "lathe/prefer-catch-tags": "error",
+      "lathe/require-centered-scroll-gutter": "error",
+      "lathe/require-suppression-reason": "error",
     },
     overrides: [
       {
         files: ["packages/client-runtime/src/state/**", "apps/{web,mobile,desktop}/src/**"],
-        rules: { "t3code/no-rpc-permission-bypass": ["error", { allowRawClientAccess: false }] },
+        rules: { "lathe/no-rpc-permission-bypass": ["error", { allowRawClientAccess: false }] },
       },
       {
         files: [
@@ -184,7 +184,7 @@ export default defineConfig({
           "packages/client-runtime/src/state/vcsAction.ts",
         ],
         rules: {
-          "t3code/no-rpc-permission-bypass": [
+          "lathe/no-rpc-permission-bypass": [
             "error",
             { allowGuardInstallation: true, allowRawClientAccess: false },
           ],
@@ -197,34 +197,34 @@ export default defineConfig({
           "apps/web/src/components/device/DevicePhoneViewport.tsx",
           "apps/web/src/components/device/DeviceDuoViewport.tsx",
         ],
-        rules: { "t3code/no-rpc-permission-bypass": ["error", { allowRawClientAccess: true }] },
+        rules: { "lathe/no-rpc-permission-bypass": ["error", { allowRawClientAccess: true }] },
       },
       {
         files: ["packages/client-runtime/src/connection/outdatedHostUpdate.ts"],
-        rules: { "t3code/no-rpc-permission-bypass": "off" },
+        rules: { "lathe/no-rpc-permission-bypass": "off" },
       },
       {
         files: [
           "packages/client-runtime/src/rpc/**",
           "**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
         ],
-        rules: { "t3code/no-rpc-permission-bypass": "off" },
+        rules: { "lathe/no-rpc-permission-bypass": "off" },
       },
       {
         files: ["packages/shared/src/HostProcess.ts"],
-        rules: { "t3code/no-global-process-runtime": "off" },
+        rules: { "lathe/no-global-process-runtime": "off" },
       },
       {
-        // The `t3` npm launcher is published as plain, dependency-free Node.
+        // The `lathe` npm launcher is published as plain, dependency-free Node.
         files: ["scripts/npm-launcher/**"],
         rules: {
-          "t3code/no-global-process-runtime": "off",
-          "t3code/namespace-node-imports": "off",
+          "lathe/no-global-process-runtime": "off",
+          "lathe/namespace-node-imports": "off",
         },
       },
       {
         files: ["apps/server/src/mcp/McpHttpServer.ts"],
-        rules: { "t3code/no-raw-mcp-registration": "off" },
+        rules: { "lathe/no-raw-mcp-registration": "off" },
       },
       {
         files: ["apps/web/src/**"],
@@ -245,7 +245,7 @@ export default defineConfig({
       },
       {
         files: ["apps/mobile/src/**"],
-        rules: { "t3code/no-mobile-uniwind-theme-escape-hatches": "error" },
+        rules: { "lathe/no-mobile-uniwind-theme-escape-hatches": "error" },
       },
       {
         // React commits state set in a raw ResizeObserver callback after the paint, so derived
@@ -255,7 +255,7 @@ export default defineConfig({
           "apps/web/src/lib/observeResize.ts",
           "**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
         ],
-        rules: { "t3code/no-raw-resize-observer": "error" },
+        rules: { "lathe/no-raw-resize-observer": "error" },
       },
       {
         files: ["apps/web/src/**"],
@@ -263,7 +263,7 @@ export default defineConfig({
       },
       {
         files: ["apps/web/src/**"],
-        rules: { "t3code/no-outset-state-indicators": "error" },
+        rules: { "lathe/no-outset-state-indicators": "error" },
       },
       {
         files: ["apps/web/src/**"],
@@ -321,7 +321,7 @@ export default defineConfig({
         },
       },
       {
-        // The sign-in masthead is T3 brand artwork: fixed gradients, not theme surfaces.
+        // The sign-in masthead is Lathe brand artwork: fixed gradients, not theme surfaces.
         files: ["apps/web/src/components/auth/AuthSurfaceShell.tsx"],
         rules: { "shadcn/no-arbitrary-values": "off" },
       },
@@ -336,7 +336,7 @@ export default defineConfig({
           "packages/shared/src/**",
         ],
         excludeFiles: ["**/*.test.ts", "**/*.test.tsx"],
-        rules: { "t3code/no-hermes-unsupported-apis": "error" },
+        rules: { "lathe/no-hermes-unsupported-apis": "error" },
       },
       {
         files: [
@@ -365,12 +365,12 @@ export default defineConfig({
           "apps/mobile/src/features/threads/thread-list-items.tsx",
           "apps/mobile/src/features/threads/thread-list-v2-items.tsx",
           "apps/mobile/src/lib/useMobileNavigationTheme.ts",
-          "apps/mobile/src/native/T3ComposerEditor.ios.tsx",
-          "apps/mobile/src/native/T3ComposerEditor.native.tsx",
+          "apps/mobile/src/native/LatheComposerEditor.ios.tsx",
+          "apps/mobile/src/native/LatheComposerEditor.native.tsx",
           "apps/mobile/src/native/SelectableMarkdownText.tsx",
         ],
         rules: {
-          "t3code/no-mobile-uniwind-theme-escape-hatches": ["error", { allowUniwindTheme: true }],
+          "lathe/no-mobile-uniwind-theme-escape-hatches": ["error", { allowUniwindTheme: true }],
         },
       },
     ],

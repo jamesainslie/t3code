@@ -4,7 +4,7 @@ import {
   type ProjectSyncMapping,
   type ProjectSyncProjectSnapshot,
   type ProjectSyncRecord,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { contentHash, type SyncSource, type SyncThread } from "./Source.ts";
 
 /** Identifies the source conversation across its content-addressed imported versions. */

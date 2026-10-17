@@ -32,13 +32,13 @@ it("loads the requested theme and caches each language per theme", async () => {
   const highlighter = {} as DiffsHighlighter;
   getSharedHighlighter.mockResolvedValue(highlighter);
 
-  const graphite = getSyntaxHighlighterPromise("typescript", "t3-graphite-dark");
+  const graphite = getSyntaxHighlighterPromise("typescript", "lathe-graphite-dark");
   await expect(graphite).resolves.toBe(highlighter);
-  expect(getSyntaxHighlighterPromise("typescript", "t3-graphite-dark")).toBe(graphite);
+  expect(getSyntaxHighlighterPromise("typescript", "lathe-graphite-dark")).toBe(graphite);
   await getSyntaxHighlighterPromise("typescript", "pierre-dark");
 
   expect(getSharedHighlighter.mock.calls.map(([options]) => options.themes)).toEqual([
-    ["t3-graphite-dark"],
+    ["lathe-graphite-dark"],
     ["pierre-dark"],
   ]);
 });

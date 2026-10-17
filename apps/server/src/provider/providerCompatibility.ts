@@ -4,8 +4,8 @@ import {
   type ProviderDriverKind,
   type ServerProvider,
   type ServerProviderCompatibilityAdvisory,
-} from "@t3tools/contracts";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
+} from "@lathe/contracts";
+import { satisfiesSemverRange } from "@lathe/shared/semver";
 import * as Schema from "effect/Schema";
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -83,11 +83,11 @@ export function resolveProviderCompatibility(
       : "unknown";
   const message =
     status === "broken"
-      ? "This provider version is known to be incompatible with this T3 Code release."
+      ? "This provider version is known to be incompatible with this Lathe release."
       : status === "unsupported"
-        ? "This provider version is outside the supported range for this T3 Code release."
+        ? "This provider version is outside the supported range for this Lathe release."
         : status === "graceful"
-          ? "This provider version has limited compatibility with this T3 Code release."
+          ? "This provider version has limited compatibility with this Lathe release."
           : null;
   const recommendedVersion = policy.recommendedVersion ?? null;
   const recommendedRange = policy.recommendedRange ?? null;

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -103,7 +103,7 @@ it.layer(TestLayer)("ForkLegacyImport", (it) => {
           is_streaming, created_at, updated_at
         ) VALUES (
           'message:fork:1', ${threadId}, NULL, 'user',
-          'Continue [Source](t3-context://v1/thread/thread-source)', '[]', ${forkThreadRecord},
+          'Continue [Source](lathe-context://v1/thread/thread-source)', '[]', ${forkThreadRecord},
           0, ${now}, ${now}
         )
       `;

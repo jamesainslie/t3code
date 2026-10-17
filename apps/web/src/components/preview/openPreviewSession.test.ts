@@ -5,7 +5,7 @@ import {
   type PreviewOpenInput,
   type PreviewSessionSnapshot,
   type ScopedThreadRef,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -80,12 +80,12 @@ describe("openPreviewSession", () => {
     await openPreviewSession({
       openPreview: ({ input }) => open(input),
       threadRef,
-      url: "t3.chat",
+      url: "lathe.chat",
     });
 
     expect(open).toHaveBeenCalledWith({
       threadId: "thread-1",
-      url: "t3.chat",
+      url: "lathe.chat",
       viewport: FILL_PREVIEW_VIEWPORT,
       profileId: DEFAULT_BROWSER_PROFILE_ID,
     });
@@ -99,7 +99,7 @@ describe("openPreviewSession", () => {
     const result = await openPreviewSession({
       openPreview: async () => AsyncResult.failure(Cause.fail(failure)),
       threadRef,
-      url: "t3.chat",
+      url: "lathe.chat",
     });
 
     expect(result._tag).toBe("Failure");

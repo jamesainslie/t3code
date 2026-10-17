@@ -7,25 +7,25 @@ import {
   type ToolActivityIcon,
   type OrchestrationV2TurnItem,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
-  resolveT3McpToolDefinition,
-  type T3McpToolDefinition,
-  type T3McpToolSummaryAction,
-} from "@t3tools/shared/t3McpToolPresentation";
-import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
-import { resolveMediaSource } from "@t3tools/client-runtime/media-source";
-import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
-import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
-import { formatTokens } from "@t3tools/shared/usageFormat";
-import { classifyToolActivity } from "@t3tools/shared/toolActivity";
-import { toolOutputIndicatesFailure } from "@t3tools/shared/toolOutput";
+  resolveLatheMcpToolDefinition,
+  type LatheMcpToolDefinition,
+  type LatheMcpToolSummaryAction,
+} from "@lathe/shared/latheMcpToolPresentation";
+import { classifyMarkdownImageSource } from "@lathe/client-runtime/markdown-images";
+import { resolveMediaSource } from "@lathe/client-runtime/media-source";
+import { parseChangeRequestUrl } from "@lathe/shared/changeRequestUrl";
+import { isWorkspaceImagePreviewPath } from "@lathe/shared/filePreview";
+import { formatTokens } from "@lathe/shared/usageFormat";
+import { classifyToolActivity } from "@lathe/shared/toolActivity";
+import { toolOutputIndicatesFailure } from "@lathe/shared/toolOutput";
 
 import {
-  summarizeT3ToolCalls,
-  t3ToolResultIndicatesFailure,
-  type T3ToolSummaryCall,
-} from "@t3tools/client-runtime/t3ToolSummary";
+  summarizeLatheToolCalls,
+  latheToolResultIndicatesFailure,
+  type LatheToolSummaryCall,
+} from "@lathe/client-runtime/latheToolSummary";
 
 export type WorkLogToolLifecycleStatus = RuntimeItemStatus | "stopped" | "idle";
 
@@ -62,7 +62,7 @@ export function contextCompactionLabel(
 }
 
 export interface WorkLogPresentationEntry {
-  readonly questionAnswer?: import("@t3tools/contracts").UserInputAttachmentAnswerPayload;
+  readonly questionAnswer?: import("@lathe/contracts").UserInputAttachmentAnswerPayload;
   readonly id: string;
   readonly createdAt: string;
   readonly label: string;
@@ -123,7 +123,7 @@ function workEntryToolName(
     return `${data.server}.${data.tool}`;
   }
   if (typeof data?.toolName === "string") return data.toolName;
-  return resolveT3McpToolDefinition(entry.toolTitle) ? entry.toolTitle : entry.label;
+  return resolveLatheMcpToolDefinition(entry.toolTitle) ? entry.toolTitle : entry.label;
 }
 
 function workEntryToolOutput(
@@ -136,8 +136,8 @@ function workEntryToolOutput(
     : (data?.output ?? data?.result ?? data?.rawOutput ?? data?.content);
 }
 
-function resolveT3McpToolPresentation(
-  definition: T3McpToolDefinition | null,
+function resolveLatheMcpToolPresentation(
+  definition: LatheMcpToolDefinition | null,
   status: string | undefined,
   data?: unknown,
 ) {
@@ -199,11 +199,11 @@ export function resolveWorkEntryToolPresentation(
   >,
   fallbackStatus?: "inProgress" | "completed",
 ) {
-  const definition = resolveT3McpToolDefinition(workEntryToolName(entry));
+  const definition = resolveLatheMcpToolDefinition(workEntryToolName(entry));
   const status = entry.toolLifecycleStatus ?? fallbackStatus;
-  return resolveT3McpToolPresentation(
+  return resolveLatheMcpToolPresentation(
     definition,
-    definition && t3ToolResultIndicatesFailure(workEntryToolOutput(entry)) ? "failed" : status,
+    definition && latheToolResultIndicatesFailure(workEntryToolOutput(entry)) ? "failed" : status,
     entry.toolData,
   );
 }
@@ -367,8 +367,8 @@ function workEntryIndicatesToolFailureFromOutput(
   }
   if (!workLogEntryIsToolLike(entry)) return false;
   if (
-    resolveT3McpToolDefinition(workEntryToolName(entry)) &&
-    t3ToolResultIndicatesFailure(workEntryToolOutput(entry))
+    resolveLatheMcpToolDefinition(workEntryToolName(entry)) &&
+    latheToolResultIndicatesFailure(workEntryToolOutput(entry))
   ) {
     return true;
   }
@@ -563,7 +563,7 @@ function toolGroupActionLabel(action: ToolGroupAction, count: number): string {
   }
 }
 
-function t3ToolSummaryCall(entry: WorkLogPresentationEntry): T3ToolSummaryCall {
+function latheToolSummaryCall(entry: WorkLogPresentationEntry): LatheToolSummaryCall {
   const item = entry.structuredPayload;
   const data =
     entry.toolData !== null && typeof entry.toolData === "object"
@@ -586,7 +586,7 @@ function t3ToolSummaryCall(entry: WorkLogPresentationEntry): T3ToolSummaryCall {
   };
 }
 
-function summaryActionPriority(action: ToolGroupAction | T3McpToolSummaryAction): number {
+function summaryActionPriority(action: ToolGroupAction | LatheMcpToolSummaryAction): number {
   switch (action) {
     case "command":
     case "edit":
@@ -641,32 +641,33 @@ export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEnt
   }
   entries = toolEntries;
   const groups = new Map<
-    ToolGroupAction | T3McpToolSummaryAction,
+    ToolGroupAction | LatheMcpToolSummaryAction,
     {
       action: ToolGroupAction;
-      t3Action: T3McpToolSummaryAction | null;
+      latheAction: LatheMcpToolSummaryAction | null;
       entries: WorkLogPresentationEntry[];
     }
   >();
   const sources = new Map<string, ToolActivitySource>();
   for (const entry of entries) {
-    const t3Action = resolveT3McpToolDefinition(workEntryToolName(entry))?.summaryAction ?? null;
-    if (entry.toolSource && t3Action === null) {
+    const latheAction =
+      resolveLatheMcpToolDefinition(workEntryToolName(entry))?.summaryAction ?? null;
+    if (entry.toolSource && latheAction === null) {
       sources.set(entry.toolSource.key, entry.toolSource);
       continue;
     }
     const action = toolGroupAction(entry);
-    const key = t3Action ?? action;
+    const key = latheAction ?? action;
     const group = groups.get(key);
     if (group) group.entries.push(entry);
-    else groups.set(key, { action, t3Action, entries: [entry] });
+    else groups.set(key, { action, latheAction, entries: [entry] });
   }
   const summaries = [...groups].map(([action, group], index) => ({
     index,
     count: group.entries.length,
     priority: summaryActionPriority(action),
-    ...(group.t3Action
-      ? summarizeT3ToolCalls(group.t3Action, group.entries.map(t3ToolSummaryCall))
+    ...(group.latheAction
+      ? summarizeLatheToolCalls(group.latheAction, group.entries.map(latheToolSummaryCall))
       : {
           label: toolGroupActionLabel(
             group.action,
@@ -697,7 +698,7 @@ export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEnt
   const sourcedCount = entries.filter(
     (entry) =>
       entry.toolSource !== undefined &&
-      resolveT3McpToolDefinition(workEntryToolName(entry)) === null,
+      resolveLatheMcpToolDefinition(workEntryToolName(entry)) === null,
   ).length;
   const remainingCount =
     entries.length - sourcedCount - selected.reduce((count, group) => count + group.count, 0);

@@ -1,4 +1,4 @@
-import type { GitHubAccountRule, SourceControlDiscoveryResult } from "@t3tools/contracts";
+import type { GitHubAccountRule, SourceControlDiscoveryResult } from "@lathe/contracts";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 

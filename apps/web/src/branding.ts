@@ -1,6 +1,6 @@
-import type { DesktopAppBranding } from "@t3tools/contracts";
+import type { DesktopAppBranding } from "@lathe/contracts";
 import { formatAppDisplayName } from "./branding.logic";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
   if (typeof window === "undefined") {

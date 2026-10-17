@@ -1,7 +1,7 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
-import { promptLinkAppPath } from "@t3tools/shared/promptLinks";
+import { scopeProjectRef, scopeThreadRef } from "@lathe/client-runtime/environment";
+import { squashAtomCommandFailure } from "@lathe/client-runtime/state/runtime";
+import type { EnvironmentId, ScopedThreadRef } from "@lathe/contracts";
+import { promptLinkAppPath } from "@lathe/shared/promptLinks";
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef } from "react";
 

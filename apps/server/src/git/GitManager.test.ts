@@ -1,4 +1,4 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -31,7 +31,7 @@ import type {
   GitManagerServiceError,
   GitPreparePullRequestThreadInput,
   ModelSelection,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -43,13 +43,13 @@ import {
   SourceControlProviderError as SourceControlProviderFailure,
   TextGenerationError,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
-import { decodeGitHubPullRequestListJson } from "@t3tools/source-control-github/server/gitHubPullRequests";
-import * as GitHubChangeRequestTemplate from "@t3tools/source-control-github/server/gitHubChangeRequestTemplate";
-import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
-import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
+import { decodeGitHubPullRequestListJson } from "@lathe/source-control-github/server/gitHubPullRequests";
+import * as GitHubChangeRequestTemplate from "@lathe/source-control-github/server/gitHubChangeRequestTemplate";
+import * as GitLabCli from "@lathe/source-control-gitlab/server/GitLabCli";
+import type * as SourceControlHost from "@lathe/source-control-core/server/SourceControlHost";
+import * as TestSourceControlHost from "@lathe/source-control-testing/TestSourceControlHost";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -58,13 +58,13 @@ import * as VcsProjectConfig from "../vcs/VcsProjectConfig.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "./GitWorkflowService.ts";
-import * as ForgejoSourceControlProvider from "@t3tools/source-control-forgejo/server/ForgejoSourceControlProvider";
-import * as GitLabSourceControlProvider from "@t3tools/source-control-gitlab/server/GitLabSourceControlProvider";
+import * as ForgejoSourceControlProvider from "@lathe/source-control-forgejo/server/ForgejoSourceControlProvider";
+import * as GitLabSourceControlProvider from "@lathe/source-control-gitlab/server/GitLabSourceControlProvider";
 import {
   ForgejoPullRequestSchema,
   toForgejoChangeRequest,
-} from "@t3tools/source-control-forgejo/server/forgejoPullRequests";
-import type { SourceControlProvider } from "@t3tools/source-control-core/server/SourceControlProvider";
+} from "@lathe/source-control-forgejo/server/forgejoPullRequests";
+import type { SourceControlProvider } from "@lathe/source-control-core/server/SourceControlProvider";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
@@ -734,7 +734,7 @@ function makeManager(input?: {
   );
   const textGeneration = createTextGeneration(input?.textGeneration);
   const layerServerConfig = ServerConfig.layerTest(process.cwd(), {
-    prefix: "t3-git-manager-test-",
+    prefix: "lathe-git-manager-test-",
   });
 
   const layerServerSettings = ServerSettings.ServerSettingsService.layerTest(input?.serverSettings);
@@ -855,7 +855,7 @@ function makeManager(input?: {
 const asThreadId = (threadId: string) => threadId as ThreadId;
 
 const layerGitManagerTest = GitVcsDriver.layer.pipe(
-  Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-manager-test-" })),
+  Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "lathe-git-manager-test-" })),
   Layer.provideMerge(VcsProcess.layer),
   Layer.provideMerge(NodeServices.layer),
 );
@@ -1318,7 +1318,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
   );
 
   it.effect(
-    "a branch PR lookup sees an upstream change on request, after a T3 git action, or after the TTL",
+    "a branch PR lookup sees an upstream change on request, after a Lathe git action, or after the TTL",
     () =>
       Effect.gen(function* () {
         const repoDir = yield* makeTempDir("t3code-git-manager-");
@@ -1371,7 +1371,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       }),
   );
 
-  it.effect("a git read in flight during a T3 git action does not outlive it", () =>
+  it.effect("a git read in flight during a Lathe git action does not outlive it", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
       yield* initRepo(repoDir);
@@ -2673,7 +2673,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         yield* runGit(repoDir, ["add", "fork-pr.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Fork PR branch"]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-488/statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "lathe/pr-488/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
         yield* configureVisibleRemoteUrlWithLocalRewrite(
           repoDir,
@@ -2708,7 +2708,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         });
 
         const status = yield* manager.status({ cwd: repoDir });
-        expect(status.refName).toBe("t3code/pr-488/statemachine");
+        expect(status.refName).toBe("lathe/pr-488/statemachine");
         expect(status.pr).toEqual({
           number: 488,
           title: "Rebase this PR on latest main",
@@ -2738,7 +2738,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         yield* runGit(repoDir, ["remote", "set-head", "origin", "main"]);
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["push", "fork-seed", "main"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-777/main"]);
+        yield* runGit(repoDir, ["checkout", "-b", "lathe/pr-777/main"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/main"]);
         yield* configureVisibleRemoteUrlWithLocalRewrite(
           repoDir,
@@ -2773,7 +2773,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         });
 
         const status = yield* manager.status({ cwd: repoDir });
-        expect(status.refName).toBe("t3code/pr-777/main");
+        expect(status.refName).toBe("lathe/pr-777/main");
         expect(status.pr).toEqual({
           number: 777,
           title: "Fork PR from main",
@@ -4538,7 +4538,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         const forkDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-142/statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "lathe/pr-142/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
         yield* configureVisibleRemoteUrlWithLocalRewrite(
           repoDir,
@@ -4550,7 +4550,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         const { manager, ghCalls } = yield* makeManager({
           ghScenario: {
             prListByHeadSelector: {
-              "t3code/pr-142/statemachine": JSON.stringify([]),
+              "lathe/pr-142/statemachine": JSON.stringify([]),
               statemachine: JSON.stringify([
                 {
                   number: 41,
@@ -4604,7 +4604,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         const forkDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-142/statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "lathe/pr-142/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
         yield* configureVisibleRemoteUrlWithLocalRewrite(
           repoDir,
@@ -4633,7 +4633,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
                   },
                 },
               ]),
-              "t3code/pr-142/statemachine": JSON.stringify([]),
+              "lathe/pr-142/statemachine": JSON.stringify([]),
             },
           },
         });
@@ -5156,7 +5156,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       yield* runGit(repoDir, ["add", "changes.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-      yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-91/statemachine"]);
+      yield* runGit(repoDir, ["checkout", "-b", "lathe/pr-91/statemachine"]);
       yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
       yield* configureVisibleRemoteUrlWithLocalRewrite(
         repoDir,
@@ -5646,7 +5646,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         pullRequestNumber: 93,
         headRepository: "octocat/codething-mvp",
         headBranch: "feature/missing-fork-branch",
-        localBranch: "t3code/pr-93/feature/missing-fork-branch",
+        localBranch: "lathe/pr-93/feature/missing-fork-branch",
       });
       if (!(error.cause instanceof AggregateError)) {
         return yield* Effect.die(error.cause);
@@ -6520,7 +6520,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           mode: "worktree",
         });
 
-        expect(result.branch).toBe("t3code/pr-91/main");
+        expect(result.branch).toBe("lathe/pr-91/main");
         expect(result.worktreePath).not.toBeNull();
         expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("main");
         expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim()).toBe(mainBefore);
@@ -6529,7 +6529,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
             "branch",
             "--show-current",
           ])).stdout.trim(),
-        ).toBe("t3code/pr-91/main");
+        ).toBe("lathe/pr-91/main");
       }),
   );
 
@@ -6581,7 +6581,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           mode: "worktree",
         });
 
-        expect(result.branch).toBe("t3code/pr-92/main");
+        expect(result.branch).toBe("lathe/pr-92/main");
         expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim()).toBe(localMainBefore);
         expect(
           (yield* runGit(result.worktreePath as string, [

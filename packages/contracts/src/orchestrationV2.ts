@@ -432,7 +432,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
 export type OrchestrationV2AppThread = typeof OrchestrationV2AppThread.Type;
 
 /**
- * The provider owns its conversation, so it cannot take messages; T3 delegate_task children
+ * The provider owns its conversation, so it cannot take messages; Lathe delegate_task children
  * (`creationSource: "mcp"`) can.
  */
 export function isProviderNativeSubagentThread(
@@ -3088,7 +3088,7 @@ export type OrchestrationV2SubscribeCommandOutputInput =
  * fell behind); `append` extends it. Text is terminal output, not display
  * text: `replace` carries the cleaned tail plus the cursor and style escapes
  * needed to resume, and `append` carries raw chunks. Clients must feed both
- * through `appendTerminalOutput` from `@t3tools/shared/terminalOutput`.
+ * through `appendTerminalOutput` from `@lathe/shared/terminalOutput`.
  * The stream ends after a frame with `running: false`.
  */
 export const OrchestrationV2CommandOutputFrame = Schema.Struct({

@@ -15,15 +15,15 @@ import {
   cliArchiveTarCommand,
   cliReleaseDownloadBaseUrl,
   parseChecksums,
-} from "@t3tools/shared/cliRelease";
-import { forkCliArchiveFileNameIn } from "@t3tools/shared/forkCliArtifacts";
+} from "@lathe/shared/cliRelease";
+import { forkCliArchiveFileNameIn } from "@lathe/shared/forkCliArtifacts";
 
 import { forkRuntimeExecutablePath } from "../fork/ForkCliInstall.ts";
 import * as ProcessRunner from "../processRunner.ts";
 
 const PINNED_RUNTIME_DIR = "runtime";
 const PINNED_RUNTIME_INSTALL_TIMEOUT = Duration.minutes(10);
-const PINNED_RUNTIME_ARCHIVE_FILE = "t3-runtime-archive";
+const PINNED_RUNTIME_ARCHIVE_FILE = "lathe-runtime-archive";
 // Boot-service setup and remote update can construct separate layers. Serialize
 // the complete install transaction across every caller in this process.
 const pinnedRuntimeInstallLock = Semaphore.makeUnsafe(1);

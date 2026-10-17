@@ -3,29 +3,29 @@ import {
   buildFileLinkParentSuffixByPath,
   fileLinkLabel,
   resolvePathLinkTarget,
-} from "@t3tools/shared/fileLinks";
+} from "@lathe/shared/fileLinks";
 import {
   isWindowsDrivePathHref,
   normalizeMarkdownLinkDestination,
   extractInlineCodeSpans,
   extractMarkdownLinkHrefs,
   inlineCodeFilePathCandidate,
-} from "@t3tools/shared/markdownLinks";
-import { isAbsolutePath } from "@t3tools/shared/path";
+} from "@lathe/shared/markdownLinks";
+import { isAbsolutePath } from "@lathe/shared/path";
 import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
-import { isMermaidFenceComplete } from "@t3tools/client-runtime/mermaid";
+import { isMermaidFenceComplete } from "@lathe/client-runtime/mermaid";
 import { MermaidDiagram } from "./chat/MermaidDiagram";
-import { AuthFilesystemReadScope, AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { AuthFilesystemReadScope, AuthOrchestrationOperateScope } from "@lathe/contracts";
 import {
   CHAT_MARKDOWN_REMARK_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
   CHAT_MARKDOWN_REHYPE_PLUGINS,
-} from "@t3tools/shared/markdownPipeline";
+} from "@lathe/shared/markdownPipeline";
 import { useAtomValue } from "@effect/atom-react";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextClipboardHtml,
-} from "@t3tools/shared/composerContextClipboard";
+} from "@lathe/shared/composerContextClipboard";
 import {
   ChevronRightIcon,
   FileSpreadsheetIcon,
@@ -53,26 +53,26 @@ import {
   type ScopedThreadRef,
   type ServerProviderSkill,
   type ThreadPullRequestKey,
-} from "@t3tools/contracts";
-import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
-import { githubMediaFetchUrl } from "@t3tools/shared/githubMedia";
+} from "@lathe/contracts";
+import { faviconUrlForOrigin } from "@lathe/shared/favicon";
+import { githubMediaFetchUrl } from "@lathe/shared/githubMedia";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
   type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   codexArtifactTemplatePresentationLabel,
   type CodexArtifactTemplate,
   type CodexArtifactTemplateKind,
-} from "@t3tools/shared/codexArtifactTemplates";
+} from "@lathe/shared/codexArtifactTemplates";
 import {
   classifyMarkdownImageSource,
   markdownImageSourceFragment,
-} from "@t3tools/client-runtime/markdown-images";
-import { mediaFileReference, mediaUrlReference } from "@t3tools/client-runtime/media-reference";
-import { MISSING_FILE_ACCESS_MESSAGE } from "@t3tools/client-runtime/state/assets";
-import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/filePreview";
+} from "@lathe/client-runtime/markdown-images";
+import { mediaFileReference, mediaUrlReference } from "@lathe/client-runtime/media-reference";
+import { MISSING_FILE_ACCESS_MESSAGE } from "@lathe/client-runtime/state/assets";
+import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@lathe/shared/filePreview";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import React, {
@@ -102,13 +102,13 @@ import ReactMarkdown from "react-markdown";
 import { toHtml } from "hast-util-to-html";
 import { createIncrementalMarkdownPlugin } from "../markdown-incremental";
 import { defaultUrlTransform } from "react-markdown";
-import { parseCitationHref } from "@t3tools/shared/assistantCitations";
-import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
-import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
+import { parseCitationHref } from "@lathe/shared/assistantCitations";
+import { parseComposerContextHref } from "@lathe/shared/composerContextReferences";
+import { parseThreadLinkHref } from "@lathe/shared/threadLinks";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import { remarkPandocMath } from "../remarkPandocMath";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
-import { isWindowsAbsolutePath } from "@t3tools/shared/path";
+import { isWindowsAbsolutePath } from "@lathe/shared/path";
 import {
   parseInlineCodeLanguage,
   rehypeSourceLines,
@@ -120,7 +120,7 @@ import { normalizeChatMath } from "../chatMath";
 import {
   artifactTemplateFromHastProperties,
   renderCodexInlineDirectivesAsMarkdown,
-} from "@t3tools/shared/codexMarkdownDirectives";
+} from "@lathe/shared/codexMarkdownDirectives";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import {
   resolveMarkdownMediaPreview,
@@ -182,7 +182,7 @@ import {
   shouldOpenMarkdownFileLinkInEditor,
   type MarkdownFileLinkMeta,
 } from "../markdown-links";
-import { isMarkdownFileLinkLabel } from "@t3tools/shared/markdownLinks";
+import { isMarkdownFileLinkLabel } from "@lathe/shared/markdownLinks";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";

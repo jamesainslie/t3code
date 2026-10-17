@@ -4,13 +4,10 @@ import {
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   type DesktopBridge,
   type DesktopSshEnvironmentTarget,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import {
-  ConnectionBlockedError,
-  ConnectionTransientError,
-} from "@t3tools/client-runtime/connection";
+import { ConnectionBlockedError, ConnectionTransientError } from "@lathe/client-runtime/connection";
 
 import {
   canRetainCachedPlatformRegistrationAfterRefreshFailure,

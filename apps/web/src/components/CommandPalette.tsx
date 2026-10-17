@@ -1,9 +1,9 @@
 "use client";
 
-import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
-import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
+import { threadPullRequestLinkMode } from "@lathe/client-runtime/thread-pull-request-compatibility";
+import { visibleThreadPullRequests } from "@lathe/shared/threadPullRequests";
 
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@lathe/client-runtime/environment";
 import {
   canCreateProjectInEnvironment,
   getCloneDestinationBrowsePath,
@@ -23,24 +23,24 @@ import {
   sortAddProjectProviderSources,
   type AddProjectRemoteSource,
   type AddProjectRemoteSourceReadiness,
-} from "@t3tools/client-runtime/operations/projects";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { connectionStatusText } from "@t3tools/client-runtime/connection";
-import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { isDependencyCandidate } from "@t3tools/client-runtime/state/thread-settled";
-import { canContinueThread } from "@t3tools/shared/threadContextReference";
-import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
+} from "@lathe/client-runtime/operations/projects";
+import { sourceControlClients } from "@lathe/client-runtime/source-control-clients";
+import { connectionStatusText } from "@lathe/client-runtime/connection";
+import { threadSearchMatchKey } from "@lathe/client-runtime/state/thread-search";
+import { isDependencyCandidate } from "@lathe/client-runtime/state/thread-settled";
+import { canContinueThread } from "@lathe/shared/threadContextReference";
+import { resolveThreadReferenceCopyTarget } from "@lathe/shared/threadReference";
 import {
   canPreloadBrowsePath,
   createBrowseNavigationCoordinator,
   filterFilesystemBrowseEntries,
   getFilesystemBrowsePath,
-} from "@t3tools/client-runtime/state/filesystem";
+} from "@lathe/client-runtime/state/filesystem";
 import {
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -56,7 +56,7 @@ import {
   type SourceControlRepositoryInfo,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   resolveEnvironmentMachineKind,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
@@ -120,7 +120,7 @@ import { SyntaxThemeSwatches } from "./SyntaxThemeSwatches";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { BUILT_IN_THEMES } from "@lathe/shared/themePalettes";
 import { getThemeDefinition } from "../themePalette";
 import {
   STANDARD_THEME_CARDS,
@@ -140,7 +140,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
-import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { isScratchProject } from "@lathe/client-runtime/state/projects";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
@@ -2459,7 +2459,7 @@ function OpenCommandPaletteDialog(props: {
         "grouping",
         "checkout",
         "remove",
-        "t3.json",
+        "lathe.json",
       ],
       title: "Project settings",
       description: contextualProjectGroup.displayName,

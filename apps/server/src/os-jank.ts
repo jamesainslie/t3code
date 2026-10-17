@@ -1,5 +1,5 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { forkBaseDirName } from "@t3tools/shared/forkBaseDir";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { forkBaseDirName } from "@lathe/shared/forkBaseDir";
 import {
   listLoginShellCandidates,
   mergePathEntries,
@@ -7,7 +7,7 @@ import {
   readPathFromLaunchctl,
   resolveWindowsEnvironment,
   setWindowsPath,
-} from "@t3tools/shared/shell";
+} from "@lathe/shared/shell";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

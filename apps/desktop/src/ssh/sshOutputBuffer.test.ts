@@ -11,10 +11,10 @@ describe("makeSshOutputBuffer", () => {
     const buffer = makeSshOutputBuffer();
     expect(buffer.append({ source: "launch", stream: "stderr", text: "install" }, AT)).toEqual([]);
     const added = buffer.append(
-      { source: "launch", stream: "stderr", text: "ing t3\r\nstarting\rready\n\npartial" },
+      { source: "launch", stream: "stderr", text: "ing lathe\r\nstarting\rready\n\npartial" },
       AT,
     );
-    expect(lines(added)).toEqual(["installing t3", "starting", "ready"]);
+    expect(lines(added)).toEqual(["installing lathe", "starting", "ready"]);
     expect(added.map((entry) => [entry.seq, entry.source, entry.stderr])).toEqual([
       [1, "launch", true],
       [2, "launch", true],

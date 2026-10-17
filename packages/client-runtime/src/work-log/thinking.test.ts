@@ -7,7 +7,7 @@ import {
   TurnItemId,
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it } from "vite-plus/test";
@@ -82,7 +82,7 @@ describe("questionLeadIn", () => {
     // Arrival order differs from ordinal order on the client.
     const items = [
       question,
-      thought("t3", 3, "Option B is safer."),
+      thought("lathe", 3, "Option B is safer."),
       askTool,
       finishedTool,
       thought("t2", 2, "  Option A is faster.  "),
@@ -115,7 +115,7 @@ describe("questionLeadIn", () => {
           resolvedAt: null,
         },
       ],
-      turnItems: [thought("t3", 3, "Why I am asking."), askTool, question],
+      turnItems: [thought("lathe", 3, "Why I am asking."), askTool, question],
     };
     expect(derivePendingThreadRequests(projection).userInputs).toMatchObject([
       { requestId, leadIn: "Why I am asking." },

@@ -3,7 +3,7 @@ import type {
   OrchestrationV2TurnItem,
   ThreadDocumentComment,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 
 import { cutToBytes } from "./text.ts";

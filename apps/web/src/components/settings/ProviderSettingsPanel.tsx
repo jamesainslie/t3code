@@ -4,15 +4,15 @@ import {
   AuthSettingsWriteScope,
   AuthProvidersManageScope,
   AuthOrchestrationReadScope,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { useAtomValue } from "@effect/atom-react";
-import { connectionStatusTitle } from "@t3tools/client-runtime/connection";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import { connectionStatusTitle } from "@lathe/client-runtime/connection";
+import { safeErrorLogAttributes } from "@lathe/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   defaultInstanceIdForDriver,
   type EnvironmentId,
@@ -25,12 +25,12 @@ import {
   resolveEnvironmentMachineKind,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
-} from "@t3tools/contracts";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+} from "@lathe/contracts";
+import { DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 import {
   getBackgroundActivityPresetSettings,
   resolveServerBackgroundActivitySettings,
-} from "@t3tools/shared/backgroundActivitySettings";
+} from "@lathe/shared/backgroundActivitySettings";
 import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";

@@ -70,7 +70,7 @@ describe("attemptLogToText", () => {
             at: "2026-09-30T11:59:59.500Z",
             source: "launch",
             stderr: true,
-            text: "installing t3",
+            text: "installing lathe",
           },
         ],
       ),
@@ -80,7 +80,7 @@ describe("attemptLogToText", () => {
         "2026-09-30T12:00:01.000Z Connected",
         "",
         "SSH output",
-        "2026-09-30T11:59:59.500Z [launch stderr] installing t3",
+        "2026-09-30T11:59:59.500Z [launch stderr] installing lathe",
       ].join("\n"),
     );
     expect(attemptLogToText([{ at: AT, attempt: 1, kind: "offline" }])).toBe(

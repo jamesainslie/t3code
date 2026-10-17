@@ -2,12 +2,12 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
   type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   terminalBrowserLaunchRelayMode,
   type TerminalBrowserLaunch,
-} from "@t3tools/client-runtime/state/terminal";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/terminal";
+import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -143,7 +143,7 @@ export function TerminalBrowserLaunchBanner({
       </View>
       {relayMode === "unreachable" ? (
         <Text className="text-xs" style={{ color: colors.foreground, opacity: 0.8 }}>
-          This sign-in posts its result to a page only this computer&apos;s T3 Code desktop app can
+          This sign-in posts its result to a page only this computer&apos;s Lathe desktop app can
           catch. Open the link from the desktop app, or use the command&apos;s device-code option if
           it has one.
         </Text>

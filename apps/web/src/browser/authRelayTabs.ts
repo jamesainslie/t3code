@@ -1,4 +1,4 @@
-import type { DesktopPreviewAuthRelay, EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { DesktopPreviewAuthRelay, EnvironmentId, ThreadId } from "@lathe/contracts";
 
 import { previewBridge } from "~/components/preview/previewBridge";
 

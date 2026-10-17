@@ -5,13 +5,13 @@ import {
   RelayConnectionTarget,
   SshConnectionProfile,
   SshConnectionTarget,
-} from "@t3tools/client-runtime/connection";
+} from "@lathe/client-runtime/connection";
 import {
   ConnectionCatalogDocument as RuntimeConnectionCatalogDocument,
   type ConnectionCatalogDocument as RuntimeConnectionCatalogDocumentType,
-} from "@t3tools/client-runtime/platform";
-import type { PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
+} from "@lathe/client-runtime/platform";
+import type { PersistedSavedEnvironmentRecord } from "@lathe/contracts";
+import { fromLenientJson } from "@lathe/shared/schemaJson";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -165,7 +165,7 @@ export class DesktopConnectionCatalogStore extends Context.Service<
     >;
     readonly clear: Effect.Effect<void>;
   }
->()("@t3tools/desktop/app/DesktopConnectionCatalogStore") {}
+>()("@lathe/desktop/app/DesktopConnectionCatalogStore") {}
 
 function decodeSecretBytes(
   catalogPath: string,

@@ -46,7 +46,7 @@ export * from "./threadTitle.ts";
 export * from "./threadDependencies.ts";
 export * from "./forkOrchestration.ts";
 export * from "./forkUsageAccountLogin.ts";
-export * from "./t3ProjectFile.ts";
+export * from "./latheProjectFile.ts";
 export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./projectSync.ts";

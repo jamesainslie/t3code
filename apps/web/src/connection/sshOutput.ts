@@ -1,4 +1,4 @@
-import type { DesktopSshEnvironmentTarget, DesktopSshOutputEntry } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget, DesktopSshOutputEntry } from "@lathe/contracts";
 import { useEffect, useState } from "react";
 
 /** The desktop keeps this many lines per target; the view keeps no more. */

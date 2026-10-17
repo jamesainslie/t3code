@@ -6,7 +6,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 
-import { resolveGitWorktreePath, resolveWorktreeT3Home } from "./devHome.ts";
+import { resolveGitWorktreePath, resolveWorktreeLatheHome } from "./devHome.ts";
 import { FORK_IDENTITY } from "./forkIdentity.ts";
 
 const makeRepo = (
@@ -21,7 +21,7 @@ const makeRepo = (
 ) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-devhome-"));
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "lathe-devhome-"));
       if (kind === "worktree") {
         NodeFS.writeFileSync(NodePath.join(root, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
       } else if (kind === "bare-repo-worktree") {
@@ -93,11 +93,11 @@ describe("resolveGitWorktreePath", () => {
   );
 });
 
-describe("resolveWorktreeT3Home", () => {
-  it.effect("answers with .t3 before the dev runner creates it", () =>
+describe("resolveWorktreeLatheHome", () => {
+  it.effect("answers with .lathe before the dev runner creates it", () =>
     Effect.gen(function* () {
       const { root, nested } = yield* makeRepo("worktree");
-      const home = yield* resolveWorktreeT3Home(nested);
+      const home = yield* resolveWorktreeLatheHome(nested);
       assert.equal(home, NodePath.join(NodePath.resolve(root), FORK_IDENTITY.baseDirName));
       assert.isFalse(NodeFS.existsSync(home ?? ""));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

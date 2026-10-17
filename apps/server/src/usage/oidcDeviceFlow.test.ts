@@ -7,7 +7,7 @@ import { makeOidcDeviceFlow } from "./oidcDeviceFlow.ts";
 
 const client = {
   issuer: "https://auth.test/realms/main",
-  clientId: "t3-code",
+  clientId: "lathe",
   clientSecret: "client-secret",
 } as const;
 
@@ -64,7 +64,7 @@ function fixture(
   };
 }
 
-const basic = `Basic ${Buffer.from("t3-code:client-secret").toString("base64")}`;
+const basic = `Basic ${Buffer.from("lathe:client-secret").toString("base64")}`;
 
 describe("oidcDeviceFlow", () => {
   it.effect("discovers the endpoints and starts a device authorization", () =>

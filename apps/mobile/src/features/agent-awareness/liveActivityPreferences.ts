@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@lathe/contracts";
 
 import type { SavedRemoteConnection } from "../../lib/connection";
 import { linkEnvironmentToCloudWithPreference } from "../cloud/linkEnvironment";

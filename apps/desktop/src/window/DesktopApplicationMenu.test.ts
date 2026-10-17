@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type * as Electron from "electron";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
@@ -30,7 +30,7 @@ const environmentInput = {
 
 const layerElectronApp = Layer.succeed(ElectronApp.ElectronApp, {
   metadata: Effect.die("unexpected metadata read"),
-  name: Effect.succeed("T3 Code"),
+  name: Effect.succeed("Lathe"),
   systemLocale: Effect.succeed("en-US"),
   whenReady: Effect.void,
   quit: Effect.void,

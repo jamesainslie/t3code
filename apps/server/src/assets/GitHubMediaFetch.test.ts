@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as GitHubCredentials from "@t3tools/source-control-github/server/GitHubCredentials";
+import * as GitHubCredentials from "@lathe/source-control-github/server/GitHubCredentials";
 
 import * as GitHubAccountSelector from "../sourceControl/GitHubAccountSelector.ts";
 import { githubToken } from "./GitHubMediaFetch.ts";

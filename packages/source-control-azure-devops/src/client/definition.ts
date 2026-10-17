@@ -1,10 +1,10 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
-import { canonicalRepositoryKey } from "@t3tools/shared/sourceControl";
+import { SourceControlProviderKind } from "@lathe/contracts";
+import { canonicalRepositoryKey } from "@lathe/shared/sourceControl";
 import {
   defineSourceControlClient,
   isChangeRequestAuthorityOfProject,
   isChangeRequestPath,
-} from "@t3tools/source-control-core/client/definition";
+} from "@lathe/source-control-core/client/definition";
 
 const CHECKOUT_COMMAND = /^az\s+repos\s+pr\s+checkout\s+(.+)$/i;
 const CHANGE_REQUEST_REFERENCE =

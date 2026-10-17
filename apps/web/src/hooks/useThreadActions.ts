@@ -3,15 +3,15 @@ import {
   scopeProjectRef,
   scopeThreadRef,
   scopedThreadKey,
-} from "@t3tools/client-runtime/environment";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/environment";
+import { settlePromise, squashAtomCommandFailure } from "@lathe/client-runtime/state/runtime";
 import {
   canAddDependency,
   canSnooze,
   effectiveSnoozed,
   threadWokeAt,
-} from "@t3tools/client-runtime/state/thread-settled";
-import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+} from "@lathe/client-runtime/state/thread-settled";
+import { threadRuntimeCanArchive } from "@lathe/client-runtime/state/models";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -20,8 +20,8 @@ import {
   type ScopedThreadRef,
   ThreadId,
   sessionGrantsScope,
-} from "@t3tools/contracts";
-import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
+} from "@lathe/contracts";
+import { resolveWorktreeCleanup } from "@lathe/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
@@ -34,7 +34,7 @@ import { environmentSession, readEnvironmentScope } from "../state/session";
 import { terminalEnvironment } from "../state/terminal";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentServerConfigsAtom } from "../state/server";
-import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { isScratchProject } from "@lathe/client-runtime/state/projects";
 import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";

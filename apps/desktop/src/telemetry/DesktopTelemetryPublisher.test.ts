@@ -1,4 +1,4 @@
-import { DesktopHostTelemetryMessage } from "@t3tools/contracts";
+import { DesktopHostTelemetryMessage } from "@lathe/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -36,7 +36,7 @@ function layerElectronApp(
 ) {
   return Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
-    name: Effect.succeed("T3 Code"),
+    name: Effect.succeed("Lathe"),
     systemLocale: Effect.succeed("en-US"),
     whenReady: Effect.void,
     quit: Effect.void,
@@ -495,7 +495,7 @@ describe("DesktopRendererHistory", () => {
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const directory = yield* fileSystem.makeTempDirectoryScoped({
-          prefix: "t3-renderer-history-",
+          prefix: "lathe-renderer-history-",
         });
         let previewPid = 7_002;
         let previewDestroyed = false;
@@ -712,7 +712,7 @@ describe("DesktopRendererHistory", () => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const directory = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-renderer-rotation-",
+        prefix: "lathe-renderer-rotation-",
       });
       const filePath = `${directory}/renderer-history.ndjson`;
       const maxBytes = 256 * 1_024;

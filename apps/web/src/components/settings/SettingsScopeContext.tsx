@@ -1,5 +1,5 @@
-import { T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t3tools/contracts";
-import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
+import { LATHE_PROJECT_FILE_NAME, type LatheProjectFile } from "@lathe/contracts";
+import { parseLatheProjectFile } from "@lathe/shared/latheProjectFile";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -18,13 +18,13 @@ function useMemberProjectFiles(scope: ReturnType<typeof resolveSettingsScope>) {
     useMemo(
       () =>
         Atom.make((get) => {
-          const files = new Map<string, T3ProjectFile | null>();
+          const files = new Map<string, LatheProjectFile | null>();
           for (const member of members) {
             const result = get(
               getProjectFileQueryAtom(
                 member.environmentId,
                 member.workspaceRoot,
-                T3_PROJECT_FILE_NAME,
+                LATHE_PROJECT_FILE_NAME,
               ),
             );
             if (result.waiting) continue;
@@ -33,12 +33,12 @@ function useMemberProjectFiles(scope: ReturnType<typeof resolveSettingsScope>) {
                 optimisticFileAtom(
                   member.environmentId,
                   member.workspaceRoot,
-                  T3_PROJECT_FILE_NAME,
+                  LATHE_PROJECT_FILE_NAME,
                 ),
               )?.data ?? Option.getOrNull(AsyncResult.value(result));
             files.set(
               member.physicalProjectKey,
-              data === null || data.truncated ? null : parseT3ProjectFile(data.contents),
+              data === null || data.truncated ? null : parseLatheProjectFile(data.contents),
             );
           }
           return files;

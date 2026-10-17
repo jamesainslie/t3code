@@ -1,4 +1,4 @@
-import type { ProviderDriverKind } from "@t3tools/contracts";
+import type { ProviderDriverKind } from "@lathe/contracts";
 
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";

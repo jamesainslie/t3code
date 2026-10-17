@@ -2,7 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import { makeComponentLogger } from "./DesktopObservability.ts";
@@ -30,20 +30,20 @@ export type CliShimTarget =
 /**
  * Electron runs the server as plain Node with `ELECTRON_RUN_AS_NODE`, which
  * reads the entry from inside the asar archive. The launcher's own path and the
- * app's T3 home are written in, so the command the server shows is absolute and
+ * app's Lathe home are written in, so the command the server shows is absolute and
  * `sudo`, which clears the environment, still runs against this install's home.
  */
 export const renderCliShim = (input: {
   readonly target: CliShimTarget;
   readonly shimPath: string;
-  readonly t3Home: string;
+  readonly latheHome: string;
 }) => {
   const { target } = input;
   if (target.kind === "windows") {
-    const utf8 = [target.executable, target.entry, input.shimPath, input.t3Home].some((value) =>
+    const utf8 = [target.executable, target.entry, input.shimPath, input.latheHome].some((value) =>
       [...value].some((character) => character.codePointAt(0)! > 0x7f),
     );
-    const restore = utf8 ? ["chcp %t3_codepage% >nul"] : [];
+    const restore = utf8 ? ["chcp %lathepage% >nul"] : [];
     return [
       "@echo off",
       `rem ${MARKER}`,
@@ -53,16 +53,13 @@ export const renderCliShim = (input: {
       // Ctrl-C that ends the batch skips the restore, so the switch is left out
       // for the common all-ASCII install.
       ...(utf8
-        ? [
-            `for /f "tokens=2 delims=:." %%c in ('chcp') do set "t3_codepage=%%c"`,
-            "chcp 65001 >nul",
-          ]
+        ? [`for /f "tokens=2 delims=:." %%c in ('chcp') do set "lathepage=%%c"`, "chcp 65001 >nul"]
         : []),
-      `set "T3CODE_CLI_PATH=${cmdText(input.shimPath)}"`,
-      `if not defined T3CODE_HOME set "T3CODE_HOME=${cmdText(input.t3Home)}"`,
+      `set "LATHE_CLI_PATH=${cmdText(input.shimPath)}"`,
+      `if not defined LATHE_HOME set "LATHE_HOME=${cmdText(input.latheHome)}"`,
       'set "ELECTRON_RUN_AS_NODE=1"',
       // Electron's Windows executable starts without stdin; this tells the CLI to reopen the console.
-      'set "T3CODE_DESKTOP_CLI_LAUNCHER=1"',
+      'set "LATHE_DESKTOP_CLI_LAUNCHER=1"',
       // A goto, not a parenthesized block: "Program Files (x86)" would close the block early.
       `if exist ${cmdWord(target.executable)} goto run`,
       ...restore,
@@ -70,18 +67,18 @@ export const renderCliShim = (input: {
       "exit /b 127",
       ":run",
       `${cmdWord(target.executable)} ${cmdWord(target.entry)} %*`,
-      'set "t3_exit=%ERRORLEVEL%"',
+      'set "lathe_exit=%ERRORLEVEL%"',
       ...restore,
-      "exit /b %t3_exit%",
+      "exit /b %lathe_exit%",
       "",
     ].join("\r\n");
   }
   const header = [
     "#!/bin/sh",
     `# ${MARKER}`,
-    `export T3CODE_CLI_PATH=${shellWord(input.shimPath)}`,
-    `home=${shellWord(input.t3Home)}`,
-    'export T3CODE_HOME="${T3CODE_HOME:-$home}"',
+    `export LATHE_CLI_PATH=${shellWord(input.shimPath)}`,
+    `home=${shellWord(input.latheHome)}`,
+    'export LATHE_HOME="${LATHE_HOME:-$home}"',
     "export ELECTRON_RUN_AS_NODE=1",
     `app=${shellWord(target.kind === "appimage" ? target.appImage : target.executable)}`,
     'if [ ! -x "$app" ]; then',
@@ -147,12 +144,12 @@ export const install = Effect.gen(function* () {
         }),
         onNone: () => ({ kind: "direct" as const, executable: process.execPath, entry }),
       });
-  const content = renderCliShim({ target, shimPath, t3Home: environment.baseDir });
+  const content = renderCliShim({ target, shimPath, latheHome: environment.baseDir });
 
   return yield* Effect.gen(function* () {
     const existing = yield* fs.readFileString(shimPath).pipe(Effect.option);
     if (Option.isSome(existing) && !existing.value.includes(MARKER)) {
-      yield* logWarning("leaving a t3 launcher the app did not write", { shimPath });
+      yield* logWarning("leaving a lathe launcher the app did not write", { shimPath });
       return Option.none<string>();
     }
     if (Option.getOrUndefined(existing) !== content) {
@@ -160,12 +157,12 @@ export const install = Effect.gen(function* () {
       const staging = `${shimPath}.${process.pid}.tmp`;
       yield* fs.writeFileString(staging, content, { mode: 0o755 });
       yield* fs.rename(staging, shimPath);
-      yield* logInfo("installed t3 launcher", { shimPath });
+      yield* logInfo("installed lathe launcher", { shimPath });
     }
     return Option.some(shimPath);
   }).pipe(
     Effect.catchCause((cause) =>
-      logWarning("could not install t3 launcher", { shimPath, cause: Cause.pretty(cause) }).pipe(
+      logWarning("could not install lathe launcher", { shimPath, cause: Cause.pretty(cause) }).pipe(
         Effect.as(Option.none<string>()),
       ),
     ),

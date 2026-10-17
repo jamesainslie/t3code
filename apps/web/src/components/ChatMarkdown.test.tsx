@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { EnvironmentId, type AuthEnvironmentScope } from "@t3tools/contracts";
+import { EnvironmentId, type AuthEnvironmentScope } from "@lathe/contracts";
 import { createRoot } from "react-dom/client";
 import { useThreadFindHighlights } from "./chat/threadFindHighlights";
-import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
-import { countThreadSearchOccurrences } from "@t3tools/shared/threadSearch";
+import { searchableMessageSegments } from "@lathe/shared/threadFindText";
+import { countThreadSearchOccurrences } from "@lathe/shared/threadSearch";
 
 import { MarkdownFindContext } from "./chat/markdownFindContext";
 import { act, type ComponentProps, type ReactNode } from "react";
@@ -20,7 +20,7 @@ import { setMarkdownTaskChecked } from "./files/filePreviewMode";
 import { splitMarkdownDocument } from "../markdown-document";
 import { loadKatex } from "./chat/MarkdownMath";
 
-vi.mock("@t3tools/client-runtime/mermaid-renderer", () => ({
+vi.mock("@lathe/client-runtime/mermaid-renderer", () => ({
   renderMermaid: vi.fn(
     async () =>
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><text>A to B</text></svg>',
@@ -60,7 +60,7 @@ vi.mock("../state/use-atom-query-runner", () => ({ useAtomQueryRunner: () => vi.
 vi.mock("../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
 vi.mock("../state/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../state/session")>();
-  const { AuthStandardClientScopes } = await import("@t3tools/contracts");
+  const { AuthStandardClientScopes } = await import("@lathe/contracts");
   const grantedScopes = new Set<AuthEnvironmentScope>(AuthStandardClientScopes);
   const hasScope = (environmentId: EnvironmentId | null, scope: AuthEnvironmentScope) =>
     environmentId !== null && grantedScopes.has(scope);
@@ -106,7 +106,7 @@ function codeButton(renderer: ReactTestRenderer, label: string) {
 
 describe("Mermaid chat diagrams", () => {
   it("keeps invalid source readable and renders a corrected diagram in the same message", async () => {
-    const { renderMermaid } = await import("@t3tools/client-runtime/mermaid-renderer");
+    const { renderMermaid } = await import("@lathe/client-runtime/mermaid-renderer");
     vi.mocked(renderMermaid).mockRejectedValueOnce(new Error("Parse error on line 2"));
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -251,7 +251,7 @@ describe("ChatMarkdown context references", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;
     const text =
-      "See [Terminal output](t3-context://v1/terminal/term-1) and ![Error image](t3-context://v1/image/img-1).";
+      "See [Terminal output](lathe-context://v1/terminal/term-1) and ![Error image](lathe-context://v1/image/img-1).";
     try {
       await act(async () => {
         renderer = create(
@@ -296,7 +296,7 @@ describe("ChatMarkdown context references", () => {
         renderer = create(
           <ChatMarkdown
             cwd={undefined}
-            text="See [**Bold** `code`](t3-context://v1/terminal/term-1)."
+            text="See [**Bold** `code`](lathe-context://v1/terminal/term-1)."
             renderContextReference={({ kind, label }) => {
               seen.push(`${kind}: ${label}`);
               return <button>{label}</button>;
@@ -1359,15 +1359,15 @@ it("opens a disclosure only when find selects a match inside it", async () => {
     expect(openStates()).toEqual(["false", "false", "false"]);
     expect(container.textContent).toContain("nothing here");
     expect(
-      [...(highlights.get("t3-thread-find-active") ?? [])].map((range) => range.toString()),
+      [...(highlights.get("lathe-thread-find-active") ?? [])].map((range) => range.toString()),
     ).toEqual(["needle"]);
-    expect(highlights.get("t3-thread-find")?.size).toBe(0);
+    expect(highlights.get("lathe-thread-find")?.size).toBe(0);
 
     await act(() => root.render(<Probe activeOccurrence={1} />));
     await frame();
     await frame();
     expect(openStates()).toEqual(["false", "true", "true"]);
-    expect(highlights.get("t3-thread-find-active")?.size).toBe(1);
+    expect(highlights.get("lathe-thread-find-active")?.size).toBe(1);
   } finally {
     await act(() => root.unmount());
     container.remove();
@@ -1422,7 +1422,7 @@ it("keeps Mermaid diagrams rendered until find selects a match in their source",
     await frame();
     expect(diagrams()).toBe(1);
     expect(
-      [...(highlights.get("t3-thread-find-active") ?? [])].map((range) => range.toString()),
+      [...(highlights.get("lathe-thread-find-active") ?? [])].map((range) => range.toString()),
     ).toEqual(["Alpha"]);
   } finally {
     await act(() => root.unmount());
@@ -1445,7 +1445,7 @@ it.each([
   },
   { text: '```ts title="src/needle.ts"\nconst a = 1;\n```', query: "needle", count: 0 },
   { text: "```weirdlang\nconst a = 1;\n```", query: "weirdlang", count: 0 },
-  { text: "Use $test-t3-app now", query: "T3 App Testing", count: 1 },
+  { text: "Use $test-lathe-app now", query: "Lathe App Testing", count: 1 },
   { text: "`/tmp/file.ts:42`", query: "file.ts · L42", count: 1, user: true, lineBreaks: true },
   { text: "> [!NOTE]\n> Searchable alert", query: "Searchable alert", count: 1 },
   {
@@ -1460,7 +1460,7 @@ it.each([
 ])(
   "highlights the indexed occurrences of $query in $text",
   async ({ text, query, count, lineBreaks, user, useTemplate }) => {
-    const skills = [{ name: "test-t3-app", displayName: "T3 App Testing" }];
+    const skills = [{ name: "test-lathe-app", displayName: "Lathe App Testing" }];
     const highlights = new Map<string, Set<Range>>();
     vi.stubGlobal(
       "Highlight",

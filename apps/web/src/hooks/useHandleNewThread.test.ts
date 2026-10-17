@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { RuntimeMode } from "@t3tools/contracts";
+import type { RuntimeMode } from "@lathe/contracts";
 
 const testState = vi.hoisted(() => {
   let completeProjectFileRead: (value: null) => void = () => undefined;
@@ -117,18 +117,18 @@ vi.mock("@effect/atom-react", () => ({
           ["environment-ssh", { settings: testState.targetSettings }],
         ]),
 }));
-vi.mock("@t3tools/client-runtime/environment", () => ({
+vi.mock("@lathe/client-runtime/environment", () => ({
   scopedProjectKey: () => "remote-project",
   scopeProjectRef: (environmentId: string, projectId: string) => ({ environmentId, projectId }),
   scopeThreadRef: (environmentId: string, threadId: string) => ({ environmentId, threadId }),
 }));
-vi.mock("@t3tools/contracts", async (importOriginal) => ({
+vi.mock("@lathe/contracts", async (importOriginal) => ({
   // The real module backs the thread chip helpers; only defaults are pinned.
-  ...(await importOriginal<typeof import("@t3tools/contracts")>()),
+  ...(await importOriginal<typeof import("@lathe/contracts")>()),
   DEFAULT_RUNTIME_MODE: "default",
   DEFAULT_SERVER_SETTINGS: {},
 }));
-vi.mock("@t3tools/shared/projectSettings", () => ({
+vi.mock("@lathe/shared/projectSettings", () => ({
   resolveProjectSettings: (
     settings: Record<string, unknown>,
     _projectId: unknown,
@@ -174,8 +174,8 @@ vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   hasExplicitComposerModelSelection: () => false,
   resolveNewThreadModelSelectionOverride: () => null,
 }));
-vi.mock("../lib/t3ProjectFileDefaults", () => ({
-  readT3ProjectFile: () => testState.projectFileRead,
+vi.mock("../lib/latheProjectFileDefaults", () => ({
+  readLatheProjectFile: () => testState.projectFileRead,
 }));
 vi.mock("../lib/utils", () => ({
   newDraftId: () => "draft-delayed",
@@ -220,7 +220,7 @@ vi.mock("./useSettings", () => ({ useClientSettings: () => ({}) }));
 import {
   buildContinuePrompt,
   buildThreadContextRecord,
-} from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/threadContextReference";
 
 import { continueInNewThreadOptions, useNewThreadHandler } from "./useHandleNewThread";
 

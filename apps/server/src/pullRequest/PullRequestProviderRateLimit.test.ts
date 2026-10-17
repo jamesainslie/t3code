@@ -1,16 +1,16 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import { assert, it } from "@effect/vitest";
 
-import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
-import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
-import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
-import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
-import { azureDevOpsProviderFailure } from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestProvider";
-import { bitbucketProviderFailure } from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestProvider";
-import { gitHubProviderFailure } from "@t3tools/source-control-github/server/GitHubPullRequestProvider";
-import { gitLabProviderFailure } from "@t3tools/source-control-gitlab/server/GitLabPullRequestProvider";
+import * as AzureDevOpsCli from "@lathe/source-control-azure-devops/server/AzureDevOpsCli";
+import * as BitbucketApi from "@lathe/source-control-bitbucket/server/BitbucketApi";
+import * as GitHubRest from "@lathe/source-control-github/server/GitHubRest";
+import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
+import * as SourceControlRateLimit from "@lathe/source-control-core/server/SourceControlRateLimit";
+import * as GitLabCli from "@lathe/source-control-gitlab/server/GitLabCli";
+import { azureDevOpsProviderFailure } from "@lathe/source-control-azure-devops/server/AzureDevOpsPullRequestProvider";
+import { bitbucketProviderFailure } from "@lathe/source-control-bitbucket/server/BitbucketPullRequestProvider";
+import { gitHubProviderFailure } from "@lathe/source-control-github/server/GitHubPullRequestProvider";
+import { gitLabProviderFailure } from "@lathe/source-control-gitlab/server/GitLabPullRequestProvider";
 
 const cause = new Error("redacted provider failure");
 

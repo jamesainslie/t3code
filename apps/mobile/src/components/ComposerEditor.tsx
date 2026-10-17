@@ -1,12 +1,12 @@
 import * as Dialog from "./ui/Dialog";
-import { ComposerContextId } from "@t3tools/contracts";
+import { ComposerContextId } from "@lathe/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EnvironmentId } from "@t3tools/contracts";
-import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import type { EnvironmentId } from "@lathe/contracts";
+import { encodeComposerContextFragment } from "@lathe/shared/composerContextClipboard";
+import { collectComposerContextReferences } from "@lathe/shared/composerContextReferences";
 import { ComposerEditor as NativeComposerEditor } from "../native/T3ComposerEditor";
 import type { ComposerEditorProps as NativeComposerEditorProps } from "../native/T3ComposerEditor";
 import {

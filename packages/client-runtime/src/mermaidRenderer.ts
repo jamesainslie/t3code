@@ -111,7 +111,7 @@ export function renderMermaid(source: string, theme: "dark" | "light"): Promise<
   const result = queue.then(async () => {
     const { default: mermaid } = await import("mermaid");
     mermaid.initialize(config(theme));
-    const id = `t3-mermaid-${++nextId}`;
+    const id = `lathe-mermaid-${++nextId}`;
     try {
       return sizeMermaidSvg((await mermaid.render(id, source)).svg);
     } finally {

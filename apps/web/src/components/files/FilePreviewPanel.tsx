@@ -8,14 +8,14 @@ import {
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadDocumentComment,
-} from "@t3tools/contracts";
-import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
-import { AuthFilesystemWriteScope } from "@t3tools/contracts";
+} from "@lathe/contracts";
+import { filePreviewDelimiter } from "@lathe/shared/delimitedPreview";
+import { AuthFilesystemWriteScope } from "@lathe/contracts";
 import {
   isWorkspaceAudioPreviewPath,
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
-} from "@t3tools/shared/filePreview";
+} from "@lathe/shared/filePreview";
 import {
   DEFAULT_TOKENIZE_MAX_LENGTH,
   VirtualizedFile,
@@ -38,8 +38,8 @@ import { useFilesystemReadAccess } from "~/state/filesystem";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
+} from "@lathe/client-runtime/state/runtime";
+import { mediaFileReference } from "@lathe/client-runtime/media-reference";
 import {
   FolderTree,
   Globe2,
@@ -68,8 +68,8 @@ import { observeResize } from "~/lib/observeResize";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { cn, randomUUID } from "~/lib/utils";
 import type { ChatFileAttachment } from "~/types";
-import { isAbsolutePath } from "@t3tools/shared/path";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { isAbsolutePath } from "@lathe/shared/path";
+import { resolvePathLinkTarget } from "@lathe/shared/fileLinks";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -167,10 +167,10 @@ interface FilePreviewPanelProps {
   onCiteText?: (citation: Citation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
 }
 
-const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
-const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
-const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
-const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
+const FILE_EXPLORER_STORAGE_KEY = "lathe.fileExplorerOpen";
+const RENDER_MARKDOWN_STORAGE_KEY = "lathe.renderMarkdown";
+const RENDER_BROWSER_FILE_STORAGE_KEY = "lathe.renderBrowserFile";
+const RENDER_TABLE_STORAGE_KEY = "lathe.renderTable";
 // Below this width the comment rail would squeeze the document, so comments collapse to markers.
 const DOCUMENT_COMMENT_RAIL_MIN_WIDTH = 880;
 type FilePostRender = <LAnnotation>(
@@ -225,7 +225,7 @@ function WorkspaceImagePreview(props: {
   }
 
   return assetUrl._tag === "Success" && imageUrl !== null ? (
-    // oxlint-disable-next-line t3code/require-centered-scroll-gutter -- The image is capped at max-h-full max-w-full, so this never scrolls.
+    // oxlint-disable-next-line lathe/require-centered-scroll-gutter -- The image is capped at max-h-full max-w-full, so this never scrolls.
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
       <MediaActions source={actionsSource}>
         <img

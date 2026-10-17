@@ -1,4 +1,4 @@
-import { EnvironmentId, PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@t3tools/contracts";
+import { EnvironmentId, PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@lathe/contracts";
 import { act, createElement, useRef } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";

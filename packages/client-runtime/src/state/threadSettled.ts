@@ -7,7 +7,7 @@ import {
   type ThreadId,
   threadDependencyWouldCycle,
   unsatisfiedThreadDependencies,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 
 import type { PendingSubagentRequest } from "./models.ts";

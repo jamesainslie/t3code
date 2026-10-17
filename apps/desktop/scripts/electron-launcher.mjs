@@ -31,7 +31,7 @@ const productionMacIconPngPath = NodePath.join(
   "prod",
   "black-macos-1024.png",
 );
-// oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
+// oxlint-disable-next-line lathe/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
 const hostPlatform = NodeOS.platform();
 
 function setPlistString(plistPath, key, value) {
@@ -114,14 +114,14 @@ function shellSingleQuote(value) {
 export function makeDevelopmentEnvironmentScript(environment) {
   const envEntries = [
     ["VITE_DEV_SERVER_URL", environment.VITE_DEV_SERVER_URL],
-    ["T3CODE_PORT", environment.T3CODE_PORT],
-    ["T3CODE_HOME", environment.T3CODE_HOME],
-    ["T3CODE_COMMIT_HASH", environment.T3CODE_COMMIT_HASH],
-    ["T3CODE_OTLP_TRACES_URL", environment.T3CODE_OTLP_TRACES_URL],
-    ["T3CODE_OTLP_EXPORT_INTERVAL_MS", environment.T3CODE_OTLP_EXPORT_INTERVAL_MS],
-    ["T3CODE_OTLP_HEADERS", environment.T3CODE_OTLP_HEADERS],
-    ["T3CODE_OTLP_PROTOCOL", environment.T3CODE_OTLP_PROTOCOL],
-    ["T3CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
+    ["LATHE_PORT", environment.LATHE_PORT],
+    ["LATHE_HOME", environment.LATHE_HOME],
+    ["LATHE_COMMIT_HASH", environment.LATHE_COMMIT_HASH],
+    ["LATHE_OTLP_TRACES_URL", environment.LATHE_OTLP_TRACES_URL],
+    ["LATHE_OTLP_EXPORT_INTERVAL_MS", environment.LATHE_OTLP_EXPORT_INTERVAL_MS],
+    ["LATHE_OTLP_HEADERS", environment.LATHE_OTLP_HEADERS],
+    ["LATHE_OTLP_PROTOCOL", environment.LATHE_OTLP_PROTOCOL],
+    ["LATHE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   return [
     ...envEntries.map(
@@ -141,7 +141,7 @@ export function makeDevelopmentLauncherScript({
   return [
     "#!/bin/sh",
     `if [ -f ${shellSingleQuote(environmentFilePath)} ]; then . ${shellSingleQuote(environmentFilePath)}; fi`,
-    `exec ${shellSingleQuote(electronBinaryPath)} --t3code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
+    `exec ${shellSingleQuote(electronBinaryPath)} --lathe-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
     "",
   ].join("\n");
 }
@@ -273,8 +273,8 @@ export function resolveMacBundleInfoPlistStrings(executableName) {
     CFBundleExecutable: executableName,
     CFBundleIconFile: "icon.icns",
     NSScreenCaptureUsageDescription:
-      "T3 Code captures the active window when you use the snapshot shortcut.",
-    NSDocumentsFolderUsageDescription: "T3 Code reads project files you open in the desktop app.",
+      "Lathe captures the active window when you use the snapshot shortcut.",
+    NSDocumentsFolderUsageDescription: "Lathe reads project files you open in the desktop app.",
   };
 }
 
@@ -406,7 +406,7 @@ function buildMacLauncher(electronBinaryPath) {
   patchHelperBundleInfoPlists(targetAppBundlePath);
   if (isDevelopment) {
     // Launching the node_modules copy makes macOS associate the process (and Dock label) with
-    // Electron.app even though this bundle's Info.plist has the T3 Code name. Its conventional
+    // Electron.app even though this bundle's Info.plist has the Lathe name. Its conventional
     // executable name also keeps Electron's default-app runtime in development mode instead of
     // making app.isPackaged report true.
     writeDevelopmentEnvironmentScript();

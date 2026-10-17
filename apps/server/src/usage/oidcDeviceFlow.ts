@@ -2,7 +2,7 @@
  * The OAuth 2.0 device authorization grant (RFC 8628) against an OIDC
  * issuer, plus the refresh grant that keeps a session alive afterwards.
  * Used by `modelproxy` usage-limit sources: the server signs the user in
- * without a browser callback, so it works when the T3 server is on a
+ * without a browser callback, so it works when the Lathe server is on a
  * different host from the browser that completes the login.
  *
  * @module usage/oidcDeviceFlow

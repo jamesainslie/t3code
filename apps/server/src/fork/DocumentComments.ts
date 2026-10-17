@@ -13,8 +13,8 @@ import {
   type ThreadDocumentComments,
   ThreadDocumentCommentsError,
   type ThreadId,
-} from "@t3tools/contracts";
-import { applyThreadDocumentCommentEvent } from "@t3tools/shared/threadDocumentComments";
+} from "@lathe/contracts";
+import { applyThreadDocumentCommentEvent } from "@lathe/shared/threadDocumentComments";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -40,7 +40,7 @@ export class DocumentComments extends Context.Service<
       threadId: ThreadId,
     ) => Stream.Stream<ThreadDocumentComments, ThreadDocumentCommentsError>;
   }
->()("t3/fork/DocumentComments") {}
+>()("lathe/fork/DocumentComments") {}
 
 const failure = (message: string) => new ThreadDocumentCommentsError({ message });
 

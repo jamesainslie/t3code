@@ -1,6 +1,6 @@
 import type * as Path from "effect/Path";
 
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 
 /**
  * Null when the setting is not an absolute path on this machine, such as `D:\worktrees`

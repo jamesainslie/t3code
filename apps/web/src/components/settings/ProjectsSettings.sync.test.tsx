@@ -1,7 +1,7 @@
 import { act, useState } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { ProjectSyncRequest, ProjectSyncResponse } from "@t3tools/contracts";
+import type { ProjectSyncRequest, ProjectSyncResponse } from "@lathe/contracts";
 
 const sync = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock("../../state/environments", () => ({
@@ -31,7 +31,7 @@ vi.mock("./SettingsScopeNotice", () => ({
 vi.mock("../../hooks/useProjectSync", () => ({
   useProjectSync: (environmentId: string) => ({
     data: {
-      defaultSourceHome: `/home/${environmentId}/.t3`,
+      defaultSourceHome: `/home/${environmentId}/.lathe`,
       history: [],
       backups: [],
       activeBatchId: null,
@@ -92,6 +92,6 @@ it("discovers sync from All machines and previews only the chosen destination", 
   await act(() => preview!.props.onClick());
   expect(sync.execute).toHaveBeenCalledExactlyOnceWith("laptop", {
     operation: "preview",
-    sourceHome: "/home/laptop/.t3",
+    sourceHome: "/home/laptop/.lathe",
   });
 });

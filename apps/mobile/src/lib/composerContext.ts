@@ -1,6 +1,6 @@
-import { serializeLegacyContextMessage } from "@t3tools/shared/composerContextLegacySend";
-import { filePreviewKind } from "@t3tools/shared/filePreview";
-import { videoMimeType } from "@t3tools/shared/video";
+import { serializeLegacyContextMessage } from "@lathe/shared/composerContextLegacySend";
+import { filePreviewKind } from "@lathe/shared/filePreview";
+import { videoMimeType } from "@lathe/shared/video";
 import {
   COMPOSER_CONTEXT_MAX_RECORDS,
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
@@ -11,7 +11,7 @@ import {
   type ReviewCommentContextRecord,
   type ScopedThreadRef,
   type ThreadContextRecord,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Schema from "effect/Schema";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
@@ -21,12 +21,12 @@ import {
   replaceComposerContextReferences,
   sanitizeComposerContextLabel,
   toKindScopedComposerContextId,
-} from "@t3tools/shared/composerContextReferences";
+} from "@lathe/shared/composerContextReferences";
 import {
   collectComposerInlineTokens,
   type ComposerInlineToken,
-} from "@t3tools/shared/composerInlineTokens";
-import { threadContextId } from "@t3tools/shared/threadContextReference";
+} from "@lathe/shared/composerInlineTokens";
+import { threadContextId } from "@lathe/shared/threadContextReference";
 
 const isMessageContext = Schema.is(OrchestrationMessageContext);
 const decodeMessageContext = Schema.decodeUnknownOption(OrchestrationMessageContext);

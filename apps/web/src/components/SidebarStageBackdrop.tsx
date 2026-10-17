@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { Edition } from "@t3tools/contracts";
+import type { Edition } from "@lathe/contracts";
 import { useId } from "react";
 
 import { APP_STAGE_LABEL } from "../branding";

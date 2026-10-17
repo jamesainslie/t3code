@@ -1,7 +1,7 @@
 /**
  * Fork-only contracts for logging a modelproxy gateway's pooled account in
- * again from T3 Code. The gateway runs the OAuth flow and keeps every
- * secret; T3 relays the session view so the header pill can show the consent
+ * again from Lathe. The gateway runs the OAuth flow and keeps every
+ * secret; Lathe relays the session view so the header pill can show the consent
  * link (Anthropic accounts paste back the code it shows) or the device code
  * (Codex accounts approve it on OpenAI's site).
  *

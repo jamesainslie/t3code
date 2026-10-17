@@ -1,24 +1,24 @@
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { customSnoozeOptions } from "../components/CustomSnoozeDialog.logic";
 import { openThreadDependencyPicker } from "../commandPaletteBus";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef } from "@lathe/client-runtime/environment";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   canAddDependency,
   canSnooze,
   effectiveBlocked,
   effectiveSnoozed,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@lathe/client-runtime/state/thread-settled";
 import {
   AuthOrchestrationOperateScope,
   type ScopedThreadRef,
   type ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
@@ -54,7 +54,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
-import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+import { threadRuntimeCanArchive } from "@lathe/client-runtime/state/models";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { continueInNewThreadOptions, useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";

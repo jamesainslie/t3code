@@ -1,5 +1,5 @@
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
+import * as ProviderEventLoggers from "@lathe/provider-core/server/ProviderEventLoggers";
+import type { RelayManagedEndpointRuntimeConfig } from "@lathe/contracts/relay";
 import * as Clock from "effect/Clock";
 import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
@@ -13,7 +13,7 @@ import * as NodeHttp from "node:http";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentHttpApi, type RepositoryIdentity } from "@t3tools/contracts";
+import { EnvironmentHttpApi, type RepositoryIdentity } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Deferred from "effect/Deferred";
@@ -49,12 +49,12 @@ import * as ProviderEventIngestor from "./orchestration-v2/ProviderEventIngestor
 import * as ModelManifest from "./provider/ModelManifest.ts";
 import * as ResetCreditCoordinator from "./provider/resetCreditCoordinator.ts";
 import * as EventNdjsonLogger from "./provider/EventNdjsonLogger.ts";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
-import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
+import * as ProviderLatestVersions from "@lathe/provider-core/server/ProviderLatestVersions";
+import * as McpProviderSessions from "@lathe/provider-core/server/McpProviderSessions";
+import * as OpenCodeRuntime from "@lathe/provider-opencode/server/OpenCodeRuntime";
+import * as OpenCodeServerLedger from "@lathe/provider-opencode/server/OpenCodeServerLedger";
 import * as ProviderHostLive from "./provider/ProviderHostLive.ts";
-import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
+import * as AcpRegistrySupport from "@lathe/provider-acp-registry/server/AcpRegistrySupport";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
 import * as SourceControlBuiltInDrivers from "./sourceControl/builtInDrivers.ts";
@@ -94,7 +94,7 @@ import * as ProviderRegistry from "./provider/ProviderRegistry.ts";
 import * as ProviderUsageLimitsIngestion from "./provider/ProviderUsageLimitsIngestion.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
-import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
+import * as LatheProjectFileLoader from "./project/LatheProjectFileLoader.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
@@ -110,7 +110,7 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as SourceControlProviderRegistry from "./sourceControl/SourceControlProviderRegistry.ts";
 import * as PullRequestReadCache from "./pullRequest/PullRequestReadCache.ts";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
+import * as SourceControlRateLimit from "@lathe/source-control-core/server/SourceControlRateLimit";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import * as Observability from "./observability/Observability.ts";
@@ -163,9 +163,9 @@ import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts
 import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinary.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as AntigravityUsage from "./provider/Drivers/AntigravityUsage.ts";
-import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAccountReader";
-import * as CursorKeychain from "@t3tools/provider-cursor/server/CursorKeychain";
-import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
+import * as CursorAccountReader from "@lathe/provider-cursor/server/CursorAccountReader";
+import * as CursorKeychain from "@lathe/provider-cursor/server/CursorKeychain";
+import * as CursorUsageAccounts from "@lathe/provider-cursor/server/CursorUsageAccounts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as RuntimeLayer from "./orchestration-v2/runtimeLayer.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
@@ -183,9 +183,9 @@ import * as ProjectHttp from "./project/http.ts";
 import { projectSyncHttpApiLayer } from "./projectSync/http.ts";
 import { projectSyncSchedulerLayer } from "./projectSync/Scheduler.ts";
 import { ProjectSyncService } from "./projectSync/Service.ts";
-import * as NetService from "@t3tools/shared/Net";
-import * as RelayClient from "@t3tools/shared/relayClient";
-import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
+import * as NetService from "@lathe/shared/Net";
+import * as RelayClient from "@lathe/shared/relayClient";
+import { disableTailscaleServe, ensureTailscaleServe } from "@lathe/tailscale";
 import * as ServerActivation from "./serverActivation.ts";
 
 // MCP handoff thread IDs include escaped provenance and can exceed find-my-way's
@@ -195,7 +195,7 @@ const HTTP_ROUTER_CONFIG = {
 } as const;
 
 // Effect's default preemptive shutdown waits 20s before finalizing request scopes.
-// T3's primary transport is long-lived WebSocket RPC, whose Effect scope finalizer
+// Lathe's primary transport is long-lived WebSocket RPC, whose Effect scope finalizer
 // already closes the websocket gracefully.
 const HTTP_PREEMPTIVE_SHUTDOWN_GRACE_MS = 0;
 const layerResourceAttribution = ResourceAttribution.layer;
@@ -447,7 +447,7 @@ const layerWorkspace = Layer.mergeAll(
 
 const layerProjectFaviconResolver = ProjectFaviconResolver.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
-  Layer.provide(T3ProjectFileLoader.layer),
+  Layer.provide(LatheProjectFileLoader.layer),
 );
 
 const layerServerEnvironment = ServerEnvironment.layer.pipe(Layer.provide(ServerSecretStore.layer));
@@ -504,7 +504,7 @@ const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   ),
 );
 
-// Fork: document comments and imports from another T3 install. Socket handlers
+// Fork: document comments and imports from another Lathe install. Socket handlers
 // resolve them per request, so they live in the runtime, not only in the routes.
 // The event sink is the runtime's own instance (layers memoize by reference);
 // startup's fork cutover import writes through it.
@@ -744,7 +744,7 @@ const layerMakeRoutes = Layer.mergeAll(
 const layerMakeServer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
-    // Before anything opens the database: one server per T3 home.
+    // Before anything opens the database: one server per Lathe home.
     const ownership = yield* ServerOwnership.acquireServerOwnership(config.serverRuntimeStatePath);
     const activation = yield* Deferred.make<void>();
     const awaitActivation = Deferred.await(activation);

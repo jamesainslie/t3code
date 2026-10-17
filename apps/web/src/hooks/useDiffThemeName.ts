@@ -1,4 +1,4 @@
-import type { ClientSettings } from "@t3tools/contracts";
+import type { ClientSettings } from "@lathe/contracts";
 import { useSyncExternalStore } from "react";
 
 import { resolveDiffThemeName } from "../lib/diffRendering";

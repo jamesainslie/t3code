@@ -6,8 +6,8 @@ import type {
   ScopedProjectRef,
   ScopedThreadRef,
   ThreadId,
-} from "@t3tools/contracts";
-import { isProviderNativeSubagentThread } from "@t3tools/contracts";
+} from "@lathe/contracts";
+import { isProviderNativeSubagentThread } from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
 

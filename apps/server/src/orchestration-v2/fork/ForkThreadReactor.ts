@@ -20,7 +20,7 @@ import {
   type ThreadDependencySatisfiedReason,
   type ThreadId,
   unsatisfiedThreadDependencies,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -123,7 +123,7 @@ export function dependencySatisfiedReason(
 class ForkThreadReactor extends Context.Service<
   ForkThreadReactor,
   { readonly start: () => Effect.Effect<void, never, Scope.Scope | Scheduler> }
->()("t3/orchestration-v2/fork/ForkThreadReactor") {}
+>()("lathe/orchestration-v2/fork/ForkThreadReactor") {}
 
 export const make = Effect.gen(function* () {
   const orchestrator = yield* Orchestrator.OrchestratorV2;

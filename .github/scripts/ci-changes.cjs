@@ -32,11 +32,11 @@ const RUNS_EVERYTHING = [
 // through relative imports rather than a package.json dependency.
 const EXTRA_OWNERS = [
   // Vite configs and tsconfigs of these apps import scripts/lib directly.
-  [/^scripts\/lib\//, ["@t3tools/desktop", "@t3tools/mobile", "@t3tools/web", "t3"]],
+  [/^scripts\/lib\//, ["@lathe/desktop", "@lathe/mobile", "@lathe/web", "lathe"]],
   // scripts/build-desktop-artifact.ts reads the GNOME extension manifest.
-  [/^apps\/desktop\/gnome-extension\//, ["@t3tools/scripts"]],
-  [/^native\/browser-secret\//, ["@t3tools/desktop"]],
-  [/^native\/libghostty-vt\//, ["@t3tools/web"]],
+  [/^apps\/desktop\/gnome-extension\//, ["@lathe/scripts"]],
+  [/^native\/browser-secret\//, ["@lathe/desktop"]],
+  [/^native\/libghostty-vt\//, ["@lathe/web"]],
 ];
 const RUST = /^native\/(resource-monitor|kde-snap-shot|hyprland-snap-shot)\//;
 
@@ -44,18 +44,18 @@ const RUST = /^native\/(resource-monitor|kde-snap-shot|hyprland-snap-shot)\//;
 // tests read app manifests, assets, and sources (cursor-sdk-packaging,
 // third-party-licenses, brand-assets, build-desktop-artifact).
 const TEST_ONLY_DEPS = {
-  "@t3tools/provider-pi": ["@t3tools/client-runtime"],
-  "@t3tools/scripts": [
-    "@t3tools/desktop",
-    "@t3tools/mobile",
-    "@t3tools/web",
-    "t3",
-    "@t3tools/provider-cursor",
+  "@lathe/provider-pi": ["@lathe/client-runtime"],
+  "@lathe/scripts": [
+    "@lathe/desktop",
+    "@lathe/mobile",
+    "@lathe/web",
+    "lathe",
+    "@lathe/provider-cursor",
   ],
 };
 // Declared dependencies that only feed a build step: the server bundles the
 // built web app (apps/server/vite.config.ts) but never imports it.
-const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
+const BUILD_ONLY_DEPS = { lathe: ["@lathe/web"] };
 
 // Sources scripts/mobile-native-static-check.ts lints, plus the tool and rule
 // configuration that decides how it lints them, plus the root package.json
@@ -64,7 +64,7 @@ const MOBILE_NATIVE =
   /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$|^\.github\/scripts\/ci-changes\.cjs$|^\.github\/actions\/ci-changes\//;
 
 // Jobs that test every package except these, which have jobs of their own.
-const OWN_TEST_JOB = new Set(["t3", "@t3tools/web", "@t3tools/monorepo"]);
+const OWN_TEST_JOB = new Set(["lathe", "@lathe/web", "@lathe/monorepo"]);
 
 function readWorkspace() {
   const patterns = [];
@@ -113,7 +113,7 @@ function ownersOf(file, packages) {
   if (path.posix.basename(file) === "package.json") return null;
   if (RUNS_EVERYTHING.some((pattern) => pattern.test(file))) return null;
   // scripts/build-desktop-artifact.test.ts reads the crates' sources.
-  if (RUST.test(file)) return ["@t3tools/scripts"];
+  if (RUST.test(file)) return ["@lathe/scripts"];
 
   const extra = EXTRA_OWNERS.flatMap(([pattern, names]) => (pattern.test(file) ? names : []));
   const owner = packages
@@ -156,7 +156,7 @@ function decide(files, packages, full) {
         }
       }
     }
-    scriptsChanged = affected.has("@t3tools/scripts");
+    scriptsChanged = affected.has("@lathe/scripts");
     for (const [name, deps] of Object.entries(TEST_ONLY_DEPS)) {
       if (deps.some((dep) => affected.has(dep))) affected.add(name);
     }
@@ -171,12 +171,12 @@ function decide(files, packages, full) {
     affected: [...affected].sort(),
     outputs: {
       typecheck: affected.size > 0,
-      build: has("@t3tools/desktop") || has("t3") || has("@t3tools/web"),
+      build: has("@lathe/desktop") || has("lathe") || has("@lathe/web"),
       test: tested.length > 0,
       // Empty means every package the Test job covers.
       test_packages: everything ? "" : tested.map((pkg) => pkg.name).join(" "),
-      test_web: has("@t3tools/web"),
-      test_server: has("t3"),
+      test_web: has("@lathe/web"),
+      test_server: has("lathe"),
       rust: everything || rust,
       release_smoke: scriptsChanged,
       mobile_native: files === null || files.some((file) => MOBILE_NATIVE.test(file)),

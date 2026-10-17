@@ -3,7 +3,7 @@ import {
   type TerminalBrowserLaunchCancelInput,
   type TerminalBrowserLaunchCompleteInput,
   type TerminalBrowserLaunchEvent,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";

@@ -1,19 +1,13 @@
-import {
-  AcpRegistryDriver,
-  type AcpRegistryDriverEnv,
-} from "@t3tools/provider-acp-registry/server";
+import { AcpRegistryDriver, type AcpRegistryDriverEnv } from "@lathe/provider-acp-registry/server";
 import { AntigravityDriver, type AntigravityDriverEnv } from "./Drivers/AntigravityDriver.ts";
 import { ClaudeDriver, type ClaudeDriverEnv } from "./Drivers/ClaudeDriver.ts";
 import { CodexDriver, type CodexDriverEnv } from "./Drivers/CodexDriver.ts";
-import { CursorDriver, type CursorDriverEnv } from "@t3tools/provider-cursor/server";
-import { GrokDriver, type GrokDriverEnv } from "@t3tools/provider-grok/server";
-import { OpenCodeDriver, type OpenCodeDriverEnv } from "@t3tools/provider-opencode/server";
-import { MuseDriver, type MuseDriverEnv } from "@t3tools/provider-muse/server";
-import { PiDriver, type PiDriverEnv } from "@t3tools/provider-pi/server";
-import type {
-  AnyProviderDriver,
-  ProviderUsageReaderEnv,
-} from "@t3tools/provider-core/server/driver";
+import { CursorDriver, type CursorDriverEnv } from "@lathe/provider-cursor/server";
+import { GrokDriver, type GrokDriverEnv } from "@lathe/provider-grok/server";
+import { OpenCodeDriver, type OpenCodeDriverEnv } from "@lathe/provider-opencode/server";
+import { MuseDriver, type MuseDriverEnv } from "@lathe/provider-muse/server";
+import { PiDriver, type PiDriverEnv } from "@lathe/provider-pi/server";
+import type { AnyProviderDriver, ProviderUsageReaderEnv } from "@lathe/provider-core/server/driver";
 
 export type BuiltInDriversEnv =
   | AcpRegistryDriverEnv

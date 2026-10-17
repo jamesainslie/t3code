@@ -1,4 +1,4 @@
-import { Edition } from "@t3tools/contracts";
+import { Edition } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { EDITIONS, getEdition } from "./editions";

@@ -1,4 +1,6 @@
-import type { ProjectId, ProjectScript, ServerSettings } from "@t3tools/contracts";
+import type { ProjectId, ProjectScript, ServerSettings } from "@lathe/contracts";
+
+import { withLegacyExportedNames } from "./forkLegacyEnv.ts";
 
 type ProjectScriptSettings = Pick<
   ServerSettings,
@@ -53,15 +55,16 @@ export function projectScriptRuntimeEnv(
   input: ProjectScriptRuntimeEnvInput,
 ): Record<string, string> {
   const env: Record<string, string> = {
-    T3CODE_PROJECT_ROOT: input.project.cwd,
+    LATHE_PROJECT_ROOT: input.project.cwd,
   };
   if (input.worktreePath) {
-    env.T3CODE_WORKTREE_PATH = input.worktreePath;
+    env.LATHE_WORKTREE_PATH = input.worktreePath;
   }
+  // Fork-only: scripts written before the rename read the old names.
   if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
+    return { ...withLegacyExportedNames(env), ...input.extraEnv };
   }
-  return env;
+  return withLegacyExportedNames(env);
 }
 
 export function setupProjectScript(scripts: readonly ProjectScript[]): ProjectScript | null {

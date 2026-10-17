@@ -1,4 +1,4 @@
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,7 +8,7 @@ import type * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
 
-import { type ClientSettings, DEFAULT_CLIENT_SETTINGS, type Edition } from "@t3tools/contracts";
+import { type ClientSettings, DEFAULT_CLIENT_SETTINGS, type Edition } from "@lathe/contracts";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
@@ -70,7 +70,7 @@ export class DesktopEditionIcon extends Context.Service<
     /** The edition icon in effect, for windows opened after it was applied. */
     readonly iconPath: Effect.Effect<Option.Option<string>>;
   }
->()("@t3tools/desktop/app/DesktopEditionIcon") {}
+>()("@lathe/desktop/app/DesktopEditionIcon") {}
 
 const { logWarning } = makeComponentLogger("desktop-edition-icon");
 

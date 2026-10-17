@@ -4,8 +4,8 @@ import {
   type PullRequestReviewVerdict,
   type RepositoryIdentity,
   SourceControlProviderKind,
-} from "@t3tools/contracts";
-import type { ChangeRequestLink } from "@t3tools/shared/changeRequestUrl";
+} from "@lathe/contracts";
+import type { ChangeRequestLink } from "@lathe/shared/changeRequestUrl";
 import * as Schema from "effect/Schema";
 
 export interface ChangeRequestTerminology {

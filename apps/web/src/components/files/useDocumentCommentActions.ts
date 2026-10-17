@@ -1,4 +1,4 @@
-import type { ScopedThreadRef, ThreadDocumentCommentMutation } from "@t3tools/contracts";
+import type { ScopedThreadRef, ThreadDocumentCommentMutation } from "@lathe/contracts";
 import { useMemo } from "react";
 
 import { documentCommentsEnvironment } from "~/state/documentComments";

@@ -12,6 +12,7 @@ import {
   remarkCodexDirectives,
 } from "./codexMarkdownDirectives.ts";
 import { isWindowsDrivePathHref } from "./markdownLinks.ts";
+import { withLegacyLinkProtocols } from "./forkLegacyLinks.ts";
 import { THREAD_LINK_PROTOCOL } from "./threadLinks.ts";
 
 type MarkdownImageHastNode = {
@@ -148,11 +149,13 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
     href: [
       ...(defaultSchema.protocols?.href ?? []),
       "file",
-      "t3-citation",
-      "t3-context",
-      THREAD_LINK_PROTOCOL,
+      ...withLegacyLinkProtocols(["lathe-citation", "lathe-context", THREAD_LINK_PROTOCOL]),
     ],
-    src: [...(defaultSchema.protocols?.src ?? []), "file", "t3-context"],
+    src: [
+      ...(defaultSchema.protocols?.src ?? []),
+      "file",
+      ...withLegacyLinkProtocols(["lathe-context"]),
+    ],
   },
 } satisfies Parameters<typeof rehypeSanitize>[0];
 
@@ -256,7 +259,7 @@ function keepWindowsPathDestination(this: DestinationCompileContext, token: unkn
 }
 
 /**
- * CommonMark reads the `\.` in `C:\me\.t3\shot.png` as an escape, even in a link
+ * CommonMark reads the `\.` in `C:\me\.lathe\shot.png` as an escape, even in a link
  * destination. Every backslash in a Windows path is a separator, so link, image, and
  * definition destinations that are Windows paths keep the text as written.
  */

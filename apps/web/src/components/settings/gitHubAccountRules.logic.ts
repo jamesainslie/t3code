@@ -2,8 +2,8 @@ import type {
   GitHubAccountRule,
   GitHubAccountRules,
   SourceControlDiscoveryResult,
-} from "@t3tools/contracts";
-import { matchingRuleIndex } from "@t3tools/shared/gitHubAccountRouting";
+} from "@lathe/contracts";
+import { matchingRuleIndex } from "@lathe/shared/gitHubAccountRouting";
 
 export interface GitHubAccountOption {
   readonly login: string;

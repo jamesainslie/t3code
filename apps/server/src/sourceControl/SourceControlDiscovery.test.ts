@@ -1,4 +1,4 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -10,32 +10,32 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/process";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
-import { VcsProcessSpawnError } from "@t3tools/contracts";
+import { VcsProcessSpawnError } from "@lathe/contracts";
 
 import * as ServerSettings from "../serverSettings.ts";
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
-import * as AzureDevOpsPullRequestCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
-import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
-import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
-import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
-import * as GitHubPullRequestApi from "@t3tools/source-control-github/server/GitHubPullRequestApi";
-import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
-import * as GitLabPullRequestCli from "@t3tools/source-control-gitlab/server/GitLabPullRequestCli";
-import * as ForgejoCli from "@t3tools/source-control-forgejo/server/ForgejoCli";
-import * as GitCafeApi from "@t3tools/source-control-gitcafe/server/GitCafeApi";
+import * as AzureDevOpsCli from "@lathe/source-control-azure-devops/server/AzureDevOpsCli";
+import * as AzureDevOpsPullRequestCli from "@lathe/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
+import * as BitbucketApi from "@lathe/source-control-bitbucket/server/BitbucketApi";
+import * as BitbucketPullRequestApi from "@lathe/source-control-bitbucket/server/BitbucketPullRequestApi";
+import * as GitHubRest from "@lathe/source-control-github/server/GitHubRest";
+import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
+import * as GitHubPullRequestApi from "@lathe/source-control-github/server/GitHubPullRequestApi";
+import * as GitLabCli from "@lathe/source-control-gitlab/server/GitLabCli";
+import * as GitLabPullRequestCli from "@lathe/source-control-gitlab/server/GitLabPullRequestCli";
+import * as ForgejoCli from "@lathe/source-control-forgejo/server/ForgejoCli";
+import * as GitCafeApi from "@lathe/source-control-gitcafe/server/GitCafeApi";
 import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
-import * as GitCafeCredentials from "@t3tools/source-control-gitcafe/server/GitCafeCredentials";
-import * as ForgejoSourceControlProvider from "@t3tools/source-control-forgejo/server/ForgejoSourceControlProvider";
-import * as ForgejoPullRequestProvider from "@t3tools/source-control-forgejo/server/ForgejoPullRequestProvider";
+import * as GitCafeCredentials from "@lathe/source-control-gitcafe/server/GitCafeCredentials";
+import * as ForgejoSourceControlProvider from "@lathe/source-control-forgejo/server/ForgejoSourceControlProvider";
+import * as ForgejoPullRequestProvider from "@lathe/source-control-forgejo/server/ForgejoPullRequestProvider";
 import * as SourceControlDiscovery from "./SourceControlDiscovery.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 import * as ServerSourceControlHost from "./ServerSourceControlHost.ts";
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+import * as SourceControlHost from "@lathe/source-control-core/server/SourceControlHost";
 
 const layerSourceControlProviderRegistryTest = (input: {
   readonly bitbucket: Partial<BitbucketApi.BitbucketApi["Service"]>;
@@ -45,7 +45,7 @@ const layerSourceControlProviderRegistryTest = (input: {
     Layer.provide(
       Layer.mergeAll(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "t3-source-control-registry-test-",
+          prefix: "lathe-source-control-registry-test-",
         }).pipe(Layer.provide(NodeServices.layer)),
         Layer.mock(AzureDevOpsCli.AzureDevOpsCli)({}),
         Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({}),
@@ -158,7 +158,7 @@ it.effect("reports implemented tools separately from locally available executabl
   const layerTest = SourceControlDiscovery.layer.pipe(
     Layer.provide(
       ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-source-control-discovery-",
+        prefix: "lathe-source-control-discovery-",
       }),
     ),
     Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
@@ -171,7 +171,7 @@ it.effect("reports implemented tools separately from locally available executabl
             account: Option.none(),
             host: Option.some("bitbucket.org"),
             detail: Option.some(
-              "Add a Bitbucket token in Settings → Source Control, or set the T3CODE_BITBUCKET_* environment variables on the server.",
+              "Add a Bitbucket token in Settings → Source Control, or set the LATHE_BITBUCKET_* environment variables on the server.",
             ),
           }),
         },
@@ -328,7 +328,7 @@ Logged in to gitlab.com as gitlab-user
   const layerTest = SourceControlDiscovery.layer.pipe(
     Layer.provide(
       ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-source-control-auth-discovery-",
+        prefix: "lathe-source-control-auth-discovery-",
       }),
     ),
     Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
@@ -408,7 +408,7 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       const git = yield* VcsProcess.VcsProcess;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fj-checkout-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-fj-checkout-" });
       const source = path.join(root, "source");
       const cwd = path.join(root, "checkout");
       yield* fs.makeDirectory(source);

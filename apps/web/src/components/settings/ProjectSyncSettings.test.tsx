@@ -1,6 +1,6 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { EnvironmentId, ProjectId, type ProjectSyncResponse } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, type ProjectSyncResponse } from "@lathe/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({

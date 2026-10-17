@@ -1,4 +1,4 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -42,7 +42,7 @@ export interface SshPasswordPromptShape {
 }
 
 export class SshPasswordPrompt extends Context.Service<SshPasswordPrompt, SshPasswordPromptShape>()(
-  "@t3tools/ssh/auth/SshPasswordPrompt",
+  "@lathe/ssh/auth/SshPasswordPrompt",
 ) {
   static readonly disabledLayer = Layer.succeed(
     SshPasswordPrompt,
@@ -67,9 +67,9 @@ export interface SshChildEnvironmentOptions {
   readonly authSecretDelivery?: "environment" | "file";
 }
 
-export const SSH_AUTH_SECRET_FILE_ENV = "T3_SSH_AUTH_SECRET_FILE";
+export const SSH_AUTH_SECRET_FILE_ENV = "LATHE_SSH_AUTH_SECRET_FILE";
 
-const SSH_ASKPASS_DIR_NAME = "t3code-ssh-askpass";
+const SSH_ASKPASS_DIR_NAME = "lathe-ssh-askpass";
 
 function joinSshAskpassPath(
   directory: string,
@@ -81,17 +81,17 @@ function joinSshAskpassPath(
 }
 
 const ASKPASS_POSIX_SCRIPT = `#!/bin/sh
-# Invoked by ssh via SSH_ASKPASS when T3 Code re-runs ssh with a cached password
+# Invoked by ssh via SSH_ASKPASS when Lathe re-runs ssh with a cached password
 # from the renderer's in-app prompt. We never expose a native dialog here - if
-# T3_SSH_AUTH_SECRET is missing, that's a caller bug and we fail loudly.
-if [ -n "\${T3_SSH_AUTH_SECRET_FILE:-}" ]; then
-  exec cat "$T3_SSH_AUTH_SECRET_FILE"
+# LATHE_SSH_AUTH_SECRET is missing, that's a caller bug and we fail loudly.
+if [ -n "\${LATHE_SSH_AUTH_SECRET_FILE:-}" ]; then
+  exec cat "$LATHE_SSH_AUTH_SECRET_FILE"
 fi
-if [ "\${T3_SSH_AUTH_SECRET+x}" = "x" ]; then
-  printf "%s\\n" "$T3_SSH_AUTH_SECRET"
+if [ "\${LATHE_SSH_AUTH_SECRET+x}" = "x" ]; then
+  printf "%s\\n" "$LATHE_SSH_AUTH_SECRET"
   exit 0
 fi
-printf 'T3 Code ssh-askpass invoked without T3_SSH_AUTH_SECRET.\\n' >&2
+printf 'Lathe ssh-askpass invoked without LATHE_SSH_AUTH_SECRET.\\n' >&2
 exit 1
 `;
 
@@ -99,19 +99,19 @@ const ASKPASS_WINDOWS_LAUNCHER_SCRIPT = `@echo off\r
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0ssh-askpass.ps1" %*\r
 `;
 
-const ASKPASS_WINDOWS_SCRIPT = `# Invoked by ssh via SSH_ASKPASS (through ssh-askpass.cmd) when T3 Code re-runs\r
+const ASKPASS_WINDOWS_SCRIPT = `# Invoked by ssh via SSH_ASKPASS (through ssh-askpass.cmd) when Lathe re-runs\r
 # ssh with a cached password from the renderer's in-app prompt. We never expose\r
-# a native dialog here - if T3_SSH_AUTH_SECRET is missing, that's a caller bug\r
+# a native dialog here - if LATHE_SSH_AUTH_SECRET is missing, that's a caller bug\r
 # and we fail loudly.\r
-if ($env:T3_SSH_AUTH_SECRET_FILE) {\r
-  [Console]::Out.Write([System.IO.File]::ReadAllText($env:T3_SSH_AUTH_SECRET_FILE))\r
+if ($env:LATHE_SSH_AUTH_SECRET_FILE) {\r
+  [Console]::Out.Write([System.IO.File]::ReadAllText($env:LATHE_SSH_AUTH_SECRET_FILE))\r
   exit 0\r
 }\r
-if ($null -ne $env:T3_SSH_AUTH_SECRET) {\r
-  [Console]::Out.WriteLine($env:T3_SSH_AUTH_SECRET)\r
+if ($null -ne $env:LATHE_SSH_AUTH_SECRET) {\r
+  [Console]::Out.WriteLine($env:LATHE_SSH_AUTH_SECRET)\r
   exit 0\r
 }\r
-[Console]::Error.WriteLine("T3 Code ssh-askpass invoked without T3_SSH_AUTH_SECRET.")\r
+[Console]::Error.WriteLine("Lathe ssh-askpass invoked without LATHE_SSH_AUTH_SECRET.")\r
 exit 1\r
 `;
 
@@ -119,7 +119,7 @@ const getDefaultSshAskpassDirectory = Effect.fn("ssh/auth.getDefaultSshAskpassDi
   function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const parentDirectory = yield* fs.makeTempDirectory({ prefix: "t3code-ssh-runtime-" });
+    const parentDirectory = yield* fs.makeTempDirectory({ prefix: "lathe-ssh-runtime-" });
     return path.join(parentDirectory, SSH_ASKPASS_DIR_NAME);
   },
 );
@@ -226,8 +226,8 @@ export const buildSshChildEnvironment = Effect.fn("ssh/auth.buildSshChildEnviron
       ? { [SSH_AUTH_SECRET_FILE_ENV]: secretFile }
       : input.authSecret === undefined
         ? {}
-        : { T3_SSH_AUTH_SECRET: input.authSecret ?? "" }),
-    ...(platform === "win32" || baseEnv.DISPLAY || hostDisplay ? {} : { DISPLAY: "t3code" }),
+        : { LATHE_SSH_AUTH_SECRET: input.authSecret ?? "" }),
+    ...(platform === "win32" || baseEnv.DISPLAY || hostDisplay ? {} : { DISPLAY: "lathe" }),
   };
 });
 

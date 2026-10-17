@@ -1,4 +1,4 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { resolveMediaSource } from "./mediaSource.ts";
@@ -129,8 +129,8 @@ describe("resolveMediaSource", () => {
     );
   });
 
-  it("serves T3 attachment files in place like any other host path", () => {
-    const path = `/home/demo/.t3/userdata/attachments/${attachmentId}.mp4`;
+  it("serves Lathe attachment files in place like any other host path", () => {
+    const path = `/home/demo/.lathe/userdata/attachments/${attachmentId}.mp4`;
     expect(resolveMediaSource(path, { threadId, workspaceRoot: "/repo" })).toMatchObject({
       kind: "video",
       access: "environment",

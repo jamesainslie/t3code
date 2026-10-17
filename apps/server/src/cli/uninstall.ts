@@ -4,8 +4,8 @@
 // cannot express: it kills the child when the scope closes.
 import * as NodeChildProcess from "node:child_process";
 
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -98,7 +98,7 @@ export const uninstallCommand = Command.make("uninstall", {
   ),
 }).pipe(
   Command.withDescription(
-    "Remove t3 from this machine: the background service, the launcher, and every downloaded version. Your projects and threads are kept.",
+    "Remove lathe from this machine: the background service, the launcher, and every downloaded version. Your projects and threads are kept.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
@@ -122,10 +122,10 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
   const plan = yield* planUninstall({ baseDir: input.baseDir });
 
   if (!plan.service && plan.launcher === undefined && plan.runtimeDir === undefined) {
-    yield* Console.log(`Nothing to remove: t3 is not installed for ${input.baseDir}.`);
+    yield* Console.log(`Nothing to remove: lathe is not installed for ${input.baseDir}.`);
     if (!(yield* HostProcess.IsExecutable)) {
       yield* Console.log(
-        `  This t3 runs from a Node script, so it was installed by npm or built from source. Remove it the same way (\`npm uninstall -g ${FORK_IDENTITY.npmPackageName}\`, or delete the checkout).`,
+        `  This lathe runs from a Node script, so it was installed by npm or built from source. Remove it the same way (\`npm uninstall -g ${FORK_IDENTITY.npmPackageName}\`, or delete the checkout).`,
       );
     }
     return;
@@ -149,7 +149,7 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
       });
     }
     const confirmed = yield* Prompt.run(
-      Prompt.Confirm({ message: "Remove t3 from this machine?", initial: false }),
+      Prompt.Confirm({ message: "Remove lathe from this machine?", initial: false }),
     ).pipe(Effect.catchTags({ QuitError: () => Effect.succeed(false) }));
     if (!confirmed) {
       yield* Console.log("Left as is.");
@@ -193,7 +193,7 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
             reason: `Could not schedule removal of ${runtimeDir}. Delete it yourself once this window is closed.`,
           }),
       });
-      yield* Console.log(`${runtimeDir} will be removed once t3 exits.`);
+      yield* Console.log(`${runtimeDir} will be removed once lathe exits.`);
     } else {
       yield* fs
         .remove(plan.runtimeDir, { recursive: true, force: true })
@@ -206,5 +206,5 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
     }
   }
   yield* Console.log("");
-  yield* Console.log("t3 is uninstalled. Thanks for trying T3 Code.");
+  yield* Console.log("lathe is uninstalled. Thanks for trying Lathe.");
 });

@@ -27,12 +27,12 @@ describe("edition art", () => {
   });
 
   it.each(ICON_EDITIONS)(
-    "marks the %s icons with the Lathe caret, never the T3 wordmark",
+    "marks the %s icons with the Lathe caret, never the Lathe wordmark",
     (edition) => {
       for (const svg of [editionIconSvg(edition), editionMacIconSvg(edition)]) {
         expect(svg).toContain(`d="${LATHE_CARET_PATH}"`);
         expect(svg).toMatch(new RegExp(`d="${LATHE_CARET_TIP_PATH}"[^>]*fill="#FF5A1F"`));
-        // The T3 wordmark outline starts with its T crossbar.
+        // The Lathe wordmark outline starts with its T crossbar.
         expect(svg).not.toContain("M33.4509 93V47.56");
       }
     },

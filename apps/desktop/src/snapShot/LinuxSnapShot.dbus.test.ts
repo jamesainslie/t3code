@@ -27,7 +27,7 @@ const hasDbus =
   NodeChildProcess.spawnSync("gdbus", ["help"]).status === 0;
 
 it.runIf(hasDbus)("captures through real D-Bus marshalling on a private bus", async () => {
-  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-private-dbus-"));
+  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "lathe-private-dbus-"));
   let daemon: NodeChildProcess.ChildProcess | undefined;
   let server: MessageBus | undefined;
   const clients: LinuxCaptureConnection[] = [];
@@ -194,11 +194,11 @@ it.runIf(hasDbus)("captures through real D-Bus marshalling on a private bus", as
       animate: true,
     });
     expect(snapshot.feedback?.animationStarted).toBe(true);
-    await snapshot.feedback!.activate("T3 Code");
+    await snapshot.feedback!.activate("Lathe");
     await snapshot.feedback!.animateTo({ x: 0.1, y: 0.8, width: 0.2, height: 0.1 });
     await snapshot.feedback!.complete();
     expect(feedbackArgs).toEqual([true, true]);
-    expect(activateTitle).toBe("T3 Code");
+    expect(activateTitle).toBe("Lathe");
     expect(animateFrame).toEqual([0.1, 0.8, 0.2, 0.1]);
     vi.stubEnv("XDG_CURRENT_DESKTOP", "KDE");
     const kde = connect();

@@ -13,23 +13,20 @@ import { CustomSnoozeSheet } from "./CustomSnoozeSheet";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { threadArrangementOpenAtom } from "../../state/thread-order";
 import type { ThreadMoveDestination } from "./threadOrder";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@lathe/client-runtime/state/shell";
+import type { EnvironmentThreadSearchMatch } from "@lathe/client-runtime/state/thread-search";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_THREAD_HIGHLIGHT_PALETTE,
   type EnvironmentMachineKind,
-} from "@t3tools/contracts";
-import { buildThreadChipClipboard } from "@t3tools/shared/threadContextReference";
+} from "@lathe/contracts";
+import { buildThreadChipClipboard } from "@lathe/shared/threadContextReference";
 import {
   canAddDependency,
   canSnooze,
   resolveSnoozePresets,
   resolveSnoozeReminder,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@lathe/client-runtime/state/thread-settled";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";

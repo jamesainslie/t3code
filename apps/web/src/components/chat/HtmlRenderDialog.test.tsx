@@ -3,9 +3,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { htmlRenderTheme, HTML_RENDER_DEFAULT_FONTS } from "@t3tools/shared/htmlRender";
-import { T3_CODE_DARK_THEME_COLORS } from "@t3tools/shared/themePalettes";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { htmlRenderTheme, HTML_RENDER_DEFAULT_FONTS } from "@lathe/shared/htmlRender";
+import { LATHE_DARK_THEME_COLORS } from "@lathe/shared/themePalettes";
+import { EnvironmentId, ThreadId } from "@lathe/contracts";
 
 import { HtmlRenderDialog } from "./HtmlRenderDialog";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
@@ -33,7 +33,7 @@ vi.mock("../ui/toast", () => ({ toastManager: { add: showError } }));
 
 vi.mock("~/hooks/useHtmlRenderTheme", () => ({
   useHtmlRenderTheme: () =>
-    htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark", HTML_RENDER_DEFAULT_FONTS),
+    htmlRenderTheme(LATHE_DARK_THEME_COLORS, "dark", HTML_RENDER_DEFAULT_FONTS),
 }));
 
 let root: Root;

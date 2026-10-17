@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { converter } from "culori/fn";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { BUILT_IN_THEMES } from "@lathe/shared/themePalettes";
 
 import {
   applyThemeColorPreview,
@@ -1083,7 +1083,7 @@ describe("stored theme preferences", () => {
     expect(isKnownThemePreference("t3-chat-dark")).toBe(true);
   });
 
-  it("resolves legacy t3-prefixed ids onto the renamed themes", () => {
+  it("resolves legacy lathe-prefixed ids onto the renamed themes", () => {
     for (const [legacy, theme] of [
       ["t3-grove", GROVE_THEME],
       ["t3-ocean", OCEAN_THEME],

@@ -14,8 +14,8 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
-import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
-import * as RelayClient from "@t3tools/shared/relayClient";
+import type { RelayManagedEndpointRuntimeConfig } from "@lathe/contracts/relay";
+import * as RelayClient from "@lathe/shared/relayClient";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
@@ -527,19 +527,19 @@ describe("CloudManagedEndpointRuntime", () => {
         providerKind: "cloudflare_tunnel",
         connectorToken: "token-1",
         tunnelId: "tunnel-1",
-        tunnelName: "t3-code-env-1",
+        tunnelName: "lathe-env-1",
       });
       yield* runtime.applyConfig({
         providerKind: "cloudflare_tunnel",
         connectorToken: "token-1",
         tunnelId: "tunnel-1",
-        tunnelName: "t3-code-env-1",
+        tunnelName: "lathe-env-1",
       });
       yield* runtime.applyConfig({
         providerKind: "cloudflare_tunnel",
         connectorToken: "token-2",
         tunnelId: "tunnel-1",
-        tunnelName: "t3-code-env-1",
+        tunnelName: "lathe-env-1",
       });
       const stopped = yield* runtime.applyConfig(null);
 

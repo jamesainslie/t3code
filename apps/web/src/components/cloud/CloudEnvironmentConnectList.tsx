@@ -1,24 +1,24 @@
-import { findErrorTraceId } from "@t3tools/client-runtime/errors";
+import { findErrorTraceId } from "@lathe/client-runtime/errors";
 import {
   type EnvironmentConnectionPresentation,
   RelayConnectionRegistration,
   RelayConnectionTarget,
   orchestrationProtocolCompatibilityError,
-} from "@t3tools/client-runtime/connection";
-import { relayOfflineReasonMessage } from "@t3tools/client-runtime/relay";
+} from "@lathe/client-runtime/connection";
+import { relayOfflineReasonMessage } from "@lathe/client-runtime/relay";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@lathe/client-runtime/state/runtime";
 import {
   type EnvironmentId,
   resolveEnvironmentMachineKind,
   type ServerConfig,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import type {
   RelayClientEnvironmentRecord,
   RelayEnvironmentStatusResponse,
-} from "@t3tools/contracts/relay";
+} from "@lathe/contracts/relay";
 import * as Option from "effect/Option";
 import { type ReactNode, useCallback, useEffect, useEffectEvent, useState } from "react";
 
@@ -170,7 +170,7 @@ export function CloudEnvironmentConnectRows({
     const message =
       cause instanceof Error ? cause.message : "Could not connect the T3 Connect environment.";
     const traceId = findErrorTraceId(cause);
-    console.error("[t3-connect] Could not connect environment", { message, traceId, cause });
+    console.error("[lathe-connect] Could not connect environment", { message, traceId, cause });
     toastManager.add({
       type: "error",
       title: "Could not connect environment",

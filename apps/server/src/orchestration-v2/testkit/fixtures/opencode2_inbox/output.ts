@@ -1,5 +1,5 @@
 import { assert } from "@effect/vitest";
-import type { ProviderReplayTranscript } from "@t3tools/contracts";
+import type { ProviderReplayTranscript } from "@lathe/contracts";
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
 import {
@@ -58,6 +58,6 @@ export function assertOpenCode2InboxOutput(
   assert.deepEqual([shell?.status, shell?.runId], ["completed", first?.id]);
 
   for (const turn of [...turnOf(first), ...turnOf(queued)]) {
-    assert.match(turn.nativeTurnRef?.nativeId ?? "", /^msg_t3_turn_/);
+    assert.match(turn.nativeTurnRef?.nativeId ?? "", /^msg_lathe_turn_/);
   }
 }

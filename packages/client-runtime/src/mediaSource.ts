@@ -1,14 +1,14 @@
-import type { AssetResource, ThreadId } from "@t3tools/contracts";
-import { mediaMimeType, mediaMimeTypeFromExtension } from "@t3tools/shared/filePreview";
+import type { AssetResource, ThreadId } from "@lathe/contracts";
+import { mediaMimeType, mediaMimeTypeFromExtension } from "@lathe/shared/filePreview";
 
 import {
   classifyMarkdownImageSource,
   markdownImageSourceFragment,
   type MarkdownImageSource,
 } from "./markdownImages.ts";
-import { fileBasename } from "@t3tools/shared/path";
-import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
-import { splitMarkdownLinkSearchAndHash } from "@t3tools/shared/markdownLinks";
+import { fileBasename } from "@lathe/shared/path";
+import { splitFilePathPosition } from "@lathe/shared/fileLinks";
+import { splitMarkdownLinkSearchAndHash } from "@lathe/shared/markdownLinks";
 import {
   mediaFileReference,
   mediaReferenceFileName,

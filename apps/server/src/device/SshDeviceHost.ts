@@ -4,10 +4,10 @@ import {
   DeviceToolVersions,
   deviceToolInstallMessage,
   type SshDeviceHostConfig,
-} from "@t3tools/contracts";
-import { runSshCommand, baseSshArgs, resolveSshCommand } from "@t3tools/ssh/command";
-import * as NetService from "@t3tools/shared/Net";
-import { waitForHttpReady } from "@t3tools/shared/httpReadiness";
+} from "@lathe/contracts";
+import { runSshCommand, baseSshArgs, resolveSshCommand } from "@lathe/ssh/command";
+import * as NetService from "@lathe/shared/Net";
+import { waitForHttpReady } from "@lathe/shared/httpReadiness";
 import * as Crypto from "effect/Crypto";
 import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";

@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 
-import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import {
-  serializeAssistantCitation,
-  withCitationComment,
-} from "@t3tools/shared/assistantCitations";
+import { EnvironmentId, MessageId, ThreadId } from "@lathe/contracts";
+import { serializeAssistantCitation, withCitationComment } from "@lathe/shared/assistantCitations";
 import { act, createRef, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";

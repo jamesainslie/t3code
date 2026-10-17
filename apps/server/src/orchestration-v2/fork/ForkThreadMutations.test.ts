@@ -7,7 +7,7 @@ import {
   ProviderInstanceId,
   SNOOZE_REMINDER_NOTICE_TITLE,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 

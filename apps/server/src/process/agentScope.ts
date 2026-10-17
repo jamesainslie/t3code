@@ -7,10 +7,10 @@ import {
   agentScopeCommand,
   type AgentScopeShape,
   type AgentSystemdScope,
-} from "@t3tools/shared/AgentScope";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
-import { resolveCommandPath } from "@t3tools/shared/shell";
+} from "@lathe/shared/AgentScope";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
+import { resolveCommandPath } from "@lathe/shared/shell";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -329,7 +329,7 @@ export const make = Effect.gen(function* () {
       if (resolved === null) return { command, args };
       const scope = yield* systemd;
       if (scope === undefined) return agentScopeCommand({ command: resolved, args });
-      const unit = `t3code-${name}-${NodeCrypto.randomUUID().slice(0, 8)}.scope`;
+      const unit = `lathe-${name}-${NodeCrypto.randomUUID().slice(0, 8)}.scope`;
       if (threadId !== undefined) yield* track(scope.systemctl, threadId, unit);
       const systemdScope: AgentSystemdScope = {
         systemdRun: scope.systemdRun,

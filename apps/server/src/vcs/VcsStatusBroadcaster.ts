@@ -20,10 +20,10 @@ import type {
   VcsStatusResult,
   VcsStatusStreamEvent,
   VcsStatusSubscriptionInput,
-} from "@t3tools/contracts";
-import { mergeGitStatusParts } from "@t3tools/shared/git";
-import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+} from "@lathe/contracts";
+import { mergeGitStatusParts } from "@lathe/shared/git";
+import * as KeyedLock from "@lathe/shared/KeyedLock";
+import { resolveProjectSettings } from "@lathe/shared/projectSettings";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
@@ -146,7 +146,7 @@ interface StreamStatusOptions {
 
 export class VcsAutoPullPolicy extends Context.Reference<{
   readonly isEnabled: (cwd: string) => Effect.Effect<boolean, never>;
-}>("t3/vcs/VcsAutoPullPolicy", {
+}>("lathe/vcs/VcsAutoPullPolicy", {
   defaultValue: () => ({ isEnabled: () => Effect.succeed(false) }),
 }) {}
 
@@ -201,7 +201,7 @@ export class VcsStatusBroadcaster extends Context.Service<
       options?: StreamStatusOptions,
     ) => Stream.Stream<VcsStatusStreamEvent, GitManagerServiceError>;
   }
->()("t3/vcs/VcsStatusBroadcaster") {}
+>()("lathe/vcs/VcsStatusBroadcaster") {}
 
 function fingerprintStatusPart(status: unknown): string {
   return JSON.stringify(status);

@@ -6,7 +6,7 @@ import type {
   OrchestrationV2ThreadProjection,
   OrchestrationV2TurnItem,
   RunId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 
 export type DigestTurnState = "running" | "completed" | "interrupted" | "error" | "queued";
 

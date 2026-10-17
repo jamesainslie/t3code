@@ -1,8 +1,8 @@
 import * as Dialog from "../../components/ui/Dialog";
 import { ConnectionTraceId } from "./ConnectionTraceId";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
-import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
+import type { AtomCommandResult } from "@lathe/client-runtime/state/runtime";
+import { type EnvironmentId, resolveEnvironmentMachineKind } from "@lathe/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";

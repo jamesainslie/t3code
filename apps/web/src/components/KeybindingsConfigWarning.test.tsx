@@ -4,7 +4,7 @@ import {
   EnvironmentId,
   type AuthEnvironmentScope,
   type AuthSessionState,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("../connection/runtime", () => ({ connectionAtomRuntime: undefined }));
-vi.mock("@t3tools/client-runtime/state/session", () => ({
+vi.mock("@lathe/client-runtime/state/session", () => ({
   createEnvironmentSessionAtoms: () => ({
     sessionStateAtom: (id: EnvironmentId) => state.sessions.get(id)!,
   }),
@@ -52,7 +52,7 @@ const session = (scopes: readonly AuthEnvironmentScope[]): AuthSessionState => (
     policy: "remote-reachable",
     bootstrapMethods: ["one-time-token"],
     sessionMethods: ["bearer-access-token"],
-    sessionCookieName: "t3_session",
+    sessionCookieName: "lathe_session",
   },
 });
 
@@ -83,7 +83,7 @@ it("updates a visible warning on revocation and blocks its retained action until
       <RegistryContext.Provider value={state.registry!}>
         <KeybindingsConfigWarning
           environmentId={environmentId}
-          configPath="/t3/keybindings.json"
+          configPath="/lathe/keybindings.json"
           availableEditors={["vscode"]}
           message="Invalid shortcut"
         />
@@ -114,6 +114,6 @@ it("updates a visible warning on revocation and blocks its retained action until
   await act(async () => open());
   expect(state.run).toHaveBeenCalledExactlyOnceWith({
     environmentId,
-    input: { cwd: "/t3/keybindings.json", editor: "vscode" },
+    input: { cwd: "/lathe/keybindings.json", editor: "vscode" },
   });
 });

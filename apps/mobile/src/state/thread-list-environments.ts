@@ -4,9 +4,9 @@ import {
   type EnvironmentMachineKind,
   type ServerConfig,
   type ServerProvider,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { Atom } from "effect/reactivity";
-import { supportsSnoozeReminder } from "@t3tools/client-runtime/state/thread-settled";
+import { supportsSnoozeReminder } from "@lathe/client-runtime/state/thread-settled";
 
 export type ThreadListProvider = Pick<
   ServerProvider,
@@ -131,7 +131,7 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
     snoozeReminderEnvironmentIds,
     dependencyEnvironmentIds,
     highlightEnvironmentIds,
-    /** Feeds `canContinueThread` from @t3tools/shared/threadContextReference. */
+    /** Feeds `canContinueThread` from @lathe/shared/threadContextReference. */
     continuationServerByEnvironmentId,
   };
 }

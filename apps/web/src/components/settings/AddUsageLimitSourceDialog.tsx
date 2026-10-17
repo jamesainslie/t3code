@@ -1,4 +1,4 @@
-import { type EnvironmentId, UsageLimitSourceId } from "@t3tools/contracts";
+import { type EnvironmentId, UsageLimitSourceId } from "@lathe/contracts";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
@@ -188,7 +188,7 @@ export function AddUsageLimitSourceDialog({
                   <Label htmlFor="usage-source-client-id">Client ID</Label>
                   <Input
                     id="usage-source-client-id"
-                    placeholder="t3-code"
+                    placeholder="lathe"
                     value={clientId}
                     onChange={(event) => setClientId(event.target.value)}
                   />

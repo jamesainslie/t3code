@@ -1,4 +1,4 @@
-import { ProviderSetupError, type ProviderInstanceId } from "@t3tools/contracts";
+import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
@@ -113,7 +113,7 @@ export const makeCodexAuth = Effect.fn("makeCodexAuth")(function* (
               .pipe(Effect.mapError((error) => setupError("start", error.detail)));
             break;
           default:
-            return yield* setupError("start", "Codex started a sign-in T3 Code cannot relay.");
+            return yield* setupError("start", "Codex started a sign-in Lathe cannot relay.");
         }
         // Cancel or expiry closes this scope before completion; tell Codex so
         // its listener and device-code polling stop with the process.

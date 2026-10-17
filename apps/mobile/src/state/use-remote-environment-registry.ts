@@ -1,7 +1,7 @@
 import * as Dialog from "../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useCallback } from "react";
@@ -175,7 +175,7 @@ export function useRemoteConnections() {
           [
             { text: "Cancel", style: "cancel" },
             {
-              text: "Open T3 Account",
+              text: "Open Lathe Account",
               onPress: () => navigation.navigate("SettingsSheet", { screen: "SettingsAuth" }),
             },
             remove,

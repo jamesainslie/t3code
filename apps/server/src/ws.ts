@@ -1,4 +1,4 @@
-import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import { OrchestrationDispatchCommandError } from "@lathe/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 
@@ -18,6 +18,7 @@ import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { rpcInitialItems } from "./rpcInitialItems.ts";
+import { readProjectFileWithLegacyFallback } from "./project/forkLegacyProjectFile.ts";
 import { subscribeChatGptHandoff } from "./provider/CodexChatGptHandoff.ts";
 import { subscribeCodexAuthCallback } from "./provider/CodexAuthCallback.ts";
 import {
@@ -101,8 +102,8 @@ import {
   type PullRequestRef,
   WS_METHODS,
   WsRpcGroup,
-} from "@t3tools/contracts";
-import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
+} from "@lathe/contracts";
+import { resolveServerBackgroundActivitySettings } from "@lathe/shared/backgroundActivitySettings";
 import {
   HttpRouter,
   HttpServerRequest,
@@ -122,7 +123,7 @@ import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import {
@@ -166,10 +167,10 @@ import * as OrchestrationEventStore from "./persistence/OrchestrationEventStore.
 import { userFacingDispatchErrorMessage } from "./orchestration-v2/UserFacingErrors.ts";
 import * as ProviderRegistry from "./provider/ProviderRegistry.ts";
 import * as ProviderInstanceRegistry from "./provider/ProviderInstanceRegistry.ts";
-import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
-import * as AcpRegistryRuntimeCoordinator from "@t3tools/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
+import * as AcpRegistrySupport from "@lathe/provider-acp-registry/server/AcpRegistrySupport";
+import * as AcpRegistryRuntimeCoordinator from "@lathe/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
 import * as ModelManifest from "./provider/ModelManifest.ts";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import * as ProviderLatestVersions from "@lathe/provider-core/server/ProviderLatestVersions";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import * as ProviderAuthService from "./provider/ProviderAuthService.ts";
 import { makeProviderInstallation } from "./provider/providerInstallation.ts";
@@ -247,12 +248,9 @@ import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
-import * as RelayClient from "@t3tools/shared/relayClient";
-import { sameGatewayRoutes, withGatewayRoutedModels } from "@t3tools/shared/gatewayRoutedModels";
-import {
-  sameUsageLimitCommandCoverage,
-  withUsageLimitsCommands,
-} from "@t3tools/shared/usageLimits";
+import * as RelayClient from "@lathe/shared/relayClient";
+import { sameGatewayRoutes, withGatewayRoutedModels } from "@lathe/shared/gatewayRoutedModels";
+import { sameUsageLimitCommandCoverage, withUsageLimitsCommands } from "@lathe/shared/usageLimits";
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
@@ -1498,7 +1496,7 @@ const layerWsRpc = (
               if (racedImport !== null) return { threadId, imported: false } as const;
               return yield* new AcpRegistryOperationError({
                 reason: "session_import_failed",
-                message: "Could not create a T3 thread for the ACP session.",
+                message: "Could not create a Lathe thread for the ACP session.",
                 cause: launched.failure,
               });
             }
@@ -1539,7 +1537,7 @@ const layerWsRpc = (
             if (importedThread !== null) {
               return yield* new AcpRegistryOperationError({
                 reason: "session_delete_failed",
-                message: "Delete the imported T3 thread before deleting its native ACP session.",
+                message: "Delete the imported Lathe thread before deleting its native ACP session.",
               });
             }
             yield* manager.deleteSession({
@@ -2644,7 +2642,7 @@ const layerWsRpc = (
             ),
           ),
         [WS_METHODS.projectsReadFile]: (input) =>
-          workspaceFileSystem.readFile(input).pipe(
+          readProjectFileWithLegacyFallback(input, workspaceFileSystem.readFile).pipe(
             Effect.mapError(
               (cause) =>
                 new ProjectReadFileError({

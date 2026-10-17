@@ -1,11 +1,11 @@
 import type { ThreadMoveDestination } from "../threads/threadOrder";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentThreadShell } from "@lathe/client-runtime/state/shell";
 import {
   canAddDependency,
   canSnooze,
   effectiveSnoozed,
-} from "@t3tools/client-runtime/state/thread-settled";
-import { AuthOrchestrationOperateScope, type ThreadId } from "@t3tools/contracts";
+} from "@lathe/client-runtime/state/thread-settled";
+import { AuthOrchestrationOperateScope, type ThreadId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";
@@ -14,7 +14,7 @@ import { withThreadDismissal } from "./thread-dismissal";
 import * as Dialog from "../../components/ui/Dialog";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
-import { pinOrderKeyBetween } from "@t3tools/client-runtime/state/thread-sort";
+import { pinOrderKeyBetween } from "@lathe/client-runtime/state/thread-sort";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { readEnvironmentScope } from "../../state/session";

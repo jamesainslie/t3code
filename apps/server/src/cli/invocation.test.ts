@@ -1,13 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import packageJson from "../../package.json" with { type: "json" };
-import { FORK_NPM_LAUNCHER_SCRIPT } from "@t3tools/shared/forkCliArtifacts";
-import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
+import { FORK_NPM_LAUNCHER_SCRIPT } from "@lathe/shared/forkCliArtifacts";
+import { FORK_IDENTITY, forkPackageSpec } from "@lathe/shared/forkIdentity";
 
 import {
   formatCliCommand,
@@ -19,35 +19,35 @@ import {
 it("formats package runner commands from their cache entry paths", () => {
   for (const [entryPath, expected] of [
     [
-      "/home/theo/.npm/_npx/abc123/node_modules/t3/dist/bin.mjs",
+      "/home/theo/.npm/_npx/abc123/node_modules/lathe/dist/bin.mjs",
       `npx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "C:\\Users\\theo\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\t3\\dist\\bin.mjs",
+      "C:\\Users\\theo\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\lathe\\dist\\bin.mjs",
       `npx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "/home/theo/.cache/pnpm/dlx/abc/node_modules/t3/dist/bin.mjs",
+      "/home/theo/.cache/pnpm/dlx/abc/node_modules/lathe/dist/bin.mjs",
       `pnpm dlx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "/home/theo/.local/share/pnpm/.pnpm/dlx/abc/node_modules/t3/dist/bin.mjs",
+      "/home/theo/.local/share/pnpm/.pnpm/dlx/abc/node_modules/lathe/dist/bin.mjs",
       `pnpm dlx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "C:\\Users\\theo\\AppData\\Local\\pnpm-cache\\dlx\\abc\\node_modules\\t3\\dist\\bin.mjs",
+      "C:\\Users\\theo\\AppData\\Local\\pnpm-cache\\dlx\\abc\\node_modules\\lathe\\dist\\bin.mjs",
       `pnpm dlx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "/home/theo/.bun/install/cache/t3@0.0.31/dist/bin.mjs",
+      "/home/theo/.bun/install/cache/@jamesainslie/lathe@0.0.31/dist/bin.mjs",
       `bunx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "/tmp/bunx-1000-t3@latest/node_modules/t3/dist/bin.mjs",
+      "/tmp/bunx-1000-lathe@latest/node_modules/lathe/dist/bin.mjs",
       `bunx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
     [
-      "C:\\Users\\theo\\AppData\\Local\\Temp\\bunx-0-t3@latest\\node_modules\\t3\\dist\\bin.mjs",
+      "C:\\Users\\theo\\AppData\\Local\\Temp\\bunx-0-lathe@latest\\node_modules\\lathe\\dist\\bin.mjs",
       `bunx ${FORK_IDENTITY.npmPackageName} serve`,
     ],
   ] as const) {
@@ -57,9 +57,9 @@ it("formats package runner commands from their cache entry paths", () => {
 
 it("treats stable installs as direct invocations", () => {
   for (const entryPath of [
-    "/usr/local/lib/node_modules/t3/dist/bin.mjs",
+    "/usr/local/lib/node_modules/lathe/dist/bin.mjs",
     "/home/theo/Code/work/t3code/apps/server/dist/bin.mjs",
-    "/home/theo/.t3/runtime/0.0.31/node_modules/t3/dist/bin.mjs",
+    "/home/theo/.lathe/runtime/0.0.31/node_modules/lathe/dist/bin.mjs",
     "",
   ]) {
     assert.equal(
@@ -79,7 +79,7 @@ it("re-suggests the prerelease channel only for prerelease builds", () => {
     assert.equal(
       formatCliCommand({
         subcommand: "serve",
-        entryPath: "/home/theo/.npm/_npx/abc123/node_modules/t3/dist/bin.mjs",
+        entryPath: "/home/theo/.npm/_npx/abc123/node_modules/lathe/dist/bin.mjs",
         version,
       }),
       expected,
@@ -91,7 +91,7 @@ it("formats serve suggestions to match the launching command", () => {
   assert.equal(
     formatCliCommand({
       subcommand: "serve",
-      entryPath: "/home/theo/.npm/_npx/abc/node_modules/t3/dist/bin.mjs",
+      entryPath: "/home/theo/.npm/_npx/abc/node_modules/lathe/dist/bin.mjs",
       version: "0.0.31-nightly.20260729",
     }),
     `npx ${forkPackageSpec("nightly")} serve`,
@@ -99,7 +99,7 @@ it("formats serve suggestions to match the launching command", () => {
   assert.equal(
     formatCliCommand({
       subcommand: "serve",
-      entryPath: "/tmp/bunx-1000-t3@latest/node_modules/t3/dist/bin.mjs",
+      entryPath: "/tmp/bunx-1000-lathe@latest/node_modules/lathe/dist/bin.mjs",
       version: "0.0.31",
     }),
     `bunx ${FORK_IDENTITY.npmPackageName} serve`,
@@ -107,7 +107,7 @@ it("formats serve suggestions to match the launching command", () => {
   assert.equal(
     formatCliCommand({
       subcommand: "serve",
-      entryPath: "/usr/local/lib/node_modules/t3/dist/bin.mjs",
+      entryPath: "/usr/local/lib/node_modules/lathe/dist/bin.mjs",
       version: "0.0.31-nightly.20260729",
     }),
     `${FORK_IDENTITY.cliBin} serve`,
@@ -130,7 +130,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       Effect.provideService(HostProcess.Environment, { PATH: input.path ?? "", ...input.env }),
     );
 
-  const pathWithT3 = Effect.gen(function* () {
+  const pathWithLathe = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const bin = yield* fs.makeTempDirectoryScoped();
@@ -140,7 +140,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
 
   it.effect("keeps a user-installed Node reachable when the command runs under sudo", () =>
     Effect.gen(function* () {
-      const npx = "/home/theo/.npm/_npx/abc/node_modules/t3/dist/bin.mjs";
+      const npx = "/home/theo/.npm/_npx/abc/node_modules/lathe/dist/bin.mjs";
       // sudo's secure_path already has a system Node.
       expect(yield* rootCommand({ node: "/usr/bin/node", entry: npx })).toBe(
         `sudo npx ${FORK_IDENTITY.npmPackageName} browser setup`,
@@ -152,43 +152,43 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       expect(
         yield* rootCommand({
           node: "/home/theo/.local/node/bin/node",
-          entry: "/home/theo/.local/lib/node_modules/t3/dist/bin.mjs",
-          path: yield* pathWithT3,
+          entry: "/home/theo/.local/lib/node_modules/lathe/dist/bin.mjs",
+          path: yield* pathWithLathe,
         }),
       ).toBe(`sudo env "PATH=$PATH" ${FORK_IDENTITY.cliBin} browser setup`);
     }).pipe(Effect.scoped),
   );
 
-  it.effect("names this install's launcher when t3 is not on PATH", () =>
+  it.effect("names this install's launcher when lathe is not on PATH", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const shim = path.join(home, ".local bin", "t3");
+      const shim = path.join(home, ".local bin", "lathe");
       yield* fs.makeDirectory(path.dirname(shim), { recursive: true });
       yield* fs.writeFileString(shim, "#!/bin/sh\n", { mode: 0o755 });
       const desktop = {
-        node: "/tmp/.mount_T3abc/t3code",
-        entry: "/tmp/.mount_T3abc/resources/app.asar/apps/server/dist/bin.mjs",
-        env: { T3CODE_CLI_PATH: shim },
+        node: "/tmp/.mount_Latheabc/t3code",
+        entry: "/tmp/.mount_Latheabc/resources/app.asar/apps/server/dist/bin.mjs",
+        env: { LATHE_CLI_PATH: shim },
       };
 
       expect(yield* rootCommand(desktop)).toBe(`sudo '${shim}' browser setup`);
 
-      expect(yield* rootCommand({ ...desktop, path: yield* pathWithT3 })).toBe(
+      expect(yield* rootCommand({ ...desktop, path: yield* pathWithLathe })).toBe(
         `sudo env "PATH=$PATH" ${FORK_IDENTITY.cliBin} browser setup`,
       );
 
       expect(
         yield* rootCommand({
-          node: "/opt/t3/t3",
-          entry: "/opt/t3/t3",
+          node: "/opt/lathe/lathe",
+          entry: "/opt/lathe/lathe",
           executable: true,
         }),
-      ).toBe("sudo /opt/t3/t3 browser setup");
+      ).toBe("sudo /opt/lathe/lathe browser setup");
 
       expect(
-        yield* rootCommand({ ...desktop, env: { T3CODE_CLI_PATH: path.join(home, "gone") } }),
+        yield* rootCommand({ ...desktop, env: { LATHE_CLI_PATH: path.join(home, "gone") } }),
       ).toBe(`sudo env "PATH=$PATH" ${FORK_IDENTITY.cliBin} browser setup`);
     }).pipe(Effect.scoped),
   );
@@ -200,14 +200,14 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const shim = path.join(home, "t3.cmd");
+      const shim = path.join(home, "lathe.cmd");
       yield* fs.writeFileString(shim, "@echo off\r\n");
       const hostCommand = (platform: NodeJS.Platform, env: Record<string, string>) =>
-        resolveHostCliCommand("doctor", ["--base-dir", "C:\\Users\\Jane Doe\\.t3"]).pipe(
-          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\T3 Code\\t3.exe"),
+        resolveHostCliCommand("doctor", ["--base-dir", "C:\\Users\\Jane Doe\\.lathe"]).pipe(
+          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\Lathe\\lathe.exe"),
           Effect.provideService(HostProcess.Arguments, [
-            "C:\\Program Files\\T3 Code\\t3.exe",
-            "C:\\Program Files\\T3 Code\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
+            "C:\\Program Files\\Lathe\\lathe.exe",
+            "C:\\Program Files\\Lathe\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
           ]),
           Effect.provideService(HostProcess.IsExecutable, false),
           Effect.provideService(HostProcess.Platform, platform),
@@ -215,29 +215,32 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
         );
       // The desktop shim is called through `&`, and each argument is quoted
       // the PowerShell way: no POSIX single quotes anywhere.
-      expect((yield* hostCommand("win32", { T3CODE_CLI_PATH: shim })).command).toBe(
-        `& "${shim}" doctor "--base-dir" "C:\\Users\\Jane Doe\\.t3"`,
+      expect((yield* hostCommand("win32", { LATHE_CLI_PATH: shim })).command).toBe(
+        `& "${shim}" doctor "--base-dir" "C:\\Users\\Jane Doe\\.lathe"`,
       );
       // Without a launcher, the plain CLI with PowerShell-quoted arguments.
       expect((yield* hostCommand("win32", {})).command).toBe(
-        `${FORK_IDENTITY.cliBin} doctor "--base-dir" "C:\\Users\\Jane Doe\\.t3"`,
+        `${FORK_IDENTITY.cliBin} doctor "--base-dir" "C:\\Users\\Jane Doe\\.lathe"`,
       );
       // Typographic quotes also delimit PowerShell strings; doubling keeps them.
       expect(
-        (yield* resolveHostCliCommand("doctor", ["--base-dir", "C:\\T3\\\u201CArchive\u201D"]).pipe(
+        (yield* resolveHostCliCommand("doctor", [
+          "--base-dir",
+          "C:\\Lathe\\\u201CArchive\u201D",
+        ]).pipe(
           Effect.provideService(HostProcess.Platform, "win32"),
           Effect.provideService(HostProcess.Environment, { PATH: "" }),
-          Effect.provideService(HostProcess.ExecutablePath, "C:\\t3.exe"),
-          Effect.provideService(HostProcess.Arguments, ["C:\\t3.exe", "C:\\bin.mjs"]),
+          Effect.provideService(HostProcess.ExecutablePath, "C:\\lathe.exe"),
+          Effect.provideService(HostProcess.Arguments, ["C:\\lathe.exe", "C:\\bin.mjs"]),
           Effect.provideService(HostProcess.IsExecutable, false),
         )).command,
       ).toBe(
-        `${FORK_IDENTITY.cliBin} doctor "--base-dir" "C:\\T3\\\u201C\u201CArchive\u201D\u201D"`,
+        `${FORK_IDENTITY.cliBin} doctor "--base-dir" "C:\\Lathe\\\u201C\u201CArchive\u201D\u201D"`,
       );
       // POSIX hosts keep single quotes for the same input. The shim prefix is
       // a host path, so only the arguments are asserted.
-      expect((yield* hostCommand("linux", { T3CODE_CLI_PATH: shim })).command).toMatch(
-        / doctor --base-dir 'C:\\Users\\Jane Doe\\\.t3'$/,
+      expect((yield* hostCommand("linux", { LATHE_CLI_PATH: shim })).command).toMatch(
+        / doctor --base-dir 'C:\\Users\\Jane Doe\\\.lathe'$/,
       );
     }).pipe(Effect.scoped),
   );
@@ -254,13 +257,13 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.writeFileString(executable, "");
       // Fork: the fork's launcher package and bin names.
       for (const [relative, kind] of [
-        ["npm/_npx/hash/node_modules/t3/dist/bin.mjs", "npx"],
+        ["npm/_npx/hash/node_modules/lathe/dist/bin.mjs", "npx"],
         [
           `npm/_npx/hash/node_modules/${FORK_IDENTITY.npmPackageName}/${FORK_NPM_LAUNCHER_SCRIPT}`,
           "npx",
         ],
-        ["pnpm/dlx/hash/node_modules/t3/dist/bin.mjs", "pnpm-dlx"],
-        [".bun/install/cache/t3/dist/bin.mjs", "bunx"],
+        ["pnpm/dlx/hash/node_modules/lathe/dist/bin.mjs", "pnpm-dlx"],
+        [".bun/install/cache/lathe/dist/bin.mjs", "bunx"],
       ] as const) {
         const entry = path.join(root, relative);
         yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
@@ -276,7 +279,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
           Effect.provideService(HostProcess.IsExecutable, launchedBy),
           Effect.provideService(
             HostProcess.Environment,
-            launchedBy ? { T3CODE_NPM_LAUNCHER_PATH: entry } : {},
+            launchedBy ? { LATHE_NPM_LAUNCHER_PATH: entry } : {},
           ),
         );
         expect(installation).toEqual({ kind });
@@ -310,7 +313,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.symlink(entry, globalBin);
       expect(yield* resolve).toEqual({ kind: "npm-global", prefix });
       yield* fs.remove(globalBin);
-      yield* fs.writeFileString(globalBin, "an unrelated t3 command");
+      yield* fs.writeFileString(globalBin, "an unrelated lathe command");
       expect(yield* resolve).toBeNull();
       expect(yield* resolve.pipe(Effect.provideService(HostProcess.Platform, "win32"))).toBeNull();
     }),
@@ -337,9 +340,9 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
         Effect.provideService(HostProcess.Arguments, [executable, executable]),
         Effect.provideService(HostProcess.IsExecutable, true),
         Effect.provideService(HostProcess.Platform, "linux"),
-        Effect.provideService(HostProcess.Environment, { T3CODE_NPM_LAUNCHER_PATH: launcher }),
+        Effect.provideService(HostProcess.Environment, { LATHE_NPM_LAUNCHER_PATH: launcher }),
       );
-      // A launcher for another version is some other `t3` the server spawned
+      // A launcher for another version is some other `lathe` the server spawned
       // (the variable is inherited), not the install this executable runs from.
       for (const [version, expected] of [
         ["0.0.1", null],
@@ -360,9 +363,9 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
       for (const relative of [
-        "project/node_modules/t3/dist/bin.mjs",
+        "project/node_modules/lathe/dist/bin.mjs",
         "project/apps/server/dist/bin.mjs",
-        ".t3/runtime/0.0.45/t3",
+        ".lathe/runtime/0.0.45/lathe",
         "missing/dist/bin.mjs",
       ]) {
         const entry = path.join(root, relative);

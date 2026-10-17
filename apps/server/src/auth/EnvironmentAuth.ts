@@ -24,8 +24,8 @@ import {
   type AuthWebSocketTicketResult,
   DpopFailureReason,
   type DpopFailureReason as DpopFailureReasonType,
-} from "@t3tools/contracts";
-import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
+} from "@lathe/contracts";
+import { encodeOAuthScope } from "@lathe/shared/oauthScope";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -46,6 +46,7 @@ import { REUSABLE_DEV_SESSION_EXPIRES_AT, resolveReusableDevAuth } from "./Reusa
 import { verifyRequestDpopProof } from "./dpop.ts";
 import { DESKTOP_RENDERER_ORIGINS } from "../httpCors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import { preRenameSessionCookieName } from "./forkLegacySessionCookie.ts";
 
 const DEFAULT_SESSION_SUBJECT = "cli-issued-session";
 export const INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT = "administrative-bootstrap";
@@ -576,7 +577,7 @@ export class EnvironmentAuth extends Context.Service<
       request: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError>;
   }
->()("t3/auth/EnvironmentAuth") {}
+>()("lathe/auth/EnvironmentAuth") {}
 
 type BootstrapExchangeResult = {
   readonly response: AuthBrowserSessionResult;
@@ -671,7 +672,9 @@ export function selectRequestCredential(
     return { token: dpopToken, source: "dpop" } as const;
   }
 
-  const legacyToken = legacyCookieName ? request.cookies[legacyCookieName] : undefined;
+  const legacyToken =
+    (legacyCookieName ? request.cookies[legacyCookieName] : undefined) ??
+    request.cookies[preRenameSessionCookieName(cookieName)];
   if (legacyToken !== undefined) {
     return { token: legacyToken, source: "legacy-cookie" } as const;
   }

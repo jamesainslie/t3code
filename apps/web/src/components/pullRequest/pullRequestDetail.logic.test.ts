@@ -1,6 +1,6 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@lathe/contracts";
 import { resolvePlanFollowUpSubmission } from "../../proposedPlan";
-import { serializeLegacyContextMessage } from "@t3tools/shared/composerContextLegacySend";
+import { serializeLegacyContextMessage } from "@lathe/shared/composerContextLegacySend";
 import {
   ProjectId,
   PullRequestAction,
@@ -13,7 +13,7 @@ import {
   type PullRequestState,
   type RepositoryIdentity,
   type ThreadPullRequestLink,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { formatInlineContextReference } from "~/lib/composerContextReferences";
 import { buildMessageContext, reviewCommentContextReference } from "~/lib/composerContextRecords";
@@ -95,7 +95,7 @@ describe("pull request checkout commands", () => {
       "bitbucket",
       "feature/checkout",
       "maria/t3code",
-      "git clone --single-branch --branch feature/checkout https://bitbucket.org/maria/t3code.git t3code-pr-42",
+      "git clone --single-branch --branch feature/checkout https://bitbucket.org/maria/t3code.git lathe-pr-42",
     ],
     ["unknown", "feature", null, null],
   ] as const)("builds the %s command", (provider, branch, repository, expected) => {
@@ -813,7 +813,7 @@ describe("fix findings handoff", () => {
       reviewThreads: [
         thread("already handled", { isResolved: true }),
         thread("   ", { id: "t2" }),
-        thread("still open", { id: "t3" }),
+        thread("still open", { id: "lathe" }),
       ],
       checks: [],
     });
@@ -1132,7 +1132,7 @@ describe("asking about a change rather than working on it", () => {
     expect(legacyText).toContain(base.url);
     expect(legacyText).toContain(prose);
     expect(legacyText).not.toContain("PLEASE IMPLEMENT THIS PLAN");
-    expect(legacyText).not.toContain("t3-context://");
+    expect(legacyText).not.toContain("lathe-context://");
   });
 
   it("builds a neutral composer reference without prescribing an action", () => {
@@ -1997,7 +1997,7 @@ describe("cached pull request detail", () => {
 
   it("shrugs off corrupt storage and no storage at all", () => {
     const storage = makeStorage();
-    storage.setItem("t3.pullRequests.detail:env-1:project-1:acme/web#7", "{not json");
+    storage.setItem("lathe.pullRequests.detail:env-1:project-1:acme/web#7", "{not json");
     expect(readPullRequestDetailSnapshot(storage, "env-1", reference)).toBeNull();
     expect(readPullRequestDetailSnapshot(undefined, "env-1", reference)).toBeNull();
     const hosted = { ...reference, host: "github.com" };

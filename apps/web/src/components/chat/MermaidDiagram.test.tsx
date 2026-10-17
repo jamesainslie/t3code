@@ -14,7 +14,7 @@ vi.mock("../ui/dialog", async (importOriginal) => {
     ),
   };
 });
-vi.mock("@t3tools/client-runtime/mermaid-renderer", () => ({
+vi.mock("@lathe/client-runtime/mermaid-renderer", () => ({
   renderMermaid: vi.fn(
     async (_source: string, theme: string) =>
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${theme}</text></svg>`,
@@ -41,7 +41,7 @@ function toggleOf(renderer: ReactTestRenderer) {
 
 describe("ExpandedDiagram", () => {
   it("opens in the app theme and re-renders the source in the other palette on toggle", async () => {
-    const { renderMermaid } = await import("@t3tools/client-runtime/mermaid-renderer");
+    const { renderMermaid } = await import("@lathe/client-runtime/mermaid-renderer");
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -76,7 +76,7 @@ describe("ExpandedDiagram", () => {
   });
 
   it("keeps the current picture and reports when the other palette fails to render", async () => {
-    const { renderMermaid } = await import("@t3tools/client-runtime/mermaid-renderer");
+    const { renderMermaid } = await import("@lathe/client-runtime/mermaid-renderer");
     vi.mocked(renderMermaid).mockRejectedValueOnce(new Error("boom"));
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;

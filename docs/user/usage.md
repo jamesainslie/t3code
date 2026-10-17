@@ -17,14 +17,14 @@ Totals depend on the history available on each server. Grok turns without a save
 record are missing from the totals.
 
 OpenCode reads its SQLite database and older JSON history. Antigravity reads local conversation
-databases, including T3-managed profiles. Set `OPENCODE_DATA_DIR` or `ANTIGRAVITY_DATA_DIR` on the
+databases, including Lathe-managed profiles. Set `OPENCODE_DATA_DIR` or `ANTIGRAVITY_DATA_DIR` on the
 server to read a different data directory; comma-separated paths read multiple directories.
 
 Cursor reads account usage from Cursor's dashboard API using the CLI login saved on the server.
-This includes headless T3 sessions and desktop usage across machines; the same account counts
-once across connected environments. Without an accessible CLI login, T3 shows a
-notice instead of incomplete local totals. T3 does not estimate missing tokens from conversation text.
-On macOS, choose **Enable Cursor usage** on Usage to allow T3 to read your existing CLI login
+This includes headless Lathe sessions and desktop usage across machines; the same account counts
+once across connected environments. Without an accessible CLI login, Lathe shows a
+notice instead of incomplete local totals. Lathe does not estimate missing tokens from conversation text.
+On macOS, choose **Enable Cursor usage** on Usage to allow Lathe to read your existing CLI login
 from Keychain. You can turn it off in **Settings → Providers → Usage providers**. macOS may ask
 you to allow access on the server Mac.
 
@@ -105,7 +105,7 @@ closes when you dismiss it or send your next message. It uses the same snapshot 
 anything. The command is offered only for providers that appear under **Usage → Limits**.
 
 OpenCode Go reports its session, weekly, and monthly allowance when OpenCode runs locally in
-the environment. T3 cannot report limits for external OpenCode servers because their credentials
+the environment. Lathe cannot report limits for external OpenCode servers because their credentials
 belong to the remote server. Limits need an OpenCode Go API key. A Console sign-in alone
 does not report them. Add your Go API key as `OPENCODE_API_KEY` in the OpenCode instance's
 **Environment variables**, then refresh provider status. Cursor reports
@@ -137,9 +137,9 @@ settings section when you no longer need it.
 ## Connect a modelproxy gateway
 
 A modelproxy gateway rotates requests across a pool of subscription accounts. To watch that pool
-from T3, open **Settings → Providers → Usage providers → Add source**, pick **modelproxy
+from Lathe, open **Settings → Providers → Usage providers → Add source**, pick **modelproxy
 gateway**, and enter the gateway URL together with the OIDC issuer, client ID, and client secret
-of the gateway's T3 client. Then choose **Sign in** on the source's row: T3 shows a short device code and
+of the gateway's Lathe client. Then choose **Sign in** on the source's row: Lathe shows a short device code and
 a link. Open the link in any browser, on any device, confirm the code, and sign in with your
 password and your second factor, either a passkey or the code from your authenticator app. The
 row updates on its own when you finish. The server keeps the session and refreshes it; sign in
@@ -152,12 +152,12 @@ thread, whichever environment the thread runs on. Hover it for every pooled acco
 spent, needing a login), and the metered fallback the gateway spills to when the pool is spent.
 The same accounts appear under **Usage → Limits**. A single missed read, such as a laptop waking
 before its network does, keeps the last reading; the pill shows the gateway offline only when it
-has not answered for two refresh intervals, and it reads again as soon as you come back to T3.
+has not answered for two refresh intervals, and it reads again as soon as you come back to Lathe.
 
 The pooled accounts are grouped by provider, with the accounts the gateway can use now listed above
 the spent or paused ones. Each account takes one line; click it to see every window and when it
 resets. Choose rings or meters for the one-line summary under **Settings → General → Gateway
-account summary**. T3 reads the gateway every few minutes, so an account you just added may take a
+account summary**. Lathe reads the gateway every few minutes, so an account you just added may take a
 moment to appear: use the refresh button in the pill's header to read it now.
 
 ### Pick models the gateway routes
@@ -167,9 +167,9 @@ To offer those names in the model picker, open the Claude instance that sends it
 through the gateway under **Settings → Providers** and turn on **Show gateway routed models**.
 Each routed name then appears in that instance's picker with the upstream beside it, such as
 **Claude (iris) · OpenRouter**. Adding or removing a route on the gateway updates the picker
-within one refresh; there is nothing to configure in T3.
+within one refresh; there is nothing to configure in Lathe.
 
-The switch is off by default because T3 cannot tell which gateway, if any, a Claude instance
+The switch is off by default because Lathe cannot tell which gateway, if any, a Claude instance
 talks to, and an instance that goes straight to Anthropic cannot serve routed names. Routes come
 from a modelproxy source on the same environment as the Claude instance, so that environment needs
 its own signed-in source even when another environment already shows the gateway's pill. If the
@@ -178,9 +178,9 @@ gateway cannot be read for a while, the picker keeps the routes it last saw.
 ## Subscription usage widget
 
 Add **Subscription usage** from your iOS or Android widget gallery to see remaining Codex and
-Claude quotas. Tap it to open **Usage → Limits**; on Android this works while T3 is running in
+Claude quotas. Tap it to open **Usage → Limits**; on Android this works while Lathe is running in
 the background, otherwise open the app from the launcher. On iOS, use **Edit Widget** to choose
-Session, Weekly, or both for each provider. Reopen T3 to refresh expired readings.
+Session, Weekly, or both for each provider. Reopen Lathe to refresh expired readings.
 
 ## Keyboard shortcuts
 

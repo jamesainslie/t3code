@@ -1,9 +1,9 @@
 "use dom";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { renderMermaid } from "@t3tools/client-runtime/mermaid-renderer";
-import { mermaidRepairPrompt } from "@t3tools/client-runtime/mermaid";
-import { mountDiagramViewport } from "@t3tools/client-runtime/mermaid-viewport";
+import { renderMermaid } from "@lathe/client-runtime/mermaid-renderer";
+import { mermaidRepairPrompt } from "@lathe/client-runtime/mermaid";
+import { mountDiagramViewport } from "@lathe/client-runtime/mermaid-viewport";
 
 const buttonStyle: CSSProperties = {
   border: "1px solid #71717a",

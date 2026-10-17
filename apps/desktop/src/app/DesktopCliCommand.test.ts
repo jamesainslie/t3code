@@ -1,4 +1,4 @@
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, beforeEach, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -24,7 +24,7 @@ const environmentFor = (
     homeDirectory: input.home,
     baseDir: input.baseDir,
     stateDir: path.join(input.baseDir, "userdata"),
-    serverRoot: "/opt/T3 Code/resources/app.asar",
+    serverRoot: "/opt/Lathe/resources/app.asar",
     appImagePath: Option.none(),
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
 
@@ -35,7 +35,7 @@ const commandIn = (
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const fs = yield* FileSystem.FileSystem;
-    const baseDir = input.baseDir ?? path.join(input.home, ".t3");
+    const baseDir = input.baseDir ?? path.join(input.home, ".lathe");
     yield* fs.makeDirectory(path.join(baseDir, "userdata"), { recursive: true });
     const make = DesktopCliCommand.make.pipe(
       Effect.provideService(
@@ -58,8 +58,8 @@ const fakePowerShell = (initial: string) => {
       const env = options.env ?? {};
       let exitCode = 0;
       let stdout = "";
-      if (env.T3_SET === "1") {
-        registry.path = env.T3_PATH ?? "";
+      if (env.LATHE_SET === "1") {
+        registry.path = env.LATHE_PATH ?? "";
         registry.writes += 1;
       } else if (registry.failReads) {
         exitCode = 1;
@@ -84,7 +84,7 @@ const fakePowerShell = (initial: string) => {
   return { registry, spawner };
 };
 
-// The machine's own PATH may already hold a t3; each test sets the PATH it means.
+// The machine's own PATH may already hold a lathe; each test sets the PATH it means.
 const machinePath = process.env.PATH;
 beforeEach(() => {
   process.env.PATH = "";
@@ -105,16 +105,16 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect(yield* command.state).toEqual({ supported: true, installedPath: null, onPath: false });
       const installed = yield* command.install;
       expect(installed.installedPath).toBe(link);
-      expect(yield* fs.readLink(link)).toBe(path.join(home, ".t3", "bin", FORK_IDENTITY.cliBin));
+      expect(yield* fs.readLink(link)).toBe(path.join(home, ".lathe", "bin", FORK_IDENTITY.cliBin));
       expect((yield* command.install).installedPath).toBe(link);
 
       expect((yield* command.uninstall).installedPath).toBeNull();
       expect(yield* fs.exists(link)).toBe(false);
-      expect(yield* fs.exists(path.join(home, ".t3", "bin", FORK_IDENTITY.cliBin))).toBe(true);
+      expect(yield* fs.exists(path.join(home, ".lathe", "bin", FORK_IDENTITY.cliBin))).toBe(true);
     }).pipe(Effect.scoped),
   );
 
-  it.effect("never replaces or removes a t3 it did not create", () =>
+  it.effect("never replaces or removes a lathe it did not create", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -122,7 +122,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       const command = yield* commandIn({ home });
       const theirs = path.join(home, ".local", "bin", FORK_IDENTITY.cliBin);
       yield* fs.makeDirectory(path.dirname(theirs), { recursive: true });
-      yield* fs.writeFileString(theirs, "npm's t3\n");
+      yield* fs.writeFileString(theirs, "npm's lathe\n");
       yield* fs.makeDirectory(path.join(home, "bin"), { recursive: true });
       yield* fs.symlink(path.join(home, "gone"), path.join(home, "bin", FORK_IDENTITY.cliBin));
 
@@ -131,26 +131,26 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
         `Another ${FORK_IDENTITY.cliBin} command is already installed`,
       );
       yield* command.uninstall;
-      expect(yield* fs.readFileString(theirs)).toBe("npm's t3\n");
+      expect(yield* fs.readFileString(theirs)).toBe("npm's lathe\n");
       expect(yield* fs.readLink(path.join(home, "bin", FORK_IDENTITY.cliBin))).toBe(
         path.join(home, "gone"),
       );
     }).pipe(Effect.scoped),
   );
 
-  it.effect("finds and removes a link left by a previous T3 home", () =>
+  it.effect("finds and removes a link left by a previous Lathe home", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const before = yield* commandIn({ home, baseDir: path.join(home, "old-t3") });
+      const before = yield* commandIn({ home, baseDir: path.join(home, "old-lathe") });
       const link = (yield* before.install).installedPath;
 
-      const after = yield* commandIn({ home, baseDir: path.join(home, "new-t3") });
+      const after = yield* commandIn({ home, baseDir: path.join(home, "new-lathe") });
       expect((yield* after.state).installedPath).toBe(link);
       expect((yield* after.install).installedPath).toBe(link);
       expect(yield* fs.readLink(link!)).toBe(
-        path.join(home, "new-t3", "bin", FORK_IDENTITY.cliBin),
+        path.join(home, "new-lathe", "bin", FORK_IDENTITY.cliBin),
       );
       yield* after.uninstall;
       expect(yield* fs.exists(path.join(home, ".local", "bin", FORK_IDENTITY.cliBin))).toBe(false);
@@ -158,12 +158,12 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("does not read a large binary another t3 links to", () =>
+  it.effect("does not read a large binary another lathe links to", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const binary = path.join(home, "native-t3");
+      const binary = path.join(home, "native-lathe");
       yield* fs.writeFileString(binary, `${"\0".repeat(64 * 1024)}${DesktopCliShim.MARKER}`);
       yield* fs.makeDirectory(path.join(home, ".local", "bin"), { recursive: true });
       yield* fs.symlink(binary, path.join(home, ".local", "bin", FORK_IDENTITY.cliBin));
@@ -176,7 +176,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("refuses to install behind another t3 that runs first", () =>
+  it.effect("refuses to install behind another lathe that runs first", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -220,7 +220,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
 
       registry.failReads = false;
       const launcherDir = DesktopCliShim.launcherPath(
-        environmentFor(yield* Path.Path, { home, baseDir: `${home}/.t3`, platform: "win32" }),
+        environmentFor(yield* Path.Path, { home, baseDir: `${home}/.lathe`, platform: "win32" }),
       ).replace(new RegExp(`[\\\\/]${FORK_IDENTITY.cliBin}\\.cmd$`), "");
       yield* command.install;
       expect(registry.path).toBe(`${userPath};${launcherDir}`);
@@ -236,7 +236,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       const home = yield* fs.makeTempDirectoryScoped();
       const launcherDir = path.dirname(
         DesktopCliShim.launcherPath(
-          environmentFor(path, { home, baseDir: path.join(home, ".t3"), platform: "win32" }),
+          environmentFor(path, { home, baseDir: path.join(home, ".lathe"), platform: "win32" }),
         ),
       );
       const userPath = `C:\\Tools;${launcherDir}`;

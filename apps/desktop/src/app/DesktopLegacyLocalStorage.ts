@@ -21,7 +21,7 @@ export class DesktopLegacyLocalStorage extends Context.Service<
     readonly take: Effect.Effect<Option.Option<Readonly<Record<string, string>>>>;
     readonly complete: Effect.Effect<void>;
   }
->()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
+>()("@lathe/desktop/app/DesktopLegacyLocalStorage") {}
 
 const MARKER_FILE_NAME = FORK_LEGACY_LOCAL_STORAGE.markerFileName;
 // Fork: upstream's V1 profiles ("T3 Code (Alpha)", "t3code") belong to the upstream install

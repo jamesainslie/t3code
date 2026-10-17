@@ -4,8 +4,8 @@
  */
 import * as NodeFS from "node:fs";
 
-import { forkCliExecutablePath } from "@t3tools/shared/forkCliArtifacts";
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { forkCliExecutablePath } from "@lathe/shared/forkCliArtifacts";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 /**
  * The executable of the pinned runtime unpacked in `versionDir`: `lathe`, or

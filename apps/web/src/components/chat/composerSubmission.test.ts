@@ -4,8 +4,8 @@ import {
   MessageId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ThreadId,
-} from "@t3tools/contracts";
-import { expandCitationsForProvider, serializeCitation } from "@t3tools/shared/assistantCitations";
+} from "@lathe/contracts";
+import { expandCitationsForProvider, serializeCitation } from "@lathe/shared/assistantCitations";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { submitComposerDraft } from "./composerSubmission";

@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@lathe/contracts";
 import { useState } from "react";
 
 import { serverEnvironment } from "../../state/server";

@@ -9,7 +9,7 @@ import type {
   PullRequestReviewPosition,
   PullRequestReviewThread,
   PullRequestThreadCommentsResult,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -113,7 +113,7 @@ type ReviewAnnotation = DiffLineAnnotation<ReviewAnnotationGroup>;
 
 const COMMIT_PAGE_SIZE = 10;
 
-const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "t3code.pullRequestFileTreeOpen";
+const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "lathe.pullRequestFileTreeOpen";
 
 interface DiffSlice {
   readonly cursor: string | null;

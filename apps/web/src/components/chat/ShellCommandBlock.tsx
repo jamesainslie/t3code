@@ -1,7 +1,7 @@
 import {
   commandHighlightLanguage,
   withVisibleControlCharacters,
-} from "@t3tools/client-runtime/work-log/command-label";
+} from "@lathe/client-runtime/work-log/command-label";
 import { Suspense, use, useMemo } from "react";
 
 import { RenderErrorBoundary } from "../RenderErrorBoundary";

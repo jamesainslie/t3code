@@ -14,8 +14,8 @@ import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./WorkspaceFileSystem.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { symlinksSupported } from "@lathe/shared/testing/symlinks";
 
 const layerProject = WorkspaceFileSystem.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
@@ -29,7 +29,7 @@ const layerTest = Layer.empty.pipe(
   Layer.provideMerge(VcsDriverRegistry.layer.pipe(Layer.provide(VcsProcess.layer))),
   Layer.provide(
     ServerConfig.ServerConfig.layerTest(process.cwd(), {
-      prefix: "t3-workspace-files-test-",
+      prefix: "lathe-workspace-files-test-",
     }),
   ),
   Layer.provideMerge(NodeServices.layer),

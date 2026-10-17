@@ -1,4 +1,4 @@
-import { FORK_IDENTITY } from "@t3tools/shared/forkIdentity";
+import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import packageJson from "../package.json" with { type: "json" };
 
 /**

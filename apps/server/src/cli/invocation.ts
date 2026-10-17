@@ -4,11 +4,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import type { ServerInstallation } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { isCommandAvailable } from "@t3tools/shared/shell";
-import { FORK_IDENTITY, forkPackageSpec } from "@t3tools/shared/forkIdentity";
-import { FORK_NPM_LAUNCHER_SCRIPT } from "@t3tools/shared/forkCliArtifacts";
+import type { ServerInstallation } from "@lathe/contracts";
+import * as HostProcess from "@lathe/shared/HostProcess";
+import { isCommandAvailable } from "@lathe/shared/shell";
+import { FORK_IDENTITY, forkPackageSpec } from "@lathe/shared/forkIdentity";
+import { FORK_NPM_LAUNCHER_SCRIPT } from "@lathe/shared/forkCliArtifacts";
 
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -48,17 +48,17 @@ const GLOBAL_INSTALL_ENTRY = new RegExp(
 );
 
 /**
- * The script this CLI was started through: the `t3` npm launcher that
+ * The script this CLI was started through: the `lathe` npm launcher that
  * downloaded and ran this executable (it names itself in
- * `T3CODE_NPM_LAUNCHER_PATH`), or the Node entry script of a build run from
+ * `LATHE_NPM_LAUNCHER_PATH`), or the Node entry script of a build run from
  * source. A standalone executable has none and reports its own path.
  *
  * The variable is inherited by everything the server spawns, so a launcher
- * counts only when its package is this exact version: a different `t3` run
+ * counts only when its package is this exact version: a different `lathe` run
  * from an agent's shell must not claim to be the npm install.
  */
 const resolveEntryPath = Effect.gen(function* () {
-  const npmLauncher = (yield* HostProcess.Environment).T3CODE_NPM_LAUNCHER_PATH?.trim();
+  const npmLauncher = (yield* HostProcess.Environment).LATHE_NPM_LAUNCHER_PATH?.trim();
   if (npmLauncher) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -110,7 +110,7 @@ export const resolveServerInstallation = Effect.gen(function* () {
 }).pipe(Effect.orElseSucceed(() => null));
 
 /**
- * The literal spec the user typed (e.g. `t3@nightly`) is resolved away before
+ * The literal spec the user typed (e.g. `@jamesainslie/lathe@nightly`) is resolved away before
  * our process starts, so re-derive it from the running version: nightly builds
  * re-suggest the nightly channel, anything else suggests the bare package.
  */
@@ -156,14 +156,14 @@ const hostShellWord = (platform: NodeJS.Platform, value: string) =>
   platform === "win32" ? powershellWord(value) : shellWord(value);
 
 /**
- * The launcher a person can type to run this install when `t3` is not on
- * PATH: the desktop app's `t3` shim, which the app and the shim itself name in
- * `T3CODE_CLI_PATH`, or a standalone binary's own path. Script installs (a
- * repo checkout) have no single launcher and keep plain `t3`.
+ * The launcher a person can type to run this install when `lathe` is not on
+ * PATH: the desktop app's `lathe` shim, which the app and the shim itself name in
+ * `LATHE_CLI_PATH`, or a standalone binary's own path. Script installs (a
+ * repo checkout) have no single launcher and keep plain `lathe`.
  */
 const resolveInstallLauncher = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const shim = (yield* HostProcess.Environment).T3CODE_CLI_PATH?.trim();
+  const shim = (yield* HostProcess.Environment).LATHE_CLI_PATH?.trim();
   if (shim && (yield* fs.exists(shim).pipe(Effect.orElseSucceed(() => false)))) {
     return Option.some(shim);
   }
@@ -173,7 +173,7 @@ const resolveInstallLauncher = Effect.gen(function* () {
 });
 
 /**
- * `t3 <subcommand> <args>` for a person to run on this host: `t3` when it is
+ * `lathe <subcommand> <args>` for a person to run on this host: `lathe` when it is
  * on PATH, the package runner this process came from, or else the absolute
  * path of the launcher for this install, such as the one the desktop app
  * installs. `args` are quoted for the host's shell: POSIX, or PowerShell on
@@ -199,7 +199,7 @@ export const resolveHostCliCommand = (subcommand: string, args: ReadonlyArray<st
 
 /**
  * `sudo` resets PATH on most distributions, which drops a user-installed Node
- * (nvm, fnm, a tarball) and with it `npx` or a global `t3`, so the command
+ * (nvm, fnm, a tarball) and with it `npx` or a global `lathe`, so the command
  * carries PATH through unless Node is on root's PATH too. An absolute launcher
  * needs neither.
  */

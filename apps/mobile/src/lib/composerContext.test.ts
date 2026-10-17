@@ -1,4 +1,4 @@
-import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
+import { upgradeLegacyContextMessage } from "@lathe/shared/composerContextLegacy";
 import { buildProjectThreadStartTurnInput } from "./projectThreadStartTurn";
 import {
   EnvironmentId,
@@ -7,15 +7,15 @@ import {
   ComposerContextId,
   ThreadId,
   type OrchestrationMessageContext,
-} from "@t3tools/contracts";
-import { buildThreadContextRecord, threadContextId } from "@t3tools/shared/threadContextReference";
-import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
+} from "@lathe/contracts";
+import { buildThreadContextRecord, threadContextId } from "@lathe/shared/threadContextReference";
+import { collectComposerInlineTokens } from "@lathe/shared/composerInlineTokens";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   collectComposerContextReferences,
   formatComposerContextReference,
   projectComposerContextForProvider,
-} from "@t3tools/shared/composerContextReferences";
+} from "@lathe/shared/composerContextReferences";
 import { describe, expect, it } from "vite-plus/test";
 import {
   composerContextEditorTokens,
@@ -334,7 +334,7 @@ describe("host context compatibility", () => {
             worktreeBranchName: "unused",
           }).message;
     expect(message).not.toHaveProperty("context");
-    expect(message.text).not.toContain("t3-context://");
+    expect(message.text).not.toContain("lathe-context://");
     expect(
       upgradeLegacyContextMessage(message.text).records.find(
         (record) => record.kind === "terminal",

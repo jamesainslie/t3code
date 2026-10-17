@@ -5,7 +5,7 @@
  * the fiber that polls the issuer for it, and every transition publishes
  * the source id so the source list re-reads and clients see the new state.
  *
- * Only the device grant is supported. It needs no redirect URI, so the T3
+ * Only the device grant is supported. It needs no redirect URI, so the Lathe
  * server can sit on one host while the user finishes the login in a browser
  * on another, which is the normal remote arrangement.
  *
@@ -16,7 +16,7 @@ import {
   type ModelproxyUsageLimitSourceConfig,
   type UsageLimitSourceAuthState,
   type UsageLimitSourceId,
-} from "@t3tools/contracts";
+} from "@lathe/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
