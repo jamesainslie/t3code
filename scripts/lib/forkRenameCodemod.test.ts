@@ -77,6 +77,25 @@ describe("renameForkText", () => {
     expect(rename(path, input)).toBe(input);
   });
 
+  it.each<readonly [string, string]>([
+    [
+      "  const prefixed = /^(?:mcp[-_]{1,2})?t3[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);",
+      "  const prefixed = /^(?:mcp[-_]{1,2})?(?:lathe|t3[-_ ]?code)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);",
+    ],
+    [
+      "  const match = /^(?<server>t3-code|t3_code|t3code)(?:[.:/])(?<tool>.+)$/i.exec(label);",
+      "  const match = /^(?<server>lathe|t3-code|t3_code|t3code)(?:[.:/])(?<tool>.+)$/i.exec(label);",
+    ],
+    [
+      'const T3_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);',
+      'const LATHE_MCP_SERVER_ALIASES = new Set(["lathe", "t3-code", "t3_code", "t3code"]);',
+    ],
+  ])("widens an MCP name matcher to accept lathe: %s", (input, expected) => {
+    const once = rename("packages/shared/src/t3McpToolPresentation.ts", input);
+    expect(once).toBe(expected);
+    expect(rename("packages/shared/src/latheMcpToolPresentation.ts", once)).toBe(once);
+  });
+
   it("is idempotent", () => {
     const once = rename("apps/web/src/a.ts", 'import { T3Xyz } from "@t3tools/shared"; // T3 Code');
     expect(rename("apps/web/src/a.ts", once)).toBe(once);

@@ -70,6 +70,16 @@ export interface RenameRule {
   readonly path?: RegExp;
   /** Tested against the occurrence, for rules a pattern cannot express. */
   readonly test?: (occurrence: RenameOccurrence) => boolean;
+  /**
+   * Replaces the text from the hit instead of the brand units: `length`
+   * characters become `text`. Only for renamed classes.
+   */
+  readonly rewrite?: (occurrence: RenameOccurrence) => RenameRewrite;
+}
+
+export interface RenameRewrite {
+  readonly length: number;
+  readonly text: string;
 }
 
 /** The characters that make up a token: identifiers, paths, URLs, package specifiers. */
@@ -129,6 +139,43 @@ const stem = (occurrence: RenameOccurrence) => {
   const head = lead.match(/[A-Za-z0-9]*$/)?.[0] ?? "";
   const tail = occurrence.token.slice(occurrence.offset).match(/^[A-Za-z0-9]*/)?.[0] ?? "";
   return head + tail;
+};
+
+/**
+ * The idioms upstream matches the MCP server name with. Each widens to accept
+ * lathe beside the pre-Lathe spellings, which stored tool names keep; `done`
+ * is the text a widened matcher has before the hit, so a second pass is a no-op.
+ */
+const MCP_MATCHER_WIDENINGS = [
+  { from: "t3[-_ ]?code", to: "(?:lathe|t3[-_ ]?code)", done: "(?:lathe|" },
+  { from: "t3-code|t3_code|t3code", to: "lathe|t3-code|t3_code|t3code", done: "lathe|" },
+  {
+    from: 't3-code", "t3_code", "t3code"',
+    to: 'lathe", "t3-code", "t3_code", "t3code"',
+    done: '"lathe", "',
+  },
+] as const;
+
+const mcpMatcherWidening = (o: RenameOccurrence) => {
+  const rest = o.line.slice(o.column);
+  const head = o.line.slice(0, o.column);
+  return MCP_MATCHER_WIDENINGS.find((w) => rest.startsWith(w.from) && !head.endsWith(w.done));
+};
+
+/**
+ * A t3code repository name in a hosted remote (host/owner/t3code,
+ * git@host:owner/t3code.git) or a bare owner/t3code slug. Local paths and the
+ * desktop scheme's MIME type are not repositories.
+ */
+const isRepositorySlugName = (o: RenameOccurrence) => {
+  const head = o.token.slice(0, o.offset);
+  return (
+    /^t3code(?:\.git)?(?![A-Za-z0-9-])/i.test(o.token.slice(o.offset)) &&
+    (/^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[:/](?:[A-Za-z0-9_.-]+\/)+$/.test(
+      head,
+    ) ||
+      (/^[A-Za-z0-9_.-]+\/$/.test(head) && head !== "x-scheme-handler/"))
+  );
 };
 
 let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
@@ -663,14 +710,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "upstream-repo-fields",
     class: "upstream-reference",
     reason:
-      "GitHub repository names in owner/name pairs and github.com URLs (pingdotgg/t3code, a fork's t3code repo), which GitHub owns, and upstream's t3tools owner.",
+      "Repository names in owner/name pairs, owner/t3code slugs and hosted remotes (pingdotgg/t3code, a fork's t3code repo), which the hosting provider owns, and upstream's t3tools owner.",
     test: (o) =>
       (o.token === "t3code" &&
         /\b(?:name|repo):\s*["']t3code["']/.test(o.line) &&
         (/\bowner:/.test(o.line) || /^\s*owner:\s*["'][^"']+["'],?$/.test(o.previousLine))) ||
       (o.token === "t3tools" && /\bowner:\s*["']t3tools["']/.test(o.line)) ||
-      (/github\.com\/[A-Za-z0-9_.-]+\/$/.test(o.token.slice(0, o.offset)) &&
-        /^t3code(?![A-Za-z0-9])/i.test(o.token.slice(o.offset))),
+      isRepositorySlugName(o),
   },
   {
     id: "upstream-own-files",
@@ -731,6 +777,17 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   },
 
   // agent-facing: names agents see and address
+  {
+    id: "agent-mcp-matcher-widening",
+    class: "agent-facing",
+    reason:
+      "Matchers for the MCP server name, widened to accept lathe beside the pre-Lathe spellings (t3-code, t3_code, t3code) that stored tool names keep.",
+    test: (o) => mcpMatcherWidening(o) !== undefined,
+    rewrite: (o) => {
+      const widening = mcpMatcherWidening(o)!;
+      return { length: widening.from.length, text: widening.to };
+    },
+  },
   {
     id: "kept-mcp-legacy-matchers",
     class: "kept",

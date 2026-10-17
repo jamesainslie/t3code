@@ -116,7 +116,10 @@ const renameOccurrences = (
       continue;
     }
     if (!RENAMED_CLASSES.has(rule.class)) continue;
-    const edit = brandEdit(text, occurrence);
+    const rewrite = rule.rewrite?.(occurrence);
+    const edit = rewrite
+      ? { start: occurrence.index, end: occurrence.index + rewrite.length, text: rewrite.text }
+      : brandEdit(text, occurrence);
     const previous = edits.at(-1);
     if (previous && edit.start < previous.end) continue;
     edits.push(edit);

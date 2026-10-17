@@ -105,11 +105,21 @@ describe("FORK_RENAME_RULES", () => {
     [
       "packages/shared/src/t3McpToolPresentation.ts",
       'const LEGACY_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);',
+      "agent-facing",
+    ],
+    [
+      "packages/shared/src/latheMcpToolPresentation.ts",
+      'const LATHE_MCP_SERVER_ALIASES = new Set(["lathe", "t3-code", "t3_code", "t3code"]);',
       "kept",
     ],
     [
       "packages/provider-acp/src/server/runtimeModel.ts",
       "  if (/^t3[-_ ]?code$/i.test(id)) {",
+      "agent-facing",
+    ],
+    [
+      "packages/provider-acp/src/server/runtimeModel.ts",
+      "  if (/^(?:lathe|t3[-_ ]?code)$/i.test(id)) {",
       "kept",
     ],
     [
@@ -195,6 +205,27 @@ describe("FORK_RENAME_RULES", () => {
     [
       "packages/client-runtime/src/a.test.ts",
       'identity("github.com/me/t3code"),',
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/git/GitManager.test.ts",
+      '            "binbandit/t3code": {',
+      "upstream-reference",
+    ],
+    [
+      "apps/web/src/a.test.ts",
+      "git clone https://bitbucket.org/maria/t3code.git",
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/a.test.ts",
+      "remote add origin git@github.com:julius/t3code.git",
+      "upstream-reference",
+    ],
+    ["apps/web/src/a.test.ts", 'const root = "/Users/me/t3code";', "identifier"],
+    [
+      "packaging/aur/t3code-bin/PKGBUILD",
+      "MimeType=x-scheme-handler/t3code;",
       "upstream-reference",
     ],
     [
