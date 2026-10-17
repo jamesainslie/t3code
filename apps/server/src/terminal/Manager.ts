@@ -81,6 +81,7 @@ import * as ProcessRunner from "../processRunner.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import * as NativeTelemetryClient from "../resourceTelemetry/NativeTelemetryClient.ts";
 import * as PtyAdapter from "@lathe/shared/PtyAdapter";
+import { isLegacyEnvName } from "@lathe/shared/forkLegacyEnv";
 
 export {
   TerminalCwdError,
@@ -1238,7 +1239,7 @@ function toSessionKey(threadId: string, terminalId: string): string {
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
   const normalizedKey = key.toUpperCase();
-  if (normalizedKey.startsWith("LATHE_")) {
+  if (normalizedKey.startsWith("LATHE_") || isLegacyEnvName(normalizedKey)) {
     return true;
   }
   if (normalizedKey.startsWith("VITE_")) {

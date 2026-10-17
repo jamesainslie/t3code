@@ -1,5 +1,7 @@
 import type { ProjectId, ProjectScript, ServerSettings } from "@lathe/contracts";
 
+import { withLegacyExportedNames } from "./forkLegacyEnv.ts";
+
 type ProjectScriptSettings = Pick<
   ServerSettings,
   | "defaultProjectScripts"
@@ -58,10 +60,11 @@ export function projectScriptRuntimeEnv(
   if (input.worktreePath) {
     env.LATHE_WORKTREE_PATH = input.worktreePath;
   }
+  // Fork-only: scripts written before the rename read the old names.
   if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
+    return { ...withLegacyExportedNames(env), ...input.extraEnv };
   }
-  return env;
+  return withLegacyExportedNames(env);
 }
 
 export function setupProjectScript(scripts: readonly ProjectScript[]): ProjectScript | null {

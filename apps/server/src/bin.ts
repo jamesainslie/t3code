@@ -6,6 +6,7 @@
  * ./cliEntry.ts before the full CLI module graph (seconds of evaluation)
  * loads; everything else defers to the real CLI in ./binCli.ts.
  */
+import "./forkLegacyEnvBoot.ts";
 import { runCliEntry } from "./cliEntry.ts";
 import { isEntrypoint } from "./entrypoint.ts";
 

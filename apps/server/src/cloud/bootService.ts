@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import { CLI_RELEASE_BASE_URL_ENV } from "@lathe/shared/cliRelease";
 
 import * as ProcessRunner from "../processRunner.ts";
+import { HOME_ENV_NAME_PATTERN } from "@lathe/shared/forkLegacyEnv";
 import {
   ensurePinnedRuntimeInstalled,
   pinnedRuntimeCommand,
@@ -55,7 +56,10 @@ function quoteSystemdValue(value: string): string {
 }
 
 export function bootServiceBaseDirOf(contents: string): string | undefined {
-  const systemd = /^Environment=LATHE_HOME=(.*)$/m.exec(contents)?.[1];
+  // Fork-only: units installed before the rename set the home under its old name.
+  const systemd = new RegExp(`^Environment=${HOME_ENV_NAME_PATTERN}=(.*)$`, "m").exec(
+    contents,
+  )?.[1];
   if (systemd !== undefined) {
     const raw = systemd.trim();
     const unquoted =
@@ -64,7 +68,9 @@ export function bootServiceBaseDirOf(contents: string): string | undefined {
         : raw;
     return unquoted.replaceAll("%%", "%");
   }
-  const plist = /<key>LATHE_HOME<\/key>\s*<string>([^<]*)<\/string>/.exec(contents)?.[1];
+  const plist = new RegExp(`<key>${HOME_ENV_NAME_PATTERN}</key>\\s*<string>([^<]*)</string>`).exec(
+    contents,
+  )?.[1];
   if (plist !== undefined) {
     return plist.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
   }

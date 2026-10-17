@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it, vi } from "@effect/vitest";
 import { ProjectId } from "@lathe/contracts";
+import { withLegacyExportedNames } from "@lathe/shared/forkLegacyEnv";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -99,13 +100,17 @@ it.effect("resolves setup scripts through the standalone project service", () =>
       cwd: "/repo-worktree",
     });
     assert.equal(open.mock.calls[0]?.[0].cwd, "/repo-worktree");
-    assert.deepEqual(open.mock.calls[0]?.[0].env, {
-      LATHE_PROJECT_ROOT: "/repo",
-      LATHE_WORKTREE_PATH: "/repo-worktree",
-      COLORTERM: "",
-      NO_COLOR: "1",
-      FORCE_COLOR: "0",
-    });
+    assert.deepEqual(
+      open.mock.calls[0]?.[0].env,
+      // Fork-only: the script also sees each variable under its pre-rename name.
+      withLegacyExportedNames({
+        LATHE_PROJECT_ROOT: "/repo",
+        LATHE_WORKTREE_PATH: "/repo-worktree",
+        COLORTERM: "",
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+      }),
+    );
     assert.equal(write.mock.calls[0]?.[0].data, "vp install\r");
     const lines: string[] = [];
     const observed = yield* runner.runForThread({

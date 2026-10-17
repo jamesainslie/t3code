@@ -4,6 +4,8 @@ import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
 
+import { adoptLegacyEnv } from "@lathe/shared/forkLegacyEnv";
+
 export interface LathePublicConfig {
   readonly clerkPublishableKey: string | undefined;
   readonly clerkJwtTemplate: string | undefined;
@@ -32,6 +34,9 @@ export function loadRepoEnv({
 } = {}): Record<string, string | undefined> {
   const rootEnv = readEnvFile(NodePath.join(repoRoot, ".env"));
   const localEnv = readEnvFile(NodePath.join(repoRoot, ".env.local"));
+  // Fork-only: .env files written before the rename use the old variable names.
+  adoptLegacyEnv(rootEnv);
+  adoptLegacyEnv(localEnv);
   const config = resolvePublicConfig(baseEnv, localEnv, rootEnv);
 
   return {

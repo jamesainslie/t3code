@@ -1,3 +1,5 @@
+import { latheMcpToolLabel } from "./forkLegacyMcp.ts";
+
 export type LatheMcpToolLogo = "lathe";
 
 export interface LatheMcpToolPresentation {
@@ -383,7 +385,7 @@ function normalizeLatheMcpToolLabel(value: string): string {
  * inventory is the real gate; unknown tools stay on the generic renderer.
  */
 function resolveLatheMcpToolName(value: string): string | null {
-  const label = normalizeLatheMcpToolLabel(value);
+  const label = latheMcpToolLabel(normalizeLatheMcpToolLabel(value));
   const mcpMatch = /^mcp__(?<server>.+?)__(?<tool>.+)$/i.exec(label);
   if (mcpMatch?.groups) {
     const { server, tool } = mcpMatch.groups;
@@ -403,7 +405,11 @@ function resolveLatheMcpToolName(value: string): string | null {
   const prefixed = /^(?:mcp[-_]{1,2})?(?:lathe|t3[-_ ]?code)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(
     label,
   );
-  const candidate = prefixed?.groups?.tool ?? label;
+  // Fork-only: the server and its own tools share the name lathe, so a bare
+  // lathe_* tool would otherwise read as server lathe and tool *.
+  const candidate = Object.hasOwn(LATHE_MCP_TOOLS, label)
+    ? label
+    : (prefixed?.groups?.tool ?? label);
   if (Object.hasOwn(LATHE_MCP_TOOLS, candidate)) return candidate;
   // OpenCode 2 registers one server per thread, `lathe-<thread>`, and joins
   // it to the tool with `_`. Thread ids can hold `_` too, so take the longest

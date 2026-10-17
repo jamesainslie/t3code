@@ -21,9 +21,13 @@ import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
 import { type DevShareError, shareDevServer, unshareDevServer } from "./lib/dev-share.ts";
+import { adoptLegacyProcessEnv } from "@lathe/shared/forkLegacyEnv";
 import { loadRepoEnv } from "./lib/public-config.ts";
 
 Object.assign(process.env, loadRepoEnv());
+
+// Fork-only: pre-rename environment variables take their Lathe names before any is read.
+adoptLegacyProcessEnv();
 
 const BASE_SERVER_PORT = 13773;
 const BASE_WEB_PORT = 5733;
