@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--lathe-font-sans);
+  --font-mono: var(--lathe-font-mono);
+  --color-background: var(--lathe-background);
+  --color-foreground: var(--lathe-foreground);
+  --color-popover: var(--lathe-popover);
+  --color-popover-foreground: var(--lathe-popover-foreground);
+  --color-primary: var(--lathe-primary);
+  --color-primary-foreground: var(--lathe-primary-foreground);
+  --color-muted: var(--lathe-muted);
+  --color-muted-foreground: var(--lathe-muted-foreground);
+  --color-accent: var(--lathe-accent);
+  --color-accent-foreground: var(--lathe-accent-foreground);
+  --color-border: var(--lathe-border);
+  --color-input: var(--lathe-input);
+  --color-ring: var(--lathe-ring);
+  --radius-sm: calc(var(--lathe-radius) - 4px);
+  --radius-md: calc(var(--lathe-radius) - 2px);
+  --radius-lg: var(--lathe-radius);
+  --radius-xl: calc(var(--lathe-radius) + 4px);
+  --radius-2xl: calc(var(--lathe-radius) + 8px);
+}
+
+:host {
+  --lathe-font-sans:
+    "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
+  --lathe-font-mono:
+    "SF Mono", "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  --lathe-radius: 0.625rem;
+  --lathe-background: white;
+  --lathe-foreground: oklch(0.269 0 0);
+  --lathe-popover: white;
+  --lathe-popover-foreground: oklch(0.269 0 0);
+  --lathe-primary: oklch(0.488 0.217 264);
+  --lathe-primary-foreground: white;
+  --lathe-muted: rgb(0 0 0 / 4%);
+  --lathe-muted-foreground: oklch(0.556 0 0);
+  --lathe-accent: rgb(0 0 0 / 4%);
+  --lathe-accent-foreground: oklch(0.269 0 0);
+  --lathe-border: rgb(0 0 0 / 8%);
+  --lathe-input: rgb(0 0 0 / 10%);
+  --lathe-ring: oklch(0.488 0.217 264);
+  color: var(--lathe-foreground);
+  font-family: var(--lathe-font-sans);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--lathe-border);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--lathe-ring) 72%, transparent);
+  outline-offset: -2px;
+}
