@@ -8,6 +8,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RoadmapRouteImport } from './routes/roadmap'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
@@ -17,6 +18,7 @@ import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSnapShotRouteImport } from './routes/settings.snap-shot'
 import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
+import { Route as SettingsRoadmapRouteImport } from './routes/settings.roadmap'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
 import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
@@ -46,6 +48,11 @@ const UsageRoute = UsageRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoadmapRoute = RoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PairRoute = PairRouteImport.update({
@@ -90,6 +97,11 @@ const SettingsSnapShotRoute = SettingsSnapShotRouteImport.update({
 const SettingsScheduledTasksRoute = SettingsScheduledTasksRouteImport.update({
   id: '/scheduled-tasks',
   path: '/scheduled-tasks',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsRoadmapRoute = SettingsRoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
@@ -175,6 +187,7 @@ export interface FileRoutesByFullPath {
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/pair': typeof PairRoute
+  '/roadmap': typeof RoadmapRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -191,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/roadmap': typeof SettingsRoadmapRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -202,6 +216,7 @@ export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/pair': typeof PairRoute
+  '/roadmap': typeof RoadmapRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -218,6 +233,7 @@ export interface FileRoutesByTo {
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/roadmap': typeof SettingsRoadmapRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -232,6 +248,7 @@ export interface FileRoutesById {
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/pair': typeof PairRoute
+  '/roadmap': typeof RoadmapRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -248,6 +265,7 @@ export interface FileRoutesById {
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/roadmap': typeof SettingsRoadmapRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -263,6 +281,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/connect-agent'
     | '/pair'
+    | '/roadmap'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -279,6 +298,7 @@ export interface FileRouteTypes {
     | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
+    | '/settings/roadmap'
     | '/settings/scheduled-tasks'
     | '/settings/snap-shot'
     | '/settings/source-control'
@@ -290,6 +310,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/connect-agent'
     | '/pair'
+    | '/roadmap'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -306,6 +327,7 @@ export interface FileRouteTypes {
     | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
+    | '/settings/roadmap'
     | '/settings/scheduled-tasks'
     | '/settings/snap-shot'
     | '/settings/source-control'
@@ -319,6 +341,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/connect-agent'
     | '/pair'
+    | '/roadmap'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -335,6 +358,7 @@ export interface FileRouteTypes {
     | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
+    | '/settings/roadmap'
     | '/settings/scheduled-tasks'
     | '/settings/snap-shot'
     | '/settings/source-control'
@@ -349,6 +373,7 @@ export interface RootRouteChildren {
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
   PairRoute: typeof PairRoute
+  RoadmapRoute: typeof RoadmapRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   UsageRoute: typeof UsageRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -376,6 +401,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/roadmap': {
+      id: '/roadmap'
+      path: '/roadmap'
+      fullPath: '/roadmap'
+      preLoaderRoute: typeof RoadmapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pair': {
@@ -439,6 +471,13 @@ declare module '@tanstack/react-router' {
       path: '/scheduled-tasks'
       fullPath: '/settings/scheduled-tasks'
       preLoaderRoute: typeof SettingsScheduledTasksRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/roadmap': {
+      id: '/settings/roadmap'
+      path: '/roadmap'
+      fullPath: '/settings/roadmap'
+      preLoaderRoute: typeof SettingsRoadmapRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/providers': {
@@ -578,6 +617,7 @@ interface SettingsRouteChildren {
   SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
+  SettingsRoadmapRoute: typeof SettingsRoadmapRoute
   SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
   SettingsSnapShotRoute: typeof SettingsSnapShotRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
@@ -595,6 +635,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
+  SettingsRoadmapRoute: SettingsRoadmapRoute,
   SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,
   SettingsSnapShotRoute: SettingsSnapShotRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
@@ -610,6 +651,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
   PairRoute: PairRoute,
+  RoadmapRoute: RoadmapRoute,
   SettingsRoute: SettingsRouteWithChildren,
   UsageRoute: UsageRoute,
   WelcomeRoute: WelcomeRoute,

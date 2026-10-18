@@ -20,6 +20,7 @@ import {
   PanelsTopLeftIcon,
   KeyboardIcon,
   Link2Icon,
+  MapIcon,
   PaletteIcon,
   SearchIcon,
   Settings2Icon,
@@ -86,6 +87,8 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/providers": BotIcon,
   "/settings/integrations": BlocksIcon,
   "/settings/scheduled-tasks": CalendarClockIcon,
+  // Fork: roadmap.
+  "/settings/roadmap": MapIcon,
   "/settings/source-control": GitBranchIcon,
   "/settings/storage": HardDriveIcon,
   "/settings/connections": Link2Icon,

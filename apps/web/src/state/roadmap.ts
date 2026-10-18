@@ -5,7 +5,7 @@ import { createRoadmapEnvironmentAtoms } from "@lathe/client-runtime/state/roadm
 import { connectionAtomRuntime } from "../connection/runtime";
 import { usePrimaryEnvironmentId } from "./environments";
 import { useEnvironmentQuery } from "./query";
-import { primaryServerSettingsAtom } from "./server";
+import { primaryServerSettingsAtom, serverEnvironment } from "./server";
 
 /** Fork: roadmap. `roadmapLive` and `dispatchRoadmap` take the roadmap home's environment id. */
 export const roadmapEnvironment = createRoadmapEnvironmentAtoms(connectionAtomRuntime);
@@ -25,4 +25,10 @@ export function useRoadmapLive(home: EnvironmentId | null) {
   return useEnvironmentQuery(
     home === null ? null : roadmapEnvironment.roadmapLive({ environmentId: home, input: {} }),
   );
+}
+
+/** Whether the home serves the roadmap; every roadmap entry point is gated on it. */
+export function useRoadmapSupported(home: EnvironmentId | null): boolean {
+  const config = useAtomValue(serverEnvironment.configValueAtom(home));
+  return config?.environment.capabilities.roadmap === true;
 }

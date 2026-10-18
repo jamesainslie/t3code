@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import { ArrowLeftIcon, ChartNoAxesColumnIcon, MapIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -6,6 +6,8 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
+// Fork: roadmap.
+import { useRoadmapHome, useRoadmapSupported } from "../../state/roadmap";
 import { LatheWordmark } from "../LatheWordmark";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -161,6 +163,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  // Fork: roadmap.
+  const roadmapSupported = useRoadmapSupported(useRoadmapHome());
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
@@ -184,6 +188,12 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
     void navigate({ to: "/usage" });
   }, [isMobile, navigate, setOpenMobile]);
+
+  // Fork: roadmap.
+  const handleRoadmapClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/roadmap" });
+  }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
@@ -218,6 +228,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {/* Fork: roadmap. */}
+          {roadmapSupported ? (
+            <SidebarUtilityItem icon={<MapIcon />} label="Roadmap" onClick={handleRoadmapClick} />
+          ) : null}
         </>
       )}
       <SidebarUpdatePill />
