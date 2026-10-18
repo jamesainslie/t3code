@@ -732,6 +732,26 @@ export type RoadmapStreamItem = typeof RoadmapStreamItem.Type;
 export const RoadmapDispatchInput = Schema.Struct({ command: RoadmapCommand });
 export type RoadmapDispatchInput = typeof RoadmapDispatchInput.Type;
 
+/**
+ * Imports a GitHub issue and its sub-issue tree on the home. Without a parent
+ * the issue becomes a top-level item in `area`, unless the account its
+ * repository routes to names an area in `roadmap.areaByLogin`.
+ */
+export const RoadmapImportIssueInput = Schema.Struct({
+  url: TrimmedNonEmptyString,
+  area: Schema.optionalKey(Schema.NullOr(RoadmapArea)),
+  parentId: Schema.optionalKey(Schema.NullOr(RoadmapItemId)),
+});
+export type RoadmapImportIssueInput = typeof RoadmapImportIssueInput.Type;
+
+export const RoadmapImportIssueResult = Schema.Struct({
+  /** The issue's item, new or already there. */
+  itemId: RoadmapItemId,
+  /** Items this import created, the issue's own included; 0 when it was already imported. */
+  imported: NonNegativeInt,
+});
+export type RoadmapImportIssueResult = typeof RoadmapImportIssueResult.Type;
+
 export const RoadmapDispatchResult = Schema.Struct({
   sequence: NonNegativeInt,
   /** Null for sprint commands, which name no item. */
