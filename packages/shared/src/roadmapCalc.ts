@@ -26,8 +26,8 @@ export type RoadmapDateOf = (at: string) => IsoDate;
 const DAY_MS = 86_400_000;
 const DEFAULT_WEEKDAYS: RoadmapWeekdays = [1, 2, 3, 4, 5];
 
-export const VELOCITY_WINDOW_WORKING_DAYS = 15;
-export const VELOCITY_MIN_SAMPLES = 5;
+const VELOCITY_WINDOW_WORKING_DAYS = 15;
+const VELOCITY_MIN_SAMPLES = 5;
 const VELOCITY_SPRINT_COUNT = 3;
 const AT_RISK_SLACK_SHARE = 0.2;
 
@@ -162,10 +162,7 @@ const bySiblingOrder = (left: RoadmapWorkItem, right: RoadmapWorkItem) =>
           ? 1
           : 0;
 
-export function childrenOf(
-  item: RoadmapWorkItem,
-  byId: RoadmapItemsById,
-): ReadonlyArray<RoadmapWorkItem> {
+function childrenOf(item: RoadmapWorkItem, byId: RoadmapItemsById): ReadonlyArray<RoadmapWorkItem> {
   return childIndex(byId).get(item.id) ?? [];
 }
 

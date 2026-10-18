@@ -149,7 +149,7 @@ const MONTH_NAMES = [
 ] as const;
 
 /** "today", "tomorrow", a weekday within six days either side, else "Oct 30". */
-export function roadmapDayLabel(date: IsoDate, today: IsoDate): string {
+function roadmapDayLabel(date: IsoDate, today: IsoDate): string {
   if (date === today) return "today";
   if (date === addDays(today, 1)) return "tomorrow";
   const [year, month, day] = date.split("-").map(Number);

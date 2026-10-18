@@ -70,7 +70,7 @@ export const ROADMAP_UNIT_LABELS: Readonly<Record<RoadmapUnit, string>> = {
 };
 
 /** Monday to Friday, for a caller with no area calendar to hand. */
-export const DEFAULT_WORKING_WEEKDAYS: ReadonlyArray<number> = [1, 2, 3, 4, 5];
+const DEFAULT_WORKING_WEEKDAYS: ReadonlyArray<number> = [1, 2, 3, 4, 5];
 
 /** Indexed 0 for Sunday, as area settings number the days. */
 export const ROADMAP_WEEKDAY_LABELS: ReadonlyArray<string> = [
