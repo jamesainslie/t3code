@@ -206,6 +206,107 @@ describe("waiting on you", () => {
     ]);
   });
 
+  describe("steward unsure notes", () => {
+    const steward = { _tag: "steward", environmentId: EnvironmentId.make("env") } as const;
+    const criterion = (criterionId: string, tickedAt: string | null = null) => ({
+      id: criterionId,
+      text: `Criterion ${criterionId}`,
+      tickedAt,
+      tickedBy: tickedAt === null ? null : steward,
+      evidence: null,
+    });
+    const note = (
+      noteId: string,
+      noteAt: string,
+      overrides: Partial<RoadmapWorkItem["progressNotes"][number]> = {},
+    ): RoadmapWorkItem["progressNotes"][number] => ({
+      id: noteId,
+      at: noteAt,
+      actor: steward,
+      kind: "unsure",
+      text: "Partial evidence",
+      criterionId: "c1",
+      ...overrides,
+    });
+
+    it("waits on the user until a tick on that criterion follows the note", () => {
+      const today = build([
+        item("open", {
+          criteria: [criterion("c1")],
+          progressNotes: [note("n1", at("2026-10-19"))],
+        }),
+        item("ticked-after", {
+          criteria: [criterion("c1", at("2026-10-20", "09:00:00.000"))],
+          progressNotes: [note("n1", at("2026-10-19"))],
+        }),
+        item("ticked-before", {
+          criteria: [criterion("c1", at("2026-10-18"))],
+          progressNotes: [
+            note("n1", at("2026-10-19")),
+            note("n2", at("2026-10-19", "13:00:00.000")),
+          ],
+        }),
+        item("gone-criterion", {
+          criteria: [],
+          progressNotes: [note("n1", at("2026-10-19"))],
+        }),
+      ]);
+      expect(rowOf(today, "open")).toMatchObject({
+        section: "waiting",
+        reason: "1 unsure note from the steward",
+      });
+      expect(rowOf(today, "ticked-before")?.reason).toBe("2 unsure notes from the steward");
+      expect(rowOf(today, "ticked-after")?.section).not.toBe("waiting");
+      expect(rowOf(today, "gone-criterion")?.section).not.toBe("waiting");
+    });
+
+    it("counts a note on the whole item until any criterion is ticked after it", () => {
+      const itemWide = note("n1", at("2026-10-19"), { criterionId: null });
+      const today = build([
+        item("waiting", { criteria: [criterion("c1")], progressNotes: [itemWide] }),
+        item("answered", {
+          criteria: [criterion("c1", at("2026-10-20", "08:00:00.000"))],
+          progressNotes: [itemWide],
+        }),
+      ]);
+      expect(rowOf(today, "waiting")?.reason).toBe("1 unsure note from the steward");
+      expect(rowOf(today, "answered")?.section).not.toBe("waiting");
+    });
+
+    it("ignores the steward's progress and drift notes", () => {
+      const today = build([
+        item("quiet", {
+          criteria: [criterion("c1")],
+          progressNotes: [
+            note("n1", at("2026-10-19"), { kind: "progress" }),
+            note("n2", at("2026-10-19"), { kind: "drift" }),
+          ],
+        }),
+      ]);
+      expect(rowOf(today, "quiet")?.section).not.toBe("waiting");
+    });
+
+    it("joins the other reasons a thread waits", () => {
+      const today = build(
+        [
+          item("busy", {
+            criteria: [criterion("c1")],
+            progressNotes: [note("n1", at("2026-10-19"))],
+          }),
+        ],
+        {
+          threadSignals: new Map([
+            [id("busy"), signal({ awaiting: { reason: "approval", thread } })],
+          ]),
+          reviewRequests: new Map([[id("busy"), ["https://github.com/o/r/pull/1"]]]),
+        },
+      );
+      expect(rowOf(today, "busy")?.reason).toBe(
+        "Waiting for your approval, 1 pull request to review, and 1 unsure note from the steward",
+      );
+    });
+  });
+
   it("is outside the capacity count", () => {
     const today = build([...history("work", 3), item("busy", { estimate: 9 })], {
       threadSignals: new Map([[id("busy"), signal({ awaiting: { reason: "approval", thread } })]]),

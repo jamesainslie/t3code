@@ -165,6 +165,31 @@ function roadmapDayLabel(date: IsoDate, today: IsoDate): string {
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/** "A", "A, and B", "A, B, and C". */
+const joinReasons = (reasons: ReadonlyArray<string>) =>
+  reasons.length <= 1
+    ? (reasons[0] ?? "")
+    : `${reasons.slice(0, -1).join(", ")}, and ${reasons.at(-1)}`;
+
+/**
+ * The steward's unsure notes the user has not answered. A tick on the note's
+ * criterion after the note answers it; a note about the whole item is
+ * answered by a tick on any criterion. A note whose criterion is gone has
+ * nothing left to answer.
+ */
+function openUnsureNotes(item: RoadmapWorkItem): number {
+  const tickedAt = (criterion: RoadmapWorkItem["criteria"][number]) =>
+    criterion.tickedAt === null ? Number.NEGATIVE_INFINITY : Date.parse(criterion.tickedAt);
+  const criteria = new Map(item.criteria.map((criterion) => [criterion.id, criterion]));
+  const lastTick = Math.max(Number.NEGATIVE_INFINITY, ...item.criteria.map(tickedAt));
+  return item.progressNotes.filter((note) => {
+    if (note.kind !== "unsure" || note.actor._tag !== "steward") return false;
+    if (note.criterionId === null) return lastTick < Date.parse(note.at);
+    const criterion = criteria.get(note.criterionId);
+    return criterion !== undefined && tickedAt(criterion) < Date.parse(note.at);
+  }).length;
+}
+
 export function buildToday(input: RoadmapTodayInput): RoadmapToday {
   const { items, today, areaSettings, threadSignals, reviewRequests } = input;
   const dateOf = input.dateOf ?? utcDateOf;
@@ -241,17 +266,18 @@ export function buildToday(input: RoadmapTodayInput): RoadmapToday {
   for (const item of candidates) {
     const signal = threadSignals.get(item.id);
     const reviews = reviewRequests.get(item.id) ?? [];
-    if (signal?.awaiting == null && reviews.length === 0) continue;
-    const reviewText = plural(reviews.length, "pull request", "pull requests") + " to review";
-    place(
-      "waiting",
-      item,
-      signal?.awaiting == null
-        ? reviewText
-        : reviews.length === 0
-          ? AWAITING_TEXT[signal.awaiting.reason]
-          : `${AWAITING_TEXT[signal.awaiting.reason]}, and ${reviewText}`,
-    );
+    const unsure = openUnsureNotes(item);
+    const reasons = [
+      ...(signal?.awaiting == null ? [] : [AWAITING_TEXT[signal.awaiting.reason]]),
+      ...(reviews.length === 0
+        ? []
+        : [`${plural(reviews.length, "pull request", "pull requests")} to review`]),
+      ...(unsure === 0
+        ? []
+        : [`${plural(unsure, "unsure note", "unsure notes")} from the steward`]),
+    ];
+    if (reasons.length === 0) continue;
+    place("waiting", item, joinReasons(reasons));
   }
 
   for (const item of candidates) {
