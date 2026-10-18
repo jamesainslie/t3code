@@ -68,6 +68,18 @@ describe("resolveLatheMcpToolPresentation", () => {
       logo: "lathe",
     });
     expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_add_note")).toBe("roadmap-update");
+    expect(resolveLatheMcpToolPresentation("mcp__lathe__lathe_roadmap_import_issue")).toEqual({
+      displayName: "Import a GitHub issue to the roadmap",
+      logo: "lathe",
+    });
+    expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_import_issue")).toBe("roadmap-create");
+    expect(resolveLatheMcpToolPresentation("mcp__lathe__lathe_roadmap_link_pull_request")).toEqual({
+      displayName: "Link a pull request to a work item",
+      logo: "lathe",
+    });
+    expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_link_pull_request")).toBe(
+      "roadmap-update",
+    );
   });
 
   it("pretty prints bare Lathe MCP toolkit names", () => {

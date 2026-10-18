@@ -67,6 +67,8 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   sprintId: null,
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -123,6 +125,14 @@ describe("validateRoadmapSearch", () => {
     }
     expect(validateRoadmapSearch({ new: 0 })).toEqual({});
     expect(validateRoadmapSearch({ new: "no" })).toEqual({});
+  });
+
+  it("reads import=1, which opens the GitHub import dialog", () => {
+    for (const value of [1, "1", true, "true"]) {
+      expect(validateRoadmapSearch({ import: value })).toEqual({ import: 1 });
+    }
+    expect(validateRoadmapSearch({ import: "no" })).toEqual({});
+    expect(withoutEditorRequest({ import: 1, new: 1, view: "board" })).toEqual({ view: "board" });
   });
 
   it("keeps parent only alongside new", () => {

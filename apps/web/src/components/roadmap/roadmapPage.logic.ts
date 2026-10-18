@@ -53,6 +53,8 @@ export interface RoadmapSearch {
   /** Opens the item editor; set by "Create work item" in the command palette. */
   readonly new?: 1;
   readonly parent?: RoadmapItemId;
+  /** Opens the GitHub import dialog; set by "Import GitHub issue" in the command palette. */
+  readonly import?: 1;
 }
 
 const includes = <T extends string>(values: ReadonlyArray<T>, value: unknown): value is T =>
@@ -75,10 +77,13 @@ function readSprintFilter(value: unknown): RoadmapSprintFilter | null {
   return text === null ? null : text === "none" ? "none" : RoadmapSprintId.make(text);
 }
 
+/** The router parses query values as JSON, so a flag can arrive as a number or a boolean. */
+const isOn = (value: unknown) => value === 1 || value === "1" || value === true || value === "true";
+
 export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSearch {
   const item = readItemId(raw.item);
   const under = readItemId(raw.under);
-  const isNew = raw.new === 1 || raw.new === "1" || raw.new === true || raw.new === "true";
+  const isNew = isOn(raw.new);
   const parent = isNew ? readItemId(raw.parent) : null;
   const sprint = readSprintFilter(raw.sprint);
   return {
@@ -93,6 +98,7 @@ export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSear
     ...(sprint === null ? {} : { sprint }),
     ...(isNew ? { new: 1 as const } : {}),
     ...(parent === null ? {} : { parent }),
+    ...(isOn(raw.import) ? { import: 1 as const } : {}),
   };
 }
 
@@ -108,7 +114,7 @@ export function roadmapEditorRequest(
 }
 
 export function withoutEditorRequest(search: RoadmapSearch): RoadmapSearch {
-  const { new: _new, parent: _parent, ...rest } = search;
+  const { new: _new, parent: _parent, import: _import, ...rest } = search;
   return rest;
 }
 

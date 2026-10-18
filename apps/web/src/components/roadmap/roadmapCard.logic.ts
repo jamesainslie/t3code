@@ -4,13 +4,16 @@
 import type {
   IsoDate,
   RoadmapActor,
+  RoadmapIssueSource,
   RoadmapItemId,
   RoadmapNoteKind,
+  RoadmapPullRequestLink,
   RoadmapThreadRef,
   RoadmapUnit,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
+import { parseGitHubIssueUrl } from "@lathe/shared/changeRequestUrl";
 import { effectiveArea } from "@lathe/shared/roadmap";
 import {
   burned,
@@ -148,6 +151,35 @@ export function roadmapActorLabel(actor: RoadmapActor): string {
     case "github":
       return "GitHub";
   }
+}
+
+export function roadmapIssueRef(source: RoadmapIssueSource): string {
+  return `${source.owner}/${source.repo}#${source.number}`;
+}
+
+/** Why the synced fields will not save, for an issue this environment cannot write. */
+export function roadmapReadOnlyHint(item: RoadmapWorkItem): string | null {
+  if (item.source === null || item.source.writable) return null;
+  return `Title, done, parent and blockers follow ${roadmapIssueRef(item.source)}, which this environment's GitHub account cannot change. Edit them on GitHub.`;
+}
+
+/** Most pull requests live beside the item's issue, so the repository shows only when it differs. */
+export function roadmapPullRequestLabel(
+  link: RoadmapPullRequestLink,
+  source: RoadmapIssueSource | null,
+): string {
+  const sameRepository =
+    source !== null &&
+    link.repository.toLowerCase() === `${source.owner}/${source.repo}`.toLowerCase();
+  return sameRepository ? `#${link.number}` : `${link.repository}#${link.number}`;
+}
+
+/** Matches the server's check, so the dialog says what is wrong before asking the home. */
+export function roadmapImportUrlError(url: string): string | null {
+  if (url.trim().length === 0) return "Paste the issue's URL.";
+  return parseGitHubIssueUrl(url.trim()) === null
+    ? "That is not a GitHub issue URL, such as https://github.com/owner/repo/issues/12."
+    : null;
 }
 
 /** The card shows the latest few; the item keeps up to `ROADMAP_NOTE_LIMIT`. */

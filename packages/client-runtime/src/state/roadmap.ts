@@ -55,5 +55,10 @@ export function createRoadmapEnvironmentAtoms<R, E>(
       label: "environment-data:roadmap:link-mint",
       tag: WS_METHODS.roadmapLinkMint,
     }),
+    /** Runs on the home, which holds the gh logins sync reads with. */
+    importRoadmapIssue: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:roadmap:import-issue",
+      tag: WS_METHODS.roadmapImportIssue,
+    }),
   };
 }

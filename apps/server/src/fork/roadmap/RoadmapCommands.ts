@@ -18,7 +18,9 @@ import {
   type RoadmapEvent,
   type RoadmapItemEvent,
   type RoadmapItemId,
+  type RoadmapIssueLocalChanges,
   type RoadmapNoteKind,
+  type RoadmapPullRequestLink,
   type RoadmapRejectionCode,
   type RoadmapSprint,
   type RoadmapSprintCommand,
@@ -63,6 +65,11 @@ export interface RoadmapSprintChange {
 const sameThread = (left: RoadmapThreadRef, right: RoadmapThreadRef) =>
   left.environmentId === right.environmentId && left.threadId === right.threadId;
 
+type PullRequestKey = Pick<RoadmapPullRequestLink, "host" | "repository" | "number">;
+
+const samePullRequest = (left: PullRequestKey, right: PullRequestKey) =>
+  left.host === right.host && left.repository === right.repository && left.number === right.number;
+
 const reject = (code: RoadmapRejectionCode, message: string) =>
   Result.fail(new RoadmapError({ code, message }));
 
@@ -70,6 +77,32 @@ const userOnly = (actor: RoadmapActor, what: string) =>
   actor._tag === "user"
     ? undefined
     : new RoadmapError({ code: "forbidden_actor", message: `Only the user can change ${what}.` });
+
+const githubOnly = (actor: RoadmapActor, what: string) =>
+  actor._tag === "github"
+    ? undefined
+    : new RoadmapError({ code: "forbidden_actor", message: `Only GitHub sync can ${what}.` });
+
+/** Design 11: a pull request links to the item types that ship code. */
+const PULL_REQUEST_TYPES: ReadonlySet<RoadmapWorkItem["type"]> = new Set([
+  "feature",
+  "story",
+  "bug",
+  "support-ticket",
+]);
+
+/**
+ * GitHub sync applies what the issue says whatever the account may write;
+ * everyone else edits the synced fields only where it could push them back.
+ */
+const isReadOnly = (item: RoadmapWorkItem, actor: RoadmapActor) =>
+  actor._tag !== "github" && item.source !== null && !item.source.writable;
+
+const readOnlyRefusal = (item: RoadmapWorkItem) =>
+  reject(
+    "read_only_source",
+    `${label(item)} follows issue #${item.source?.number ?? "?"}, which this environment's GitHub account cannot change. Edit it on GitHub.`,
+  );
 
 /**
  * The earliest calendar date it can be anywhere (UTC-12). The server does not
@@ -196,6 +229,7 @@ export function planRoadmapCommand(input: {
         }
       }
       const siblings = siblingsOf(parentId, command.itemId);
+      const initialState = command.state ?? "backlog";
       const item: RoadmapWorkItem = {
         id: command.itemId,
         type: command.itemType,
@@ -203,7 +237,7 @@ export function planRoadmapCommand(input: {
         description: command.description ?? "",
         parentId,
         sortKey: sortKeyBetween(siblings.at(-1)?.sortKey ?? null, null),
-        state: command.state ?? "backlog",
+        state: initialState,
         priority: command.priority ?? null,
         area:
           command.area !== undefined
@@ -228,20 +262,153 @@ export function planRoadmapCommand(input: {
         updatedAt: occurredAt,
         createdBy: actor,
         stateChangedAt: occurredAt,
-        completedAt: command.state === "done" ? occurredAt : null,
+        completedAt: initialState === "done" ? occurredAt : null,
         pinnedAt: null,
         snoozedUntil: null,
         sprintId: command.sprintId ?? null,
         hours: [],
         progressNotes: [],
+        source: null,
+        pullRequests: [],
       };
       return Result.succeed({ ...base, type: "roadmap.item.created", payload: { item } });
+    }
+
+    case "roadmap.source.import": {
+      const forbidden = githubOnly(actor, "import issues");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      if (records.has(command.itemId)) {
+        return reject("already_exists", `Work item ${command.itemId} already exists.`);
+      }
+      const holder = liveItems().find((other) => other.source?.nodeId === command.source.nodeId);
+      if (holder !== undefined) {
+        return reject(
+          "already_exists",
+          `Issue #${command.source.number} is already ${label(holder)}.`,
+        );
+      }
+      if (command.parentId !== null) {
+        const parent = requireParent(command.parentId, command.itemType);
+        if (Result.isFailure(parent)) return Result.fail(parent.failure);
+      }
+      const siblings = siblingsOf(command.parentId, command.itemId);
+      const item: RoadmapWorkItem = {
+        id: command.itemId,
+        type: command.itemType,
+        title: command.title,
+        description: "",
+        parentId: command.parentId,
+        sortKey: sortKeyBetween(siblings.at(-1)?.sortKey ?? null, null),
+        state: command.state,
+        priority: null,
+        area: command.area,
+        dueDate: null,
+        startDate: null,
+        estimate: null,
+        criteria: [],
+        blockedBy: [],
+        externalBlockers: [],
+        related: [],
+        attachments: [],
+        origin: null,
+        needsReview: false,
+        createdAt: occurredAt,
+        updatedAt: occurredAt,
+        createdBy: actor,
+        stateChangedAt: occurredAt,
+        completedAt: command.state === "done" ? occurredAt : null,
+        pinnedAt: null,
+        snoozedUntil: null,
+        sprintId: null,
+        hours: [],
+        progressNotes: [],
+        source: command.source,
+        pullRequests: [],
+      };
+      return Result.succeed({ ...base, type: "roadmap.item.created", payload: { item } });
+    }
+
+    case "roadmap.source.sync": {
+      const forbidden = githubOnly(actor, "sync issues");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (current.success.source === null) {
+        return reject("invalid_request", `${label(current.success)} has no issue to sync.`);
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.source.synced",
+        payload: {
+          writable: command.writable,
+          remoteUpdatedAt: command.remoteUpdatedAt,
+          syncedAt: occurredAt,
+          base: command.base,
+        },
+      });
+    }
+
+    case "roadmap.source.unlink": {
+      if (actor._tag !== "user" && actor._tag !== "github") {
+        return reject("forbidden_actor", "Only the user can stop syncing an item with its issue.");
+      }
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (current.success.source === null) {
+        return reject("invalid_request", `${label(current.success)} has no issue.`);
+      }
+      return Result.succeed({ ...base, type: "roadmap.source.unlinked", payload: {} });
+    }
+
+    case "roadmap.pull-request.link": {
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (!PULL_REQUEST_TYPES.has(current.success.type)) {
+        return reject(
+          "invalid_request",
+          `Pull requests link to features, stories, bugs and support tickets, not ${label(current.success)}.`,
+        );
+      }
+      const { pullRequest } = command;
+      return Result.succeed({
+        ...base,
+        type: "roadmap.pull-request.linked",
+        payload: {
+          pullRequest: {
+            ...pullRequest,
+            host: pullRequest.host.toLowerCase(),
+            repository: pullRequest.repository.toLowerCase(),
+          },
+        },
+      });
+    }
+
+    case "roadmap.pull-request.unlink": {
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      return Result.succeed({
+        ...base,
+        type: "roadmap.pull-request.unlinked",
+        payload: {
+          host: command.host.toLowerCase(),
+          repository: command.repository.toLowerCase(),
+          number: command.number,
+        },
+      });
     }
 
     case "roadmap.item.update": {
       const current = requireLive(command.itemId);
       if (Result.isFailure(current)) return Result.fail(current.failure);
       const item = current.success;
+      if (
+        isReadOnly(item, actor) &&
+        ((command.patch.title !== undefined && command.patch.title !== item.title) ||
+          (command.patch.state !== undefined &&
+            (command.patch.state === "done") !== (item.state === "done")))
+      ) {
+        return readOnlyRefusal(item);
+      }
       const nextType = command.patch.type;
       if (nextType !== undefined && nextType !== item.type) {
         const parent = item.parentId === null ? undefined : liveItem(item.parentId);
@@ -270,6 +437,20 @@ export function planRoadmapCommand(input: {
       const current = requireLive(command.itemId);
       if (Result.isFailure(current)) return Result.fail(current.failure);
       const item = current.success;
+      if (command.parentId !== item.parentId && item.source !== null) {
+        // A new parent rewrites the sub-issue link on both issues involved.
+        const before = item.parentId === null ? undefined : liveItem(item.parentId);
+        const after = command.parentId === null ? undefined : liveItem(command.parentId);
+        const locked = [item, before, after].find(
+          (entry) =>
+            entry !== undefined &&
+            isReadOnly(entry, actor) &&
+            (entry !== item ||
+              (before?.source ?? null) !== null ||
+              (after?.source ?? null) !== null),
+        );
+        if (locked !== undefined) return readOnlyRefusal(locked);
+      }
       if (command.parentId !== null) {
         const parent = requireLive(command.parentId);
         if (Result.isFailure(parent)) return Result.fail(parent.failure);
@@ -394,6 +575,9 @@ export function planRoadmapCommand(input: {
       }
       const blocker = requireLive(command.blockedById);
       if (Result.isFailure(blocker)) return Result.fail(blocker.failure);
+      if (isReadOnly(current.success, actor) && blocker.success.source !== null) {
+        return readOnlyRefusal(current.success);
+      }
       if (wouldCreateBlockerCycle(command.itemId, command.blockedById, byId)) {
         return reject(
           "blocker_cycle",
@@ -410,6 +594,12 @@ export function planRoadmapCommand(input: {
     case "roadmap.blocker.unlink": {
       const current = requireLive(command.itemId);
       if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (
+        isReadOnly(current.success, actor) &&
+        (records.get(command.blockedById)?.item.source ?? null) !== null
+      ) {
+        return readOnlyRefusal(current.success);
+      }
       return Result.succeed({
         ...base,
         type: "roadmap.blocker.unlinked",
@@ -828,11 +1018,22 @@ export function projectRoadmapEvent(
   const item = record.item;
   const withoutId = <A>(values: ReadonlyArray<A>, value: A) =>
     values.filter((entry) => entry !== value);
+  // Sync compares these times with the issue's to settle a conflict, so only
+  // changes made here count; GitHub's own arrive already agreed.
+  const localChange = (
+    fields: ReadonlyArray<keyof RoadmapIssueLocalChanges>,
+  ): Partial<Pick<RoadmapWorkItem, "source">> => {
+    if (item.source === null || event.actor._tag === "github" || fields.length === 0) return {};
+    const localChangedAt = { ...item.source.localChangedAt };
+    for (const field of fields) localChangedAt[field] = at;
+    return { source: { ...item.source, localChangedAt } };
+  };
   const next = ((): RoadmapWorkItem => {
     switch (event.type) {
       case "roadmap.item.updated": {
         const state = event.payload.state;
         const stateChanged = state !== undefined && state !== item.state;
+        const title = event.payload.title;
         return {
           ...item,
           ...event.payload,
@@ -845,10 +1046,21 @@ export function projectRoadmapEvent(
                 ...(state === "done" ? { pinnedAt: null } : {}),
               }
             : {}),
+          ...localChange([
+            ...(title !== undefined && title !== item.title ? (["title"] as const) : []),
+            ...(stateChanged && (state === "done") !== (item.state === "done")
+              ? (["closed"] as const)
+              : []),
+          ]),
         };
       }
       case "roadmap.item.moved":
-        return { ...item, parentId: event.payload.parentId, sortKey: event.payload.sortKey };
+        return {
+          ...item,
+          parentId: event.payload.parentId,
+          sortKey: event.payload.sortKey,
+          ...localChange(event.payload.parentId === item.parentId ? [] : ["parent"]),
+        };
       case "roadmap.criteria.set":
         return { ...item, criteria: event.payload.criteria };
       case "roadmap.criterion.ticked":
@@ -874,9 +1086,14 @@ export function projectRoadmapEvent(
             ...withoutId(item.blockedBy, event.payload.blockedById),
             event.payload.blockedById,
           ],
+          ...localChange(item.blockedBy.includes(event.payload.blockedById) ? [] : ["blockedBy"]),
         };
       case "roadmap.blocker.unlinked":
-        return { ...item, blockedBy: withoutId(item.blockedBy, event.payload.blockedById) };
+        return {
+          ...item,
+          blockedBy: withoutId(item.blockedBy, event.payload.blockedById),
+          ...localChange(item.blockedBy.includes(event.payload.blockedById) ? ["blockedBy"] : []),
+        };
       case "roadmap.external-blocker.added":
         return { ...item, externalBlockers: [...item.externalBlockers, event.payload.blocker] };
       case "roadmap.external-blocker.resolved":
@@ -948,6 +1165,36 @@ export function projectRoadmapEvent(
         return {
           ...item,
           progressNotes: item.progressNotes.filter((note) => note.id !== event.payload.noteId),
+        };
+      case "roadmap.source.synced":
+        return item.source === null
+          ? item
+          : {
+              ...item,
+              source: {
+                ...item.source,
+                writable: event.payload.writable,
+                remoteUpdatedAt: event.payload.remoteUpdatedAt,
+                syncedAt: event.payload.syncedAt,
+                base: event.payload.base,
+              },
+            };
+      case "roadmap.source.unlinked":
+        return { ...item, source: null };
+      case "roadmap.pull-request.linked": {
+        const link = event.payload.pullRequest;
+        return {
+          ...item,
+          pullRequests: [
+            ...item.pullRequests.filter((entry) => !samePullRequest(entry, link)),
+            link,
+          ],
+        };
+      }
+      case "roadmap.pull-request.unlinked":
+        return {
+          ...item,
+          pullRequests: item.pullRequests.filter((entry) => !samePullRequest(entry, event.payload)),
         };
     }
   })();

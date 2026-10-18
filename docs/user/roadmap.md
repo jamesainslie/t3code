@@ -96,6 +96,44 @@ Once an area has three finished sprints, items in a sprint forecast from the pac
 sprints instead of the last 15 working days. Deleting a sprint takes its items out of it and keeps
 the items.
 
+## Import GitHub issues
+
+Choose **Import issue** on the Roadmap, or **Import GitHub issue** in the command palette, and paste
+the issue's URL. Pick a parent to put it under, or leave it at the top level in the area you choose.
+When the home's `settings.json` maps the repository's GitHub login to an area under
+`roadmap.areaByLogin`, such as `{ "jane-work": "work" }`, that area applies instead.
+The issue and its sub-issues become work items: an issue with sub-issues becomes an epic, feature or
+story by its place in the tree, and one without becomes a story. Importing an issue that is already
+on the roadmap opens its item.
+
+Imported items stay in sync with GitHub while the roadmap home is running:
+
+- The title, open or closed, the sub-issue parent, and blocked-by links sync both ways. Parent and
+  blocker links sync only when both ends are imported issues. Dates, estimates, priority, criteria
+  and notes stay in Lathe.
+- Closing the issue sets the item to **Done**, and reopening it sets **In progress**. Marking the
+  item **Done** closes the issue, and moving it out of Done reopens it.
+- Sub-issues added on GitHub under an imported issue come in on their own.
+- When an item and its issue both changed, the newer change wins and the item gets a **Sync** note
+  saying what happened.
+- Moving an item under a work item that is not an issue removes it from its parent issue on GitHub,
+  and a note says so.
+
+Sync uses the roadmap home's GitHub logins, chosen per repository by the rules under **GitHub
+accounts** in the home's **Settings → Source Control** (see
+[Several GitHub accounts](./source-control.md#several-github-accounts)). A project's own account
+choice does not apply, since an imported issue belongs to no project. The home needs a login for
+every account whose repositories you import from.
+When that login cannot edit an issue, the item's synced fields are read-only, and the card says
+why. Open issues are checked every minute and closed ones every 15 minutes. A change you make in
+Lathe is sent at once.
+
+An item's card shows its issue number. Choose it to open the issue, or choose the unlink button
+beside it to stop syncing. The item stays on the roadmap, and the issue is not changed.
+
+Agents can link pull requests to features, stories, bugs and support tickets. The card lists them,
+shows a pull request's details when you hover it, and removes a link you no longer want.
+
 ## Log hours
 
 Choose **Log hours** in the **Hours** field of an item's card, enter the hours and an optional note,
@@ -123,7 +161,7 @@ item and acceptance criteria, with its forecast and progress when it has them. Y
 thread stays as you wrote it. Messages that start with a `/` command do not include the summary.
 
 Agents can read the roadmap, update their work item, tick criteria with evidence, log hours, add
-progress notes, create items, and attach threads. The **Notes** section of an item's card shows the
+progress notes, create items, attach threads, import GitHub issues, and link pull requests. The **Notes** section of an item's card shows the
 latest notes, newest first, and removes one you no longer want. When an agent reads a work item it also sees the forecast, progress and
 pace. An agent cannot mark an item done while any of its criteria are unticked. Items an agent
 creates are marked **Needs review** until you open or edit them. Pins, snoozes and sprints are yours

@@ -61,6 +61,18 @@ export class GitHubAccountSelector extends Context.Service<
     readonly pinFor: (
       input: GitHubAccountCheckout,
     ) => Effect.Effect<PinnedGitHubCredentialValue | null>;
+    /**
+     * Fork: roadmap. The account the rules select for a repository no checkout holds, and its
+     * token as a pin (null when `gh` has none). Null when no rule matches, so gh's active account
+     * applies. With no checkout there is no project, so no project override.
+     */
+    readonly forRepository: (input: {
+      readonly host: string;
+      readonly owner: string;
+    }) => Effect.Effect<{
+      readonly login: string;
+      readonly credential: PinnedGitHubCredentialValue | null;
+    } | null>;
     /** Forget a cached token so the next pin asks `gh` again, for example after an auth failure. */
     readonly invalidate: (selection: GitHubAccountSelection) => Effect.Effect<void>;
   }
@@ -148,11 +160,7 @@ export const make = Effect.gen(function* () {
   >();
   const missingTokenLogged = new Set<string>();
 
-  const pinFor: GitHubAccountSelector["Service"]["pinFor"] = Effect.fn(
-    "GitHubAccountSelector.pinFor",
-  )(function* (input) {
-    const selected = yield* forCheckout(input);
-    if (selected === null) return null;
+  const tokenFor = Effect.fnUntraced(function* (selected: GitHubAccountSelection, cwd: string) {
     const key = tokenKey(selected);
     const now = yield* Clock.currentTimeMillis;
     const cached = tokenCache.get(key);
@@ -163,7 +171,7 @@ export const make = Effect.gen(function* () {
         operation: "GitHubAccountSelector.token",
         command: "gh",
         args: ["auth", "token", "--hostname", selected.host, "--user", selected.login],
-        cwd: input.cwd,
+        cwd,
         env: { GH_DEBUG: "" },
       })
       .pipe(Effect.option);
@@ -192,12 +200,37 @@ export const make = Effect.gen(function* () {
     return credential;
   });
 
+  const pinFor: GitHubAccountSelector["Service"]["pinFor"] = Effect.fn(
+    "GitHubAccountSelector.pinFor",
+  )(function* (input) {
+    const selected = yield* forCheckout(input);
+    return selected === null ? null : yield* tokenFor(selected, input.cwd);
+  });
+
+  // Fork: roadmap.
+  const forRepository: GitHubAccountSelector["Service"]["forRepository"] = Effect.fn(
+    "GitHubAccountSelector.forRepository",
+  )(function* (input) {
+    const settings = yield* serverSettings.getSettings.pipe(Effect.option);
+    if (settings._tag === "None") return null;
+    const host = input.host.toLowerCase();
+    const login = resolveGitHubAccount({
+      rules: settings.value.gitHubAccountRules,
+      projectOverride: undefined,
+      host,
+      owner: input.owner,
+    });
+    if (login === null) return null;
+    // `gh auth token` reads no repository, so the server's own directory serves.
+    return { login, credential: yield* tokenFor({ host, login }, ".") };
+  });
+
   const invalidate: GitHubAccountSelector["Service"]["invalidate"] = (selection) =>
     Effect.sync(() => {
       tokenCache.delete(tokenKey(selection));
     });
 
-  return GitHubAccountSelector.of({ forCheckout, pinFor, invalidate });
+  return GitHubAccountSelector.of({ forCheckout, pinFor, forRepository, invalidate });
 });
 
 const layer = Layer.effect(GitHubAccountSelector, make);
@@ -238,6 +271,7 @@ export const layerUnselected = Layer.succeed(
   GitHubAccountSelector.of({
     forCheckout: () => Effect.succeed(null),
     pinFor: () => Effect.succeed(null),
+    forRepository: () => Effect.succeed(null),
     invalidate: () => Effect.void,
   }),
 );

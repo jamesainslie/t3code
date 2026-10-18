@@ -55,6 +55,8 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   sprintId: null,
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -257,6 +259,86 @@ it.layer(layer)("RoadmapStore", (it) => {
       yield* sql`UPDATE projection_roadmap_items SET payload_json = '{}'`;
       yield* store.rebuild();
       assert.deepEqual(Option.getOrThrow(yield* store.get(itemId)), before);
+    }),
+  );
+
+  it.effect("projects an issue source and pull requests, and rebuilds them", () =>
+    Effect.gen(function* () {
+      const store = yield* RoadmapStore.RoadmapStore;
+      const sql = yield* SqlClient.SqlClient;
+      const itemId = RoadmapItemId.make("synced");
+      // Stored before GitHub sync: the created payload has no source and no pull requests.
+      const { source: _, pullRequests: __, ...withoutGitHub } = item("synced");
+      yield* sql`
+        INSERT INTO roadmap_events (
+          event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
+        ) VALUES (
+          'event-synced', 'cmd-synced', 'synced', 'roadmap.item.created', '{"_tag":"user"}',
+          ${JSON.stringify({ item: withoutGitHub })}, ${at}
+        )
+      `;
+      yield* store.rebuild();
+      const plain = Option.getOrThrow(yield* store.get(itemId)).item;
+      assert.isNull(plain.source);
+      assert.deepEqual(plain.pullRequests, []);
+
+      const base = { title: "Synced", closed: true, parentNodeId: null, blockedByNodeIds: [] };
+      const imported = item("imported", {
+        source: {
+          host: "github.com",
+          owner: "acme",
+          repo: "web",
+          number: 12,
+          nodeId: "I_12",
+          url: "https://github.com/acme/web/issues/12",
+          writable: true,
+          remoteUpdatedAt: "2026-10-17T00:00:00Z",
+          syncedAt: at,
+          base: { ...base, closed: false },
+          localChangedAt: { title: null, closed: null, parent: null, blockedBy: null },
+        },
+      });
+      yield* commit({
+        ...meta("imported"),
+        actor: { _tag: "github" },
+        type: "roadmap.item.created",
+        payload: { item: imported },
+      });
+      yield* commit({
+        ...meta("imported", later),
+        actor: { _tag: "github" },
+        type: "roadmap.source.synced",
+        payload: {
+          writable: false,
+          remoteUpdatedAt: "2026-10-18T00:00:00Z",
+          syncedAt: later,
+          base,
+        },
+      });
+      const link = {
+        host: "github.com",
+        repository: "acme/web",
+        number: 7,
+        url: "https://github.com/acme/web/pull/7",
+      };
+      yield* commit({
+        ...meta("imported", later),
+        type: "roadmap.pull-request.linked",
+        payload: { pullRequest: link },
+      });
+
+      const before = Option.getOrThrow(yield* store.get(RoadmapItemId.make("imported")));
+      assert.deepEqual(before.item.source, {
+        ...imported.source!,
+        writable: false,
+        remoteUpdatedAt: "2026-10-18T00:00:00Z",
+        syncedAt: later,
+        base,
+      });
+      assert.deepEqual(before.item.pullRequests, [link]);
+      yield* sql`UPDATE projection_roadmap_items SET payload_json = '{}'`;
+      yield* store.rebuild();
+      assert.deepEqual(Option.getOrThrow(yield* store.get(RoadmapItemId.make("imported"))), before);
     }),
   );
 

@@ -3,13 +3,16 @@
  * inline edits, or the ways onto the roadmap when the thread is on none.
  */
 import type {
+  EnvironmentId,
   IsoDate,
   RoadmapAreasSettings,
   RoadmapCommand,
   RoadmapCriterion,
+  RoadmapIssueSource,
   RoadmapItemId,
   RoadmapItemPatch,
   RoadmapItemType,
+  RoadmapPullRequestLink,
   RoadmapSprint,
   RoadmapSprintId,
   RoadmapWorkItem,
@@ -21,15 +24,21 @@ import {
   AlarmClockIcon,
   CalendarIcon,
   ChevronRightIcon,
+  CircleDotIcon,
   ClockIcon,
   MapIcon,
   PinIcon,
   PinOffIcon,
+  UnlinkIcon,
   XIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
+import { useOpenLink } from "~/browser/useOpenLink";
+import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
 import { cn, randomUUID } from "~/lib/utils";
+import { PullRequestLinkPreview } from "../pullRequest/PullRequestLinkPreview";
+import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -66,6 +75,9 @@ import {
   roadmapActorLabel,
   roadmapCardNotes,
   roadmapCardSlots,
+  roadmapIssueRef,
+  roadmapPullRequestLabel,
+  roadmapReadOnlyHint,
   type RoadmapCardView,
 } from "./roadmapCard.logic";
 import {
@@ -102,6 +114,8 @@ export function RoadmapCardBody(
     readonly sprints: ReadonlyArray<RoadmapSprint>;
     readonly areaSettings: RoadmapAreasSettings;
     readonly canChange: boolean;
+    /** Where a linked pull request's preview is read: the thread's own environment. */
+    readonly pullRequestEnvironmentId: EnvironmentId | null;
   },
 ) {
   return (
@@ -537,6 +551,126 @@ function CriterionRow(props: {
   );
 }
 
+/** The issue the item syncs with, opened in the browser, and the way to stop syncing. */
+function IssueLink(props: {
+  readonly itemId: RoadmapItemId;
+  readonly source: RoadmapIssueSource;
+  readonly canChange: boolean;
+  readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
+}) {
+  const openLink = useOpenLink(null);
+  const ref = roadmapIssueRef(props.source);
+  return (
+    <span className="flex items-center">
+      <Button
+        size="xs"
+        variant="link"
+        aria-label={`Open GitHub issue ${ref}`}
+        onClick={(event) => void openLink(props.source.url, { event })}
+      >
+        <CircleDotIcon aria-hidden />#{props.source.number}
+      </Button>
+      <Button
+        size="icon-micro"
+        variant="ghost-muted"
+        aria-label={`Stop syncing with ${ref}`}
+        disabled={!props.canChange}
+        onClick={() =>
+          void props.onCommand(
+            {
+              type: "roadmap.source.unlink",
+              commandId: newRoadmapCommandId(),
+              itemId: props.itemId,
+            },
+            "Could not stop syncing with the issue",
+          )
+        }
+      >
+        <UnlinkIcon />
+      </Button>
+    </span>
+  );
+}
+
+function PullRequestsSection(props: {
+  readonly item: RoadmapWorkItem;
+  readonly environmentId: EnvironmentId | null;
+  readonly canChange: boolean;
+  readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
+}) {
+  const { item } = props;
+  if (item.pullRequests.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-1">
+      <span className="font-medium text-muted-foreground">Pull requests</span>
+      <ul className="flex flex-col gap-0.5">
+        {item.pullRequests.map((link) => (
+          <li
+            key={`${link.host}/${link.repository}#${link.number}`}
+            className="flex min-w-0 items-center gap-1"
+          >
+            <PullRequestLink link={link} source={item.source} environmentId={props.environmentId} />
+            <Button
+              size="icon-micro"
+              variant="ghost-muted"
+              aria-label={`Unlink pull request ${link.repository}#${link.number}`}
+              disabled={!props.canChange}
+              onClick={() =>
+                void props.onCommand(
+                  {
+                    type: "roadmap.pull-request.unlink",
+                    commandId: newRoadmapCommandId(),
+                    itemId: item.id,
+                    host: link.host,
+                    repository: link.repository,
+                    number: link.number,
+                  },
+                  "Could not unlink the pull request",
+                )
+              }
+            >
+              <XIcon />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Items store only the pull request's key. Its state, title and author come
+ * from the pull request preview, read only while the link is hovered.
+ */
+function PullRequestLink(props: {
+  readonly link: RoadmapPullRequestLink;
+  readonly source: RoadmapIssueSource | null;
+  readonly environmentId: EnvironmentId | null;
+}) {
+  const openLink = useOpenLink(null);
+  const target = usePullRequestPreviewTarget(props.environmentId, props.link.url);
+  const anchor = (
+    <button
+      type="button"
+      className="inline-flex min-w-0 items-center gap-1 rounded-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      onClick={(event) => void openLink(props.link.url, { event })}
+    >
+      <PullRequestGlyph.pullRequest className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="truncate">{roadmapPullRequestLabel(props.link, props.source)}</span>
+    </button>
+  );
+  return target === null ? (
+    anchor
+  ) : (
+    <PullRequestLinkPreview
+      link={anchor}
+      originalUrl={props.link.url}
+      target={target}
+      confirmBeforeOpen={false}
+    />
+  );
+}
+
 function NotesSection(props: {
   readonly item: RoadmapWorkItem;
   readonly canChange: boolean;
@@ -599,9 +733,11 @@ function AttachedItem(
     readonly sprints: ReadonlyArray<RoadmapSprint>;
     readonly areaSettings: RoadmapAreasSettings;
     readonly canChange: boolean;
+    readonly pullRequestEnvironmentId: EnvironmentId | null;
   },
 ) {
   const { item, items, sprints, areaSettings, canChange, onOpenItem, onUpdate } = props;
+  const readOnlyHint = roadmapReadOnlyHint(item);
   const today = localIsoDate(new Date());
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const priority = effectivePriority(item.id, byId);
@@ -707,7 +843,16 @@ function AttachedItem(
             Snoozed until {formatRoadmapDate(snoozedUntil, today)}
           </Badge>
         ) : null}
+        {item.source !== null ? (
+          <IssueLink
+            itemId={item.id}
+            source={item.source}
+            canChange={canChange}
+            onCommand={props.onCommand}
+          />
+        ) : null}
       </div>
+      {readOnlyHint !== null ? <p className="text-muted-foreground">{readOnlyHint}</p> : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         <Field label="Due">
           <DueDateField
@@ -807,6 +952,12 @@ function AttachedItem(
           ))
         )}
       </section>
+      <PullRequestsSection
+        item={item}
+        environmentId={props.pullRequestEnvironmentId}
+        canChange={canChange}
+        onCommand={props.onCommand}
+      />
       <NotesSection item={item} canChange={canChange} onCommand={props.onCommand} />
       <section className="flex flex-col gap-1">
         <span className="font-medium text-muted-foreground">Blocked by</span>

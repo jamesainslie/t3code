@@ -293,3 +293,45 @@ it.effect("matches rules against the repository a borrowed checkout addresses", 
     );
   }),
 );
+
+it.effect("selects and pins the account for a repository with no checkout", () =>
+  Effect.gen(function* () {
+    const commands: Array<ReadonlyArray<string>> = [];
+    const selector = yield* makeSelector({
+      identities: { "/repo": identity({ rootPath: "/repo", owner: "geico-private" }) },
+      settings: {
+        gitHubAccountRules: [workRule],
+        projectSettingsOverrides: { [PROJECT_ID]: { gitHubAccount: "work-override" } },
+      },
+      projects: [{ projectId: PROJECT_ID, workspaceRoot: "/repo" }],
+      commands,
+    });
+    // No checkout, so no project override: the rules alone decide.
+    const selected = yield* selector.forRepository({ host: "GitHub.com", owner: "geico-private" });
+    assert.strictEqual(selected?.login, "work");
+    assert.strictEqual(Redacted.value(selected!.credential!.token), "token-work");
+    // Checkout pins share the token cache.
+    assert.strictEqual(
+      selected!.credential,
+      yield* selector.pinFor({ cwd: "/repo", repository: "geico-private/other" }),
+    );
+    assert.deepStrictEqual(commands, [
+      ["auth", "token", "--hostname", "github.com", "--user", "work"],
+    ]);
+    assert.isNull(yield* selector.forRepository({ host: "github.com", owner: "pingdotgg" }));
+  }),
+);
+
+it.effect("selects a repository's account with no pin when gh has no token for it", () =>
+  Effect.gen(function* () {
+    const selector = yield* makeSelector({
+      identities: {},
+      settings: { gitHubAccountRules: [workRule] },
+      token: () => Effect.succeed(processOutput("")),
+    });
+    assert.deepStrictEqual(
+      yield* selector.forRepository({ host: "github.com", owner: "geico-private" }),
+      { login: "work", credential: null },
+    );
+  }),
+);

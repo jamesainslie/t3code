@@ -47,7 +47,7 @@ import {
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
 // Fork: roadmap.
-import { RoadmapAreaSettingsPatch, RoadmapAreasSettings } from "./roadmap.ts";
+import { RoadmapArea, RoadmapAreaSettingsPatch, RoadmapAreasSettings } from "./roadmap.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1297,6 +1297,13 @@ export const RoadmapSettings = Schema.Struct({
    */
   stewardModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /**
+   * The area an imported issue lands in, by the `gh` login its repository
+   * routes to. Without a match the importer's chosen area applies.
+   */
+  areaByLogin: Schema.Record(TrimmedNonEmptyString, RoadmapArea).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
   ),
 });
 export type RoadmapSettings = typeof RoadmapSettings.Type;

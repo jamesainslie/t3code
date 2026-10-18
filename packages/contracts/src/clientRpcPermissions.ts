@@ -52,6 +52,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.roadmapDispatch]: AuthOrchestrationOperateScope,
   [WS_METHODS.roadmapLinkConfigure]: AuthAccessWriteScope,
   [WS_METHODS.roadmapLinkMint]: AuthAccessWriteScope,
+  [WS_METHODS.roadmapImportIssue]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

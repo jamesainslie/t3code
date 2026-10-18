@@ -117,6 +117,67 @@ export type RoadmapProgressNote = typeof RoadmapProgressNote.Type;
 /** An item keeps its newest notes; older ones drop off as new ones arrive. */
 export const ROADMAP_NOTE_LIMIT = 50;
 
+/**
+ * A GitHub pull request linked to an item, by key only. The card reads its
+ * status through the pull request service, so no snapshot rides in events.
+ */
+export const RoadmapPullRequestLink = Schema.Struct({
+  host: TrimmedNonEmptyString,
+  /** `owner/name`, lower case, as `parseChangeRequestUrl` gives it. */
+  repository: TrimmedNonEmptyString,
+  number: PositiveInt,
+  url: TrimmedNonEmptyString,
+});
+export type RoadmapPullRequestLink = typeof RoadmapPullRequestLink.Type;
+
+/**
+ * What the item and its issue agreed on at the last sync. Each side's change
+ * is measured from here, so a field that moved on one side only is copied to
+ * the other, and one that moved on both is a conflict. Parent and blockers
+ * count only issues that are themselves items.
+ */
+export const RoadmapIssueSyncBase = Schema.Struct({
+  title: Schema.String,
+  closed: Schema.Boolean,
+  parentNodeId: Schema.NullOr(TrimmedNonEmptyString),
+  blockedByNodeIds: Schema.Array(TrimmedNonEmptyString),
+});
+export type RoadmapIssueSyncBase = typeof RoadmapIssueSyncBase.Type;
+
+/** When a user or agent last changed each synced field here; GitHub's own changes leave it. */
+export const RoadmapIssueLocalChanges = Schema.Struct({
+  title: Schema.NullOr(IsoDateTime),
+  closed: Schema.NullOr(IsoDateTime),
+  parent: Schema.NullOr(IsoDateTime),
+  blockedBy: Schema.NullOr(IsoDateTime),
+});
+export type RoadmapIssueLocalChanges = typeof RoadmapIssueLocalChanges.Type;
+
+export const ROADMAP_NO_LOCAL_CHANGES: RoadmapIssueLocalChanges = {
+  title: null,
+  closed: null,
+  parent: null,
+  blockedBy: null,
+};
+
+/** The GitHub issue an item was imported from, and where the two stood at the last sync. */
+export const RoadmapIssueSource = Schema.Struct({
+  host: TrimmedNonEmptyString,
+  owner: TrimmedNonEmptyString,
+  repo: TrimmedNonEmptyString,
+  number: PositiveInt,
+  nodeId: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+  /** Without it the synced fields are read-only here; the planner refuses edits to them. */
+  writable: Schema.Boolean,
+  /** GitHub's `updatedAt` at the last sync, as GitHub wrote it. */
+  remoteUpdatedAt: IsoDateTime,
+  syncedAt: IsoDateTime,
+  base: RoadmapIssueSyncBase,
+  localChangedAt: RoadmapIssueLocalChanges,
+});
+export type RoadmapIssueSource = typeof RoadmapIssueSource.Type;
+
 export const RoadmapSprint = Schema.Struct({
   id: RoadmapSprintId,
   name: TrimmedNonEmptyString,
@@ -211,6 +272,11 @@ export const RoadmapWorkItem = Schema.Struct({
    * created events stored before notes decode, so a rebuild needs no upgrade.
    */
   progressNotes: Schema.Array(RoadmapProgressNote).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** The defaults let items and created events stored before GitHub sync decode. */
+  source: Schema.NullOr(RoadmapIssueSource).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  pullRequests: Schema.Array(RoadmapPullRequestLink).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
 });
@@ -368,6 +434,37 @@ export const RoadmapNoteRemoveCommand = command("roadmap.note.remove", {
   itemId: RoadmapItemId,
   noteId: TrimmedNonEmptyString,
 });
+/** GitHub sync's own: creates an item from an issue. Users import through the sync service. */
+export const RoadmapSourceImportCommand = command("roadmap.source.import", {
+  itemId: RoadmapItemId,
+  itemType: RoadmapItemType,
+  title: TrimmedNonEmptyString,
+  parentId: Schema.NullOr(RoadmapItemId),
+  area: Schema.NullOr(RoadmapArea),
+  state: RoadmapItemState,
+  source: RoadmapIssueSource,
+});
+/** GitHub sync's own: records where the item and its issue now agree. */
+export const RoadmapSourceSyncCommand = command("roadmap.source.sync", {
+  itemId: RoadmapItemId,
+  writable: Schema.Boolean,
+  remoteUpdatedAt: IsoDateTime,
+  base: RoadmapIssueSyncBase,
+});
+/** Stops syncing the item; it stays as a Lathe-only item and the issue is untouched. */
+export const RoadmapSourceUnlinkCommand = command("roadmap.source.unlink", {
+  itemId: RoadmapItemId,
+});
+export const RoadmapPullRequestLinkCommand = command("roadmap.pull-request.link", {
+  itemId: RoadmapItemId,
+  pullRequest: RoadmapPullRequestLink,
+});
+export const RoadmapPullRequestUnlinkCommand = command("roadmap.pull-request.unlink", {
+  itemId: RoadmapItemId,
+  host: TrimmedNonEmptyString,
+  repository: TrimmedNonEmptyString,
+  number: PositiveInt,
+});
 export const RoadmapSprintCreateCommand = command("roadmap.sprint.create", {
   sprintId: RoadmapSprintId,
   name: TrimmedNonEmptyString,
@@ -411,6 +508,11 @@ export const RoadmapItemCommand = Schema.Union([
   RoadmapHoursRemoveCommand,
   RoadmapNoteAddCommand,
   RoadmapNoteRemoveCommand,
+  RoadmapSourceImportCommand,
+  RoadmapSourceSyncCommand,
+  RoadmapSourceUnlinkCommand,
+  RoadmapPullRequestLinkCommand,
+  RoadmapPullRequestUnlinkCommand,
 ]);
 export type RoadmapItemCommand = typeof RoadmapItemCommand.Type;
 
@@ -499,6 +601,25 @@ export const RoadmapItemEvent = Schema.Union([
   event("roadmap.hours.removed", Schema.Struct({ entryId: TrimmedNonEmptyString })),
   event("roadmap.note.added", Schema.Struct({ note: RoadmapProgressNote })),
   event("roadmap.note.removed", Schema.Struct({ noteId: TrimmedNonEmptyString })),
+  event(
+    "roadmap.source.synced",
+    Schema.Struct({
+      writable: Schema.Boolean,
+      remoteUpdatedAt: IsoDateTime,
+      syncedAt: IsoDateTime,
+      base: RoadmapIssueSyncBase,
+    }),
+  ),
+  event("roadmap.source.unlinked", Schema.Struct({})),
+  event("roadmap.pull-request.linked", Schema.Struct({ pullRequest: RoadmapPullRequestLink })),
+  event(
+    "roadmap.pull-request.unlinked",
+    Schema.Struct({
+      host: TrimmedNonEmptyString,
+      repository: TrimmedNonEmptyString,
+      number: PositiveInt,
+    }),
+  ),
 ]);
 export type RoadmapItemEvent = typeof RoadmapItemEvent.Type;
 
@@ -556,6 +677,8 @@ export const RoadmapRejectionCode = Schema.Literals([
   "invalid_request",
   /** A steward tick whose evidence is no newer than the last untick of that criterion. */
   "stale_evidence",
+  /** The item's issue cannot be written with this environment's GitHub account. */
+  "read_only_source",
 ]);
 export type RoadmapRejectionCode = typeof RoadmapRejectionCode.Type;
 
@@ -619,6 +742,26 @@ export type RoadmapStreamItem = typeof RoadmapStreamItem.Type;
 
 export const RoadmapDispatchInput = Schema.Struct({ command: RoadmapCommand });
 export type RoadmapDispatchInput = typeof RoadmapDispatchInput.Type;
+
+/**
+ * Imports a GitHub issue and its sub-issue tree on the home. Without a parent
+ * the issue becomes a top-level item in `area`, unless the account its
+ * repository routes to names an area in `roadmap.areaByLogin`.
+ */
+export const RoadmapImportIssueInput = Schema.Struct({
+  url: TrimmedNonEmptyString,
+  area: Schema.optionalKey(Schema.NullOr(RoadmapArea)),
+  parentId: Schema.optionalKey(Schema.NullOr(RoadmapItemId)),
+});
+export type RoadmapImportIssueInput = typeof RoadmapImportIssueInput.Type;
+
+export const RoadmapImportIssueResult = Schema.Struct({
+  /** The issue's item, new or already there. */
+  itemId: RoadmapItemId,
+  /** Items this import created, the issue's own included; 0 when it was already imported. */
+  imported: NonNegativeInt,
+});
+export type RoadmapImportIssueResult = typeof RoadmapImportIssueResult.Type;
 
 export const RoadmapDispatchResult = Schema.Struct({
   sequence: NonNegativeInt,

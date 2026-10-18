@@ -2,6 +2,8 @@ import {
   EnvironmentId,
   RoadmapItemId,
   ThreadId,
+  ROADMAP_NO_LOCAL_CHANGES,
+  type RoadmapIssueSource,
   type RoadmapItemType,
   type RoadmapProgressNote,
   type RoadmapWorkItem,
@@ -20,6 +22,10 @@ import {
   roadmapCardOpen,
   roadmapCardSlots,
   roadmapCardView,
+  roadmapImportUrlError,
+  roadmapIssueRef,
+  roadmapPullRequestLabel,
+  roadmapReadOnlyHint,
 } from "./roadmapCard.logic";
 
 const thread = { environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread") };
@@ -57,6 +63,8 @@ const item = (
   sprintId: null,
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -302,5 +310,53 @@ describe("roadmapCardNotes", () => {
       { id: "n2", at: at(2), actor: "Steward", kind: "Unsure", text: "Note n2", criterion: null },
       { id: "n1", at: at(1), actor: "Fix login", kind: null, text: "Note n1", criterion: "Ships" },
     ]);
+  });
+});
+
+describe("GitHub on the card", () => {
+  const source = (writable: boolean): RoadmapIssueSource => ({
+    host: "github.com",
+    owner: "acme",
+    repo: "web",
+    number: 12,
+    nodeId: "I_12",
+    url: "https://github.com/acme/web/issues/12",
+    writable,
+    remoteUpdatedAt: "2026-10-18T00:00:00Z",
+    syncedAt: "2026-10-18T00:00:00.000Z",
+    base: { title: "Title a", closed: false, parentNodeId: null, blockedByNodeIds: [] },
+    localChangedAt: ROADMAP_NO_LOCAL_CHANGES,
+  });
+
+  it("names an issue by repository and number", () => {
+    expect(roadmapIssueRef(source(true))).toBe("acme/web#12");
+  });
+
+  it("explains read-only fields only for an issue this environment cannot write", () => {
+    expect(roadmapReadOnlyHint(item("a"))).toBeNull();
+    expect(roadmapReadOnlyHint(item("a", { source: source(true) }))).toBeNull();
+    expect(roadmapReadOnlyHint(item("a", { source: source(false) }))).toBe(
+      "Title, done, parent and blockers follow acme/web#12, which this environment's GitHub account cannot change. Edit them on GitHub.",
+    );
+  });
+
+  it("labels a pull request by number, adding the repository when it differs from the issue's", () => {
+    const link = (repository: string) => ({
+      host: "github.com",
+      repository,
+      number: 7,
+      url: `https://github.com/${repository}/pull/7`,
+    });
+    expect(roadmapPullRequestLabel(link("acme/web"), source(true))).toBe("#7");
+    expect(roadmapPullRequestLabel(link("acme/api"), source(true))).toBe("acme/api#7");
+    expect(roadmapPullRequestLabel(link("acme/web"), null)).toBe("acme/web#7");
+  });
+
+  it("accepts only a GitHub issue URL to import", () => {
+    expect(roadmapImportUrlError("https://github.com/acme/web/issues/12")).toBeNull();
+    expect(roadmapImportUrlError("  ")).toBe("Paste the issue's URL.");
+    expect(roadmapImportUrlError("https://github.com/acme/web/pull/7")).toBe(
+      "That is not a GitHub issue URL, such as https://github.com/owner/repo/issues/12.",
+    );
   });
 });

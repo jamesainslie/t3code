@@ -191,6 +191,57 @@ so the planner ties each kind to its writer: `progress` from any actor, `sync` o
 rely on this, so a kind check belongs in `planRoadmapCommand`, never in the code that writes the
 note. An item keeps its newest 50 notes; the projection drops the oldest.
 
+## GitHub sync
+
+[`RoadmapGitHubSync`](../../apps/server/src/fork/roadmap/RoadmapGitHubSync.ts) imports issues and
+keeps their items in step. It starts on every environment, and every sweep and import first checks
+`isHome`, so moving the home moves sync with it. It reads and writes through
+[`GitHubIssueApi`](../../packages/source-control-github/src/server/GitHubIssueApi.ts) with the token
+`GitHubAccountSelector.forRepository` pins for the issue's owner. An issue belongs to no checkout,
+so a project's account override never applies.
+
+### The agreement, not the clocks, finds a change
+
+Each item's `source.base` records what the item and the issue agreed on at the last sync. The pure
+[`reconcileIssue`](../../apps/server/src/fork/roadmap/RoadmapGitHubReconcile.ts) compares both
+sides with it: a field that moved on one side is copied to the other, and only a field that moved
+on both to different values is a conflict. Timestamps settle conflicts only. The issue's `updatedAt`
+moves for comments and labels, so comparing it with the item's `updatedAt` would call every
+comment a conflict.
+
+The conflict clock on the Lathe side is `source.localChangedAt`, one time per synced field. The
+projection stamps it when a user, agent or steward changes that field, never for the `github`
+actor, so GitHub's own changes never look like local ones. The reactor watches the live stream for
+a new stamp and requests a sweep of that item, which is how a local edit reaches GitHub within
+seconds. Compare GitHub times by parsing: GitHub writes `...Z` without milliseconds, Lathe writes
+`.000Z`, and the strings do not sort together.
+
+Parent and blocker links count only issues that are themselves items. A GitHub parent no item
+holds reads as no parent, so importing a sub-issue alone never pushes its parent link away, and the
+link comes into the agreement once that parent is imported.
+
+### What a sweep writes
+
+- Remote changes apply first, as ordinary commands from the `github` actor. A refused one (a cycle,
+  a type that cannot sit under the new parent) leaves the agreement, so the next sweep tries again.
+- Pushes run inline. A failed push also leaves the agreement and `syncedAt` alone, so the next
+  sweep pushes again. A rate-limited account pauses until GitHub's reset time.
+- `roadmap.source.sync` records the new agreement only when it, `writable` or the issue's
+  `updatedAt` changed. Without that check every open item would write an event every minute.
+- Sync notes take an id hashed from the decision, so a retried sweep adds no second note.
+- An issue the read no longer returns is left alone. A deleted issue and an account that cannot see
+  it look the same, so sync never unlinks or deletes on its own.
+
+Only `github` may run `roadmap.source.import` and `roadmap.source.sync`. An agent's import through
+the MCP tool is recorded as GitHub's too, because the sync service makes the commands. The planner
+refuses user and agent changes to synced fields of an unwritable issue with `read_only_source`;
+the UI only explains it.
+
+Linked pull requests are keys on the item. The card reads a pull request's details through the
+thread's environment, and only while the link is hovered, so no pull request state rides in
+roadmap events. Migration 11 writes `source` and `pullRequests` into stored items; both decode to
+empty from older events.
+
 ## The steward
 
 [`RoadmapSteward`](../../apps/server/src/fork/roadmap/RoadmapSteward.ts) runs on every environment
