@@ -155,7 +155,7 @@ export function RoadmapTimeline({
     <div className="flex flex-col gap-2">
       {note === null ? null : <p className="text-xs text-muted-foreground">{note}</p>}
       <div className="flex">
-        <div className="w-64 shrink-0 border-r border-border">
+        <div className="w-max max-w-[40%] min-w-64 shrink-0 border-r border-border">
           <div className={hasSprints ? "h-12" : "h-7"} />
           {display.rows.map((entry) => {
             const row = entry.kind === "item" ? layout.rows[entry.row] : undefined;
@@ -287,28 +287,37 @@ const TimelineLabel = memo(function TimelineLabel({
   selected,
   onSelect,
 }: TimelineLabelProps) {
+  // Labels keep the lane height to line up with their bars, so a title longer than
+  // the column's cap is cut here and shown in full on hover.
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex h-9 w-full items-center gap-1.5 border-b border-border/40 pr-2 text-left text-sm outline-none hover:bg-accent/40 focus-visible:bg-accent/40",
-        selected && "bg-accent/60",
-      )}
-      style={{ paddingLeft: LABEL_PADDING + depth * LABEL_INDENT }}
-      onClick={() => onSelect(item.id)}
-    >
-      <RoadmapTypeTag type={item.type} />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate",
-          heading && "font-medium",
-          item.state === "done" && "text-muted-foreground",
-        )}
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "flex h-9 w-full items-center gap-1.5 border-b border-border/40 pr-2 text-left text-sm outline-none hover:bg-accent/40 focus-visible:bg-accent/40",
+              selected && "bg-accent/60",
+            )}
+            style={{ paddingLeft: LABEL_PADDING + depth * LABEL_INDENT }}
+            onClick={() => onSelect(item.id)}
+          />
+        }
       >
-        {item.title}
-      </span>
-      <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
-    </button>
+        <RoadmapTypeTag type={item.type} />
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            heading && "font-medium",
+            item.state === "done" && "text-muted-foreground",
+          )}
+        >
+          {item.title}
+        </span>
+        <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
+      </TooltipTrigger>
+      <TooltipPopup side="right">{item.title}</TooltipPopup>
+    </Tooltip>
   );
 });
 

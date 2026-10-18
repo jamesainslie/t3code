@@ -253,7 +253,7 @@ export function RoadmapPage() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>{header}</WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="expanded">
+          <WorkspacePageContainer width="full">
             {home === null || !supported ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
                 The roadmap home is not connected, or its server does not have the roadmap yet.{" "}
