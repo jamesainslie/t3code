@@ -109,7 +109,6 @@ export function reconcileIssue(input: {
     notes.push({ key: `${remote.updatedAt}:${field}:${text}`, text });
   const readOnlyReason = `this environment's GitHub account cannot change issue ${issueLabel(remote)}`;
 
-  // Title.
   let title = base.title;
   {
     const remoteChanged = remote.title !== base.title;
@@ -174,7 +173,7 @@ export function reconcileIssue(input: {
     }
   }
 
-  // Parent, in known terms.
+  // Parent and blockers count only issues that are items, so GitHub links elsewhere stay put.
   let parentNodeId = base.parentNodeId;
   {
     const remoteParent =
