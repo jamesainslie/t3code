@@ -43,6 +43,7 @@ const item = (
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
   ...overrides,
 });
 

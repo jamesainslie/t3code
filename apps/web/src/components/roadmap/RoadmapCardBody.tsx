@@ -64,6 +64,7 @@ import {
   formatVelocity,
   parentPath,
   roadmapActorLabel,
+  roadmapCardNotes,
   roadmapCardSlots,
   type RoadmapCardView,
 } from "./roadmapCard.logic";
@@ -536,6 +537,61 @@ function CriterionRow(props: {
   );
 }
 
+function NotesSection(props: {
+  readonly item: RoadmapWorkItem;
+  readonly canChange: boolean;
+  readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
+}) {
+  const { item } = props;
+  const notes = useMemo(() => roadmapCardNotes(item), [item]);
+  if (notes.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <span className="font-medium text-muted-foreground">Notes</span>
+      <ul className="flex flex-col gap-1.5">
+        {notes.map((note) => (
+          <li key={note.id} className="flex items-start gap-2">
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-foreground">{note.text}</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+                {note.kind !== null ? (
+                  <Badge size="sm" variant="outline">
+                    {note.kind}
+                  </Badge>
+                ) : null}
+                <span className="truncate">
+                  {[note.actor, formatRelativeTimeLabel(note.at), note.criterion]
+                    .filter((part) => part !== null && part.length > 0)
+                    .join(" · ")}
+                </span>
+              </span>
+            </span>
+            <Button
+              size="icon-micro"
+              variant="ghost-muted"
+              aria-label="Remove note"
+              disabled={!props.canChange}
+              onClick={() =>
+                void props.onCommand(
+                  {
+                    type: "roadmap.note.remove",
+                    commandId: newRoadmapCommandId(),
+                    itemId: item.id,
+                    noteId: note.id,
+                  },
+                  "Could not remove the note",
+                )
+              }
+            >
+              <XIcon />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function AttachedItem(
   props: RoadmapCardBodyHandlers & {
     readonly item: RoadmapWorkItem;
@@ -751,6 +807,7 @@ function AttachedItem(
           ))
         )}
       </section>
+      <NotesSection item={item} canChange={canChange} onCommand={props.onCommand} />
       <section className="flex flex-col gap-1">
         <span className="font-medium text-muted-foreground">Blocked by</span>
         {blocked.blocked ? (

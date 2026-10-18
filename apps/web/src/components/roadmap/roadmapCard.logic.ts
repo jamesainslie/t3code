@@ -5,6 +5,7 @@ import type {
   IsoDate,
   RoadmapActor,
   RoadmapItemId,
+  RoadmapNoteKind,
   RoadmapThreadRef,
   RoadmapUnit,
   RoadmapWorkItem,
@@ -147,6 +148,43 @@ export function roadmapActorLabel(actor: RoadmapActor): string {
     case "github":
       return "GitHub";
   }
+}
+
+/** The card shows the latest few; the item keeps up to `ROADMAP_NOTE_LIMIT`. */
+export const ROADMAP_CARD_NOTE_COUNT = 5;
+
+const NOTE_KIND_LABELS: Readonly<Record<RoadmapNoteKind, string | null>> = {
+  progress: null,
+  drift: "Drift",
+  unsure: "Unsure",
+  sync: "Sync",
+};
+
+export interface RoadmapCardNote {
+  readonly id: string;
+  readonly at: string;
+  readonly actor: string;
+  /** Null for plain progress, the kind most notes are. */
+  readonly kind: string | null;
+  readonly text: string;
+  /** The criterion's text, or null when the note names none or one since removed. */
+  readonly criterion: string | null;
+}
+
+/** The latest notes, newest first. */
+export function roadmapCardNotes(item: RoadmapWorkItem): ReadonlyArray<RoadmapCardNote> {
+  const criteria = new Map(item.criteria.map((criterion) => [criterion.id, criterion.text]));
+  return item.progressNotes
+    .slice(-ROADMAP_CARD_NOTE_COUNT)
+    .toReversed()
+    .map((note) => ({
+      id: note.id,
+      at: note.at,
+      actor: roadmapActorLabel(note.actor),
+      kind: NOTE_KIND_LABELS[note.kind],
+      text: note.text,
+      criterion: note.criterionId === null ? null : (criteria.get(note.criterionId) ?? null),
+    }));
 }
 
 /**

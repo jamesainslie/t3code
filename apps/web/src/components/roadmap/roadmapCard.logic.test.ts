@@ -3,6 +3,7 @@ import {
   RoadmapItemId,
   ThreadId,
   type RoadmapItemType,
+  type RoadmapProgressNote,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -13,7 +14,9 @@ import {
   formatUnitProgress,
   formatVelocity,
   parentPath,
+  ROADMAP_CARD_NOTE_COUNT,
   roadmapActorLabel,
+  roadmapCardNotes,
   roadmapCardOpen,
   roadmapCardSlots,
   roadmapCardView,
@@ -53,6 +56,7 @@ const item = (
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
   ...overrides,
 });
 
@@ -229,5 +233,64 @@ describe("roadmapCardView", () => {
       kind: "attached",
       item: attached,
     });
+  });
+});
+
+describe("roadmapCardNotes", () => {
+  const at = (minute: number) => `2026-10-18T09:${String(minute).padStart(2, "0")}:00.000Z`;
+  const note = (
+    id: string,
+    minute: number,
+    overrides: Partial<RoadmapProgressNote> = {},
+  ): RoadmapProgressNote => ({
+    id,
+    at: at(minute),
+    actor: { _tag: "user" },
+    kind: "progress",
+    text: `Note ${id}`,
+    criterionId: null,
+    ...overrides,
+  });
+
+  it("is empty for an item with no notes", () => {
+    expect(roadmapCardNotes(item("a"))).toEqual([]);
+  });
+
+  it("lists the newest notes first, up to the card's limit", () => {
+    const notes = Array.from({ length: ROADMAP_CARD_NOTE_COUNT + 2 }, (_, index) =>
+      note(`n${index}`, index),
+    );
+    const shown = roadmapCardNotes(item("a", { progressNotes: notes }));
+    expect(shown.map((entry) => entry.id)).toEqual(
+      notes
+        .slice(-ROADMAP_CARD_NOTE_COUNT)
+        .map((entry) => entry.id)
+        .toReversed(),
+    );
+  });
+
+  it("labels the actor, names the kind unless it is progress, and quotes the criterion", () => {
+    const criterion = { id: "c1", text: "Ships", tickedAt: null, tickedBy: null, evidence: null };
+    const shown = roadmapCardNotes(
+      item("a", {
+        criteria: [criterion],
+        progressNotes: [
+          note("n1", 1, {
+            actor: { _tag: "agent", thread, threadTitle: "Fix login" },
+            criterionId: "c1",
+          }),
+          note("n2", 2, {
+            actor: { _tag: "steward", environmentId: thread.environmentId },
+            kind: "unsure",
+          }),
+          note("n3", 3, { actor: { _tag: "github" }, kind: "sync", criterionId: "gone" }),
+        ],
+      }),
+    );
+    expect(shown).toEqual([
+      { id: "n3", at: at(3), actor: "GitHub", kind: "Sync", text: "Note n3", criterion: null },
+      { id: "n2", at: at(2), actor: "Steward", kind: "Unsure", text: "Note n2", criterion: null },
+      { id: "n1", at: at(1), actor: "Fix login", kind: null, text: "Note n1", criterion: "Ships" },
+    ]);
   });
 });
