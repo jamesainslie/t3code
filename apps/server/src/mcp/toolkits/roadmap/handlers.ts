@@ -16,7 +16,6 @@ import * as Option from "effect/Option";
 
 import * as RoadmapProgress from "../../../fork/roadmap/RoadmapProgress.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
-import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -59,7 +58,6 @@ const make = Effect.gen(function* () {
   const roadmap = yield* RoadmapService.RoadmapService;
   const threads = yield* ThreadManagementService.ThreadManagementService;
   const crypto = yield* Crypto.Crypto;
-  const serverSettings = yield* ServerSettingsService;
 
   const fromService = <A>(effect: Effect.Effect<A, RoadmapError>) =>
     effect.pipe(Effect.mapError(toolFailure));
@@ -80,21 +78,9 @@ const make = Effect.gen(function* () {
 
   /** Forecasts over the whole roadmap as it stands now, in each area's unit. */
   const progressSnapshot = Effect.gen(function* () {
-    const items = yield* fromService(roadmap.list());
-    const sprints = yield* fromService(roadmap.listSprints());
-    const settings = yield* serverSettings.getSettings.pipe(
-      Effect.mapError(
-        () =>
-          new RoadmapToolFailure({
-            code: "internal",
-            reason: "Could not read the roadmap settings.",
-          }),
-      ),
-    );
+    const snapshot = yield* fromService(roadmap.snapshot());
     return RoadmapProgress.progressCalculator({
-      items,
-      sprints,
-      areas: settings.roadmap.areas,
+      ...snapshot,
       today: yield* RoadmapProgress.todayUtc,
     });
   });
@@ -242,7 +228,7 @@ const make = Effect.gen(function* () {
         const item = yield* targetItem(scope, input.itemId);
         const { byId, progressOf } = yield* progressSnapshot;
         const progress = progressOf(item);
-        const history = yield* fromService(roadmap.history(item.id));
+        const { history } = yield* fromService(roadmap.item(item.id));
         const summary = (candidate: RoadmapWorkItem) => ({
           id: candidate.id,
           type: candidate.type,

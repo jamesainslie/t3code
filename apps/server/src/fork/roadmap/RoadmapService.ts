@@ -10,9 +10,11 @@ import {
   type RoadmapDispatchResult,
   RoadmapError,
   type RoadmapItemId,
+  type RoadmapLinkItem,
+  type RoadmapLinkSnapshot,
   type RoadmapSprint,
-  type RoadmapStoredEvent,
   type RoadmapStreamItem,
+  type RoadmapThreadContext,
   type RoadmapThreadRef,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
@@ -31,7 +33,12 @@ import * as Stream from "effect/Stream";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { planRoadmapCommand } from "./RoadmapCommands.ts";
+import { renderRoadmapContext } from "./RoadmapContextBlock.ts";
+import * as RoadmapProgress from "./RoadmapProgress.ts";
 import * as RoadmapStore from "./RoadmapStore.ts";
+
+/** Enough for an agent to see what changed lately without carrying an item's whole life. */
+const ITEM_HISTORY_LIMIT = 20;
 
 export class RoadmapService extends Context.Service<
   RoadmapService,
@@ -55,10 +62,14 @@ export class RoadmapService extends Context.Service<
     readonly forThread: (
       thread: RoadmapThreadRef,
     ) => Effect.Effect<ReadonlyArray<RoadmapWorkItem>, RoadmapError>;
-    /** The item's events, oldest first. */
-    readonly history: (
-      itemId: RoadmapItemId,
-    ) => Effect.Effect<ReadonlyArray<RoadmapStoredEvent>, RoadmapError>;
+    /** Items, sprints and each area's settings, read together. */
+    readonly snapshot: () => Effect.Effect<RoadmapLinkSnapshot, RoadmapError>;
+    /** The item, null when missing or deleted, and its latest events, oldest first. */
+    readonly item: (itemId: RoadmapItemId) => Effect.Effect<RoadmapLinkItem, RoadmapError>;
+    /** The thread's items and the block its agent sees each turn, "" without an item. */
+    readonly threadContext: (
+      thread: RoadmapThreadRef,
+    ) => Effect.Effect<RoadmapThreadContext, RoadmapError>;
     /** A snapshot, then a delta per changed item or sprint after every later commit. */
     readonly stream: () => Stream.Stream<RoadmapStreamItem, RoadmapError>;
   }
@@ -221,17 +232,53 @@ const make = Effect.gen(function* () {
       }),
     );
 
+  const snapshot: RoadmapService["Service"]["snapshot"] = () =>
+    Effect.all({
+      items: list(),
+      sprints: store.listSprints().pipe(Effect.mapError(readFailed)),
+      areas: settings.getSettings.pipe(
+        Effect.map((current) => current.roadmap.areas),
+        Effect.mapError(readFailed),
+      ),
+    });
+
+  const item: RoadmapService["Service"]["item"] = (itemId) =>
+    Effect.all({
+      item: store
+        .get(itemId)
+        .pipe(Effect.map((record) => Option.getOrNull(Option.map(record, (live) => live.item)))),
+      history: store
+        .history(itemId)
+        .pipe(Effect.map((events) => events.slice(-ITEM_HISTORY_LIMIT))),
+    }).pipe(Effect.mapError(readFailed));
+
+  const forThread: RoadmapService["Service"]["forThread"] = (thread) =>
+    store.forThread(thread).pipe(Effect.mapError(readFailed));
+
+  const threadContext: RoadmapService["Service"]["threadContext"] = (thread) =>
+    Effect.gen(function* () {
+      const items = yield* forThread(thread);
+      // A thread is attached to one item at a time; see `already_attached`.
+      const [attached] = items;
+      if (attached === undefined) return { items, context: "" };
+      const current = yield* snapshot();
+      const { byId, progressOf } = RoadmapProgress.progressCalculator({
+        ...current,
+        today: yield* RoadmapProgress.todayUtc,
+      });
+      return { items, context: renderRoadmapContext(attached, byId, progressOf(attached)) };
+    });
+
   return RoadmapService.of({
     isHome,
     dispatch,
     list,
     listSprints: () => store.listSprints().pipe(Effect.mapError(readFailed)),
-    get: (itemId) =>
-      store
-        .get(itemId)
-        .pipe(Effect.map(Option.map((record) => record.item)), Effect.mapError(readFailed)),
-    forThread: (thread) => store.forThread(thread).pipe(Effect.mapError(readFailed)),
-    history: (itemId) => store.history(itemId).pipe(Effect.mapError(readFailed)),
+    get: (itemId) => item(itemId).pipe(Effect.map((read) => Option.fromNullOr(read.item))),
+    forThread,
+    snapshot,
+    item,
+    threadContext,
     stream,
   });
 });

@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import * as RoadmapContextBlock from "./RoadmapContextBlock.ts";
 import type * as RoadmapProgress from "./RoadmapProgress.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 import * as RoadmapTurnContext from "./RoadmapTurnContext.ts";
@@ -97,7 +98,7 @@ describe("renderRoadmapContext", () => {
     });
 
     expect(
-      RoadmapTurnContext.renderRoadmapContext(
+      RoadmapContextBlock.renderRoadmapContext(
         feature,
         byIdOf(objective, epic, openBlocker, doneBlocker, feature),
       ),
@@ -117,7 +118,7 @@ describe("renderRoadmapContext", () => {
 
   it("says when a top-level item has no due date, criteria or blockers", () => {
     const item = workItem("root", { type: "objective", title: "Ship it" });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
     expect(rendered).toContain(
       'Objective "Ship it" (id root), state Backlog, priority P2, no due date.',
     );
@@ -132,8 +133,8 @@ describe("renderRoadmapContext", () => {
         criterion(`c${index}`, `Criterion number ${index} with some explanatory words`),
       ),
     });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toContain("[ ] Criterion number 0 with some explanatory words");
     expect(rendered).not.toContain("Criterion number 59");
     expect(rendered).toMatch(/\.\.\. and \d+ more criteria\./);
@@ -142,8 +143,8 @@ describe("renderRoadmapContext", () => {
 
   it("shortens a very long title instead of dropping the footer", () => {
     const item = workItem("wordy", { title: "word ".repeat(1_000).trim() });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toMatch(/update this item\.$/);
   });
 });
@@ -164,7 +165,7 @@ describe("renderRoadmapContext progress line", () => {
   it("puts the forecast and progress right after the state line", () => {
     const parent = workItem("parent", { type: "epic", title: "Roadmap" });
     const item = workItem("feature", { parentId: parent.id, dueDate: "2026-10-23" });
-    const lines = RoadmapTurnContext.renderRoadmapContext(
+    const lines = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(parent, item),
       progress(),
@@ -176,7 +177,7 @@ describe("renderRoadmapContext progress line", () => {
 
   it("shows progress alone when there is no forecast, in the area's unit", () => {
     const item = workItem("feature");
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({
@@ -192,7 +193,7 @@ describe("renderRoadmapContext progress line", () => {
 
   it("leaves the line out with no forecast and nothing done", () => {
     const item = workItem("feature");
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({
@@ -200,7 +201,7 @@ describe("renderRoadmapContext progress line", () => {
         forecast: { status: "no-forecast", projected: null, slackDays: null },
       }),
     );
-    expect(rendered).toBe(RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item)));
+    expect(rendered).toBe(RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item)));
     expect(rendered).not.toMatch(/^(Forecast|Progress):/m);
   });
 
@@ -211,12 +212,12 @@ describe("renderRoadmapContext progress line", () => {
         criterion(`c${index}`, `Criterion number ${index} with some explanatory words`),
       ),
     });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({ forecast: { status: "late", projected: "2026-11-02", slackDays: -3 } }),
     );
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toContain("Forecast: Late, projected 2026-11-02; 6 of 10 pts done.");
     expect(rendered).toMatch(/update this item\.$/);
   });
@@ -317,7 +318,7 @@ describe("RoadmapTurnContext.forThread", () => {
       const failing = turnContextLayer(
         Layer.mock(RoadmapService.RoadmapService)({
           isHome: Effect.succeed(true),
-          forThread: () => Effect.fail(new RoadmapError({ code: "internal", message: "down" })),
+          threadContext: () => Effect.fail(new RoadmapError({ code: "internal", message: "down" })),
         }),
       );
       const dying = turnContextLayer(

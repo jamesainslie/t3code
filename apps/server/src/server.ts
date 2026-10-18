@@ -62,6 +62,7 @@ import * as DocumentComments from "./fork/DocumentComments.ts";
 // Fork: roadmap.
 import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
 import * as RoadmapTurnContext from "./fork/roadmap/RoadmapTurnContext.ts";
+import * as RoadmapHttp from "./fork/roadmap/http.ts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
@@ -719,6 +720,9 @@ const layerMakeRoutes = Layer.mergeAll(
       Layer.provide(PullRequestHttp.layer),
       Layer.provide(ProjectHttp.layer),
       Layer.provide(projectSyncHttpApiLayer),
+      // Fork: roadmap.
+      Layer.provide(RoadmapHttp.layer),
+      Layer.provide(RoadmapHttp.layerRoadmapLinkAuth),
       Layer.provide(ServerHttp.layerServerEnvironmentHttpApi),
       Layer.provide(WebhookRoute.layer.pipe(Layer.provide(RelayDeliveryProof.layer))),
       Layer.provide(AuthHttp.layerAuthenticatedAuth),

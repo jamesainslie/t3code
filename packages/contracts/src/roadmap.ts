@@ -512,10 +512,16 @@ export const RoadmapErrorCode = Schema.Literals([
 ]);
 export type RoadmapErrorCode = typeof RoadmapErrorCode.Type;
 
-export class RoadmapError extends Schema.TaggedError<RoadmapError>()("RoadmapError", {
-  code: RoadmapErrorCode,
-  message: Schema.String,
-}) {}
+// The status matters only to the roadmap HTTP API, where a linked environment
+// tells a refusal apart from a transport failure.
+export class RoadmapError extends Schema.TaggedError<RoadmapError>()(
+  "RoadmapError",
+  {
+    code: RoadmapErrorCode,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
 export const isRoadmapError = Schema.is(RoadmapError);
 
 // RPC payloads
@@ -563,3 +569,86 @@ export const RoadmapDispatchResult = Schema.Struct({
   itemId: Schema.NullOr(RoadmapItemId),
 });
 export type RoadmapDispatchResult = typeof RoadmapDispatchResult.Type;
+
+// The one-way link: another environment reads and changes the home's roadmap
+// over the home's roadmap HTTP API, with a roadmap-link credential.
+
+/** Everything the roadmap tools compute over: items, sprints and each area's settings. */
+export const RoadmapLinkSnapshot = Schema.Struct({
+  items: Schema.Array(RoadmapWorkItem),
+  sprints: Schema.Array(RoadmapSprint),
+  areas: RoadmapAreasSettings,
+});
+export type RoadmapLinkSnapshot = typeof RoadmapLinkSnapshot.Type;
+
+/** A live item, or null for a missing or deleted one, with its latest events. */
+export const RoadmapLinkItem = Schema.Struct({
+  item: Schema.NullOr(RoadmapWorkItem),
+  history: Schema.Array(RoadmapStoredEvent),
+});
+export type RoadmapLinkItem = typeof RoadmapLinkItem.Type;
+
+/** The items a thread is attached to, and the block its agent sees each turn ("" for none). */
+export const RoadmapThreadContext = Schema.Struct({
+  items: Schema.Array(RoadmapWorkItem),
+  context: Schema.String,
+});
+export type RoadmapThreadContext = typeof RoadmapThreadContext.Type;
+
+export const RoadmapLinkDispatchInput = Schema.Struct({
+  command: RoadmapCommand,
+  actor: RoadmapActor,
+});
+export type RoadmapLinkDispatchInput = typeof RoadmapLinkDispatchInput.Type;
+
+/** A write from a linked environment: applied on the home, or waiting in the link's queue. */
+export const RoadmapSubmitResult = Schema.Union([
+  Schema.Struct({
+    queued: Schema.Literal(false),
+    sequence: NonNegativeInt,
+    itemId: Schema.NullOr(RoadmapItemId),
+  }),
+  Schema.Struct({ queued: Schema.Literal(true), itemId: Schema.NullOr(RoadmapItemId) }),
+]);
+export type RoadmapSubmitResult = typeof RoadmapSubmitResult.Type;
+
+/**
+ * `unreachable` is the last call to the home failing; `since` is when the
+ * first of that run failed. Writes wait in the queue meanwhile.
+ */
+export const RoadmapLinkStatus = Schema.Struct({
+  state: Schema.Literals(["not-linked", "linked", "unreachable"]),
+  homeUrl: Schema.NullOr(Schema.String),
+  unreachableSince: Schema.NullOr(IsoDateTime),
+  /** Writes waiting to reach the home. */
+  queued: NonNegativeInt,
+  /** Writes the home refused; they are kept, not retried. */
+  rejected: NonNegativeInt,
+});
+export type RoadmapLinkStatus = typeof RoadmapLinkStatus.Type;
+
+/** A home URL and a one-time link grant minted on the home, or null to unlink. */
+export const RoadmapLinkConfigureInput = Schema.Struct({
+  link: Schema.NullOr(
+    Schema.Struct({ homeUrl: TrimmedNonEmptyString, credential: TrimmedNonEmptyString }),
+  ),
+});
+export type RoadmapLinkConfigureInput = typeof RoadmapLinkConfigureInput.Type;
+
+export const RoadmapLinkMintInput = Schema.Struct({
+  /** The environment the link speaks for; the home binds its agents' writes to it. */
+  environmentId: EnvironmentId,
+  label: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type RoadmapLinkMintInput = typeof RoadmapLinkMintInput.Type;
+
+export const RoadmapLinkMintResult = Schema.Struct({
+  credential: TrimmedNonEmptyString,
+  expiresAt: IsoDateTime,
+});
+export type RoadmapLinkMintResult = typeof RoadmapLinkMintResult.Type;
+
+export class RoadmapLinkError extends Schema.TaggedError<RoadmapLinkError>()("RoadmapLinkError", {
+  reason: Schema.Literals(["invalid_url", "unreachable", "credential_rejected", "storage"]),
+  message: Schema.String,
+}) {}

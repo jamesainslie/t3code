@@ -732,11 +732,12 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         expect(link.environmentId).toBe(linked);
         expect([...link.scopes].toSorted()).toEqual(["roadmap:read", "roadmap:write"]);
 
-        for (const refused of [
+        const refusals: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
           serverAuth.authenticateHttpRequest(request),
           serverAuth.authenticateWebSocketUpgrade({ ...request, url: "/ws" } as never),
           serverAuth.authenticateMcpClient(request),
-        ]) {
+        ];
+        for (const refused of refusals) {
           const error = yield* Effect.flip(refused);
           expect(error._tag).toBe("ServerAuthInvalidCredentialError");
         }
