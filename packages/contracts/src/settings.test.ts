@@ -53,6 +53,21 @@ describe("ServerSettings response streaming", () => {
   });
 });
 
+describe("roadmap settings", () => {
+  it("makes this environment the roadmap home by default", () => {
+    expect(decodeServerSettings({}).roadmap).toEqual({ homeEnvironmentId: null });
+  });
+
+  it("accepts a home environment and clearing it in a patch", () => {
+    expect(decodeServerSettingsPatch({ roadmap: { homeEnvironmentId: "env-home" } })).toEqual({
+      roadmap: { homeEnvironmentId: "env-home" },
+    });
+    expect(decodeServerSettingsPatch({ roadmap: { homeEnvironmentId: null } })).toEqual({
+      roadmap: { homeEnvironmentId: null },
+    });
+  });
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

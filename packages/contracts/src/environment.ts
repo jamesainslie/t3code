@@ -143,6 +143,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands thread.document-comment.* and exposes `documentComments`
       on thread detail. Absent on older servers, so clients hide margin comments. */
   threadDocumentComments: Schema.optionalKey(Schema.Boolean),
+  /** Fork: roadmap. Server owns a roadmap and serves roadmapSubscribe and roadmapDispatch. */
+  roadmap: Schema.optionalKey(Schema.Boolean),
   threadPullRequestWatch: Schema.optionalKey(Schema.Boolean),
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   serverSelfUpdate: Schema.optionalKey(ServerSelfUpdateCapability),
