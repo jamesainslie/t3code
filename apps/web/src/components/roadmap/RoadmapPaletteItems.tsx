@@ -5,7 +5,7 @@
 import type { ScopedThreadRef } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
 import { useRouter } from "@tanstack/react-router";
-import { LinkIcon, MapIcon, PlusIcon, SunIcon, UnlinkIcon } from "lucide-react";
+import { CircleDotIcon, LinkIcon, MapIcon, PlusIcon, SunIcon, UnlinkIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { useRoadmapLive } from "../../state/roadmap";
@@ -133,6 +133,17 @@ export function useRoadmapPaletteActionItems(input: {
     icon: <PlusIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await router.navigate({ href: roadmapHref({ new: true, parent: attached?.id ?? null }) });
+    },
+  });
+  // Import shares the operate grant that `canChange` reads.
+  result.push({
+    kind: "action",
+    value: "action:roadmap-import-issue",
+    searchTerms: ["import github issue", "github", "issue", "sync", "roadmap"],
+    title: "Import GitHub issue",
+    icon: <CircleDotIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await router.navigate({ href: roadmapHref({ importIssue: true }) });
     },
   });
   if (activeThread !== null && threadRef !== null && items !== null) {

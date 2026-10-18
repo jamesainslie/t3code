@@ -45,6 +45,7 @@ import {
   typeOptionsFor,
   type RoadmapEditorDraft,
 } from "./roadmapPage.logic";
+import { roadmapReadOnlyHint } from "./roadmapCard.logic";
 import { sprintOptionsFor } from "./roadmapSprints.logic";
 import { newRoadmapCommandId, newRoadmapItemId, useRoadmapDispatch } from "./useRoadmapDispatch";
 
@@ -71,6 +72,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
   const dispatch = useRoadmapDispatch(home);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const editing = mode.kind === "edit" ? mode.item : null;
+  const readOnlyHint = editing === null ? null : roadmapReadOnlyHint(editing);
   const [draft, setDraft] = useState<RoadmapEditorDraft>(() => {
     if (mode.kind === "edit") return editorDraftFor(mode.item);
     const parent = mode.parentId === null ? null : (byId.get(mode.parentId) ?? null);
@@ -178,7 +180,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
             <DialogDescription>
               {editing === null
                 ? "Leave priority and area to inherit them from the parent."
-                : "Changes apply as soon as you save."}
+                : (readOnlyHint ?? "Changes apply as soon as you save.")}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -210,6 +212,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
                   <Input
                     id={`${id}-title`}
                     autoFocus
+                    disabled={readOnlyHint !== null}
                     value={draft.title}
                     placeholder="What should be true when this is done?"
                     onChange={(event) => update({ title: event.target.value })}

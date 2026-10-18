@@ -32,6 +32,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger } from "../ui/select";
 import {
   RoadmapAreaBadge,
   RoadmapBlockedBadge,
+  RoadmapIssueChip,
   RoadmapNeedsReviewBadge,
   RoadmapPriorityChip,
   RoadmapStateChip,
@@ -217,7 +218,8 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
         ) : (
           <button
             type="button"
-            disabled={!canEdit}
+            // The title of an issue this environment cannot write follows GitHub.
+            disabled={!canEdit || item.source?.writable === false}
             onClick={() => setEditingTitle(true)}
             aria-label={`Rename ${item.title}`}
             className="min-w-0 truncate rounded-sm text-start text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
@@ -225,6 +227,7 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
             {item.title}
           </button>
         )}
+        {item.source !== null ? <RoadmapIssueChip source={item.source} /> : null}
         {shownArea !== null ? <RoadmapAreaBadge area={shownArea} /> : null}
         {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
         {blocked ? <RoadmapBlockedBadge /> : null}

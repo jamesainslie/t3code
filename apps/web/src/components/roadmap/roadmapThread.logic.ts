@@ -18,15 +18,20 @@ export function roadmapHref(
     readonly item?: RoadmapItemId;
     readonly new?: boolean;
     readonly parent?: RoadmapItemId | null;
+    /** Opens the GitHub import dialog, over the Outline where the import lands. */
+    readonly importIssue?: boolean;
   } = {},
 ): string {
   const params = new URLSearchParams();
   // Today shows no selection, so a link to an item opens the Outline unless told otherwise.
-  const view = target.view ?? (target.item === undefined ? DEFAULT_ROADMAP_VIEW : "outline");
+  const view =
+    target.view ??
+    (target.item === undefined && target.importIssue !== true ? DEFAULT_ROADMAP_VIEW : "outline");
   if (view !== DEFAULT_ROADMAP_VIEW) params.set("view", view);
   if (target.item !== undefined) params.set("item", target.item);
   if (target.new) params.set("new", "1");
   if (target.new && target.parent) params.set("parent", target.parent);
+  if (target.importIssue) params.set("import", "1");
   const query = params.toString();
   return query.length > 0 ? `/roadmap?${query}` : "/roadmap";
 }
