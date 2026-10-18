@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { resolveSideCardStack, type SideCardPlacement } from "./threadSideCardLayout";
 
 /** Marks a side card's root element with its id so the cards below it can make room. */
-export const THREAD_SIDE_CARD_ATTRIBUTE = "data-thread-side-card";
+const THREAD_SIDE_CARD_ATTRIBUTE = "data-thread-side-card";
 
 /** The column's order, top to bottom. */
-export const THREAD_SIDE_CARD_ORDER = ["iris", "roadmap"] as const;
+const THREAD_SIDE_CARD_ORDER = ["iris", "roadmap"] as const;
 export type ThreadSideCardId = (typeof THREAD_SIDE_CARD_ORDER)[number];
 
 function edges(element: Element) {

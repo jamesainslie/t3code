@@ -1908,8 +1908,15 @@ it.effect(
         assert.equal(resolved?.thread.threadId, threadId);
         assert.deepEqual(
           resolved?.capabilities,
-          // Fork: document comments are always granted.
-          new Set(["preview", "orchestration", "worktree", "pull-requests", "document-comments"]),
+          // Fork: document comments and the roadmap are always granted.
+          new Set([
+            "preview",
+            "orchestration",
+            "worktree",
+            "pull-requests",
+            "document-comments",
+            "roadmap",
+          ]),
         );
 
         yield* manager.close(providerSessionId);
@@ -1966,13 +1973,14 @@ it.effect(
         const resolved = yield* registry.resolve(token!);
         assert.deepEqual(
           resolved?.capabilities,
-          // Fork: document comments always, thread history at the default referenced level.
+          // Fork: document comments and the roadmap always, thread history at the default referenced level.
           new Set([
             "orchestration",
             "worktree",
             "pull-requests",
             "document-comments",
             "thread-history",
+            "roadmap",
           ]),
         );
 
