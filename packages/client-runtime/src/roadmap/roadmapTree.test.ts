@@ -1,6 +1,8 @@
 import {
   EnvironmentId,
   RoadmapItemId,
+  type RoadmapSprint,
+  RoadmapSprintId,
   type RoadmapThreadRef,
   type RoadmapWorkItem,
   ThreadId,
@@ -48,6 +50,21 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   createdAt: at,
   updatedAt: at,
   createdBy: { _tag: "user" },
+  stateChangedAt: at,
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
+  ...overrides,
+});
+
+const sprint = (sprintId: string, overrides: Partial<RoadmapSprint> = {}): RoadmapSprint => ({
+  id: RoadmapSprintId.make(sprintId),
+  name: `Sprint ${sprintId}`,
+  area: "work",
+  startDate: "2026-10-19",
+  endDate: "2026-10-30",
   ...overrides,
 });
 
@@ -61,6 +78,7 @@ describe("applyRoadmapStreamItem", () => {
     type: "snapshot",
     sequence: 5,
     items: [item("a"), item("b")],
+    sprints: [sprint("s1")],
   });
 
   it("replaces state with a snapshot", () => {
@@ -68,9 +86,46 @@ describe("applyRoadmapStreamItem", () => {
       type: "snapshot",
       sequence: 9,
       items: [item("c")],
+      sprints: [],
     });
     expect(replaced?.sequence).toBe(9);
     expect(replaced?.items.map((entry) => entry.id)).toEqual(["c"]);
+    expect(replaced?.sprints).toEqual([]);
+  });
+
+  it("keeps the snapshot's sprints, then upserts and removes them in start order", () => {
+    expect(snapshot?.sprints.map((entry) => entry.id)).toEqual(["s1"]);
+    const renamed = applyRoadmapStreamItem(snapshot, {
+      type: "sprint.upserted",
+      sequence: 6,
+      sprint: sprint("s1", { name: "Renamed" }),
+    });
+    const earlier = applyRoadmapStreamItem(renamed, {
+      type: "sprint.upserted",
+      sequence: 7,
+      sprint: sprint("s0", { startDate: "2026-10-05", endDate: "2026-10-16" }),
+    });
+    expect(earlier?.sprints.map((entry) => [entry.id, entry.name])).toEqual([
+      ["s0", "Sprint s0"],
+      ["s1", "Renamed"],
+    ]);
+    const removed = applyRoadmapStreamItem(earlier, {
+      type: "sprint.removed",
+      sequence: 8,
+      sprintId: RoadmapSprintId.make("s1"),
+    });
+    expect(removed?.sprints.map((entry) => entry.id)).toEqual(["s0"]);
+    expect(removed?.sequence).toBe(8);
+    expect(removed?.items).toBe(snapshot?.items);
+  });
+
+  it("drops a stale sprint delta", () => {
+    const stale = applyRoadmapStreamItem(snapshot, {
+      type: "sprint.removed",
+      sequence: 5,
+      sprintId: RoadmapSprintId.make("s1"),
+    });
+    expect(stale).toBe(snapshot);
   });
 
   it("ignores deltas before the first snapshot", () => {

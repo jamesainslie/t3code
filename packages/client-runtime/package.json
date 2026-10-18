@@ -295,6 +295,14 @@
       "types": "./src/roadmap/roadmapTree.ts",
       "default": "./src/roadmap/roadmapTree.ts"
     },
+    "./roadmap/today": {
+      "types": "./src/roadmap/today.ts",
+      "default": "./src/roadmap/today.ts"
+    },
+    "./roadmap/timeline": {
+      "types": "./src/roadmap/timeline.ts",
+      "default": "./src/roadmap/timeline.ts"
+    },
     "./state/threads": {
       "types": "./src/state/threads.ts",
       "default": "./src/state/threads.ts"
