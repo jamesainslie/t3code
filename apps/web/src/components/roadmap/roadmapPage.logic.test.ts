@@ -67,6 +67,8 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   sprintId: null,
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 

@@ -60,6 +60,8 @@ const item = (id: string, sprint: string | null): RoadmapWorkItem => ({
   sprintId: sprint === null ? null : sprintId(sprint),
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
 });
 
 describe("sprintOptionsFor", () => {

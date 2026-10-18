@@ -57,6 +57,8 @@ const item = (
   sprintId: null,
   hours: [],
   progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
