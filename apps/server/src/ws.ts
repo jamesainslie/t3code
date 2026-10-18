@@ -260,6 +260,7 @@ import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as DocumentComments from "./fork/DocumentComments.ts";
 // Fork: roadmap.
+import * as RoadmapGitHubSync from "./fork/roadmap/RoadmapGitHubSync.ts";
 import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
 import { gatewayRoutedInstanceIds, sameInstanceIds } from "./usage/gatewayRoutedInstances.ts";
 
@@ -1171,9 +1172,11 @@ const CoreServerWsRpcGroup = WsCoreRpcGroup.middleware(RpcInstrumentation);
 const layerForkWsRpc = WsForkRpcGroup.middleware(RpcInstrumentation).toLayer(
   Effect.gen(function* () {
     const roadmap = yield* RoadmapService.RoadmapService;
+    const roadmapGitHub = yield* RoadmapGitHubSync.RoadmapGitHubSync;
     const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
     return {
       [WS_METHODS.roadmapSubscribe]: (_input) => roadmap.stream(),
+      [WS_METHODS.roadmapImportIssue]: (input) => roadmapGitHub.importIssue(input),
       // Agents reach the same service through MCP tools, acting as themselves.
       [WS_METHODS.roadmapDispatch]: (input) => roadmap.dispatch(input.command, { _tag: "user" }),
       [WS_METHODS.roadmapLinkStatus]: (_input) => roadmap.linkStatus,

@@ -5,6 +5,8 @@ import {
   EnvironmentId,
   ProviderInstanceId,
   type RoadmapCommand,
+  RoadmapError,
+  type RoadmapImportIssueInput,
   RoadmapItemId,
   ThreadId,
 } from "@lathe/contracts";
@@ -16,6 +18,7 @@ import * as Stream from "effect/Stream";
 import type { Tool } from "effect/ai";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import * as RoadmapGitHubSync from "../../../fork/roadmap/RoadmapGitHubSync.ts";
 import * as RoadmapLinkTestkit from "../../../fork/roadmap/RoadmapLink.testkit.ts";
 import * as RoadmapLinkOutbox from "../../../fork/roadmap/RoadmapLinkOutbox.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
@@ -73,6 +76,19 @@ const threadsLayer = Layer.mock(ThreadManagement.ThreadManagementService)({
     ),
 });
 
+/** Imports asked of GitHub sync, which answers as the home would. */
+const imports: Array<RoadmapImportIssueInput> = [];
+const githubSyncLayer = Layer.mock(RoadmapGitHubSync.RoadmapGitHubSync)({
+  importIssue: (input) =>
+    Effect.sync(() => imports.push(input)).pipe(
+      Effect.andThen(
+        input.url.endsWith("/404")
+          ? Effect.fail(new RoadmapError({ code: "not_found", message: "No such issue." }))
+          : Effect.succeed({ itemId: RoadmapItemId.make("imported"), imported: 3 }),
+      ),
+    ),
+});
+
 type Tools = typeof RoadmapToolkit.tools;
 
 const makeHarness = Effect.fn("makeRoadmapToolkitHarness")(function* (
@@ -85,6 +101,7 @@ const makeHarness = Effect.fn("makeRoadmapToolkitHarness")(function* (
   const dependencies = Layer.mergeAll(
     threadsLayer,
     NodeCrypto.layer,
+    githubSyncLayer,
     options.linkedTo === undefined
       ? roadmapLayer(options.homeEnvironmentId ?? null)
       : RoadmapLinkTestkit.layerLinkedEnvironment(options.linkedTo, {
@@ -309,6 +326,94 @@ describe("roadmap toolkit handlers", () => {
       });
       const other = Option.getOrThrow(yield* harness.roadmap.get(RoadmapItemId.make("other")));
       expect(other.hours.map((entry) => entry.hours)).toEqual([0.25]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("adds a progress note on the attached item as the calling agent, once per retry", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.userDispatch(createAsUser("feature", { attachThread: callerRef } as never));
+      yield* harness.userDispatch(createAsUser("other"));
+      const feature = RoadmapItemId.make("feature");
+
+      const input = { text: "Wired the retry path", clientRequestId: "note-1" };
+      const first = yield* harness.call("lathe_roadmap_add_note", input);
+      const retried = yield* harness.call("lathe_roadmap_add_note", input);
+      expect(retried).toEqual(first);
+      expect(first).toMatchObject({ itemId: feature, sequence: expect.any(Number) });
+
+      const item = Option.getOrThrow(yield* harness.roadmap.get(feature));
+      expect(item.progressNotes).toEqual([
+        {
+          id: first.noteId,
+          at: expect.any(String),
+          actor: { _tag: "agent", thread: callerRef, threadTitle: THREAD_ID },
+          kind: "progress",
+          text: "Wired the retry path",
+          criterionId: null,
+        },
+      ]);
+
+      yield* harness.call("lathe_roadmap_add_note", {
+        itemId: RoadmapItemId.make("other"),
+        text: "Unblocked by the release",
+      });
+      const other = Option.getOrThrow(yield* harness.roadmap.get(RoadmapItemId.make("other")));
+      expect(other.progressNotes.map((note) => note.text)).toEqual(["Unblocked by the release"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("imports a GitHub issue through GitHub sync and reports its refusals", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      imports.length = 0;
+      const result = yield* harness.call("lathe_roadmap_import_issue", {
+        url: "https://github.com/acme/web/issues/12",
+        area: "work",
+      });
+      expect(result).toEqual({ itemId: "imported", imported: 3 });
+      expect(imports).toEqual([{ url: "https://github.com/acme/web/issues/12", area: "work" }]);
+
+      const error = yield* harness
+        .call("lathe_roadmap_import_issue", { url: "https://github.com/acme/web/issues/404" })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "RoadmapToolFailure", code: "not_found" });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("links a pull request to the attached item as the calling agent", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.userDispatch(createAsUser("feature", { attachThread: callerRef } as never));
+      const feature = RoadmapItemId.make("feature");
+      const result = yield* harness.call("lathe_roadmap_link_pull_request", {
+        url: "https://github.com/Acme/Web/pull/7",
+      });
+      expect(result).toMatchObject({ itemId: feature, sequence: expect.any(Number) });
+      const item = Option.getOrThrow(yield* harness.roadmap.get(feature));
+      expect(item.pullRequests).toEqual([
+        {
+          host: "github.com",
+          repository: "acme/web",
+          number: 7,
+          url: "https://github.com/Acme/Web/pull/7",
+        },
+      ]);
+
+      const notPullRequest = yield* harness
+        .call("lathe_roadmap_link_pull_request", { url: "https://github.com/acme/web/issues/7" })
+        .pipe(Effect.flip);
+      expect(notPullRequest).toMatchObject({ _tag: "RoadmapToolFailure", code: "invalid_request" });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses a note for a caller with no work item", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      const error = yield* harness
+        .call("lathe_roadmap_add_note", { text: "Lost" })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "RoadmapToolFailure", code: "not_attached" });
     }).pipe(Effect.scoped),
   );
 

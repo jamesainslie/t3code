@@ -66,6 +66,9 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -122,6 +125,14 @@ describe("validateRoadmapSearch", () => {
     }
     expect(validateRoadmapSearch({ new: 0 })).toEqual({});
     expect(validateRoadmapSearch({ new: "no" })).toEqual({});
+  });
+
+  it("reads import=1, which opens the GitHub import dialog", () => {
+    for (const value of [1, "1", true, "true"]) {
+      expect(validateRoadmapSearch({ import: value })).toEqual({ import: 1 });
+    }
+    expect(validateRoadmapSearch({ import: "no" })).toEqual({});
+    expect(withoutEditorRequest({ import: 1, new: 1, view: "board" })).toEqual({ view: "board" });
   });
 
   it("keeps parent only alongside new", () => {
@@ -413,8 +424,18 @@ describe("forecasts", () => {
     }),
   );
   const areaSettings = {
-    work: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
-    personal: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
+    work: {
+      unit: "points" as const,
+      workingWeekdays: [1, 2, 3, 4, 5],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
+    personal: {
+      unit: "points" as const,
+      workingWeekdays: [1, 2, 3, 4, 5],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
   };
   const target = (itemId: string, estimate: number | null, dueDate: string) =>
     item(itemId, { type: "story", estimate, dueDate });

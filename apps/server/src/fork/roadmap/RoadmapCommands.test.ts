@@ -7,6 +7,11 @@ import {
   type RoadmapActor,
   type RoadmapCommand,
   RoadmapItemId,
+  type RoadmapIssueSource,
+  ROADMAP_NO_LOCAL_CHANGES,
+  ROADMAP_NOTE_LIMIT,
+  type RoadmapNoteKind,
+  type RoadmapProgressNote,
   type RoadmapSprint,
   RoadmapSprintId,
   type RoadmapThreadRef,
@@ -35,6 +40,8 @@ const thread = (threadId: string): RoadmapThreadRef => ({
   threadId: ThreadId.make(threadId),
 });
 const agent: RoadmapActor = { _tag: "agent", thread: thread("t-agent"), threadTitle: "Agent" };
+const steward: RoadmapActor = { _tag: "steward", environmentId: EnvironmentId.make("env-home") };
+const github: RoadmapActor = { _tag: "github" };
 
 const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): RoadmapWorkItem => ({
   id: id(itemId),
@@ -65,6 +72,9 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -92,6 +102,7 @@ const plan = (
     readonly actor?: RoadmapActor;
     readonly lastDeletion?: ReadonlyArray<string>;
     readonly sprints?: ReadonlyArray<RoadmapSprint>;
+    readonly criterionUntickedAt?: string;
   } = {},
 ) =>
   planRoadmapCommand({
@@ -103,6 +114,9 @@ const plan = (
       ...(options.lastDeletion === undefined
         ? {}
         : { lastDeletion: options.lastDeletion.map((value) => id(value)) }),
+      ...(options.criterionUntickedAt === undefined
+        ? {}
+        : { criterionUntickedAt: options.criterionUntickedAt }),
     },
     eventId: EventId.make("event-1"),
     now,
@@ -474,6 +488,135 @@ describe("planRoadmapCommand", () => {
     });
   });
 
+  describe("the steward", () => {
+    const records = [
+      live(
+        item("f", {
+          type: "feature",
+          criteria: [
+            { id: "c1", text: "Open", tickedAt: null, tickedBy: null, evidence: null },
+            { id: "c2", text: "Done", tickedAt: earlier, tickedBy: user, evidence: "by hand" },
+          ],
+        }),
+      ),
+    ];
+    const tick = (body: Partial<CommandBody<"roadmap.criterion.tick">> = {}) =>
+      cmd("roadmap.criterion.tick", {
+        itemId: id("f"),
+        criterionId: "c1",
+        ticked: true,
+        evidence: "Turn 4 ran the tests and they passed",
+        evidenceAfter: "2026-10-17T10:00:00.000Z",
+        ...body,
+      });
+    const asSteward = { actor: steward } as const;
+
+    it("ticks an open criterion with its evidence", () => {
+      const after = run(tick(), records, asSteward).get(id("f"))!.item;
+      assert.deepEqual(after.criteria[0], {
+        id: "c1",
+        text: "Open",
+        tickedAt: nowIso,
+        tickedBy: steward,
+        evidence: "Turn 4 ran the tests and they passed",
+      });
+    });
+
+    it("never unticks, and never ticks without evidence", () => {
+      assert.equal(
+        failureOf(plan(tick({ ticked: false }), records, asSteward)).code,
+        "forbidden_actor",
+      );
+      for (const evidence of [null, "   "]) {
+        assert.equal(
+          failureOf(plan(tick({ evidence }), records, asSteward)).code,
+          "invalid_request",
+        );
+      }
+    });
+
+    it("leaves a criterion someone already ticked alone", () => {
+      assert.equal(
+        failureOf(plan(tick({ criterionId: "c2" }), records, asSteward)).code,
+        "forbidden_actor",
+      );
+    });
+
+    it("re-ticks an unticked criterion only with evidence from after the untick", () => {
+      const untickedAt = "2026-10-17T12:00:00.000Z";
+      const options = { ...asSteward, criterionUntickedAt: untickedAt };
+      for (const evidenceAfter of [
+        undefined,
+        "2026-10-17T10:00:00.000Z",
+        untickedAt,
+        "not a time",
+      ]) {
+        const command =
+          evidenceAfter === undefined
+            ? cmd("roadmap.criterion.tick", {
+                itemId: id("f"),
+                criterionId: "c1",
+                ticked: true,
+                evidence: "Turn 4",
+              })
+            : tick({ evidenceAfter });
+        assert.equal(failureOf(plan(command, records, options)).code, "stale_evidence");
+      }
+      eventOf(plan(tick({ evidenceAfter: "2026-10-17T12:00:01.000Z" }), records, options));
+    });
+
+    it("leaves the user free to re-tick after unticking", () => {
+      eventOf(
+        plan(
+          cmd("roadmap.criterion.tick", { itemId: id("f"), criterionId: "c1", ticked: true }),
+          records,
+          {
+            criterionUntickedAt: "2026-10-17T12:00:00.000Z",
+          },
+        ),
+      );
+    });
+
+    it("refuses every change but ticks and notes", () => {
+      const refused: ReadonlyArray<RoadmapCommand> = [
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { state: "done" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { priority: "p0" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { dueDate: "2026-11-01" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { estimate: 3 } }),
+        cmd("roadmap.item.create", { itemId: id("new"), itemType: "story", title: "New" }),
+        cmd("roadmap.item.move", { itemId: id("f"), parentId: null }),
+        cmd("roadmap.item.delete", { itemId: id("f") }),
+        cmd("roadmap.criteria.set", { itemId: id("f"), criteria: [] }),
+        cmd("roadmap.thread.detach", { itemId: id("f"), thread: thread("t-agent") }),
+        cmd("roadmap.hours.log", { itemId: id("f"), entryId: "h1", hours: 1 }),
+        cmd("roadmap.item.mark-reviewed", { itemId: id("f") }),
+        cmd("roadmap.sprint.create", {
+          sprintId: sid("s1"),
+          name: "S1",
+          area: "work",
+          startDate: "2026-10-19",
+          endDate: "2026-10-30",
+        }),
+      ];
+      for (const command of refused) {
+        assert.equal(
+          failureOf(plan(command, records, asSteward)).code,
+          "forbidden_actor",
+          command.type,
+        );
+      }
+      for (const kind of ["progress", "drift", "unsure"] as const) {
+        eventOf(
+          plan(
+            cmd("roadmap.note.add", { itemId: id("f"), noteId: kind, kind, text: "Seen" }),
+            records,
+            asSteward,
+          ),
+        );
+      }
+    });
+  });
+
   describe("blockers and related", () => {
     const records = [live(item("a", { blockedBy: [id("b")] })), live(item("b")), live(item("c"))];
 
@@ -599,7 +742,7 @@ describe("planRoadmapCommand", () => {
     const setState = (state: RoadmapWorkItem["state"], extra: object = {}) =>
       cmd("roadmap.item.update", { itemId: id("a"), patch: { state, ...extra } });
 
-    it("starts a new item's history at creation, with nothing pinned, snoozed or logged", () => {
+    it("starts a new item's history at creation, with nothing pinned, snoozed, logged or noted", () => {
       const created = payloadOf(plan(create())).item as RoadmapWorkItem;
       assert.deepInclude(created, {
         stateChangedAt: nowIso,
@@ -608,6 +751,7 @@ describe("planRoadmapCommand", () => {
         snoozedUntil: null,
         sprintId: null,
         hours: [],
+        progressNotes: [],
       });
     });
 
@@ -700,7 +844,6 @@ describe("planRoadmapCommand", () => {
     });
 
     it("refuses pins from anyone but the user", () => {
-      const steward: RoadmapActor = { _tag: "steward", environmentId: EnvironmentId.make("e") };
       for (const actor of [agent, steward]) {
         for (const command of [pin("a"), unpin("a")]) {
           const failure = failureOf(plan(command, [live(item("a"))], { actor }));
@@ -795,6 +938,425 @@ describe("planRoadmapCommand", () => {
       const remove = (entryId: string) => cmd("roadmap.hours.remove", { itemId: id("a"), entryId });
       assert.deepEqual(run(remove("h1"), records).get(id("a"))!.item.hours, entries.slice(1));
       assert.equal(failureOf(plan(remove("nope"), records)).code, "not_found");
+    });
+  });
+
+  describe("notes", () => {
+    const add = (
+      noteId: string,
+      kind: RoadmapNoteKind = "progress",
+      extra: { readonly criterionId?: string | null; readonly itemId?: string } = {},
+    ) =>
+      cmd("roadmap.note.add", {
+        itemId: id(extra.itemId ?? "a"),
+        noteId,
+        kind,
+        text: `Note ${noteId}`,
+        ...(extra.criterionId === undefined ? {} : { criterionId: extra.criterionId }),
+      });
+    const remove = (noteId: string) => cmd("roadmap.note.remove", { itemId: id("a"), noteId });
+    const note = (
+      noteId: string,
+      overrides: Partial<RoadmapProgressNote> = {},
+    ): RoadmapProgressNote => ({
+      id: noteId,
+      at: earlier,
+      actor: user,
+      kind: "progress",
+      text: `Note ${noteId}`,
+      criterionId: null,
+      ...overrides,
+    });
+    const criterion = {
+      id: "c1",
+      text: "Ships",
+      tickedAt: null,
+      tickedBy: null,
+      evidence: null,
+    };
+    const records = [live(item("a", { criteria: [criterion] }))];
+
+    it("adds a progress note from every actor, with the actor and the event time", () => {
+      for (const actor of [user, agent, steward, github]) {
+        const after = run(add("n1"), records, { actor }).get(id("a"))!.item;
+        assert.deepEqual(after.progressNotes, [
+          {
+            id: "n1",
+            at: nowIso,
+            actor,
+            kind: "progress",
+            text: "Note n1",
+            criterionId: null,
+          },
+        ]);
+      }
+    });
+
+    it("keeps sync notes to GitHub", () => {
+      for (const actor of [user, agent, steward]) {
+        assert.equal(
+          failureOf(plan(add("n1", "sync"), records, { actor })).code,
+          "forbidden_actor",
+        );
+      }
+      const after = run(add("n1", "sync"), records, { actor: github }).get(id("a"))!.item;
+      assert.equal(after.progressNotes[0]!.kind, "sync");
+    });
+
+    it("keeps drift and unsure notes to the steward", () => {
+      for (const kind of ["drift", "unsure"] as const) {
+        for (const actor of [user, agent, github]) {
+          assert.equal(
+            failureOf(plan(add("n1", kind), records, { actor })).code,
+            "forbidden_actor",
+          );
+        }
+        const after = run(add("n1", kind), records, { actor: steward }).get(id("a"))!.item;
+        assert.equal(after.progressNotes[0]!.kind, kind);
+      }
+    });
+
+    it("ties a note to a criterion on the item and refuses one the item lacks", () => {
+      const after = run(add("n1", "progress", { criterionId: "c1" }), records, { actor: agent });
+      assert.equal(after.get(id("a"))!.item.progressNotes[0]!.criterionId, "c1");
+      assert.equal(
+        failureOf(plan(add("n1", "progress", { criterionId: "c9" }), records)).code,
+        "criterion_not_found",
+      );
+    });
+
+    it("refuses a note id already on the item", () => {
+      assert.equal(
+        failureOf(plan(add("n1"), [live(item("a", { progressNotes: [note("n1")] }))])).code,
+        "already_exists",
+      );
+    });
+
+    it("refuses a missing or deleted item", () => {
+      assert.equal(failureOf(plan(add("n1", "progress", { itemId: "nope" }))).code, "not_found");
+      assert.equal(failureOf(plan(add("n1"), [gone(item("a"))])).code, "deleted");
+    });
+
+    it("appends the newest note last and keeps only the newest 50", () => {
+      const full = Array.from({ length: ROADMAP_NOTE_LIMIT }, (_, index) => note(`old-${index}`));
+      const after = run(add("new"), [live(item("a", { progressNotes: full }))]).get(id("a"))!.item;
+      assert.equal(after.progressNotes.length, ROADMAP_NOTE_LIMIT);
+      assert.equal(after.progressNotes[0]!.id, "old-1");
+      assert.equal(after.progressNotes.at(-1)!.id, "new");
+    });
+
+    it("removes a note for the user and refuses an unknown one", () => {
+      const notes = [note("n1"), note("n2", { actor: steward, kind: "unsure" })];
+      const withNotes = [live(item("a", { progressNotes: notes }))];
+      assert.deepEqual(
+        run(remove("n2"), withNotes).get(id("a"))!.item.progressNotes,
+        notes.slice(0, 1),
+      );
+      assert.equal(failureOf(plan(remove("nope"), withNotes)).code, "not_found");
+    });
+
+    it("refuses note removal from anyone but the user", () => {
+      const withNotes = [live(item("a", { progressNotes: [note("n1", { actor: agent })] }))];
+      for (const actor of [agent, steward, github]) {
+        assert.equal(failureOf(plan(remove("n1"), withNotes, { actor })).code, "forbidden_actor");
+      }
+    });
+  });
+
+  describe("GitHub sources", () => {
+    const source = (overrides: Partial<RoadmapIssueSource> = {}): RoadmapIssueSource => ({
+      host: "github.com",
+      owner: "acme",
+      repo: "web",
+      number: 12,
+      nodeId: "I_12",
+      url: "https://github.com/acme/web/issues/12",
+      writable: true,
+      remoteUpdatedAt: "2026-10-17T00:00:00Z",
+      syncedAt: earlier,
+      base: { title: "Item a", closed: false, parentNodeId: null, blockedByNodeIds: [] },
+      localChangedAt: ROADMAP_NO_LOCAL_CHANGES,
+      ...overrides,
+    });
+    const importIssue = (overrides: Partial<CommandBody<"roadmap.source.import">> = {}) =>
+      cmd("roadmap.source.import", {
+        itemId: id("a"),
+        itemType: "story",
+        title: "Item a",
+        parentId: null,
+        area: "work",
+        state: "backlog",
+        source: source(),
+        ...overrides,
+      });
+    const sourced = (itemId: string, overrides: Partial<RoadmapIssueSource> = {}) =>
+      item(itemId, {
+        type: "story",
+        source: source({ nodeId: `I_${itemId}`, ...overrides }),
+      });
+
+    describe("import", () => {
+      it("creates the item from the issue for GitHub", () => {
+        const after = run(importIssue({ state: "done" }), [], { actor: github }).get(id("a"))!;
+        assert.deepEqual(after.item.source, source());
+        assert.equal(after.item.type, "story");
+        assert.equal(after.item.area, "work");
+        assert.equal(after.item.state, "done");
+        assert.equal(after.item.completedAt, nowIso);
+        assert.deepEqual(after.item.createdBy, github);
+        assert.isFalse(after.item.needsReview);
+      });
+
+      it("places the item under a parent that can hold it", () => {
+        const parent = live(item("p", { type: "epic" }));
+        const after = run(importIssue({ parentId: id("p") }), [parent], { actor: github });
+        assert.equal(after.get(id("a"))!.item.parentId, "p");
+        const story = live(item("s", { type: "story" }));
+        assert.equal(
+          failureOf(plan(importIssue({ parentId: id("s") }), [story], { actor: github })).code,
+          "invalid_parent",
+        );
+      });
+
+      it("refuses everyone but GitHub", () => {
+        for (const actor of [user, agent, steward]) {
+          assert.equal(failureOf(plan(importIssue(), [], { actor })).code, "forbidden_actor");
+        }
+      });
+
+      it("refuses an issue a live item already holds, and accepts it again once that item is deleted", () => {
+        const holder = item("b", { source: source() });
+        assert.equal(
+          failureOf(plan(importIssue(), [live(holder)], { actor: github })).code,
+          "already_exists",
+        );
+        assert.isTrue(Result.isSuccess(plan(importIssue(), [gone(holder)], { actor: github })));
+      });
+    });
+
+    describe("sync", () => {
+      const sync = (itemId = "a") =>
+        cmd("roadmap.source.sync", {
+          itemId: id(itemId),
+          writable: false,
+          remoteUpdatedAt: "2026-10-18T08:00:00Z",
+          base: { title: "Renamed", closed: true, parentNodeId: "I_p", blockedByNodeIds: ["I_b"] },
+        });
+
+      it("records where the item and its issue agree, keeping the local change times", () => {
+        const localChangedAt = { ...ROADMAP_NO_LOCAL_CHANGES, title: earlier };
+        const records = [live(sourced("a", { localChangedAt }))];
+        const after = run(sync(), records, { actor: github }).get(id("a"))!.item.source!;
+        assert.isFalse(after.writable);
+        assert.equal(after.remoteUpdatedAt, "2026-10-18T08:00:00Z");
+        assert.equal(after.syncedAt, nowIso);
+        assert.deepEqual(after.base, {
+          title: "Renamed",
+          closed: true,
+          parentNodeId: "I_p",
+          blockedByNodeIds: ["I_b"],
+        });
+        assert.deepEqual(after.localChangedAt, localChangedAt);
+        assert.equal(after.nodeId, "I_a");
+      });
+
+      it("refuses everyone but GitHub, and an item with no issue", () => {
+        assert.equal(
+          failureOf(plan(sync(), [live(sourced("a"))], { actor: user })).code,
+          "forbidden_actor",
+        );
+        assert.equal(
+          failureOf(plan(sync(), [live(item("a"))], { actor: github })).code,
+          "invalid_request",
+        );
+      });
+    });
+
+    describe("unlink", () => {
+      const unlink = cmd("roadmap.source.unlink", { itemId: id("a") });
+
+      it("turns the item into a Lathe-only item for the user or GitHub", () => {
+        for (const actor of [user, github]) {
+          const after = run(unlink, [live(sourced("a"))], { actor }).get(id("a"))!.item;
+          assert.isNull(after.source);
+        }
+      });
+
+      it("refuses agents and the steward, and an item with no issue", () => {
+        for (const actor of [agent, steward]) {
+          assert.equal(
+            failureOf(plan(unlink, [live(sourced("a"))], { actor })).code,
+            "forbidden_actor",
+          );
+        }
+        assert.equal(failureOf(plan(unlink, [live(item("a"))])).code, "invalid_request");
+      });
+    });
+
+    describe("local change times", () => {
+      const update = (patch: CommandBody<"roadmap.item.update">["patch"]) =>
+        cmd("roadmap.item.update", { itemId: id("a"), patch });
+      const changes = (
+        command: RoadmapCommand,
+        records: ReadonlyArray<RoadmapItemRecord>,
+        actor: RoadmapActor = user,
+      ) => run(command, records, { actor }).get(id("a"))!.item.source!.localChangedAt;
+
+      it("records when a user or agent renames the item or opens or closes it", () => {
+        const records = [live(sourced("a"))];
+        assert.equal(changes(update({ title: "New" }), records).title, nowIso);
+        assert.equal(changes(update({ state: "done" }), records, agent).closed, nowIso);
+        const done = [live(item("a", { ...sourced("a"), state: "done" }))];
+        assert.equal(changes(update({ state: "in-progress" }), done).closed, nowIso);
+      });
+
+      it("ignores changes that leave the synced fields alone, and GitHub's own", () => {
+        const records = [live(sourced("a"))];
+        assert.deepEqual(
+          changes(update({ state: "in-progress" }), records),
+          ROADMAP_NO_LOCAL_CHANGES,
+        );
+        assert.deepEqual(changes(update({ title: "Item a" }), records), ROADMAP_NO_LOCAL_CHANGES);
+        assert.deepEqual(
+          changes(update({ title: "New", state: "done" }), records, github),
+          ROADMAP_NO_LOCAL_CHANGES,
+        );
+      });
+
+      it("records a move to another parent but not a reorder", () => {
+        const records = [
+          live(item("p", { type: "epic" })),
+          live(item("q", { type: "epic" })),
+          live({ ...sourced("a"), parentId: id("p") }),
+          live(item("b", { type: "story", parentId: id("p"), sortKey: "z" })),
+        ];
+        const move = (parentId: string) =>
+          cmd("roadmap.item.move", { itemId: id("a"), parentId: id(parentId) });
+        assert.equal(changes(move("q"), records).parent, nowIso);
+        assert.isNull(changes(move("p"), records).parent);
+      });
+
+      it("records a blocker linked or unlinked", () => {
+        const records = [live(sourced("a")), live(sourced("b"))];
+        const link = cmd("roadmap.blocker.link", { itemId: id("a"), blockedById: id("b") });
+        assert.equal(changes(link, records).blockedBy, nowIso);
+        const blocked = [live({ ...sourced("a"), blockedBy: [id("b")] }), live(sourced("b"))];
+        const unlink = cmd("roadmap.blocker.unlink", { itemId: id("a"), blockedById: id("b") });
+        assert.equal(changes(unlink, blocked).blockedBy, nowIso);
+      });
+
+      it("leaves an item with no issue without a source", () => {
+        const after = run(update({ title: "New" }), [live(item("a"))]).get(id("a"))!.item;
+        assert.isNull(after.source);
+      });
+    });
+
+    describe("read-only issues", () => {
+      const readOnly = (itemId: string) => sourced(itemId, { writable: false });
+      const update = (patch: CommandBody<"roadmap.item.update">["patch"]) =>
+        cmd("roadmap.item.update", { itemId: id("a"), patch });
+
+      it("refuses user and agent changes to the synced fields", () => {
+        const records = [
+          live({ ...readOnly("a"), parentId: id("p") }),
+          live({ ...sourced("p"), type: "epic" }),
+          live(item("q", { type: "epic" })),
+          live(sourced("b")),
+        ];
+        const refused = [
+          update({ title: "New" }),
+          update({ state: "done" }),
+          cmd("roadmap.item.move", { itemId: id("a"), parentId: id("q") }),
+          cmd("roadmap.blocker.link", { itemId: id("a"), blockedById: id("b") }),
+        ];
+        for (const actor of [user, agent]) {
+          for (const command of refused) {
+            assert.equal(failureOf(plan(command, records, { actor })).code, "read_only_source");
+          }
+        }
+        for (const command of refused) {
+          assert.isTrue(Result.isSuccess(plan(command, records, { actor: github })));
+        }
+      });
+
+      it("accepts changes to fields that stay in Lathe", () => {
+        const records = [
+          live({ ...readOnly("a"), parentId: id("p") }),
+          live(item("p", { type: "epic" })),
+          live(item("q", { type: "epic" })),
+          live(item("b", { type: "story" })),
+        ];
+        for (const command of [
+          update({ priority: "p1", description: "Notes", state: "in-progress" }),
+          update({ title: "Item a" }),
+          cmd("roadmap.blocker.link", { itemId: id("a"), blockedById: id("b") }),
+          cmd("roadmap.item.move", { itemId: id("a"), parentId: id("q") }),
+        ]) {
+          assert.isTrue(Result.isSuccess(plan(command, records)));
+        }
+      });
+
+      it("refuses moving an issue under a read-only issue", () => {
+        const records = [
+          live({ ...readOnly("p"), type: "epic" }),
+          live(sourced("a")),
+          live(item("l", { type: "story" })),
+        ];
+        const under = (itemId: string) =>
+          cmd("roadmap.item.move", { itemId: id(itemId), parentId: id("p") });
+        assert.equal(failureOf(plan(under("a"), records)).code, "read_only_source");
+        assert.isTrue(Result.isSuccess(plan(under("l"), records)));
+      });
+    });
+
+    describe("pull requests", () => {
+      const pullRequest = {
+        host: "GitHub.com",
+        repository: "Acme/Web",
+        number: 7,
+        url: "https://github.com/acme/web/pull/7",
+      };
+      const link = (itemId = "a") =>
+        cmd("roadmap.pull-request.link", { itemId: id(itemId), pullRequest });
+      const unlink = cmd("roadmap.pull-request.unlink", {
+        itemId: id("a"),
+        host: "github.com",
+        repository: "acme/web",
+        number: 7,
+      });
+
+      it("links a pull request once, keyed in lower case, from any actor", () => {
+        const records = [live(item("a", { type: "feature" }))];
+        const once = run(link(), records, { actor: agent });
+        const twice = run(link(), [...once.values()]);
+        assert.deepEqual(twice.get(id("a"))!.item.pullRequests, [
+          { ...pullRequest, host: "github.com", repository: "acme/web" },
+        ]);
+      });
+
+      it("links only to features, stories, bugs and support tickets", () => {
+        for (const type of ["feature", "story", "bug", "support-ticket"] as const) {
+          assert.isTrue(Result.isSuccess(plan(link(), [live(item("a", { type }))])));
+        }
+        for (const type of ["objective", "key-result", "initiative", "epic"] as const) {
+          assert.equal(
+            failureOf(plan(link(), [live(item("a", { type }))])).code,
+            "invalid_request",
+          );
+        }
+      });
+
+      it("unlinks a pull request", () => {
+        const records = [
+          live(
+            item("a", {
+              type: "story",
+              pullRequests: [{ ...pullRequest, host: "github.com", repository: "acme/web" }],
+            }),
+          ),
+        ];
+        assert.deepEqual(run(unlink, records).get(id("a"))!.item.pullRequests, []);
+      });
     });
   });
 

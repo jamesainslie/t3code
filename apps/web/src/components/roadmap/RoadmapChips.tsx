@@ -1,5 +1,6 @@
 import type {
   RoadmapArea,
+  RoadmapIssueSource,
   RoadmapItemState,
   RoadmapItemType,
   RoadmapPriority,
@@ -105,6 +106,16 @@ export function RoadmapBlockedBadge() {
   return (
     <Badge size="sm" variant="warning">
       Blocked
+    </Badge>
+  );
+}
+
+/** The GitHub issue an item syncs with, by number; the repository is in its label. */
+export function RoadmapIssueChip({ source }: { readonly source: RoadmapIssueSource }) {
+  const ref = `${source.owner}/${source.repo}#${source.number}`;
+  return (
+    <Badge size="sm" variant="outline" aria-label={`GitHub issue ${ref}`} title={ref}>
+      #{source.number}
     </Badge>
   );
 }

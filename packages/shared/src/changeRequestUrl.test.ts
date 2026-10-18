@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   changeRequestUrlFor,
   parseChangeRequestUrl,
+  parseGitHubIssueUrl,
   pullRequestCandidateUrlFromReferenceAutolink,
   siblingPullRequestUrl,
 } from "./changeRequestUrl.ts";
@@ -186,5 +187,32 @@ describe("changeRequestUrlFor", () => {
       repository: "org/project/_git/web",
       number: 42,
     });
+  });
+});
+
+describe("parseGitHubIssueUrl", () => {
+  it("reads the host, owner, repository and number of a GitHub issue", () => {
+    expect(parseGitHubIssueUrl("https://github.com/Acme/Web/issues/123")).toEqual({
+      host: "github.com",
+      owner: "Acme",
+      repo: "Web",
+      number: 123,
+    });
+    expect(
+      parseGitHubIssueUrl("https://GitHub.Acme.test/acme/web/issues/9#issuecomment-1"),
+    ).toEqual({ host: "github.acme.test", owner: "acme", repo: "web", number: 9 });
+  });
+
+  it("refuses pull requests, other pages and numbers that are not positive", () => {
+    for (const url of [
+      "https://github.com/acme/web/pull/7",
+      "https://github.com/acme/web/issues",
+      "https://github.com/acme/web/issues/0",
+      "https://github.com/acme/issues/12",
+      "ftp://github.com/acme/web/issues/1",
+      "not a url",
+    ]) {
+      expect(parseGitHubIssueUrl(url)).toBeNull();
+    }
   });
 });

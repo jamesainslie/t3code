@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import type { RoadmapItemId, RoadmapSprint, RoadmapWorkItem } from "@lathe/contracts";
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { MapIcon, PlusIcon } from "lucide-react";
+import { CircleDotIcon, MapIcon, PlusIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { isElectron } from "~/env";
@@ -31,6 +31,7 @@ import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadc
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { RoadmapBoard } from "./RoadmapBoard";
+import { RoadmapImportIssueDialog } from "./RoadmapImportIssueDialog";
 import { RoadmapItemEditor, type RoadmapItemEditorMode } from "./RoadmapItemEditor";
 import { RoadmapOutline } from "./RoadmapOutline";
 import { RoadmapSprintsButton } from "./RoadmapSprints";
@@ -116,7 +117,22 @@ export function RoadmapPage() {
     (urlRequest === null
       ? null
       : { key: -1, mode: { kind: "create", parentId: urlRequest.parentId } as const });
-  useEscapeToGoBack(editor === null ? undefined : IGNORE_ESCAPE);
+  // Fork: roadmap. The import dialog opens from the header or, like the editor,
+  // from the URL ("Import GitHub issue" in the command palette).
+  const canImport = useAtomValue(roadmapEnvironment.importRoadmapIssue.permissionAtom(home));
+  const [importRequested, setImportRequested] = useState(false);
+  const importOpen =
+    live.data !== null && (importRequested || (search.import === 1 && search !== dismissedSearch));
+  useEscapeToGoBack(editor === null && !importOpen ? undefined : IGNORE_ESCAPE);
+  const closeImport = (itemId?: RoadmapItemId) => {
+    setImportRequested(false);
+    if (search.import === undefined && itemId === undefined) return;
+    setDismissedSearch(search);
+    setSearch((current) => ({
+      ...withoutEditorRequest(current),
+      ...(itemId === undefined ? {} : { item: itemId }),
+    }));
+  };
 
   const setSearch = useCallback(
     (next: (current: RoadmapSearch) => RoadmapSearch) =>
@@ -210,6 +226,15 @@ export function RoadmapPage() {
             today={today}
           />
         ) : null}
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={!canImport || live.data === null}
+          onClick={() => setImportRequested(true)}
+        >
+          <CircleDotIcon />
+          Import issue
+        </Button>
         <Button
           size="xs"
           variant="outline"
@@ -322,6 +347,9 @@ export function RoadmapPage() {
           mode={editor.mode}
           onClose={closeEditor}
         />
+      ) : null}
+      {importOpen && home !== null ? (
+        <RoadmapImportIssueDialog home={home} items={items} onClose={closeImport} />
       ) : null}
     </SidebarInset>
   );

@@ -2,7 +2,10 @@ import {
   EnvironmentId,
   RoadmapItemId,
   ThreadId,
+  ROADMAP_NO_LOCAL_CHANGES,
+  type RoadmapIssueSource,
   type RoadmapItemType,
+  type RoadmapProgressNote,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -13,10 +16,16 @@ import {
   formatUnitProgress,
   formatVelocity,
   parentPath,
+  ROADMAP_CARD_NOTE_COUNT,
   roadmapActorLabel,
+  roadmapCardNotes,
   roadmapCardOpen,
   roadmapCardSlots,
   roadmapCardView,
+  roadmapImportUrlError,
+  roadmapIssueRef,
+  roadmapPullRequestLabel,
+  roadmapReadOnlyHint,
 } from "./roadmapCard.logic";
 
 const thread = { environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread") };
@@ -53,6 +62,9 @@ const item = (
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -113,8 +125,18 @@ describe("roadmapCardSlots", () => {
   const today = "2026-10-19";
   const weekdays = [1, 2, 3, 4, 5];
   const areaSettings = {
-    work: { unit: "points" as const, workingWeekdays: weekdays, goingColdDays: 5 },
-    personal: { unit: "hours" as const, workingWeekdays: [0, 1, 2, 3, 4], goingColdDays: 5 },
+    work: {
+      unit: "points" as const,
+      workingWeekdays: weekdays,
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
+    personal: {
+      unit: "hours" as const,
+      workingWeekdays: [0, 1, 2, 3, 4],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
   };
   const history = ["a", "b", "c", "d", "e"].map((name) =>
     item(`done-${name}`, {
@@ -229,5 +251,112 @@ describe("roadmapCardView", () => {
       kind: "attached",
       item: attached,
     });
+  });
+});
+
+describe("roadmapCardNotes", () => {
+  const at = (minute: number) => `2026-10-18T09:${String(minute).padStart(2, "0")}:00.000Z`;
+  const note = (
+    id: string,
+    minute: number,
+    overrides: Partial<RoadmapProgressNote> = {},
+  ): RoadmapProgressNote => ({
+    id,
+    at: at(minute),
+    actor: { _tag: "user" },
+    kind: "progress",
+    text: `Note ${id}`,
+    criterionId: null,
+    ...overrides,
+  });
+
+  it("is empty for an item with no notes", () => {
+    expect(roadmapCardNotes(item("a"))).toEqual([]);
+  });
+
+  it("lists the newest notes first, up to the card's limit", () => {
+    const notes = Array.from({ length: ROADMAP_CARD_NOTE_COUNT + 2 }, (_, index) =>
+      note(`n${index}`, index),
+    );
+    const shown = roadmapCardNotes(item("a", { progressNotes: notes }));
+    expect(shown.map((entry) => entry.id)).toEqual(
+      notes
+        .slice(-ROADMAP_CARD_NOTE_COUNT)
+        .map((entry) => entry.id)
+        .toReversed(),
+    );
+  });
+
+  it("labels the actor, names the kind unless it is progress, and quotes the criterion", () => {
+    const criterion = { id: "c1", text: "Ships", tickedAt: null, tickedBy: null, evidence: null };
+    const shown = roadmapCardNotes(
+      item("a", {
+        criteria: [criterion],
+        progressNotes: [
+          note("n1", 1, {
+            actor: { _tag: "agent", thread, threadTitle: "Fix login" },
+            criterionId: "c1",
+          }),
+          note("n2", 2, {
+            actor: { _tag: "steward", environmentId: thread.environmentId },
+            kind: "unsure",
+          }),
+          note("n3", 3, { actor: { _tag: "github" }, kind: "sync", criterionId: "gone" }),
+        ],
+      }),
+    );
+    expect(shown).toEqual([
+      { id: "n3", at: at(3), actor: "GitHub", kind: "Sync", text: "Note n3", criterion: null },
+      { id: "n2", at: at(2), actor: "Steward", kind: "Unsure", text: "Note n2", criterion: null },
+      { id: "n1", at: at(1), actor: "Fix login", kind: null, text: "Note n1", criterion: "Ships" },
+    ]);
+  });
+});
+
+describe("GitHub on the card", () => {
+  const source = (writable: boolean): RoadmapIssueSource => ({
+    host: "github.com",
+    owner: "acme",
+    repo: "web",
+    number: 12,
+    nodeId: "I_12",
+    url: "https://github.com/acme/web/issues/12",
+    writable,
+    remoteUpdatedAt: "2026-10-18T00:00:00Z",
+    syncedAt: "2026-10-18T00:00:00.000Z",
+    base: { title: "Title a", closed: false, parentNodeId: null, blockedByNodeIds: [] },
+    localChangedAt: ROADMAP_NO_LOCAL_CHANGES,
+  });
+
+  it("names an issue by repository and number", () => {
+    expect(roadmapIssueRef(source(true))).toBe("acme/web#12");
+  });
+
+  it("explains read-only fields only for an issue this environment cannot write", () => {
+    expect(roadmapReadOnlyHint(item("a"))).toBeNull();
+    expect(roadmapReadOnlyHint(item("a", { source: source(true) }))).toBeNull();
+    expect(roadmapReadOnlyHint(item("a", { source: source(false) }))).toBe(
+      "Title, done, parent and blockers follow acme/web#12, which this environment's GitHub account cannot change. Edit them on GitHub.",
+    );
+  });
+
+  it("labels a pull request by number, adding the repository when it differs from the issue's", () => {
+    const link = (repository: string) => ({
+      host: "github.com",
+      repository,
+      number: 7,
+      url: `https://github.com/${repository}/pull/7`,
+    });
+    expect(roadmapPullRequestLabel(link("acme/web"), source(true))).toBe("#7");
+    expect(roadmapPullRequestLabel(link("acme/api"), source(true))).toBe("acme/api#7");
+    expect(roadmapPullRequestLabel(link("acme/web"), null)).toBe("acme/web#7");
+  });
+
+  it("accepts only a GitHub issue URL to import", () => {
+    expect(roadmapImportUrlError("https://github.com/acme/web/issues/12")).toBeNull();
+    expect(roadmapImportUrlError("  ")).toBe("Paste the issue's URL.");
+    expect(roadmapImportUrlError("https://github.com/acme/web/pull/7")).toBe(
+      "That is not a GitHub issue URL, such as https://github.com/owner/repo/issues/12.",
+    );
   });
 });

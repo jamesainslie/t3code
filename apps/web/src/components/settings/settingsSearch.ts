@@ -202,6 +202,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["link unlink second environment agents queue unreachable roadmap home address"],
   },
   {
+    id: "roadmap-steward",
+    title: "Roadmap steward",
+    to: "/settings/roadmap",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["steward area acceptance criteria tick evidence unsure drift notes automatic"],
+  },
+  {
     id: "project-defaults",
     title: "Project defaults and overrides",
     to: "/settings/general",
@@ -643,6 +651,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     scope: "project-defaults",
     searchTerms: ["generated thread titles source control content default provider"],
+  },
+  // Fork: roadmap. Placed after the general model rows so a search for "model" lists them first.
+  {
+    id: "roadmap-steward-model",
+    title: "Steward model",
+    to: "/settings/roadmap",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["roadmap steward cheap acceptance criteria ticks evidence background"],
   },
   {
     id: "app-version",

@@ -13,6 +13,8 @@ import {
   RoadmapDispatchInput,
   RoadmapDispatchResult,
   RoadmapError,
+  RoadmapImportIssueInput,
+  RoadmapImportIssueResult,
   RoadmapLinkConfigureInput,
   RoadmapLinkError,
   RoadmapLinkMintInput,
@@ -615,6 +617,7 @@ export const WS_METHODS = {
   roadmapLinkStatus: "roadmap.link.status",
   roadmapLinkConfigure: "roadmap.link.configure",
   roadmapLinkMint: "roadmap.link.mint",
+  roadmapImportIssue: "roadmap.importIssue",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -1967,6 +1970,13 @@ const WsRoadmapLinkConfigureRpc = Rpc.make(WS_METHODS.roadmapLinkConfigure, {
   error: Schema.Union([RoadmapLinkError, RoadmapError, EnvironmentAuthorizationError]),
 });
 
+/** On the home: imports a GitHub issue and its sub-issues as work items. */
+const WsRoadmapImportIssueRpc = Rpc.make(WS_METHODS.roadmapImportIssue, {
+  payload: RoadmapImportIssueInput,
+  success: RoadmapImportIssueResult,
+  error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
+});
+
 /** On the home: a one-time grant another environment spends to link itself. */
 const WsRoadmapLinkMintRpc = Rpc.make(WS_METHODS.roadmapLinkMint, {
   payload: RoadmapLinkMintInput,
@@ -2195,6 +2205,7 @@ export const WsForkRpcGroup = RpcGroup.make(
   WsRoadmapLinkStatusRpc,
   WsRoadmapLinkConfigureRpc,
   WsRoadmapLinkMintRpc,
+  WsRoadmapImportIssueRpc,
 ).middleware(RpcScopeAuthorization);
 
 export const WsRpcGroup = WsCoreRpcGroup.merge(WsForkRpcGroup);

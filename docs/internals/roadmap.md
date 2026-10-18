@@ -180,6 +180,109 @@ future required item field needs the same upgrade or a decoding default, or a re
 old events. The backfilled values are approximate. A phase 1 item that was done counts as completed
 on its last update, which can put it in the first velocity window.
 
+`progressNotes` took the decoding default instead, so migration 10 only writes the empty list into
+the item projection and leaves stored events alone.
+
+### Note kinds belong to actors
+
+Progress notes are the one place agents, GitHub sync and the steward all write prose onto an item,
+so the planner ties each kind to its writer: `progress` from any actor, `sync` only from `github`,
+`drift` and `unsure` only from `steward`. Only the user removes a note. GitHub sync and the steward
+rely on this, so a kind check belongs in `planRoadmapCommand`, never in the code that writes the
+note. An item keeps its newest 50 notes; the projection drops the oldest.
+
+## GitHub sync
+
+[`RoadmapGitHubSync`](../../apps/server/src/fork/roadmap/RoadmapGitHubSync.ts) imports issues and
+keeps their items in step. It starts on every environment, and every sweep and import first checks
+`isHome`, so moving the home moves sync with it. It reads and writes through
+[`GitHubIssueApi`](../../packages/source-control-github/src/server/GitHubIssueApi.ts) with the token
+`GitHubAccountSelector.forRepository` pins for the issue's owner. An issue belongs to no checkout,
+so a project's account override never applies.
+
+### The agreement, not the clocks, finds a change
+
+Each item's `source.base` records what the item and the issue agreed on at the last sync. The pure
+[`reconcileIssue`](../../apps/server/src/fork/roadmap/RoadmapGitHubReconcile.ts) compares both
+sides with it: a field that moved on one side is copied to the other, and only a field that moved
+on both to different values is a conflict. Timestamps settle conflicts only. The issue's `updatedAt`
+moves for comments and labels, so comparing it with the item's `updatedAt` would call every
+comment a conflict.
+
+The conflict clock on the Lathe side is `source.localChangedAt`, one time per synced field. The
+projection stamps it when a user, agent or steward changes that field, never for the `github`
+actor, so GitHub's own changes never look like local ones. The reactor watches the live stream for
+a new stamp and requests a sweep of that item, which is how a local edit reaches GitHub within
+seconds. Compare GitHub times by parsing: GitHub writes `...Z` without milliseconds, Lathe writes
+`.000Z`, and the strings do not sort together.
+
+Parent and blocker links count only issues that are themselves items. A GitHub parent no item
+holds reads as no parent, so importing a sub-issue alone never pushes its parent link away, and the
+link comes into the agreement once that parent is imported.
+
+### What a sweep writes
+
+- Remote changes apply first, as ordinary commands from the `github` actor. A refused one (a cycle,
+  a type that cannot sit under the new parent) leaves the agreement, so the next sweep tries again.
+- Pushes run inline. A failed push also leaves the agreement and `syncedAt` alone, so the next
+  sweep pushes again. A rate-limited account pauses until GitHub's reset time.
+- `roadmap.source.sync` records the new agreement only when it, `writable` or the issue's
+  `updatedAt` changed. Without that check every open item would write an event every minute.
+- Sync notes take an id hashed from the decision, so a retried sweep adds no second note.
+- An issue the read no longer returns is left alone. A deleted issue and an account that cannot see
+  it look the same, so sync never unlinks or deletes on its own.
+
+Only `github` may run `roadmap.source.import` and `roadmap.source.sync`. An agent's import through
+the MCP tool is recorded as GitHub's too, because the sync service makes the commands. The planner
+refuses user and agent changes to synced fields of an unwritable issue with `read_only_source`;
+the UI only explains it.
+
+Linked pull requests are keys on the item. The card reads a pull request's details through the
+thread's environment, and only while the link is hovered, so no pull request state rides in
+roadmap events. Migration 11 writes `source` and `pullRequests` into stored items; both decode to
+empty from older events.
+
+## The steward
+
+[`RoadmapSteward`](../../apps/server/src/fork/roadmap/RoadmapSteward.ts) runs on every environment
+over the attached threads that environment owns. It never reads another environment's turns, and it
+writes through `RoadmapService.submit` as `{ _tag: "steward", environmentId }`, so off the home its
+writes queue in the link outbox like an agent's.
+
+### Its limits live in the planner
+
+The steward's output is a model's judgement, so nothing in its own code is trusted to hold the
+limits. `planRoadmapCommand` refuses every steward command except `roadmap.criterion.tick` and
+`roadmap.note.add`, which rules out field patches, priorities, due dates, state changes and Done. A
+steward tick must tick, carry evidence, and land on an unticked criterion. The steward drops
+refusals with a log line; they never surface.
+
+The re-tick rule: once a criterion has been unticked, a steward tick needs `evidenceAfter`, the end
+time of the turn its evidence cites, newer than the latest untick. Unticks clear the criterion, so
+the time exists only in the event history. `RoadmapService.dispatch` reads it from `store.history`
+for steward ticks alone and passes it to the planner as `criterionUntickedAt`. The rule counts any
+untick, since the steward itself never unticks. The model names a turn number for each tick, and
+[`stewardCommands`](../../apps/server/src/fork/roadmap/RoadmapStewardPrompt.ts) maps that number to
+the turn's end time. A tick citing a turn outside the new ones is dropped before it is sent, so the
+model cannot launder an old turn through a newer `evidenceAfter`.
+
+### Runs see only new turns
+
+`roadmap_steward_threads` (fork migration 12) records, per thread, the end of the newest turn a
+run gave the model. A run digests turns that ended after it, and advances it after submitting, even
+when the home refused every write, since the same turns would draw the same answer. A failed model
+call or unreachable home leaves it, so the next run retries those turns.
+
+Triggers come from `streamDomainEvents`, which is live only, so turns that end while the server is
+down are never announced. The daily sweep covers them. Its "last sweep day" lives in memory on
+purpose: the first tick after a start sweeps, and the per-thread cursor makes a repeated sweep cheap.
+Notices for one thread coalesce while a run for it is queued.
+
+The model comes from `roadmap.stewardModelSelection`, which each environment holds because provider
+logins differ per machine, and falls back to the text generation model. It runs through
+`TextGeneration.generateStructured`, which every runner-based provider implements once in
+`fromRunner`. Muse and ACP registry instances refuse it.
+
 ## Dates without a time zone
 
 The server does not know the user's time zone. Clients compute in local dates (`localDateOf`), and

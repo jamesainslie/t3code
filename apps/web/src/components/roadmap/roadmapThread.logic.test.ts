@@ -43,6 +43,9 @@ const item = (
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
+  source: null,
+  pullRequests: [],
   ...overrides,
 });
 
@@ -60,6 +63,7 @@ describe("roadmapHref", () => {
     expect(roadmapHref({ new: true, parent: RoadmapItemId.make("p1") })).toBe(
       "/roadmap?new=1&parent=p1",
     );
+    expect(roadmapHref({ importIssue: true })).toBe("/roadmap?view=outline&import=1");
   });
 });
 

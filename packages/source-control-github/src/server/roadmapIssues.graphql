@@ -1,0 +1,92 @@
+# Fork: roadmap. The issues Lathe's roadmap imports and keeps in step with its work items. Every
+# read selects the same fields, so an import and a later sweep compare like with like. Sub-issues
+# and blockers past the first 50 are not read: a roadmap item with more is not a plan anyone reads.
+
+fragment RoadmapIssueFields on Issue {
+  id
+  number
+  title
+  state
+  updatedAt
+  url
+  viewerCanUpdate
+  repository {
+    name
+    owner {
+      login
+    }
+  }
+  parent {
+    id
+  }
+  subIssues(first: 50) {
+    nodes {
+      id
+    }
+  }
+  blockedBy(first: 50) {
+    nodes {
+      id
+    }
+  }
+}
+
+query RoadmapIssueByNumber($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      ...RoadmapIssueFields
+    }
+  }
+}
+
+# A batch of issues by node id, for a sweep or a sub-issue tree.
+query RoadmapIssueTree($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Issue {
+      ...RoadmapIssueFields
+    }
+  }
+}
+
+mutation RoadmapUpdateIssueTitle($issueId: ID!, $title: String!) {
+  updateIssue(input: { id: $issueId, title: $title }) {
+    clientMutationId
+  }
+}
+
+mutation RoadmapCloseIssue($issueId: ID!) {
+  closeIssue(input: { issueId: $issueId }) {
+    clientMutationId
+  }
+}
+
+mutation RoadmapReopenIssue($issueId: ID!) {
+  reopenIssue(input: { issueId: $issueId }) {
+    clientMutationId
+  }
+}
+
+# `replaceParent` moves an issue that already has another parent, as a drag in Lathe does.
+mutation RoadmapAddSubIssue($issueId: ID!, $subIssueId: ID!) {
+  addSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId, replaceParent: true }) {
+    clientMutationId
+  }
+}
+
+mutation RoadmapRemoveSubIssue($issueId: ID!, $subIssueId: ID!) {
+  removeSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId }) {
+    clientMutationId
+  }
+}
+
+mutation RoadmapAddBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
+  addBlockedBy(input: { issueId: $issueId, blockingIssueId: $blockingIssueId }) {
+    clientMutationId
+  }
+}
+
+mutation RoadmapRemoveBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
+  removeBlockedBy(input: { issueId: $issueId, blockingIssueId: $blockingIssueId }) {
+    clientMutationId
+  }
+}

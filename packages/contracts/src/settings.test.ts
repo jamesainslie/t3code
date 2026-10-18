@@ -54,13 +54,28 @@ describe("ServerSettings response streaming", () => {
 });
 
 describe("roadmap settings", () => {
-  const defaultArea = { unit: "points", workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 };
+  const defaultArea = {
+    unit: "points",
+    workingWeekdays: [1, 2, 3, 4, 5],
+    goingColdDays: 5,
+    stewardEnabled: false,
+  };
 
   it("makes this environment the roadmap home by default, with default areas", () => {
     expect(decodeServerSettings({}).roadmap).toEqual({
       homeEnvironmentId: null,
       areas: { work: defaultArea, personal: defaultArea },
+      stewardModelSelection: null,
+      areaByLogin: {},
     });
+  });
+
+  it("reads the area each GitHub login's issues import into", () => {
+    expect(
+      decodeServerSettings({ roadmap: { areaByLogin: { "jane-work": "work" } } }).roadmap
+        .areaByLogin,
+    ).toEqual({ "jane-work": "work" });
+    expect(() => decodeServerSettings({ roadmap: { areaByLogin: { jane: "home" } } })).toThrow();
   });
 
   it("fills area defaults for a settings file written before areas existed", () => {
@@ -70,7 +85,28 @@ describe("roadmap settings", () => {
     expect(decoded.roadmap).toEqual({
       homeEnvironmentId: "env-home",
       areas: { work: { ...defaultArea, unit: "hours" }, personal: defaultArea },
+      stewardModelSelection: null,
+      areaByLogin: {},
     });
+  });
+
+  it("keeps the steward off per area, with no model of its own, until set", () => {
+    const decoded = decodeServerSettings({
+      roadmap: {
+        areas: { work: { stewardEnabled: true } },
+        stewardModelSelection: { instanceId: "claudeAgent", model: "claude-haiku-4-5" },
+      },
+    });
+    expect(decoded.roadmap.areas.work.stewardEnabled).toBe(true);
+    expect(decoded.roadmap.areas.personal.stewardEnabled).toBe(false);
+    expect(decoded.roadmap.stewardModelSelection).toMatchObject({
+      instanceId: "claudeAgent",
+      model: "claude-haiku-4-5",
+    });
+    const patch = {
+      roadmap: { stewardModelSelection: null, areas: { personal: { stewardEnabled: true } } },
+    };
+    expect(decodeServerSettingsPatch(patch)).toEqual(patch);
   });
 
   it("accepts a partial area patch", () => {

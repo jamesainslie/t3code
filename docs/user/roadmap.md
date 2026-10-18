@@ -40,7 +40,9 @@ untouched 6 working days" or "Due Wed, forecast Fri, at risk". An item appears o
 section that matches:
 
 - **Waiting on you**: an attached thread wants an approval, an answer or a plan review, or finished
-  a turn you have not seen, or a pull request linked to it waits for your review.
+  a turn you have not seen, or a pull request linked to it waits for your review. The
+  [steward](#the-steward) puts an item here too when it is unsure whether a criterion is met, until
+  that criterion is ticked or you remove the note.
 - **Your picks**: items you pinned.
 - **Due or slipping**: overdue, due within three working days, or forecast to miss the due date.
 - **Going cold**: P0 and P1 items with no activity for the area's **Going cold** days. Activity is
@@ -94,6 +96,44 @@ Once an area has three finished sprints, items in a sprint forecast from the pac
 sprints instead of the last 15 working days. Deleting a sprint takes its items out of it and keeps
 the items.
 
+## Import GitHub issues
+
+Choose **Import issue** on the Roadmap, or **Import GitHub issue** in the command palette, and paste
+the issue's URL. Pick a parent to put it under, or leave it at the top level in the area you choose.
+When the home's `settings.json` maps the repository's GitHub login to an area under
+`roadmap.areaByLogin`, such as `{ "jane-work": "work" }`, that area applies instead.
+The issue and its sub-issues become work items: an issue with sub-issues becomes an epic, feature or
+story by its place in the tree, and one without becomes a story. Importing an issue that is already
+on the roadmap opens its item.
+
+Imported items stay in sync with GitHub while the roadmap home is running:
+
+- The title, open or closed, the sub-issue parent, and blocked-by links sync both ways. Parent and
+  blocker links sync only when both ends are imported issues. Dates, estimates, priority, criteria
+  and notes stay in Lathe.
+- Closing the issue sets the item to **Done**, and reopening it sets **In progress**. Marking the
+  item **Done** closes the issue, and moving it out of Done reopens it.
+- Sub-issues added on GitHub under an imported issue come in on their own.
+- When an item and its issue both changed, the newer change wins and the item gets a **Sync** note
+  saying what happened.
+- Moving an item under a work item that is not an issue removes it from its parent issue on GitHub,
+  and a note says so.
+
+Sync uses the roadmap home's GitHub logins, chosen per repository by the rules under **GitHub
+accounts** in the home's **Settings → Source Control** (see
+[Several GitHub accounts](./source-control.md#several-github-accounts)). A project's own account
+choice does not apply, since an imported issue belongs to no project. The home needs a login for
+every account whose repositories you import from.
+When that login cannot edit an issue, the item's synced fields are read-only, and the card says
+why. Open issues are checked every minute and closed ones every 15 minutes. A change you make in
+Lathe is sent at once.
+
+An item's card shows its issue number. Choose it to open the issue, or choose the unlink button
+beside it to stop syncing. The item stays on the roadmap, and the issue is not changed.
+
+Agents can link pull requests to features, stories, bugs and support tickets. The card lists them,
+shows a pull request's details when you hover it, and removes a link you no longer want.
+
 ## Log hours
 
 Choose **Log hours** in the **Hours** field of an item's card, enter the hours and an optional note,
@@ -111,6 +151,8 @@ roadmap home and apply to every client.
   Monday to Friday.
 - **Going cold**: how many working days without activity put a P0 or P1 item under **Going cold**.
   Defaults to 5.
+- **Steward**: whether the [steward](#the-steward) reads this area's attached threads. Off by
+  default.
 
 ## Agents on attached threads
 
@@ -118,14 +160,38 @@ At the start of every turn, the agent on an attached thread receives a short sum
 item and acceptance criteria, with its forecast and progress when it has them. Your message in the
 thread stays as you wrote it. Messages that start with a `/` command do not include the summary.
 
-Agents can read the roadmap, update their work item, tick criteria with evidence, log hours, create
-items, and attach threads. When an agent reads a work item it also sees the forecast, progress and
+Agents can read the roadmap, update their work item, tick criteria with evidence, log hours, add
+progress notes, create items, attach threads, import GitHub issues, and link pull requests. The **Notes** section of an item's card shows the
+latest notes, newest first, and removes one you no longer want. When an agent reads a work item it also sees the forecast, progress and
 pace. An agent cannot mark an item done while any of its criteria are unticked. Items an agent
 creates are marked **Needs review** until you open or edit them. Pins, snoozes and sprints are yours
 alone, and agents cannot change them.
 
 Agents work from the server's calendar, which is UTC. Near midnight, the forecast an agent sees can
 be a day off from the one on your Roadmap.
+
+## The steward
+
+The steward is a background agent that reads attached threads and relates their work to the item's
+acceptance criteria. Turn it on per area with the **Steward** switch in **Settings → Roadmap**.
+
+After a turn ends on an attached thread, and once a day, it reads the turns since its last look and
+can:
+
+- Tick a criterion when a turn shows concrete evidence, such as a commit or a passing test. The tick
+  is labelled **Steward** on the card, with the thread, the turn number and the evidence.
+- Add an **Unsure** note when a turn suggests a criterion is met but the evidence is partial. These
+  notes put the item under **Waiting on you** on Today.
+- Add a **Drift** note when the thread works on something the item does not describe, and a short
+  progress note.
+
+It never unticks a criterion, changes an item's fields, priority, due date or state, or marks
+anything done. If you untick a criterion, the steward ticks it again only for a turn that ended after
+you unticked it.
+
+Each environment runs its own steward over the threads it owns, on the model you choose in
+**Settings → Roadmap → Steward model** on that environment. A small model is enough. Off uses the
+text generation model. With a Claude model, its calls show in that environment's **Usage**.
 
 Agents on threads that run on another environment reach the roadmap once that environment is
 linked to the roadmap home. See [Link a second environment](#link-a-second-environment).

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
@@ -67,6 +67,50 @@ const fullItem = {
     { id: "h1", at, hours: 1.5, actor: { _tag: "user" }, note: "Pairing" },
     { id: "h2", at, hours: 0.25, actor: { _tag: "agent", thread, threadTitle: "x" }, note: null },
   ],
+  progressNotes: [
+    {
+      id: "n1",
+      at,
+      actor: { _tag: "agent", thread, threadTitle: "x" },
+      kind: "progress",
+      text: "Tokens wired into the build",
+      criterionId: "c1",
+    },
+    {
+      id: "n2",
+      at,
+      actor: { _tag: "steward", environmentId: "env-home" },
+      kind: "unsure",
+      text: "No test covers the installer art yet",
+      criterionId: null,
+    },
+  ],
+  source: {
+    host: "github.com",
+    owner: "acme",
+    repo: "web",
+    number: 123,
+    nodeId: "I_kwDOA",
+    url: "https://github.com/acme/web/issues/123",
+    writable: true,
+    remoteUpdatedAt: "2026-10-18T08:00:00Z",
+    syncedAt: at,
+    base: {
+      title: "Build-time brand layer",
+      closed: false,
+      parentNodeId: null,
+      blockedByNodeIds: [],
+    },
+    localChangedAt: { title: at, closed: null, parent: null, blockedBy: null },
+  },
+  pullRequests: [
+    {
+      host: "github.com",
+      repository: "acme/web",
+      number: 7,
+      url: "https://github.com/acme/web/pull/7",
+    },
+  ],
 };
 
 const sprint = {
@@ -103,6 +147,30 @@ describe("RoadmapWorkItem", () => {
     const entry = { id: "h", at, hours: 0, actor: { _tag: "user" }, note: null };
     expect(() => decodeItem({ ...fullItem, hours: [entry] })).toThrow();
   });
+
+  it("decodes an item stored before notes with no notes", () => {
+    const { progressNotes: _, ...withoutNotes } = fullItem;
+    expect(decodeItem(withoutNotes).progressNotes).toEqual([]);
+  });
+
+  it("decodes an item stored before GitHub sync with no source and no pull requests", () => {
+    const { source: _, pullRequests: __, ...withoutGitHub } = fullItem;
+    const decoded = decodeItem(withoutGitHub);
+    expect(decoded.source).toBeNull();
+    expect(decoded.pullRequests).toEqual([]);
+  });
+
+  it("rejects a source with no issue number or a pull request link with no url", () => {
+    expect(() => decodeItem({ ...fullItem, source: { ...fullItem.source, number: 0 } })).toThrow();
+    const link = fullItem.pullRequests[0]!;
+    expect(() => decodeItem({ ...fullItem, pullRequests: [{ ...link, url: "" }] })).toThrow();
+  });
+
+  it("rejects a note of an unknown kind or with blank text", () => {
+    const note = fullItem.progressNotes[0]!;
+    expect(() => decodeItem({ ...fullItem, progressNotes: [{ ...note, kind: "idea" }] })).toThrow();
+    expect(() => decodeItem({ ...fullItem, progressNotes: [{ ...note, text: "  " }] })).toThrow();
+  });
 });
 
 describe("RoadmapSprint", () => {
@@ -115,11 +183,12 @@ describe("RoadmapSprint", () => {
 describe("RoadmapAreaSettings", () => {
   const decode = decodeAreaSettings;
 
-  it("defaults to points, Monday to Friday, and five days to go cold", () => {
+  it("defaults to points, Monday to Friday, five days to go cold, and no steward", () => {
     expect(decode({})).toEqual({
       unit: "points",
       workingWeekdays: [1, 2, 3, 4, 5],
       goingColdDays: 5,
+      stewardEnabled: false,
     });
   });
 
@@ -226,6 +295,42 @@ describe("RoadmapCommand", () => {
     { type: "roadmap.hours.log", itemId: "item-1", entryId: "h1", hours: 2 },
     { type: "roadmap.hours.log", itemId: "item-1", entryId: "h1", hours: 2, note: "Review" },
     { type: "roadmap.hours.remove", itemId: "item-1", entryId: "h1" },
+    { type: "roadmap.note.add", itemId: "item-1", noteId: "n1", kind: "progress", text: "Done" },
+    {
+      type: "roadmap.note.add",
+      itemId: "item-1",
+      noteId: "n1",
+      kind: "drift",
+      text: "Scope grew",
+      criterionId: "c1",
+    },
+    { type: "roadmap.note.remove", itemId: "item-1", noteId: "n1" },
+    {
+      type: "roadmap.source.import",
+      itemId: "item-1",
+      itemType: "story",
+      title: "Imported",
+      parentId: null,
+      area: "work",
+      state: "backlog",
+      source: fullItem.source,
+    },
+    {
+      type: "roadmap.source.sync",
+      itemId: "item-1",
+      writable: false,
+      remoteUpdatedAt: "2026-10-18T10:00:00Z",
+      base: fullItem.source.base,
+    },
+    { type: "roadmap.source.unlink", itemId: "item-1" },
+    { type: "roadmap.pull-request.link", itemId: "item-1", pullRequest: fullItem.pullRequests[0] },
+    {
+      type: "roadmap.pull-request.unlink",
+      itemId: "item-1",
+      host: "github.com",
+      repository: "acme/web",
+      number: 7,
+    },
     {
       type: "roadmap.sprint.create",
       sprintId: "sprint-1",
@@ -248,6 +353,12 @@ describe("RoadmapCommand", () => {
     expect(() =>
       decodeCommand({ ...base, type: "roadmap.hours.log", entryId: "h1", hours: -1 } as never),
     ).toThrow();
+  });
+
+  it("rejects a note of an unknown kind or with blank text", () => {
+    const base = { commandId: "cmd-6", type: "roadmap.note.add", itemId: "item-1", noteId: "n1" };
+    expect(() => decodeCommand({ ...base, kind: "idea", text: "x" } as never)).toThrow();
+    expect(() => decodeCommand({ ...base, kind: "progress", text: " " } as never)).toThrow();
   });
 });
 
@@ -288,9 +399,46 @@ describe("RoadmapEvent", () => {
       { ...base, type: "roadmap.item.unsnoozed", payload: {} },
       { ...base, type: "roadmap.hours.logged", payload: { entry: fullItem.hours[0] } },
       { ...base, type: "roadmap.hours.removed", payload: { entryId: "h1" } },
+      { ...base, type: "roadmap.note.added", payload: { note: fullItem.progressNotes[1] } },
+      { ...base, type: "roadmap.note.removed", payload: { noteId: "n1" } },
+      {
+        ...base,
+        type: "roadmap.source.synced",
+        payload: {
+          writable: true,
+          remoteUpdatedAt: "2026-10-18T10:00:00Z",
+          syncedAt: at,
+          base: fullItem.source.base,
+        },
+      },
+      { ...base, type: "roadmap.source.unlinked", payload: {} },
+      {
+        ...base,
+        type: "roadmap.pull-request.linked",
+        payload: { pullRequest: fullItem.pullRequests[0] },
+      },
+      {
+        ...base,
+        type: "roadmap.pull-request.unlinked",
+        payload: { host: "github.com", repository: "acme/web", number: 7 },
+      },
     ]) {
       expect(decodeEvent(event as never).type).toBe(event.type);
     }
+  });
+
+  it("decodes a created event stored before notes, giving the item no notes", () => {
+    const { progressNotes: _, ...withoutNotes } = fullItem;
+    const decoded = decodeEvent({
+      type: "roadmap.item.created",
+      eventId: "event-4",
+      itemId: "item-1",
+      actor: { _tag: "user" },
+      occurredAt: at,
+      payload: { item: withoutNotes },
+    } as never);
+    assert(decoded.type === "roadmap.item.created");
+    expect(decoded.payload.item.progressNotes).toEqual([]);
   });
 });
 
@@ -305,7 +453,7 @@ describe("RoadmapDispatchResult", () => {
 
 describe("RoadmapRejectionCode", () => {
   it("covers the pin limit, actor refusals and invalid requests", () => {
-    for (const code of ["pin_limit", "forbidden_actor", "invalid_request"]) {
+    for (const code of ["pin_limit", "forbidden_actor", "invalid_request", "read_only_source"]) {
       expect(RoadmapRejectionCode.literals).toContain(code);
     }
   });

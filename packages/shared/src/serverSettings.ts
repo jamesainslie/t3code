@@ -180,6 +180,26 @@ export function resolveReviewGuideModelSelection(
   return resolveSourceControlWriterModelSelection(settings, providers, projectId);
 }
 
+// Fork: roadmap. The steward runs per environment, outside any project.
+export function resolveRoadmapStewardModelSelection(
+  settings: ServerSettings,
+  providers: ReadonlyArray<ServerProvider> | undefined,
+): ModelSelection {
+  const selection = settings.roadmap.stewardModelSelection;
+  if (selection && resolveProjectProviderInstanceEnabled(settings, null, selection.instanceId)) {
+    const provider = providers?.find((candidate) => candidate.instanceId === selection.instanceId);
+    if (
+      providers === undefined ||
+      (provider?.enabled === true &&
+        isProviderAvailable(provider) &&
+        isProviderTextGenerationCapable(provider))
+    ) {
+      return selection;
+    }
+  }
+  return settings.textGenerationModelSelection;
+}
+
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;
@@ -472,8 +492,13 @@ export function applyServerSettingsPatch(
     };
   }
   const next = deepMerge(current, patchForMerge);
+  // Fork: roadmap. A model selection is replaced whole; deepMerge would keep stale options.
+  const stewardModelSelectionPatch = patch.roadmap?.stewardModelSelection;
   const nextWithReplacementsBase = {
     ...next,
+    ...(stewardModelSelectionPatch === undefined
+      ? {}
+      : { roadmap: { ...next.roadmap, stewardModelSelection: stewardModelSelectionPatch } }),
     favorites,
     providerModelPreferences: nextModelPreferences,
     ...(worktreeCleanupPatch === undefined

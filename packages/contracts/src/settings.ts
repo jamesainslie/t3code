@@ -47,7 +47,7 @@ import {
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
 // Fork: roadmap.
-import { RoadmapAreaSettingsPatch, RoadmapAreasSettings } from "./roadmap.ts";
+import { RoadmapArea, RoadmapAreaSettingsPatch, RoadmapAreasSettings } from "./roadmap.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1290,6 +1290,21 @@ export const RoadmapSettings = Schema.Struct({
   areas: RoadmapAreasSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(RoadmapAreasSettings)({}))),
   ),
+  /**
+   * The model this environment's steward runs on. Each environment keeps its
+   * own, since provider logins differ per machine; null uses the text
+   * generation model.
+   */
+  stewardModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /**
+   * The area an imported issue lands in, by the `gh` login its repository
+   * routes to. Without a match the importer's chosen area applies.
+   */
+  areaByLogin: Schema.Record(TrimmedNonEmptyString, RoadmapArea).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type RoadmapSettings = typeof RoadmapSettings.Type;
 
@@ -1653,6 +1668,7 @@ export const ServerSettingsPatch = Schema.Struct({
   roadmap: Schema.optionalKey(
     Schema.Struct({
       homeEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)),
+      stewardModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
       areas: Schema.optionalKey(
         Schema.Struct({
           work: Schema.optionalKey(RoadmapAreaSettingsPatch),

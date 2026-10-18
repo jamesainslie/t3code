@@ -31,6 +31,7 @@ import { useRoadmapAreaSettings } from "~/state/roadmap";
 import {
   RoadmapBlockedBadge,
   RoadmapForecastBadge,
+  RoadmapIssueChip,
   RoadmapNeedsReviewBadge,
   RoadmapPriorityChip,
   RoadmapTypeTag,
@@ -222,6 +223,7 @@ const BoardCard = memo(function BoardCard({
       <div className="flex items-center gap-1.5">
         <RoadmapTypeTag type={item.type} />
         <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
+        {item.source !== null ? <RoadmapIssueChip source={item.source} /> : null}
         <span className="ms-auto flex items-center gap-1">
           {forecast !== null ? <RoadmapForecastBadge forecast={forecast} /> : null}
           {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}

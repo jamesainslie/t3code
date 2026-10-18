@@ -442,6 +442,8 @@ const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set([
   "providerHealthRefreshInterval",
   "sourceControlWriterModelSelection",
   "reviewGuideModelSelection",
+  // Fork: roadmap.
+  "stewardModelSelection",
   "textGenerationModelSelection",
   "pullRequestMergeMethod",
   "gitHubAccountRules",

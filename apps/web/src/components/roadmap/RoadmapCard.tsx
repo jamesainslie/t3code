@@ -153,6 +153,7 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
             sprints={live.data?.sprints ?? EMPTY_SPRINTS}
             areaSettings={areaSettings}
             canChange={availability.canChange}
+            pullRequestEnvironmentId={thread.environmentId}
             onClose={closeCard}
             onOpenItem={actions.openInRoadmap}
             onAttach={() => openRoadmapAttachPicker(threadRef)}

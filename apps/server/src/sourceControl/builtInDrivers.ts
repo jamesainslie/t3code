@@ -10,6 +10,8 @@ import * as GitCafeApi from "@lathe/source-control-gitcafe/server/GitCafeApi";
 import * as GitCafeCredentials from "@lathe/source-control-gitcafe/server/GitCafeCredentials";
 import * as GitCafeDriver from "@lathe/source-control-gitcafe/server/driver";
 import * as GitHubRest from "@lathe/source-control-github/server/GitHubRest";
+// Fork: roadmap.
+import * as GitHubIssueApi from "@lathe/source-control-github/server/GitHubIssueApi";
 import * as GitHubPullRequestApi from "@lathe/source-control-github/server/GitHubPullRequestApi";
 import * as GitHubDriver from "@lathe/source-control-github/server/driver";
 import * as GitLabCli from "@lathe/source-control-gitlab/server/GitLabCli";
@@ -39,7 +41,10 @@ export const BUILT_IN_SOURCE_CONTROL_DRIVERS: ReadonlyArray<
 export const layer = Layer.mergeAll(
   // `GitHubRest.layerWithDependencies` carries the quota reserve and rate-limit pause every GitHub
   // reader shares, so the server builds it once, here.
-  GitHubPullRequestApi.layer.pipe(Layer.provideMerge(GitHubRest.layerWithDependencies)),
+  // Fork: roadmap. Issue reads share the pull request API's quota and rate-limit pause.
+  Layer.merge(GitHubPullRequestApi.layer, GitHubIssueApi.layer).pipe(
+    Layer.provideMerge(GitHubRest.layerWithDependencies),
+  ),
   AzureDevOpsPullRequestCli.layer.pipe(Layer.provideMerge(AzureDevOpsCli.layer)),
   BitbucketPullRequestApi.layer.pipe(Layer.provideMerge(BitbucketApi.layer)),
   ForgejoCli.layer,

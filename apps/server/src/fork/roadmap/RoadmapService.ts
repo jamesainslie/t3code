@@ -38,7 +38,7 @@ import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { planRoadmapCommand } from "./RoadmapCommands.ts";
+import { planRoadmapCommand, type RoadmapItemRecord } from "./RoadmapCommands.ts";
 import { renderRoadmapContext } from "./RoadmapContextBlock.ts";
 import * as RoadmapLink from "./RoadmapLink.ts";
 import * as RoadmapLinkOutbox from "./RoadmapLinkOutbox.ts";
@@ -89,6 +89,11 @@ export class RoadmapService extends Context.Service<
     readonly list: () => Effect.Effect<ReadonlyArray<RoadmapWorkItem>, RoadmapError>;
     /** Sprints, ordered by start date. */
     readonly listSprints: () => Effect.Effect<ReadonlyArray<RoadmapSprint>, RoadmapError>;
+    /**
+     * Every item in this environment's own tables, deleted ones included, never
+     * forwarded. GitHub sync, which runs on the home only, reads it.
+     */
+    readonly localRecords: () => Effect.Effect<ReadonlyArray<RoadmapItemRecord>, RoadmapError>;
     /** A live item; deleted ones read as none. */
     readonly get: (
       itemId: RoadmapItemId,
@@ -182,6 +187,22 @@ const make = Effect.gen(function* () {
                 yield* store.lastDeletion(command.itemId).pipe(Effect.mapError(readFailed)),
               )
             : undefined;
+        // Fork: roadmap. Only the steward's re-tick rule needs the untick time.
+        const criterionUntickedAt =
+          command.type === "roadmap.criterion.tick" && actor._tag === "steward"
+            ? yield* store.history(command.itemId).pipe(
+                Effect.map(
+                  (events) =>
+                    events.findLast(
+                      ({ event }) =>
+                        event.type === "roadmap.criterion.ticked" &&
+                        event.payload.criterionId === command.criterionId &&
+                        !event.payload.ticked,
+                    )?.event.occurredAt,
+                ),
+                Effect.mapError(readFailed),
+              )
+            : undefined;
         const now = yield* DateTime.now;
         const eventId = yield* idAllocator.allocate
           .event({ commandId: command.commandId })
@@ -193,6 +214,7 @@ const make = Effect.gen(function* () {
             items: new Map(records.map((record) => [record.item.id, record])),
             sprints: new Map(sprints.map((sprint) => [sprint.id, sprint])),
             ...(lastDeletion === undefined ? {} : { lastDeletion }),
+            ...(criterionUntickedAt === undefined ? {} : { criterionUntickedAt }),
           },
           eventId,
           now,
@@ -403,6 +425,7 @@ const make = Effect.gen(function* () {
     configureLink,
     list: () => snapshot().pipe(Effect.map((current) => current.items)),
     listSprints: () => snapshot().pipe(Effect.map((current) => current.sprints)),
+    localRecords: () => store.list({ includeDeleted: true }).pipe(Effect.mapError(readFailed)),
     get: (itemId) => item(itemId).pipe(Effect.map((read) => Option.fromNullOr(read.item))),
     forThread,
     snapshot,

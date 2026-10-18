@@ -65,6 +65,9 @@ import * as RoadmapTurnContext from "./fork/roadmap/RoadmapTurnContext.ts";
 import * as RoadmapHttp from "./fork/roadmap/http.ts";
 import * as RoadmapLink from "./fork/roadmap/RoadmapLink.ts";
 import * as RoadmapLinkOutbox from "./fork/roadmap/RoadmapLinkOutbox.ts";
+import * as RoadmapSteward from "./fork/roadmap/RoadmapSteward.ts";
+import * as Scheduler from "./scheduling/Scheduler.ts";
+import * as RoadmapGitHubSync from "./fork/roadmap/RoadmapGitHubSync.ts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
@@ -601,6 +604,14 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     ),
   ),
   layerThreadPullRequestWorker,
+  // Fork: roadmap. GitHub sync for issue-backed work items. It starts on every
+  // environment and each sweep checks that this one is the roadmap home.
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const service = yield* RoadmapGitHubSync.RoadmapGitHubSync;
+      yield* service.start();
+    }),
+  ).pipe(Layer.provideMerge(RoadmapGitHubSync.layer.pipe(Layer.provide(layerRoadmapService)))),
   Layer.effectDiscard(
     Effect.gen(function* () {
       const service = yield* PullRequestSyncReactor.PullRequestSyncReactor;
@@ -628,6 +639,9 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
   ProviderUsageLimitsIngestion.layer,
+  // Fork: roadmap. After turns end on attached threads, and daily, the steward
+  // relates them to their item's criteria.
+  RoadmapSteward.workerLive.pipe(Layer.provide(Scheduler.layer)),
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),

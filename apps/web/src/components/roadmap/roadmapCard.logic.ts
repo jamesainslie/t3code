@@ -4,12 +4,16 @@
 import type {
   IsoDate,
   RoadmapActor,
+  RoadmapIssueSource,
   RoadmapItemId,
+  RoadmapNoteKind,
+  RoadmapPullRequestLink,
   RoadmapThreadRef,
   RoadmapUnit,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
+import { parseGitHubIssueUrl } from "@lathe/shared/changeRequestUrl";
 import { effectiveArea } from "@lathe/shared/roadmap";
 import {
   burned,
@@ -147,6 +151,72 @@ export function roadmapActorLabel(actor: RoadmapActor): string {
     case "github":
       return "GitHub";
   }
+}
+
+export function roadmapIssueRef(source: RoadmapIssueSource): string {
+  return `${source.owner}/${source.repo}#${source.number}`;
+}
+
+/** Why the synced fields will not save, for an issue this environment cannot write. */
+export function roadmapReadOnlyHint(item: RoadmapWorkItem): string | null {
+  if (item.source === null || item.source.writable) return null;
+  return `Title, done, parent and blockers follow ${roadmapIssueRef(item.source)}, which this environment's GitHub account cannot change. Edit them on GitHub.`;
+}
+
+/** Most pull requests live beside the item's issue, so the repository shows only when it differs. */
+export function roadmapPullRequestLabel(
+  link: RoadmapPullRequestLink,
+  source: RoadmapIssueSource | null,
+): string {
+  const sameRepository =
+    source !== null &&
+    link.repository.toLowerCase() === `${source.owner}/${source.repo}`.toLowerCase();
+  return sameRepository ? `#${link.number}` : `${link.repository}#${link.number}`;
+}
+
+/** Matches the server's check, so the dialog says what is wrong before asking the home. */
+export function roadmapImportUrlError(url: string): string | null {
+  if (url.trim().length === 0) return "Paste the issue's URL.";
+  return parseGitHubIssueUrl(url.trim()) === null
+    ? "That is not a GitHub issue URL, such as https://github.com/owner/repo/issues/12."
+    : null;
+}
+
+/** The card shows the latest few; the item keeps up to `ROADMAP_NOTE_LIMIT`. */
+export const ROADMAP_CARD_NOTE_COUNT = 5;
+
+const NOTE_KIND_LABELS: Readonly<Record<RoadmapNoteKind, string | null>> = {
+  progress: null,
+  drift: "Drift",
+  unsure: "Unsure",
+  sync: "Sync",
+};
+
+export interface RoadmapCardNote {
+  readonly id: string;
+  readonly at: string;
+  readonly actor: string;
+  /** Null for plain progress, the kind most notes are. */
+  readonly kind: string | null;
+  readonly text: string;
+  /** The criterion's text, or null when the note names none or one since removed. */
+  readonly criterion: string | null;
+}
+
+/** The latest notes, newest first. */
+export function roadmapCardNotes(item: RoadmapWorkItem): ReadonlyArray<RoadmapCardNote> {
+  const criteria = new Map(item.criteria.map((criterion) => [criterion.id, criterion.text]));
+  return item.progressNotes
+    .slice(-ROADMAP_CARD_NOTE_COUNT)
+    .toReversed()
+    .map((note) => ({
+      id: note.id,
+      at: note.at,
+      actor: roadmapActorLabel(note.actor),
+      kind: NOTE_KIND_LABELS[note.kind],
+      text: note.text,
+      criterion: note.criterionId === null ? null : (criteria.get(note.criterionId) ?? null),
+    }));
 }
 
 /**
