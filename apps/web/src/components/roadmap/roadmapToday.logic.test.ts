@@ -334,6 +334,14 @@ describe("roadmapSnoozeChoices", () => {
     ]);
   });
 
+  it("offers tomorrow, the coming Monday and a week out from a Wednesday", () => {
+    expect(roadmapSnoozeChoices("2026-10-21").map((choice) => choice.until)).toEqual([
+      "2026-10-22",
+      "2026-10-26",
+      "2026-10-28",
+    ]);
+  });
+
   it("lands next Monday on the coming Monday from a Friday and a Sunday", () => {
     const nextMonday = (today: string) =>
       roadmapSnoozeChoices(today).find((choice) => choice.id === "next-monday")?.until;

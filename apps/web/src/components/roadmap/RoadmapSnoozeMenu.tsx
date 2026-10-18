@@ -22,6 +22,8 @@ export interface RoadmapSnoozeMenuProps {
   /** The user's local date; every choice lands after it. */
   readonly today: IsoDate;
   readonly onSnooze: (until: IsoDate) => void;
+  /** Adds an Unsnooze entry; pass it only while the item is snoozed. */
+  readonly onUnsnooze?: () => void;
   /** The trigger element, such as `<Button size="xs" variant="ghost-muted" />`. */
   readonly render: ReactElement;
   /** The trigger's content. */
@@ -35,6 +37,7 @@ export interface RoadmapSnoozeMenuProps {
 export function RoadmapSnoozeMenu({
   today,
   onSnooze,
+  onUnsnooze,
   render,
   children,
   disabled = false,
@@ -71,6 +74,7 @@ export function RoadmapSnoozeMenu({
           ))}
           <MenuSeparator />
           <MenuItem onClick={() => setPicker(true)}>Pick a date…</MenuItem>
+          {onUnsnooze === undefined ? null : <MenuItem onClick={onUnsnooze}>Unsnooze</MenuItem>}
         </MenuPopup>
       </Menu>
       <Popover open={picking} onOpenChange={setPicker}>

@@ -16,7 +16,7 @@ import type {
 } from "@lathe/contracts";
 import { blockedState, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
-import { addDays, isSnoozed } from "@lathe/shared/roadmapCalc";
+import { isSnoozed } from "@lathe/shared/roadmapCalc";
 import {
   AlarmClockIcon,
   CalendarIcon,
@@ -65,7 +65,6 @@ import {
   parentPath,
   roadmapActorLabel,
   roadmapCardSlots,
-  snoozeChoices,
   type RoadmapCardView,
 } from "./roadmapCard.logic";
 import {
@@ -77,6 +76,7 @@ import {
   ROADMAP_FORECAST_TONE,
 } from "./RoadmapChips";
 import { formatRoadmapDate } from "./roadmapPage.logic";
+import { RoadmapSnoozeMenu } from "./RoadmapSnoozeMenu";
 import { sprintOptionsFor } from "./roadmapSprints.logic";
 import { newRoadmapCommandId } from "./useRoadmapDispatch";
 
@@ -290,7 +290,6 @@ function PinButton(props: {
   );
 }
 
-/** Kept to the card until the shared snooze menu lands, then replaced by it. */
 function SnoozeButton(props: {
   readonly item: RoadmapWorkItem;
   readonly today: IsoDate;
@@ -298,94 +297,44 @@ function SnoozeButton(props: {
   readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
 }) {
   const { item, today } = props;
-  const [open, setOpen] = useState(false);
-  const [picking, setPicking] = useState(false);
   const snoozed = isSnoozed(item, today);
-  const close = () => {
-    setOpen(false);
-    setPicking(false);
-  };
-  const snooze = (until: IsoDate) => {
-    close();
-    void props.onCommand(
-      { type: "roadmap.item.snooze", commandId: newRoadmapCommandId(), itemId: item.id, until },
-      "Could not snooze",
-    );
-  };
-  const unsnooze = () => {
-    close();
-    void props.onCommand(
-      { type: "roadmap.item.unsnooze", commandId: newRoadmapCommandId(), itemId: item.id },
-      "Could not unsnooze",
-    );
-  };
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setOpen(true);
-        else close();
-      }}
+    <RoadmapSnoozeMenu
+      today={today}
+      disabled={!props.canChange || (!snoozed && item.state === "done")}
+      onSnooze={(until) =>
+        void props.onCommand(
+          { type: "roadmap.item.snooze", commandId: newRoadmapCommandId(), itemId: item.id, until },
+          "Could not snooze",
+        )
+      }
+      {...(snoozed
+        ? {
+            onUnsnooze: () =>
+              void props.onCommand(
+                {
+                  type: "roadmap.item.unsnooze",
+                  commandId: newRoadmapCommandId(),
+                  itemId: item.id,
+                },
+                "Could not unsnooze",
+              ),
+          }
+        : {})}
+      render={
+        <Button
+          size="icon-micro"
+          variant="ghost-muted"
+          aria-label={
+            snoozed && item.snoozedUntil !== null
+              ? `Snoozed until ${formatRoadmapDate(item.snoozedUntil, today)}`
+              : "Snooze"
+          }
+        />
+      }
     >
-      <PopoverTrigger
-        disabled={!props.canChange || (!snoozed && item.state === "done")}
-        render={
-          <Button
-            size="icon-micro"
-            variant="ghost-muted"
-            aria-label={
-              snoozed && item.snoozedUntil !== null
-                ? `Snoozed until ${formatRoadmapDate(item.snoozedUntil, today)}`
-                : "Snooze"
-            }
-          />
-        }
-      >
-        <AlarmClockIcon />
-      </PopoverTrigger>
-      <PopoverPopup align="end" aria-label="Snooze until">
-        {picking ? (
-          <Calendar
-            mode="single"
-            defaultMonth={isoDateToLocal(addDays(today, 1))}
-            disabled={{ before: isoDateToLocal(addDays(today, 1)) }}
-            onSelect={(next: Date | undefined) => {
-              if (next !== undefined) snooze(localIsoDate(next));
-            }}
-          />
-        ) : (
-          <div className="flex min-w-40 flex-col">
-            {snoozeChoices(today).map((choice) => (
-              <Button
-                key={choice.label}
-                size="xs"
-                variant="ghost"
-                className="justify-between"
-                onClick={() => snooze(choice.until)}
-              >
-                {choice.label}
-                <span className="text-muted-foreground">
-                  {formatRoadmapDate(choice.until, today)}
-                </span>
-              </Button>
-            ))}
-            <Button
-              size="xs"
-              variant="ghost"
-              className="justify-start"
-              onClick={() => setPicking(true)}
-            >
-              Pick a date
-            </Button>
-            {snoozed ? (
-              <Button size="xs" variant="ghost" className="justify-start" onClick={unsnooze}>
-                Unsnooze
-              </Button>
-            ) : null}
-          </div>
-        )}
-      </PopoverPopup>
-    </Popover>
+      <AlarmClockIcon />
+    </RoadmapSnoozeMenu>
   );
 }
 

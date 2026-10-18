@@ -17,7 +17,6 @@ import {
   roadmapCardOpen,
   roadmapCardSlots,
   roadmapCardView,
-  snoozeChoices,
 } from "./roadmapCard.logic";
 
 const thread = { environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread") };
@@ -197,22 +196,6 @@ describe("card formatting", () => {
     expect(
       cardForecastText({ status: "on-track", projected: "2027-01-04", slackDays: 4 }, "2026-10-19"),
     ).toBe("On track, Mon Jan 4, 2027");
-  });
-});
-
-describe("snoozeChoices", () => {
-  it("offers tomorrow, the next Monday and a week out", () => {
-    // 2026-10-21 is a Wednesday.
-    expect(snoozeChoices("2026-10-21")).toEqual([
-      { label: "Tomorrow", until: "2026-10-22" },
-      { label: "Next Monday", until: "2026-10-26" },
-      { label: "In a week", until: "2026-10-28" },
-    ]);
-  });
-
-  it("takes next Monday to mean the coming one, a week on from a Monday", () => {
-    expect(snoozeChoices("2026-10-19")[1]).toEqual({ label: "Next Monday", until: "2026-10-26" });
-    expect(snoozeChoices("2026-10-25")[1]).toEqual({ label: "Next Monday", until: "2026-10-26" });
   });
 });
 

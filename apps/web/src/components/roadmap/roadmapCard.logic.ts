@@ -12,7 +12,6 @@ import type {
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
 import { effectiveArea } from "@lathe/shared/roadmap";
 import {
-  addDays,
   burned,
   forecast,
   type RoadmapForecast,
@@ -109,23 +108,6 @@ export function cardForecastText(value: RoadmapForecast, today: IsoDate): string
   const [year, month, day] = value.projected.split("-").map(Number);
   const weekday = WEEKDAY_SHORT[new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay()]!;
   return `${label}, ${weekday} ${formatRoadmapDate(value.projected, today)}`;
-}
-
-export interface RoadmapSnoozeChoice {
-  readonly label: string;
-  readonly until: IsoDate;
-}
-
-/** Snooze is to a date after today; "Next Monday" from a Monday is a week on. */
-export function snoozeChoices(today: IsoDate): ReadonlyArray<RoadmapSnoozeChoice> {
-  const [year, month, day] = today.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay();
-  const toMonday = (8 - weekday) % 7 || 7;
-  return [
-    { label: "Tomorrow", until: addDays(today, 1) },
-    { label: "Next Monday", until: addDays(today, toMonday) },
-    { label: "In a week", until: addDays(today, 7) },
-  ];
 }
 
 /** The item's ancestors from the root down; stops at a missing parent or a corrupt loop. */
