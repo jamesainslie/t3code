@@ -52,6 +52,17 @@ Terms whose meaning matters across Lathe. Architecture and lifecycle constraints
 | Pull request sync    | The worker that refreshes each distinct linked review once per cadence and discovers native stack layers. Explicit refreshes and failed stack reads trigger another read.                |
 | Current pull request | The link used by single-review controls and older clients. Open work takes precedence; a completed single chain points at its top layer. Unrelated terminal links use the latest update. |
 
+## Roadmap
+
+| Term                | Meaning                                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Roadmap             | The tree of planned work and its screen. One roadmap covers every environment.                                                            |
+| Roadmap home        | The one environment whose database holds the roadmap. See [roadmap](./roadmap.md).                                                        |
+| Work item           | A node in the roadmap tree. Never called a task, which delegated and scheduled tasks use, or an issue, which always means a GitHub issue. |
+| Item type           | Objective, Key result, Initiative, Epic, Feature, Story, Bug, or Support ticket. The type limits which items can be its parent.           |
+| Acceptance criteria | A work item's ordered checklist. Distinct from the provider goal.                                                                         |
+| Area                | Work or Personal. An item without one inherits its parent's, and a root without one counts as Personal.                                   |
+
 ## Composer context
 
 | Term                 | Meaning                                                                                                                                |

@@ -1,6 +1,6 @@
 # Fork schema and data
 
-This fork adds thread fields, tables, and sync history that upstream does not know. Each lives
+This fork adds thread fields, tables, RPCs, and sync history that upstream does not know. Each lives
 where an upstream merge cannot silently drop or mask it.
 
 ## Migrations
@@ -32,6 +32,15 @@ Upstream's importer copies `state.sqlite` to `statev2.sqlite` and reads upstream
 `ForkLegacyImport.aroundLegacyImport` wraps its shell import: it rewrites the fork's v1 thread
 references to upstream's record shape first, because the importer decodes message context strictly,
 then carries the fork's thread columns onto the v2 threads. Both are idempotent.
+
+## WebSocket RPCs
+
+Add fork RPCs to `WsForkRpcGroup` in
+[`packages/contracts/src/rpc.ts`](../../packages/contracts/src/rpc.ts), not to `WsCoreRpcGroup`.
+The core group sits at TypeScript's instantiation depth limit, and one more RPC fails the server's
+handler layer with TS2589. `WsRpcGroup` merges the two groups, and the RPC server and clients use the
+merged group. `ws.ts` builds the fork group's handlers in a separate layer, so they cost the core
+handler layer nothing.
 
 ## Sync
 
