@@ -7,6 +7,7 @@ import type { RpcSession } from "../rpc/session.ts";
 import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
@@ -98,6 +99,36 @@ describe("command permissions", () => {
         expect((yield* roadmap.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
           "EnvironmentAuthorizationError",
         );
+      }),
+    ),
+  );
+
+  it.effect("requires the destination access grant to mint or hand over a roadmap link", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const mint = createCommandPermissions(runtime, WS_METHODS.roadmapLinkMint);
+        const configure = createCommandPermissions(runtime, WS_METHODS.roadmapLinkConfigure);
+        // Operating the environment is not enough to change who reaches its roadmap.
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        for (const command of [mint, configure]) {
+          expect(registry.get(command.permissionAtom(env))).toBe(false);
+          expect((yield* command.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+        }
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthAccessWriteScope],
+            permissions: [AuthAccessWriteScope],
+          }),
+        );
+        for (const command of [mint, configure]) {
+          expect(registry.get(command.permissionAtom(env))).toBe(true);
+          yield* command.authorize(registry, env);
+        }
       }),
     ),
   );

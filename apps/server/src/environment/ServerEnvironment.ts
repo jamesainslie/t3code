@@ -262,6 +262,8 @@ export const make = Effect.gen(function* () {
       threadDocumentComments: true,
       // Fork: roadmap.
       roadmap: true,
+      // Fork: roadmap.
+      roadmapLink: true,
       serverResolvedCommandContext: true,
       environmentIcon: true,
       projectCloneTracking: true,

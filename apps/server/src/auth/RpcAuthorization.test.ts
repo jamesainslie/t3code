@@ -1,4 +1,5 @@
 import {
+  AuthAccessWriteScope,
   AuthEnvironmentMaintainScope,
   AuthDiagnosticsReadScope,
   AuthFilesystemReadScope,
@@ -41,6 +42,16 @@ describe("RPC authorization scopes", () => {
       AuthOrchestrationOperateScope,
     );
     expect(requiredScopeForRpcMethod(WS_METHODS.roadmapSubscribe)).toBe(AuthOrchestrationReadScope);
+  });
+
+  // Fork: roadmap. A link credential reaches another environment's roadmap,
+  // so making one or handing one over is access management.
+  it("requires access management to link to the roadmap home or mint a link", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.roadmapLinkConfigure)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.roadmapLinkMint)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.roadmapLinkStatus)).toBe(
+      AuthOrchestrationReadScope,
+    );
   });
 
   it("requires operate access to stop a workflow", () => {

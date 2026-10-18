@@ -145,6 +145,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadDocumentComments: Schema.optionalKey(Schema.Boolean),
   /** Fork: roadmap. Server owns a roadmap and serves roadmapSubscribe and roadmapDispatch. */
   roadmap: Schema.optionalKey(Schema.Boolean),
+  /** Fork: roadmap. Server can link to a roadmap home on another environment, and mint links as one. */
+  roadmapLink: Schema.optionalKey(Schema.Boolean),
   threadPullRequestWatch: Schema.optionalKey(Schema.Boolean),
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   serverSelfUpdate: Schema.optionalKey(ServerSelfUpdateCapability),

@@ -81,10 +81,10 @@ export class RoadmapService extends Context.Service<
       actor: RoadmapActor,
     ) => Effect.Effect<RoadmapSubmitResult, RoadmapError>;
     readonly linkStatus: Effect.Effect<RoadmapLinkStatus, RoadmapError>;
-    /** Links this environment to the home, or unlinks it with null. */
+    /** Links this environment to the home, or unlinks it with null; answers the new status. */
     readonly configureLink: (
       link: RoadmapLinkConfigureInput["link"],
-    ) => Effect.Effect<void, RoadmapLinkError>;
+    ) => Effect.Effect<RoadmapLinkStatus, RoadmapLinkError | RoadmapError>;
     /** Live items, ordered by parent then sibling order. */
     readonly list: () => Effect.Effect<ReadonlyArray<RoadmapWorkItem>, RoadmapError>;
     /** Sprints, ordered by start date. */
@@ -392,7 +392,7 @@ const make = Effect.gen(function* () {
 
   const configureLink: RoadmapService["Service"]["configureLink"] = (next) =>
     // The worker idles while unlinked; a new link may have writes waiting.
-    link.configure(next).pipe(Effect.andThen(outbox.wake));
+    link.configure(next).pipe(Effect.andThen(outbox.wake), Effect.andThen(linkStatus));
 
   return RoadmapService.of({
     isHome,

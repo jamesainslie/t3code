@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { GitPreparePullRequestThreadInput } from "./git.ts";
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
@@ -46,8 +47,11 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
-  // Fork: roadmap.
+  // Fork: roadmap. A link credential reaches another environment's roadmap,
+  // so minting one or handing one over is access management.
   [WS_METHODS.roadmapDispatch]: AuthOrchestrationOperateScope,
+  [WS_METHODS.roadmapLinkConfigure]: AuthAccessWriteScope,
+  [WS_METHODS.roadmapLinkMint]: AuthAccessWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
