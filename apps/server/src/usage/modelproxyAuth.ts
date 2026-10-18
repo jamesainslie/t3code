@@ -24,6 +24,7 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -86,6 +87,11 @@ export const makeModelproxyAuth = Effect.gen(function* () {
   const endpoints = new Map<string, OidcEndpoints>();
 
   const publish = (sourceId: UsageLimitSourceId) => PubSub.publish(changes, sourceId);
+  // Token reads take turns. An issuer that rotates refresh tokens accepts
+  // each one once, so two callers refreshing together (a live follower and an
+  // interval read on wake) would see the loser rejected and the session
+  // cleared. Taking turns, the second caller finds the first one's token.
+  const tokenLock = yield* Semaphore.make(1);
 
   const discover = (issuer: string) =>
     Effect.gen(function* () {
@@ -202,7 +208,7 @@ export const makeModelproxyAuth = Effect.gen(function* () {
     }
     yield* saveSession(sourceId, refreshed.success);
     return refreshed.success.accessToken;
-  });
+  }, tokenLock.withPermits(1));
 
   // Polls the token endpoint until the user finishes, the code expires, or
   // the flow is cancelled. Runs in the service scope so a cancelled or

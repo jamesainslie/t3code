@@ -74,7 +74,9 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.terminalAttach
   | typeof WS_METHODS.terminalObserve
   // Fork: document comments.
-  | typeof WS_METHODS.subscribeThreadDocumentComments;
+  | typeof WS_METHODS.subscribeThreadDocumentComments
+  // Fork: live gateway status.
+  | typeof WS_METHODS.usageLimitSourceWatch;
 
 export type EnvironmentStreamCommandRpcTag =
   | typeof WS_METHODS.chatGptHandoffSubscribe

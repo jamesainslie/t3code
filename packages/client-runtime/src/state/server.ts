@@ -1159,13 +1159,11 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceId]),
       },
     }),
-    usageLimitSourceRefresh: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:usage-limit-source-refresh",
-      tag: WS_METHODS.usageLimitSourceRefresh,
-      concurrency: {
-        mode: "singleFlight",
-        key: ({ environmentId }) => environmentId,
-      },
+    // Fork: held open while a gateway card shows, so its sources stream live.
+    usageLimitSourceWatch: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:usage-limit-source-watch",
+      tag: WS_METHODS.usageLimitSourceWatch,
+      idleTtlMs: 0,
     }),
     usageLimitSourceAccountLogin: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:usage-limit-source-account-login",
