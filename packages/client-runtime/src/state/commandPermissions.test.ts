@@ -85,6 +85,23 @@ describe("command permissions", () => {
     ),
   );
 
+  it.effect("requires the destination operate grant to change the roadmap", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const roadmap = createCommandPermissions(runtime, WS_METHODS.roadmapDispatch);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(roadmap.permissionAtom(env))).toBe(true);
+        yield* roadmap.authorize(registry, env);
+        expect(registry.get(roadmap.permissionAtom(other))).toBe(false);
+        expect((yield* roadmap.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+      }),
+    ),
+  );
+
   it.effect("requires the destination settings grant to check OTLP endpoints", () =>
     Effect.scoped(
       Effect.gen(function* () {
