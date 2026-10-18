@@ -30,6 +30,11 @@ const TYPE_TAGS: Readonly<
   "support-ticket": { label: "SUPPORT", hue: "#fbbf24" },
 };
 
+/** For surfaces coloured by type beyond the tag itself, such as Timeline bars. */
+export function roadmapTypeHue(type: RoadmapItemType): string {
+  return TYPE_TAGS[type].hue;
+}
+
 export function RoadmapTypeTag({ type }: { readonly type: RoadmapItemType }) {
   const tag = TYPE_TAGS[type];
   return (
