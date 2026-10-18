@@ -298,6 +298,7 @@ export type RoadmapStoredEvent = typeof RoadmapStoredEvent.Type;
 
 export const RoadmapRejectionCode = Schema.Literals([
   "not_found",
+  "already_exists",
   "deleted",
   "invalid_parent",
   "parent_cycle",
