@@ -1,35 +1,17 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
   AuthRoadmapReadScope,
   CommandId,
-  EnvironmentHttpApi,
   EnvironmentId,
   type RoadmapActor,
   type RoadmapCommand,
   RoadmapItemId,
   ThreadId,
 } from "@lathe/contracts";
-import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Etag from "effect/http/Etag";
-import * as HttpPlatform from "effect/http/HttpPlatform";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
 import * as EnvironmentAuth from "../../auth/EnvironmentAuth.ts";
-import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
-import * as ServerConfig from "../../config.ts";
-import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
-import * as SqlitePersistence from "../../persistence/Sqlite.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
-import * as RoadmapHttp from "./http.ts";
-import * as RoadmapService from "./RoadmapService.ts";
-
-class RoadmapTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.roadmap) {}
+import * as RoadmapLinkTestkit from "./RoadmapLink.testkit.ts";
 
 const LAPTOP = EnvironmentId.make("env-laptop");
 const DESKTOP = EnvironmentId.make("env-desktop");
@@ -49,57 +31,18 @@ const create = (itemId: string, fields: Partial<RoadmapCommand> = {}): RoadmapCo
     ...fields,
   }) as RoadmapCommand;
 
-const layerServerConfig = ServerConfig.layerTest(process.cwd(), {
-  prefix: "lathe-roadmap-http-test-",
-});
-
-/** A roadmap home with real auth, the roadmap service and the roadmap HTTP group. */
+/** The in-process home, called with raw requests to see statuses and bodies. */
 const makeHome = Effect.fn("makeRoadmapHome")(function* (
   options: { readonly homeEnvironmentId?: EnvironmentId | null } = {},
 ) {
-  const services = yield* Layer.build(
-    Layer.mergeAll(
-      EnvironmentAuth.layer.pipe(
-        Layer.provide(ServerSecretStore.layer),
-        Layer.provide(ServerEnvironment.layerIdentity),
-      ),
-      RoadmapService.layer.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            IdAllocator.layer,
-            ServerSettingsService.layerTest({
-              roadmap: { homeEnvironmentId: options.homeEnvironmentId ?? null },
-            }),
-            ServerEnvironment.layerIdentity.pipe(Layer.provide(ServerSecretStore.layer)),
-          ),
-        ),
-      ),
-    ).pipe(
-      Layer.provideMerge(SqlitePersistence.layerMemory),
-      Layer.provideMerge(layerServerConfig),
-      Layer.provideMerge(NodeServices.layer),
-    ),
-  );
-  const routes = HttpApiBuilder.layer(RoadmapTestApi).pipe(
-    Layer.provide(RoadmapHttp.layer),
-    Layer.provide(RoadmapHttp.layerRoadmapLinkAuth),
-    Layer.provide(Layer.succeedContext(services)),
-    Layer.provide(HttpPlatform.layer),
-    Layer.provide(Etag.layerWeak),
-    Layer.provide(NodeServices.layer),
-  );
-  const { handler, dispose } = HttpRouter.toWebHandler(routes, { disableLogger: true });
-  yield* Effect.addFinalizer(() => Effect.promise(dispose));
-
-  const auth = Context.get(services, EnvironmentAuth.EnvironmentAuth);
-  const roadmap = Context.get(services, RoadmapService.RoadmapService);
+  const home = yield* RoadmapLinkTestkit.makeInProcessHome(options);
   const linkToken = (environmentId: EnvironmentId) =>
     Effect.gen(function* () {
-      const grant = yield* auth.issueRoadmapLinkGrant({ environmentId });
-      const exchanged = yield* auth.exchangeBootstrapCredentialForAccessToken(
-        grant.credential,
-        undefined,
-        { deviceType: "bot" },
+      const grant = yield* home.linkGrant(environmentId);
+      const exchanged = yield* RoadmapLinkTestkit.issueOnLiveClock(
+        home.auth.exchangeBootstrapCredentialForAccessToken(grant, undefined, {
+          deviceType: "bot",
+        }),
       );
       return exchanged.access_token;
     });
@@ -109,7 +52,7 @@ const makeHome = Effect.fn("makeRoadmapHome")(function* (
     body?: unknown,
   ): Effect.Effect<{ readonly status: number; readonly json: any }> =>
     Effect.promise(async () => {
-      const response = await handler(
+      const response = await home.handler(
         new Request(`http://localhost${path}`, {
           method: body === undefined ? "GET" : "POST",
           headers: {
@@ -122,13 +65,11 @@ const makeHome = Effect.fn("makeRoadmapHome")(function* (
       const text = await response.text();
       return { status: response.status, json: text.length === 0 ? null : JSON.parse(text) };
     });
-  return { auth, roadmap, linkToken, request };
+  return { auth: home.auth, roadmap: home.roadmap, linkToken, request };
 });
 
-// Live clock: the web handler runs on its own runtime and the real clock, so a
-// session issued under the test clock, in 1970, would read as long expired.
 describe("roadmap HTTP API", () => {
-  it.live("serves a link session and refuses every other credential", () =>
+  it.effect("serves a link session and refuses every other credential", () =>
     Effect.gen(function* () {
       const home = yield* makeHome();
       yield* home.roadmap.dispatch(create("a"), { _tag: "user" });
@@ -139,13 +80,13 @@ describe("roadmap HTTP API", () => {
       expect(snapshot.json.items.map((item: { id: string }) => item.id)).toEqual(["a"]);
       expect(snapshot.json.areas.work.unit).toBe("points");
 
-      const administrative = yield* home.auth.issueSession();
+      const administrative = yield* RoadmapLinkTestkit.issueOnLiveClock(home.auth.issueSession());
       expect((yield* home.request("/api/roadmap/snapshot", administrative.token)).status).toBe(401);
       expect((yield* home.request("/api/roadmap/snapshot", null)).status).toBe(401);
     }).pipe(Effect.scoped),
   );
 
-  it.live("reads one item with its history, and a thread's item with its context", () =>
+  it.effect("reads one item with its history, and a thread's item with its context", () =>
     Effect.gen(function* () {
       const home = yield* makeHome();
       const thread = { environmentId: LAPTOP, threadId: ThreadId.make("thread-1") };
@@ -168,7 +109,7 @@ describe("roadmap HTTP API", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("applies writes only for agents on the environment the link speaks for", () =>
+  it.effect("applies writes only for agents on the environment the link speaks for", () =>
     Effect.gen(function* () {
       const home = yield* makeHome();
       const token = yield* home.linkToken(LAPTOP);
@@ -199,7 +140,7 @@ describe("roadmap HTTP API", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("replays a repeated write instead of applying it twice", () =>
+  it.effect("replays a repeated write instead of applying it twice", () =>
     Effect.gen(function* () {
       const home = yield* makeHome();
       const token = yield* home.linkToken(LAPTOP);
@@ -212,13 +153,15 @@ describe("roadmap HTTP API", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("needs roadmap:write to change anything", () =>
+  it.effect("needs roadmap:write to change anything", () =>
     Effect.gen(function* () {
       const home = yield* makeHome();
-      const readOnly = yield* home.auth.issueSession({
-        subject: EnvironmentAuth.roadmapLinkSubject(LAPTOP),
-        scopes: [AuthRoadmapReadScope],
-      });
+      const readOnly = yield* RoadmapLinkTestkit.issueOnLiveClock(
+        home.auth.issueSession({
+          subject: EnvironmentAuth.roadmapLinkSubject(LAPTOP),
+          scopes: [AuthRoadmapReadScope],
+        }),
+      );
       expect((yield* home.request("/api/roadmap/snapshot", readOnly.token)).status).toBe(200);
       const refused = yield* home.request("/api/roadmap/dispatch", readOnly.token, {
         command: create("nope"),
@@ -228,7 +171,7 @@ describe("roadmap HTTP API", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.live("refuses when this environment is not the home, so links never chain", () =>
+  it.effect("refuses when this environment is not the home, so links never chain", () =>
     Effect.gen(function* () {
       const home = yield* makeHome({ homeEnvironmentId: EnvironmentId.make("env-elsewhere") });
       const token = yield* home.linkToken(LAPTOP);
