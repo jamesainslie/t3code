@@ -38,12 +38,12 @@ The subscribe and dispatch RPCs live in the fork RPC group. See
 The server setting `roadmap.homeEnvironmentId` names the home. Null means this environment.
 `RoadmapService.isHome` compares it with the environment's own id.
 
-- Only the home accepts commands. Dispatch elsewhere fails with `roadmap_home_elsewhere`.
-- MCP tools refuse reads off the home as well, because the local tables there are empty rather than
-  the roadmap.
+- Only the home applies commands. `dispatch` elsewhere fails with `roadmap_home_elsewhere`.
+- Off the home, an environment linked to the home forwards reads and queues writes (see
+  [The one-way link](#the-one-way-link)). An environment that is neither refuses reads too, because
+  its local tables are empty rather than the roadmap.
 - `roadmap.subscribe` does not check the home. Subscribing to the wrong environment returns an
   empty roadmap, not an error.
-- The turn context returns no block off the home.
 
 Clients talk to the home directly. The web client reads the setting from the primary environment
 only (`useRoadmapHome` in [`state/roadmap.ts`](../../apps/web/src/state/roadmap.ts)). A client
@@ -56,14 +56,69 @@ agent on a second environment left at the default reads and writes that environm
 which no client shows.
 
 Threads on other environments attach by reference, as an environment id and a thread id. A client
-connected to both environments can attach them. When their environment names the real home, agents
-on those threads get `roadmap_home_elsewhere` from the MCP tools and no context block.
+connected to both environments can attach them. Their agents reach the roadmap only through their
+environment's link; without one they get `roadmap_home_elsewhere` from the MCP tools and no context
+block.
 
 Changing the setting does not move any data. The new home shows its own roadmap.
 
-The planned one-way link is not built. Under that plan, each non-home environment holds the home's
-address and a credential, calls the home's roadmap service, and queues its calls while the home is
-unreachable. The home never connects out.
+## The one-way link
+
+An environment that is not the home holds the home's URL and a roadmap-link session in its secret
+store ([`RoadmapLink`](../../apps/server/src/fork/roadmap/RoadmapLink.ts)). It calls the home over
+HTTP, through the environment API's `roadmap` group
+([`http.ts`](../../apps/server/src/fork/roadmap/http.ts)). The home never connects out, so a home
+that is a laptop asleep half the day costs the other environments nothing but a queue.
+
+The session's subject is `roadmap-link:<environmentId>` and its scopes are `roadmap:read` and
+`roadmap:write`. Every other HTTP and WebSocket path refuses the subject, as they refuse
+`mcp-client` (see [environment auth](./environment-auth.md)). The reason is the actor check: the
+home applies a write only when its actor is an agent or steward of the environment the subject
+names, and refuses user and GitHub actors outright. No other path makes that check, so a link
+session there could act as the user. The roadmap group also refuses when its own environment is not
+the home, so a link can never forward a call on to a further home.
+
+Linking goes through the client, which is connected to both environments. It mints a one-time grant
+on the home (`roadmap.link.mint`) and hands it to the other environment (`roadmap.link.configure`),
+which spends it at the home's `/oauth/token` for a session that lasts a year. The year-long
+credential never passes through the client, and configuring fails, storing nothing, when the other
+environment cannot reach the home at the URL it was given. Both RPCs need `access:write`. Revoking
+the session in the home's connections list cuts the link; the other side then reports it
+unreachable.
+
+### Writes queue; reads do not
+
+`RoadmapService.submit` is the write path for agents. Off the home it puts the command in
+`roadmap_link_outbox` (fork migration 9), and
+[`RoadmapLinkOutbox`](../../apps/server/src/fork/roadmap/RoadmapLinkOutbox.ts) sends it.
+
+- One worker sends the oldest pending row and nothing behind it, so the home applies writes in the
+  order they were made. A transport failure leaves the row at the head.
+- Transport failures retry forever, waiting one second and doubling to a minute. The home's
+  `internal` and `roadmap_home_elsewhere` answers count as transport failures, because the home may
+  answer differently later.
+- Any other `RoadmapError` from the home ends that row alone. It stays in the table as `rejected`
+  with the error, is never sent again, and a later submit of the same command answers with it.
+- Resending a row the home applied but whose answer was lost is safe, because the home's command
+  receipts replay the first outcome.
+
+A submit waits up to five seconds for the home's answer, so an agent on a reachable home still hears
+a refusal. A failed try at the home ends every wait at once, and the MCP tools then report
+`{ queued: true, itemId }`. While the home is already known to be down, a submit does not wait.
+
+Reads go straight to the home with a ten second timeout and fail when it does not answer. Tools
+that name their item therefore skip reading it first, so they can still queue while the home is
+down. Resolving a thread's own item needs the home to answer.
+
+### Possibly out of date
+
+The turn context keeps the last block the home rendered for each thread, in memory. When the home
+does not answer within three seconds, the agent gets that copy with a first line saying it is
+possibly out of date and when it was fetched. A thread with no copy gets no block. Unlinking drops
+the copies, and a restart loses them.
+
+The home renders the block for every environment (`forThread` on the roadmap group), so agents on
+every environment see the same text and only one copy of the renderer exists.
 
 ## Agent context rides in the provider-bound text
 
@@ -78,8 +133,8 @@ and the block must refresh each turn.
 - The stored user message is unchanged. The block never appears in the thread's history.
 - A message that starts with `/` gets no block, because the provider must see the slash command
   first.
-- `forThread` never fails. It logs a warning and returns an empty block on any error or defect, so a
-  roadmap problem cannot stop a turn.
+- `forThread` never fails. It logs a warning and returns the last copy, or an empty block, on any
+  error or defect, so a roadmap problem cannot stop a turn.
 - Steered messages do not pass through turn start and carry no block.
 
 The attachment projection allows several items per thread. The planner refuses a second one with
