@@ -10,6 +10,7 @@ import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import {
+  EnvironmentId,
   ForwardCompatibleNullable,
   ForwardCompatibleOptional,
   OmittedWhenNull,
@@ -1277,6 +1278,15 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+// Fork: roadmap.
+export const RoadmapSettings = Schema.Struct({
+  /** The environment that owns the roadmap; null means this one. */
+  homeEnvironmentId: Schema.NullOr(EnvironmentId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+});
+export type RoadmapSettings = typeof RoadmapSettings.Type;
+
 export const ServerSettings = Schema.Struct({
   // Null means no client has migrated this preference yet; an empty value is
   // authoritative so another device cannot resurrect cleared preferences.
@@ -1287,6 +1297,10 @@ export const ServerSettings = Schema.Struct({
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(StorageCleanupSettings)({}))),
+  ),
+  // Fork: roadmap.
+  roadmap: RoadmapSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(RoadmapSettings)({}))),
   ),
 
   worktreesDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -1628,6 +1642,10 @@ export const ServerSettingsPatch = Schema.Struct({
       browserArtifactsAfterDays: Schema.optionalKey(StorageRetentionDays),
       logsAfterDays: Schema.optionalKey(StorageRetentionDays),
     }),
+  ),
+  // Fork: roadmap.
+  roadmap: Schema.optionalKey(
+    Schema.Struct({ homeEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)) }),
   ),
   worktreesDirectory: Schema.optionalKey(TrimmedString),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
