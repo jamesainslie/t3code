@@ -7,6 +7,8 @@ export function isSidebarUtilityPage(pathname: string) {
     pathname.startsWith("/settings/") ||
     pathname.startsWith("/projects/") ||
     pathname === "/usage" ||
+    // Fork: roadmap.
+    pathname === "/roadmap" ||
     pathname === "/pull-requests"
   );
 }
