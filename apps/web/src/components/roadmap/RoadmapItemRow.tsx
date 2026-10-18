@@ -207,31 +207,34 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
             ))}
           </SelectPopup>
         </Select>
-        {editingTitle ? (
-          <TitleInput
-            title={item.title}
-            onDone={(next) => {
-              setEditingTitle(false);
-              if (next !== null && next !== item.title) actions.update(item.id, { title: next });
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            // The title of an issue this environment cannot write follows GitHub.
-            disabled={!canEdit || item.source?.writable === false}
-            onClick={() => setEditingTitle(true)}
-            aria-label={`Rename ${item.title}`}
-            className="min-w-0 truncate rounded-sm text-start text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
-          >
-            {item.title}
-          </button>
-        )}
-        {item.source !== null ? <RoadmapIssueChip source={item.source} /> : null}
-        {shownArea !== null ? <RoadmapAreaBadge area={shownArea} /> : null}
-        {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
-        {blocked ? <RoadmapBlockedBadge /> : null}
-        <RoadmapThreadsLink attachments={item.attachments} />
+        {/* Badges wrap below a long title instead of squeezing it. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {editingTitle ? (
+            <TitleInput
+              title={item.title}
+              onDone={(next) => {
+                setEditingTitle(false);
+                if (next !== null && next !== item.title) actions.update(item.id, { title: next });
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              // The title of an issue this environment cannot write follows GitHub.
+              disabled={!canEdit || item.source?.writable === false}
+              onClick={() => setEditingTitle(true)}
+              aria-label={`Rename ${item.title}`}
+              className="min-w-0 rounded-sm text-start wrap-break-word text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+            >
+              {item.title}
+            </button>
+          )}
+          {item.source !== null ? <RoadmapIssueChip source={item.source} /> : null}
+          {shownArea !== null ? <RoadmapAreaBadge area={shownArea} /> : null}
+          {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
+          {blocked ? <RoadmapBlockedBadge /> : null}
+          <RoadmapThreadsLink attachments={item.attachments} />
+        </div>
       </div>
       <Select
         value={priorityInherited ? INHERIT : priority}

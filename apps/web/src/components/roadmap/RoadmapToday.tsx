@@ -181,7 +181,7 @@ function SnoozedList({
                 <button
                   type="button"
                   onClick={() => onOpen(item)}
-                  className="min-w-0 truncate rounded-sm text-start text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="min-w-0 rounded-sm text-start wrap-break-word text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {item.title}
                 </button>

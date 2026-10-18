@@ -82,15 +82,18 @@ export const RoadmapTodayRow = memo(function RoadmapTodayRow({
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <RoadmapTypeTag type={item.type} />
-        <button
-          type="button"
-          onClick={() => onOpen(item)}
-          className="min-w-0 truncate rounded-sm text-start text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        >
-          {item.title}
-        </button>
-        <RoadmapAreaBadge area={row.area} />
-        <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
+        {/* Badges wrap below a long title instead of squeezing it. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            className="min-w-0 rounded-sm text-start wrap-break-word text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            {item.title}
+          </button>
+          <RoadmapAreaBadge area={row.area} />
+          <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
+        </div>
       </div>
       <div className="flex items-center gap-3 text-xs group-hover/row:hidden group-focus-within/row:hidden group-data-active/row:hidden">
         <span className={cn("truncate", REASON_TONE[todayReasonTone(row)])}>{row.reason}</span>
