@@ -59,6 +59,9 @@ import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
 import * as SourceControlBuiltInDrivers from "./sourceControl/builtInDrivers.ts";
 import * as DocumentComments from "./fork/DocumentComments.ts";
+// Fork: roadmap.
+import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceRegistryHydration.ts";
@@ -511,6 +514,8 @@ const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
 const layerForkServices = Layer.mergeAll(
   RuntimeLayer.layerEventSink,
   DocumentComments.layer,
+  // Fork: roadmap.
+  RoadmapService.layer.pipe(Layer.provide(IdAllocator.layer)),
   ProjectSyncService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
