@@ -40,7 +40,9 @@ untouched 6 working days" or "Due Wed, forecast Fri, at risk". An item appears o
 section that matches:
 
 - **Waiting on you**: an attached thread wants an approval, an answer or a plan review, or finished
-  a turn you have not seen, or a pull request linked to it waits for your review.
+  a turn you have not seen, or a pull request linked to it waits for your review. The
+  [steward](#the-steward) puts an item here too when it is unsure whether a criterion is met, until
+  that criterion is ticked or you remove the note.
 - **Your picks**: items you pinned.
 - **Due or slipping**: overdue, due within three working days, or forecast to miss the due date.
 - **Going cold**: P0 and P1 items with no activity for the area's **Going cold** days. Activity is
@@ -111,6 +113,8 @@ roadmap home and apply to every client.
   Monday to Friday.
 - **Going cold**: how many working days without activity put a P0 or P1 item under **Going cold**.
   Defaults to 5.
+- **Steward**: whether the [steward](#the-steward) reads this area's attached threads. Off by
+  default.
 
 ## Agents on attached threads
 
@@ -127,6 +131,29 @@ alone, and agents cannot change them.
 
 Agents work from the server's calendar, which is UTC. Near midnight, the forecast an agent sees can
 be a day off from the one on your Roadmap.
+
+## The steward
+
+The steward is a background agent that reads attached threads and relates their work to the item's
+acceptance criteria. Turn it on per area with the **Steward** switch in **Settings → Roadmap**.
+
+After a turn ends on an attached thread, and once a day, it reads the turns since its last look and
+can:
+
+- Tick a criterion when a turn shows concrete evidence, such as a commit or a passing test. The tick
+  is labelled **Steward** on the card, with the thread, the turn number and the evidence.
+- Add an **Unsure** note when a turn suggests a criterion is met but the evidence is partial. These
+  notes put the item under **Waiting on you** on Today.
+- Add a **Drift** note when the thread works on something the item does not describe, and a short
+  progress note.
+
+It never unticks a criterion, changes an item's fields, priority, due date or state, or marks
+anything done. If you untick a criterion, the steward ticks it again only for a turn that ended after
+you unticked it.
+
+Each environment runs its own steward over the threads it owns, on the model you choose in
+**Settings → Roadmap → Steward model** on that environment. A small model is enough. Off uses the
+text generation model. With a Claude model, its calls show in that environment's **Usage**.
 
 Agents on threads that run on another environment reach the roadmap once that environment is
 linked to the roadmap home. See [Link a second environment](#link-a-second-environment).

@@ -191,6 +191,47 @@ so the planner ties each kind to its writer: `progress` from any actor, `sync` o
 rely on this, so a kind check belongs in `planRoadmapCommand`, never in the code that writes the
 note. An item keeps its newest 50 notes; the projection drops the oldest.
 
+## The steward
+
+[`RoadmapSteward`](../../apps/server/src/fork/roadmap/RoadmapSteward.ts) runs on every environment
+over the attached threads that environment owns. It never reads another environment's turns, and it
+writes through `RoadmapService.submit` as `{ _tag: "steward", environmentId }`, so off the home its
+writes queue in the link outbox like an agent's.
+
+### Its limits live in the planner
+
+The steward's output is a model's judgement, so nothing in its own code is trusted to hold the
+limits. `planRoadmapCommand` refuses every steward command except `roadmap.criterion.tick` and
+`roadmap.note.add`, which rules out field patches, priorities, due dates, state changes and Done. A
+steward tick must tick, carry evidence, and land on an unticked criterion. The steward drops
+refusals with a log line; they never surface.
+
+The re-tick rule: once a criterion has been unticked, a steward tick needs `evidenceAfter`, the end
+time of the turn its evidence cites, newer than the latest untick. Unticks clear the criterion, so
+the time exists only in the event history. `RoadmapService.dispatch` reads it from `store.history`
+for steward ticks alone and passes it to the planner as `criterionUntickedAt`. The rule counts any
+untick, since the steward itself never unticks. The model names a turn number for each tick, and
+[`stewardCommands`](../../apps/server/src/fork/roadmap/RoadmapStewardPrompt.ts) maps that number to
+the turn's end time. A tick citing a turn outside the new ones is dropped before it is sent, so the
+model cannot launder an old turn through a newer `evidenceAfter`.
+
+### Runs see only new turns
+
+`roadmap_steward_threads` (fork migration 12) records, per thread, the end of the newest turn a
+run gave the model. A run digests turns that ended after it, and advances it after submitting, even
+when the home refused every write, since the same turns would draw the same answer. A failed model
+call or unreachable home leaves it, so the next run retries those turns.
+
+Triggers come from `streamDomainEvents`, which is live only, so turns that end while the server is
+down are never announced. The daily sweep covers them. Its "last sweep day" lives in memory on
+purpose: the first tick after a start sweeps, and the per-thread cursor makes a repeated sweep cheap.
+Notices for one thread coalesce while a run for it is queued.
+
+The model comes from `roadmap.stewardModelSelection`, which each environment holds because provider
+logins differ per machine, and falls back to the text generation model. It runs through
+`TextGeneration.generateStructured`, which every runner-based provider implements once in
+`fromRunner`. Muse and ACP registry instances refuse it.
+
 ## Dates without a time zone
 
 The server does not know the user's time zone. Clients compute in local dates (`localDateOf`), and
