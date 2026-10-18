@@ -78,6 +78,26 @@ describe("summarizeLatheToolCalls", () => {
     ).toBe("Updated 1 work item");
   });
 
+  it("sums logged hours once per entry and counts the work items", () => {
+    const retried = { itemId: "item-1", sequence: 5, entryId: "entry-1", totalHours: 1.5 };
+    expect(
+      summarizeLatheToolCalls("roadmap-log-hours", [
+        completed({ hours: 1.5, clientRequestId: "log-1" }, retried),
+        completed({ hours: 1.5, clientRequestId: "log-1" }, retried),
+        completed({ hours: 2 }, { itemId: "item-1", sequence: 6, entryId: "entry-2" }),
+        completed(
+          { itemId: "item-2", hours: 0.5 },
+          { itemId: "item-2", sequence: 7, entryId: "entry-3" },
+        ),
+      ]).label,
+    ).toBe("Logged 4 hours on 2 work items");
+    expect(
+      summarizeLatheToolCalls("roadmap-log-hours", [
+        { input: { hours: 1 }, output: undefined, outcome: "failed" },
+      ]),
+    ).toEqual({ label: "Tried to log 1 hour on 1 work item", failedCount: 1 });
+  });
+
   it("counts answered requests rather than pretending every request contains one question", () => {
     expect(
       summarizeLatheToolCalls("question-respond", [

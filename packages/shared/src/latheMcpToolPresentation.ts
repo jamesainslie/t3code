@@ -73,7 +73,8 @@ export type LatheMcpToolSummaryAction =
   // Fork: roadmap.
   | "roadmap-read"
   | "roadmap-create"
-  | "roadmap-update";
+  | "roadmap-update"
+  | "roadmap-log-hours";
 
 export interface LatheMcpToolDefinition {
   readonly displayName: string;
@@ -192,6 +193,10 @@ const LATHE_MCP_TOOLS: Readonly<Record<string, LatheMcpToolDefinition>> = {
   lathe_roadmap_link_blocker: tool(
     ["Link", "Linking", "Linked", "a roadmap blocker"],
     "roadmap-update",
+  ),
+  lathe_roadmap_log_hours: tool(
+    ["Log", "Logging", "Logged", "hours on a work item"],
+    "roadmap-log-hours",
   ),
   lathe_thread_send: tool(["Send", "Sending", "Sent", "to a Lathe thread"], "thread-send"),
   lathe_thread_wait: tool(["Wait", "Waiting", "Waited", "for a Lathe thread"], "thread-wait"),
