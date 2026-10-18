@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { RoadmapItemId, RoadmapWorkItem } from "@lathe/contracts";
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { MapIcon, PlusIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -190,7 +190,10 @@ export function RoadmapPage() {
           <WorkspacePageContainer width="expanded">
             {home === null || !supported ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                The roadmap home is not connected, or its server does not have the roadmap yet.
+                The roadmap home is not connected, or its server does not have the roadmap yet.{" "}
+                <Link to="/settings/roadmap" className="underline underline-offset-4">
+                  Choose a roadmap home
+                </Link>
               </p>
             ) : live.error !== null && live.data === null ? (
               <p className="py-12 text-center text-sm text-muted-foreground">

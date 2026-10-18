@@ -24,6 +24,8 @@ export type SettingsPath =
   | "/settings/providers"
   | "/settings/integrations"
   | "/settings/scheduled-tasks"
+  // Fork: roadmap.
+  | "/settings/roadmap"
   | "/settings/source-control"
   | "/settings/storage"
   | "/settings/connections"
@@ -82,6 +84,8 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
   "/settings/scheduled-tasks": "Scheduled Tasks",
+  // Fork: roadmap.
+  "/settings/roadmap": "Roadmap",
   "/settings/source-control": "Source Control",
   "/settings/storage": "Storage",
   "/settings/connections": "Connections",
@@ -169,6 +173,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/storage",
     scope: "environment-defaults",
     searchTerms: ["disk storage browser screenshots captures rotated logs cleanup retention"],
+  },
+  // Fork: roadmap.
+  {
+    id: "roadmap-home",
+    title: "Roadmap home",
+    to: "/settings/roadmap",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["work items objectives epics stories planning environment owns roadmap"],
   },
   {
     id: "project-defaults",
@@ -1126,6 +1139,8 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/storage": "project-defaults",
   "/settings/connections": "connections",
   "/settings/scheduled-tasks": null,
+  // Fork: roadmap.
+  "/settings/roadmap": "environment-defaults",
   "/settings/archived": "project-defaults",
 };
 
