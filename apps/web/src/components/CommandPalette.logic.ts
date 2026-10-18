@@ -60,6 +60,8 @@ export type CommandPaletteOpenIntent =
   // rather than being read from the route: the menu can be opened from a
   // sidebar row for a thread that is not the one on screen.
   | { readonly kind: "depends-on"; readonly blockedThreadRef: ScopedThreadRef }
+  // Fork: roadmap. Same reason: the thread menu can attach a thread that is not on screen.
+  | { readonly kind: "roadmap-attach"; readonly threadRef: ScopedThreadRef }
   | {
       readonly kind: "search";
       readonly query: string;
@@ -84,6 +86,8 @@ export type CommandPaletteUiAction =
   | { readonly _tag: "OpenNewThreadIn" }
   | { readonly _tag: "OpenChangeTheme" }
   | { readonly _tag: "OpenDependsOn"; readonly blockedThreadRef: ScopedThreadRef }
+  // Fork: roadmap.
+  | { readonly _tag: "OpenRoadmapAttach"; readonly threadRef: ScopedThreadRef }
   | { readonly _tag: "ClearOpenIntent" };
 
 export function reduceCommandPaletteUiState(
@@ -120,6 +124,13 @@ export function reduceCommandPaletteUiState(
         open: true,
         mode: "command",
         openIntent: { kind: "depends-on", blockedThreadRef: action.blockedThreadRef },
+      };
+    // Fork: roadmap.
+    case "OpenRoadmapAttach":
+      return {
+        open: true,
+        mode: "command",
+        openIntent: { kind: "roadmap-attach", threadRef: action.threadRef },
       };
     case "ClearOpenIntent":
       return state.openIntent ? { ...state, openIntent: null } : state;

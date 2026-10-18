@@ -59,6 +59,8 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { continueInNewThreadOptions, useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
+// Fork: roadmap.
+import { useRoadmapThreadActions } from "../components/roadmap/useRoadmapThreadActions";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -107,6 +109,8 @@ export function useThreadActionMenu(input: {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
+  // Fork: roadmap.
+  const { actions: roadmapActions, availability: roadmapAvailability } = useRoadmapThreadActions();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
@@ -132,7 +136,8 @@ export function useThreadActionMenu(input: {
   });
 
   const openMenu = useCallback(
-    (position: { x: number; y: number }) => {
+    // Fork: roadmap. Named so the roadmap toggle can reopen the menu.
+    function openMenu(position: { x: number; y: number }): void {
       if (threadRef === null) return;
       void (async () => {
         const api = readLocalApi();
@@ -149,6 +154,8 @@ export function useThreadActionMenu(input: {
           highlight: readEnvironmentSupportsHighlight(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
           dependencies: readEnvironmentSupportsDependencies(threadRef.environmentId),
+          // Fork: roadmap.
+          roadmap: roadmapAvailability.supported,
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
@@ -174,10 +181,19 @@ export function useThreadActionMenu(input: {
           isRunning: !threadRuntimeCanArchive(thread.runtime),
           supports,
           snoozePresets,
+          // Fork: roadmap.
+          roadmap: roadmapActions.menuState(threadRef),
         });
         const clicked = await settlePromise(() => api.contextMenu.show(items, position));
         if (clicked._tag === "Failure" || clicked.value === null) return;
         const action: ThreadActionMenuId = clicked.value;
+        // Fork: roadmap.
+        const roadmapOutcome = roadmapActions.handleMenuAction(action, thread);
+        if (roadmapOutcome === "reopen") {
+          openMenu(position);
+          return;
+        }
+        if (roadmapOutcome !== null) return;
         if (
           threadActionRequiresOperate(action) &&
           !readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
@@ -448,6 +464,8 @@ export function useThreadActionMenu(input: {
       projectGroupingSettings,
       projects,
       releaseThreadDependencies,
+      roadmapActions,
+      roadmapAvailability.supported,
       router,
       setThreadAutoSettle,
       settleThread,

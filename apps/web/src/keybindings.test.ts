@@ -297,6 +297,51 @@ describe("thread undo shortcut", () => {
   });
 });
 
+// Fork: roadmap.
+describe("open roadmap shortcut", () => {
+  it("resolves mod+alt+r, including the macOS Option glyph", () => {
+    assert.equal(
+      resolveShortcutCommand(
+        event({ key: "®", code: "KeyR", metaKey: true, altKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        { platform: "MacIntel", context: { terminalFocus: false } },
+      ),
+      "roadmap.open",
+    );
+    assert.equal(
+      resolveShortcutCommand(
+        event({ key: "r", ctrlKey: true, altKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        { platform: "Win32", context: { terminalFocus: false } },
+      ),
+      "roadmap.open",
+    );
+  });
+
+  it("leaves the chord to the terminal while it has focus", () => {
+    assert.isNull(
+      resolveShortcutCommand(
+        event({ key: "r", ctrlKey: true, altKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        { platform: "Linux", context: { terminalFocus: true } },
+      ),
+    );
+  });
+
+  it("is the only default bound to mod+alt+r", () => {
+    assert.deepEqual(
+      DEFAULT_RESOLVED_KEYBINDINGS.filter(
+        (binding) =>
+          binding.shortcut.modKey &&
+          binding.shortcut.altKey &&
+          !binding.shortcut.shiftKey &&
+          binding.shortcut.key === "r",
+      ).map((binding) => binding.command),
+      ["roadmap.open"],
+    );
+  });
+});
+
 describe("copy thread reference shortcut", () => {
   it("resolves Cmd+Shift+C on macOS and Ctrl+Shift+C elsewhere", () => {
     assert.equal(
