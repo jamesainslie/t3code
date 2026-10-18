@@ -20,6 +20,8 @@ export interface CommandPaletteOpenDetail {
   readonly blockedThreadRef?: ScopedThreadRef;
   /** Fork: roadmap. The thread the work item picker attaches. Required for that mode. */
   readonly roadmapThreadRef?: ScopedThreadRef;
+  /** Fork: roadmap. With "new-thread-in", told the thread the chosen project starts. */
+  readonly onThreadCreated?: (thread: ScopedThreadRef) => void;
 }
 
 /** Open the palette on the "Depends on" picker for a thread that should wait. */
