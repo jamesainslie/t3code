@@ -41,21 +41,21 @@ export function RoadmapDuePicker({
 }) {
   const [open, setOpen] = useState(false);
   const selected = value === null ? undefined : dateOf(value);
-  const overdue = value !== null && value < today;
+  const text = value === null ? "None" : formatRoadmapDate(value, today);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         disabled={disabled}
-        aria-label={label}
+        aria-label={`${label}: ${text}`}
         render={
           appearance === "inline" ? (
-            <Button size="micro" variant={overdue ? "ghost-destructive" : "ghost-muted"} />
+            <Button size="micro" variant="ghost-muted" />
           ) : (
             <Button variant="outline" className="w-full justify-between" />
           )
         }
       >
-        {value === null ? "None" : formatRoadmapDate(value, today)}
+        {text}
         {appearance === "field" ? <CalendarIcon /> : null}
       </PopoverTrigger>
       <PopoverPopup align="start" aria-label={label}>
@@ -139,7 +139,7 @@ export function RoadmapEstimatePicker({
     >
       <PopoverTrigger
         disabled={disabled}
-        aria-label={label}
+        aria-label={`${label}: ${value === null ? "None" : value}`}
         render={<Button size="micro" variant="ghost-muted" />}
       >
         {value === null ? "None" : String(value)}
