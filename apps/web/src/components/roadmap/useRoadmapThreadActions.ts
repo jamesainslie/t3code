@@ -47,7 +47,7 @@ import { roadmapHref } from "./roadmapThread.logic";
  * The thread menu's "Start a new thread for it" toggle. It lives for the
  * session: the menu closes on every click, so the choice has to outlast it.
  */
-export const roadmapCreateInNewThreadAtom = Atom.make(false).pipe(
+const roadmapCreateInNewThreadAtom = Atom.make(false).pipe(
   Atom.keepAlive,
   Atom.withLabel("roadmap:create-in-new-thread"),
 );

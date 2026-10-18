@@ -30,7 +30,7 @@ import { useRoadmapThreadActions, type RoadmapThreadTarget } from "./useRoadmapT
  * one, so the card follows whether the thread is attached. It lasts the
  * session, so switching threads and back keeps the choice.
  */
-export const roadmapCardOpenOverrideAtom = Atom.family((threadKey: string) =>
+const roadmapCardOpenOverrideAtom = Atom.family((threadKey: string) =>
   Atom.make<boolean | null>(null).pipe(
     Atom.keepAlive,
     Atom.withLabel(`roadmap:card-open:${threadKey}`),
@@ -38,7 +38,7 @@ export const roadmapCardOpenOverrideAtom = Atom.family((threadKey: string) =>
 );
 
 /** The portal shell, placed like the Iris card and marked so the stack can measure it. */
-export function RoadmapCard({
+function RoadmapCard({
   placement,
   onClose,
   children,
