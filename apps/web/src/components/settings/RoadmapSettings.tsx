@@ -1,8 +1,36 @@
-import { EnvironmentId } from "@lathe/contracts";
+import {
+  EnvironmentId,
+  type RoadmapArea,
+  type RoadmapAreaSettings,
+  type RoadmapUnit,
+} from "@lathe/contracts";
+import { useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useEnvironments } from "~/state/environments";
+import {
+  useRoadmapAreaSettings,
+  useRoadmapHome,
+  useRoadmapSupported,
+  useUpdateRoadmapAreaSettings,
+} from "~/state/roadmap";
+import {
+  ROADMAP_AREA_LABELS,
+  ROADMAP_AREAS,
+  ROADMAP_UNIT_LABELS,
+  ROADMAP_UNITS,
+  ROADMAP_WEEKDAY_LABELS,
+  workingWeekdaysFrom,
+} from "../roadmap/roadmap.logic";
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "../ui/number-field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
@@ -15,7 +43,10 @@ import {
 
 const THIS_ENVIRONMENT = "this";
 
-/** Fork: roadmap. Which environment owns the roadmap; per-area settings arrive in phase 2. */
+/**
+ * Fork: roadmap. Which environment owns the roadmap, and each area's unit and
+ * calendar, which live on the home whichever environment Settings has selected.
+ */
 export function RoadmapSettingsPanel() {
   const { scope, connectedEnvironments, targets } = useSettingsScope();
   const { environments } = useEnvironments();
@@ -98,6 +129,144 @@ export function RoadmapSettingsPanel() {
           }
         />
       </SettingsSection>
+      <RoadmapAreaSections />
     </SettingsPageContainer>
+  );
+}
+
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function RoadmapAreaSections() {
+  const home = useRoadmapHome();
+  const supported = useRoadmapSupported(home);
+  const areas = useRoadmapAreaSettings(home);
+  const update = useUpdateRoadmapAreaSettings(home);
+  if (!supported) return null;
+  return ROADMAP_AREAS.map((area, index) => (
+    <RoadmapAreaSection
+      key={area}
+      area={area}
+      settings={areas[area]}
+      searchAnchor={index === 0}
+      onChange={(patch) => void update(area, patch)}
+    />
+  ));
+}
+
+function RoadmapAreaSection({
+  area,
+  settings,
+  searchAnchor,
+  onChange,
+}: {
+  readonly area: RoadmapArea;
+  readonly settings: RoadmapAreaSettings;
+  readonly searchAnchor: boolean;
+  readonly onChange: (patch: Partial<RoadmapAreaSettings>) => void;
+}) {
+  const label = ROADMAP_AREA_LABELS[area];
+  return (
+    <SettingsSection title={`${label} area`}>
+      <SettingsRow
+        {...(searchAnchor ? searchableSetting("roadmap-areas") : {})}
+        title="Unit"
+        description="What estimates, progress and velocity count. Saved on the roadmap home."
+        control={
+          <Select
+            value={settings.unit}
+            items={ROADMAP_UNIT_LABELS}
+            onValueChange={(next) => {
+              const unit = ROADMAP_UNITS.find((option) => option === next);
+              if (unit !== undefined && unit !== settings.unit) onChange({ unit });
+            }}
+          >
+            <SelectTrigger size="sm" aria-label={`${label} unit`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false}>
+              {ROADMAP_UNITS.map((unit: RoadmapUnit) => (
+                <SelectItem key={unit} value={unit}>
+                  {ROADMAP_UNIT_LABELS[unit]}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        }
+      />
+      <SettingsRow
+        title="Working days"
+        description="The days that count toward working days left, velocity and forecasts."
+        control={
+          <ToggleGroup
+            multiple
+            aria-label={`${label} working days`}
+            variant="segmented"
+            value={settings.workingWeekdays.map(String)}
+            onValueChange={(next) => {
+              const workingWeekdays = workingWeekdaysFrom(next);
+              // Settings refuse an empty week, so the last day stays pressed.
+              if (workingWeekdays !== null) onChange({ workingWeekdays });
+            }}
+          >
+            {WEEKDAY_ORDER.map((day) => (
+              <Toggle key={day} value={String(day)}>
+                {ROADMAP_WEEKDAY_LABELS[day]}
+              </Toggle>
+            ))}
+          </ToggleGroup>
+        }
+      />
+      <SettingsRow
+        title="Going cold"
+        description="Working days without activity before a P0 or P1 item shows as going cold on Today."
+        control={
+          <GoingColdField
+            label={`${label} going cold`}
+            value={settings.goingColdDays}
+            onChange={(goingColdDays) => onChange({ goingColdDays })}
+          />
+        }
+      />
+    </SettingsSection>
+  );
+}
+
+function GoingColdField({
+  label,
+  value,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly onChange: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState<number | null>(value);
+  const [shown, setShown] = useState(value);
+  // A save from elsewhere replaces the draft once it arrives.
+  if (shown !== value) {
+    setShown(value);
+    setDraft(value);
+  }
+  return (
+    <NumberField
+      value={draft}
+      min={1}
+      max={365}
+      step={1}
+      size="sm"
+      onValueChange={setDraft}
+      onValueCommitted={(next) => {
+        if (next === null) return setDraft(value);
+        const days = Math.min(365, Math.max(1, Math.round(next)));
+        setDraft(days);
+        if (days !== value) onChange(days);
+      }}
+    >
+      <NumberFieldGroup>
+        <NumberFieldDecrement aria-label={`Decrease ${label}`} />
+        <NumberFieldInput aria-label={`${label} in working days`} />
+        <NumberFieldIncrement aria-label={`Increase ${label}`} />
+      </NumberFieldGroup>
+    </NumberField>
   );
 }
