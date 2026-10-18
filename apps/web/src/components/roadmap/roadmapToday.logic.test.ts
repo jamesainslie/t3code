@@ -15,6 +15,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  createTodayBaselines,
   parseTodayLastOpenedAt,
   roadmapPinFailure,
   roadmapReviewRequests,
@@ -494,6 +495,45 @@ describe("todayOpenThreads", () => {
     ).toEqual([t2]);
     expect(todayOpenThreads(withBoth, undefined)).toEqual([t1, t2]);
     expect(todayOpenThreads(item("bare"), undefined)).toEqual([]);
+  });
+});
+
+describe("createTodayBaselines", () => {
+  const homeA = EnvironmentId.make("home-a");
+  const homeB = EnvironmentId.make("home-b");
+  const fakeStore = (initial: Record<string, string>) => {
+    const stored = new Map(Object.entries(initial));
+    return {
+      stored,
+      read: (home: EnvironmentId) => stored.get(home) ?? null,
+      write: (home: EnvironmentId, at: string) => void stored.set(home, at),
+    };
+  };
+
+  it("keeps the first visit's baseline for the page load while recording the visit", () => {
+    const store = fakeStore({ [homeA]: "2026-10-17T09:00:00.000Z" });
+    const baselineFor = createTodayBaselines(store);
+    expect(baselineFor(homeA, "2026-10-18T09:00:00.000Z")).toBe("2026-10-17T09:00:00.000Z");
+    expect(store.stored.get(homeA)).toBe("2026-10-18T09:00:00.000Z");
+    // Back from the Outline: the stored visit is newer, but the baseline holds.
+    expect(baselineFor(homeA, "2026-10-18T09:05:00.000Z")).toBe("2026-10-17T09:00:00.000Z");
+    expect(store.stored.get(homeA)).toBe("2026-10-18T09:00:00.000Z");
+  });
+
+  it("keeps a separate baseline per home, including none", () => {
+    const store = fakeStore({ [homeA]: "2026-10-17T09:00:00.000Z" });
+    const baselineFor = createTodayBaselines(store);
+    expect(baselineFor(homeB, "2026-10-18T09:00:00.000Z")).toBeNull();
+    expect(baselineFor(homeA, "2026-10-18T09:01:00.000Z")).toBe("2026-10-17T09:00:00.000Z");
+    expect(baselineFor(homeB, "2026-10-18T09:02:00.000Z")).toBeNull();
+  });
+
+  it("starts over on a new page load", () => {
+    const store = fakeStore({ [homeA]: "2026-10-17T09:00:00.000Z" });
+    createTodayBaselines(store)(homeA, "2026-10-18T09:00:00.000Z");
+    expect(createTodayBaselines(store)(homeA, "2026-10-18T10:00:00.000Z")).toBe(
+      "2026-10-18T09:00:00.000Z",
+    );
   });
 });
 

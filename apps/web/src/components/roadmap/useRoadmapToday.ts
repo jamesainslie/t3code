@@ -20,7 +20,7 @@ import type {
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { Atom } from "effect/reactivity";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -31,6 +31,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useUiStateStore } from "../../uiStateStore";
 import { toastManager } from "../ui/toast";
 import {
+  createTodayBaselines,
   parseTodayLastOpenedAt,
   roadmapPinFailure,
   roadmapReviewRequests,
@@ -46,31 +47,31 @@ import {
 import { newRoadmapCommandId, useRoadmapDispatch } from "./useRoadmapDispatch";
 import { useRoadmapThreadActions } from "./useRoadmapThreadActions";
 
-function readLastOpenedAt(home: EnvironmentId): string | null {
-  try {
-    return parseTodayLastOpenedAt(localStorage.getItem(todayLastOpenedStorageKey(home)));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * When Today was last opened on this client before this visit. It is read
- * before the visit is recorded, so "Newly unblocked" compares against the
- * previous visit rather than this one.
- */
-export function useRoadmapTodayLastOpenedAt(home: EnvironmentId, now: string): string | null {
-  const [previous, setPrevious] = useState(() => ({ home, at: readLastOpenedAt(home) }));
-  if (previous.home !== home) setPrevious({ home, at: readLastOpenedAt(home) });
-  useEffect(() => {
+const todayBaselineFor = createTodayBaselines({
+  read: (home) => {
     try {
-      localStorage.setItem(todayLastOpenedStorageKey(home), now);
+      return parseTodayLastOpenedAt(localStorage.getItem(todayLastOpenedStorageKey(home)));
+    } catch {
+      return null;
+    }
+  },
+  write: (home, at) => {
+    try {
+      localStorage.setItem(todayLastOpenedStorageKey(home), at);
     } catch {
       // Blocked or full storage only means every visit looks back one day.
     }
-  }, [home, now]);
-  // A stale home's value is never shown: the state update above re-renders first.
-  return previous.home === home ? previous.at : null;
+  },
+});
+
+/**
+ * When Today was last opened on this client before this page load, so
+ * "Newly unblocked" compares against the previous visit rather than this one.
+ */
+export function useRoadmapTodayLastOpenedAt(home: EnvironmentId, now: string): string | null {
+  // Repeat calls for a home return the cached baseline, so a render React
+  // discards or repeats records nothing new.
+  return useMemo(() => todayBaselineFor(home, now), [home, now]);
 }
 
 // React cannot subscribe to a list of atoms whose length changes, so the

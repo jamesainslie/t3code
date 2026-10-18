@@ -353,3 +353,28 @@ export const todayLastOpenedStorageKey = (home: EnvironmentId) =>
 export function parseTodayLastOpenedAt(raw: string | null): string | null {
   return raw !== null && !Number.isNaN(Date.parse(raw)) ? raw : null;
 }
+
+export interface TodayLastOpenedStore {
+  readonly read: (home: EnvironmentId) => string | null;
+  readonly write: (home: EnvironmentId, at: string) => void;
+}
+
+/**
+ * The "Newly unblocked" baseline for each home, fixed for one page load.
+ * Today remounts whenever the user switches roadmap tabs, so recording each
+ * mount as the last visit would make the next mount compare against a moment
+ * ago and drop everything it had just shown. Only the first visit in a page
+ * load reads the stored time and records itself.
+ */
+export function createTodayBaselines(
+  store: TodayLastOpenedStore,
+): (home: EnvironmentId, now: string) => string | null {
+  const baselines = new Map<EnvironmentId, string | null>();
+  return (home, now) => {
+    if (baselines.has(home)) return baselines.get(home) ?? null;
+    const baseline = store.read(home);
+    baselines.set(home, baseline);
+    store.write(home, now);
+    return baseline;
+  };
+}
