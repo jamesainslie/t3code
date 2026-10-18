@@ -1,12 +1,11 @@
 import { UsageLimitSourceId, type UsageLimitSourceSnapshot } from "@lathe/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   deriveProxyPill,
   formatCountdownSeconds,
   looksLikeEmailCode,
   selectProxySource,
-  startRefreshLoop,
 } from "./ProxyUsagePill.logic";
 
 const now = Date.parse("2026-09-23T12:00:00Z");
@@ -408,72 +407,5 @@ describe("model windows", () => {
     const [fable, other] = pill.accounts[0]!.windows;
     expect(fable).toMatchObject({ glyph: "feather", title: "Weekly · Fable" });
     expect(other).toMatchObject({ glyph: null, label: "other", title: "Weekly · Other" });
-  });
-});
-
-describe("startRefreshLoop", () => {
-  it("re-reads on each interval until stopped, skipping while hidden", async () => {
-    vi.useFakeTimers();
-    let hidden = false;
-    const refresh = vi.fn(() => Promise.resolve());
-    const stop = startRefreshLoop(refresh, { intervalMs: 5_000, isHidden: () => hidden });
-
-    await vi.advanceTimersByTimeAsync(4_999);
-    expect(refresh).toHaveBeenCalledTimes(0);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    hidden = true;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    hidden = false;
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(refresh).toHaveBeenCalledTimes(2);
-
-    stop();
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(refresh).toHaveBeenCalledTimes(2);
-    vi.useRealTimers();
-  });
-
-  it("waits for a slow read before timing the next", async () => {
-    vi.useFakeTimers();
-    let finish = () => {};
-    const refresh = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const stop = startRefreshLoop(refresh, { intervalMs: 5_000, isHidden: () => false });
-
-    await vi.advanceTimersByTimeAsync(5_000);
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    finish();
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(refresh).toHaveBeenCalledTimes(2);
-    stop();
-    vi.useRealTimers();
-  });
-
-  it("does not start another read when stopped mid-read", async () => {
-    vi.useFakeTimers();
-    let finish = () => {};
-    const refresh = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const stop = startRefreshLoop(refresh, { intervalMs: 5_000, isHidden: () => false });
-    await vi.advanceTimersByTimeAsync(5_000);
-    stop();
-    finish();
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(refresh).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 });

@@ -2,7 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientResponse } from "effect/http";
+import * as Stream from "effect/Stream";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import { makeModelproxyApi, mapModelproxyStatus, ModelproxyStatus } from "./modelproxyApi.ts";
 
@@ -268,6 +269,109 @@ describe("makeModelproxyApi", () => {
         expect(result.failure.unauthorized).toBe(true);
         expect(result.failure.detail).toContain("403");
       }
+    }),
+  );
+});
+
+/** A server-sent-events body delivered in the given chunks. */
+function eventStream(chunks: ReadonlyArray<string>): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    }),
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
+describe("makeModelproxyApi.streamStatus", () => {
+  const streamWith = (
+    response: () => Response,
+    seen?: (request: HttpClientRequest.HttpClientRequest) => void,
+  ) =>
+    makeModelproxyApi.pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.sync(() => {
+            seen?.(request);
+            return HttpClientResponse.fromWeb(request, response());
+          }),
+        ),
+      ),
+    );
+
+  it.effect("follows each status event, however the body is chunked", () =>
+    Effect.gen(function* () {
+      let authorization: string | undefined;
+      let path: string | undefined;
+      const second = JSON.stringify({ ...raw, current: "james-pro" });
+      const first = `event: status\ndata: ${JSON.stringify(raw)}\n\n`;
+      const api = yield* streamWith(
+        () =>
+          eventStream([
+            first.slice(0, 40),
+            first.slice(40),
+            ": keepalive\n\n",
+            `event: status\ndata: ${second.slice(0, 10)}`,
+            `${second.slice(10)}\n\n`,
+          ]),
+        (request) => {
+          path = new URL(request.url).pathname;
+          authorization = request.headers.authorization;
+        },
+      );
+      const statuses = yield* api
+        .streamStatus("https://iris.test", "access-token")
+        .pipe(Stream.runCollect);
+      expect(path).toBe("/api/status/stream");
+      expect(authorization).toBe("Bearer access-token");
+      expect(statuses.map((status) => status.current)).toEqual(["james-max", "james-pro"]);
+    }),
+  );
+
+  it.effect("skips an event this build cannot read and keeps following", () =>
+    Effect.gen(function* () {
+      const api = yield* streamWith(() =>
+        eventStream([
+          "event: status\ndata: {not json\n\n",
+          'event: status\ndata: {"current":1}\n\n',
+          `event: status\ndata: ${JSON.stringify(raw)}\n\n`,
+        ]),
+      );
+      const statuses = yield* api
+        .streamStatus("https://iris.test", "access-token")
+        .pipe(Stream.runCollect);
+      expect(statuses.map((status) => status.current)).toEqual(["james-max"]);
+    }),
+  );
+
+  it.effect("tells a gateway without the stream from a rejected session", () =>
+    Effect.gen(function* () {
+      const failureFor = (status: number) =>
+        streamWith(() => new Response("no", { status })).pipe(
+          Effect.flatMap((api) =>
+            api.streamStatus("https://iris.test", "token").pipe(Stream.runDrain, Effect.flip),
+          ),
+        );
+      const missing = yield* failureFor(404);
+      expect(missing.unsupported).toBe(true);
+      expect(missing.unauthorized).toBeUndefined();
+      const rejected = yield* failureFor(401);
+      expect(rejected.unauthorized).toBe(true);
+      const down = yield* failureFor(503);
+      expect(down.transient).toBe(true);
+      const page = yield* streamWith(
+        () => new Response("<html>sign in</html>", { headers: { "Content-Type": "text/html" } }),
+      ).pipe(
+        Effect.flatMap((api) =>
+          api.streamStatus("https://iris.test", "token").pipe(Stream.runDrain, Effect.flip),
+        ),
+      );
+      expect(page.unsupported).toBe(true);
     }),
   );
 });

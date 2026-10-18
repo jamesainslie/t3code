@@ -4,13 +4,16 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ServerConfigStreamEvent,
   UsageLimitSourceId,
+  type UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
@@ -120,6 +123,76 @@ function harness(
   );
   return { counts, demand, layer };
 }
+
+/** A promise and the function that settles it. */
+function signal() {
+  let resolve = () => {};
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * A gateway whose status stream the test writes to: `send` delivers one
+ * event on the open stream and `end` closes it from the gateway's side.
+ * `nextOpen` and `nextCancel` wait for the client to open or drop a stream.
+ */
+function liveGateway() {
+  const encoder = new TextEncoder();
+  let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let opened = signal();
+  let cancelled = signal();
+  const live = {
+    opens: 0,
+    reply: (request: HttpClientRequest.HttpClientRequest) => {
+      if (new URL(request.url).pathname !== "/api/status/stream") return statusReply();
+      live.opens += 1;
+      const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          stream = controller;
+        },
+        cancel: () => {
+          const cancel = cancelled;
+          cancelled = signal();
+          cancel.resolve();
+        },
+      });
+      const open = opened;
+      opened = signal();
+      open.resolve();
+      return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+    },
+    /** Delivers every status in one read, as a busy gateway's burst would arrive. */
+    send: (...statuses: ReadonlyArray<unknown>) =>
+      stream?.enqueue(
+        encoder.encode(
+          statuses.map((next) => `event: status\ndata: ${JSON.stringify(next)}\n\n`).join(""),
+        ),
+      ),
+    end: () => stream?.close(),
+    nextOpen: () => {
+      const { promise } = opened;
+      return Effect.promise(() => promise);
+    },
+    nextCancel: () => {
+      const { promise } = cancelled;
+      return Effect.promise(() => promise);
+    },
+  };
+  return live;
+}
+
+/** The first published source list whose gateway snapshot matches. */
+const firstWhere = (
+  sources: UsageLimitSources.UsageLimitSources["Service"],
+  matches: (snapshot: UsageLimitSourceSnapshot) => boolean,
+) =>
+  sources.streamChanges.pipe(
+    Stream.filter((snapshots) => snapshots[0] !== undefined && matches(snapshots[0])),
+    Stream.runHead,
+    Effect.map(Option.getOrThrow),
+  );
 
 /** Runs a refresh to completion, letting its retry pause elapse. */
 const refreshThroughRetry = (sources: UsageLimitSources.UsageLimitSources["Service"]) =>
@@ -262,6 +335,114 @@ describe("UsageLimitSources", () => {
       }).pipe(Effect.provide(layer));
     }),
   );
+
+  it.effect("follows the gateway's status stream while a client watches, and only then", () => {
+    const live = liveGateway();
+    const { layer } = harness({ gateway: live.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      expect(live.opens).toBe(0);
+
+      const watching = yield* Scope.make();
+      const opened = live.nextOpen();
+      yield* sources.watch.pipe(Scope.provide(watching));
+      yield* opened;
+      live.send({ ...status, inflightTotal: 4 });
+      const [followed] = yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === 4);
+      expect(followed?.error).toBeUndefined();
+      expect(followed?.proxy?.routes).toEqual([kimi]);
+
+      const closed = live.nextCancel();
+      yield* Scope.close(watching, Exit.void);
+      yield* closed;
+      expect(live.opens).toBe(1);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("publishes a busy gateway's latest status at most every two seconds", () => {
+    const live = liveGateway();
+    const { layer } = harness({ gateway: live.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      const published: Array<number | undefined> = [];
+      yield* sources.streamChanges.pipe(
+        Stream.runForEach((snapshots) =>
+          Effect.sync(() => void published.push(snapshots[0]?.proxy?.inflightTotal)),
+        ),
+        Effect.forkScoped,
+      );
+      const opened = live.nextOpen();
+      yield* sources.watch;
+      yield* opened;
+
+      live.send({ ...status, inflightTotal: 1 });
+      yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === 1);
+      live.send({ ...status, inflightTotal: 2 }, { ...status, inflightTotal: 3 });
+      yield* Effect.raceFirst(
+        firstWhere(sources, (s) => s.proxy?.inflightTotal === 3),
+        Effect.forever(
+          Effect.andThen(
+            Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve))),
+            TestClock.adjust("500 millis"),
+          ),
+        ),
+      );
+      expect(published).not.toContain(2);
+    }).pipe(Effect.scoped, Effect.provide(layer));
+  });
+
+  it.effect("picks the stream back up when the gateway closes it", () => {
+    const live = liveGateway();
+    const { layer } = harness({ gateway: live.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      const first = live.nextOpen();
+      yield* sources.watch;
+      yield* first;
+
+      const second = live.nextOpen();
+      live.end();
+      // The close reaches the follower through the body stream, outside the
+      // test clock, so the clock moves only after the event loop has turned.
+      yield* Effect.raceFirst(
+        second,
+        Effect.forever(
+          Effect.andThen(
+            Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve))),
+            TestClock.adjust("1 second"),
+          ),
+        ),
+      );
+      live.send({ ...status, queueDepth: 2 });
+      yield* firstWhere(sources, (s) => s.proxy?.queueDepth === 2);
+      expect(live.opens).toBe(2);
+    }).pipe(Effect.scoped, Effect.provide(layer));
+  });
+
+  it.effect("reads a watched gateway on a short cadence when it has no stream", () => {
+    const reads = { status: 0 };
+    const { layer } = harness({
+      gateway: (request) => {
+        if (new URL(request.url).pathname === "/api/status/stream") {
+          return new Response("404 page not found", { status: 404 });
+        }
+        reads.status += 1;
+        return Response.json({ ...status, inflightTotal: reads.status });
+      },
+    });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      const before = reads.status;
+      yield* sources.watch;
+      yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === before + 1);
+      yield* TestClock.adjust("5 seconds");
+      yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === before + 2);
+    }).pipe(Effect.scoped, Effect.provide(layer));
+  });
 
   it.effect("keeps malformed source URLs encodable for config subscribers", () =>
     Effect.gen(function* () {

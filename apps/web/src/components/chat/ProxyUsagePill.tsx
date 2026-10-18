@@ -9,11 +9,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
+import { useEnvironmentQuery } from "../../state/query";
 import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
-import { ChevronRightIcon, FeatherIcon, RefreshCwIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon, FeatherIcon, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -29,7 +30,6 @@ import {
 import {
   deriveProxyPill,
   selectProxySource,
-  startRefreshLoop,
   type ProxyAccountView,
   type ProxyPillView,
   type ProxyTone,
@@ -116,26 +116,23 @@ function useNowSecond(): number {
   return now;
 }
 
-const CARD_REFRESH_MS = 5_000;
-
 /**
- * Re-reads the gateway while the card is open. The server's own reads follow
- * the provider health interval, minutes apart, which leaves an open card
- * stale. A failed read shows on the card itself, so it raises no toast.
+ * Holds the gateway's status stream open while the ledger shows in a visible
+ * window. The server follows it and pushes each change through the server
+ * config, so the ledger moves when the gateway does rather than on the
+ * provider health interval. A hidden window lets go: every push reaches every
+ * client, and nobody is reading this one.
  */
-function useRefreshWhileOpen(environmentId: EnvironmentId, enabled: boolean) {
-  const refreshSources = useAtomCommand(serverEnvironment.usageLimitSourceRefresh, {
-    label: "refresh gateway accounts",
-    reportFailure: false,
-    reportDefect: false,
-  });
+function useLiveGateway(environmentId: EnvironmentId) {
+  const [visible, setVisible] = useState(() => !document.hidden);
   useEffect(() => {
-    if (!enabled) return;
-    return startRefreshLoop(() => refreshSources({ environmentId, input: {} }), {
-      intervalMs: CARD_REFRESH_MS,
-      isHidden: () => document.hidden,
-    });
-  }, [enabled, environmentId, refreshSources]);
+    const update = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+  useEnvironmentQuery(
+    visible ? serverEnvironment.usageLimitSourceWatch({ environmentId, input: {} }) : null,
+  );
 }
 
 /** A 3px bar with a hairline at the rotation threshold. */
@@ -447,11 +444,7 @@ function Ledger({
   const pill = useMemo(() => deriveProxyPill(snapshot, now, { seconds: true }), [snapshot, now]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const auth = useAtomCommand(serverEnvironment.usageLimitSourceAuth, { reportFailure: false });
-  const refreshSources = useAtomCommand(serverEnvironment.usageLimitSourceRefresh, {
-    label: "refresh gateway accounts",
-  });
-  const [refreshing, setRefreshing] = useState(false);
-  useRefreshWhileOpen(environmentId, variant === "card");
+  useLiveGateway(environmentId);
   const summaryStyle = useClientSettings((settings) => settings.proxyLedgerSummaryStyle);
   // Rows open independently and stay open while the ledger does.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
@@ -502,21 +495,6 @@ function Ledger({
           <span className="font-mono text-2xs whitespace-nowrap text-secondary-label">
             {pill.runwayText ? `${narrow ? "runway" : "fleet runway"} ${pill.runwayText}` : ""}
           </span>
-          {pill.status === "live" ? (
-            <Button
-              size="icon-micro"
-              variant="ghost-muted"
-              aria-label="Refresh accounts"
-              disabled={refreshing}
-              onClick={async () => {
-                setRefreshing(true);
-                await refreshSources({ environmentId, input: {} });
-                setRefreshing(false);
-              }}
-            >
-              <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-            </Button>
-          ) : null}
           {onClose ? (
             <Button size="icon-micro" variant="ghost-muted" aria-label="Close" onClick={onClose}>
               <XIcon />

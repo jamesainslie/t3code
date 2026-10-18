@@ -419,7 +419,6 @@ export const WS_METHODS = {
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
   usageLimitSourceAuth: "usageLimitSource.auth",
-  usageLimitSourceRefresh: "usageLimitSource.refresh",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -595,6 +594,8 @@ export const WS_METHODS = {
   subscribeThreadDocumentComments: "subscribeThreadDocumentComments",
   // Fork: gateway account logins (forkUsageAccountLogin.ts).
   usageLimitSourceAccountLogin: "usageLimitSource.accountLogin",
+  // Fork: live gateway status while a client watches.
+  usageLimitSourceWatch: "usageLimitSource.watch",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -654,10 +655,19 @@ const WsUsageLimitSourceAuthRpc = Rpc.make(WS_METHODS.usageLimitSourceAuth, {
   error: Schema.Union([UsageLimitSourceError, EnvironmentAuthorizationError]),
 });
 
-/** Re-reads every configured usage-limit source now, without re-checking providers. */
-const WsUsageLimitSourceRefreshRpc = Rpc.make(WS_METHODS.usageLimitSourceRefresh, {
+/**
+ * Fork: while subscribed, gateway sources follow their status streams, so the
+ * `usageLimitSourcesUpdated` config event carries every change. The stream
+ * itself never emits; its lifetime is the demand. It took the place of a
+ * one-shot refresh: a card that is live has nothing to refresh, and one more
+ * method in this group pushes the server's layer types past what TypeScript
+ * resolves, turning `serve`'s requirements into `any`.
+ */
+const WsUsageLimitSourceWatchRpc = Rpc.make(WS_METHODS.usageLimitSourceWatch, {
   payload: Schema.Struct({}),
+  success: Schema.Never,
   error: EnvironmentAuthorizationError,
+  stream: true,
 });
 
 const WsUsageLimitSourceAccountLoginRpc = Rpc.make(WS_METHODS.usageLimitSourceAccountLogin, {
@@ -1924,8 +1934,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
   WsUsageLimitSourceAuthRpc,
-  WsUsageLimitSourceRefreshRpc,
   WsUsageLimitSourceAccountLoginRpc,
+  WsUsageLimitSourceWatchRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsChatGptReconnectProfileRpc,
