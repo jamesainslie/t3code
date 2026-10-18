@@ -70,8 +70,9 @@ export const RPC_REQUIRED_SCOPES = {
   // Fork: document comments.
   [WS_METHODS.threadDocumentCommentsMutate]: AuthOrchestrationOperateScope,
   [WS_METHODS.subscribeThreadDocumentComments]: AuthOrchestrationReadScope,
-  // Fork: roadmap. roadmapDispatch is client-guarded above.
+  // Fork: roadmap. roadmapDispatch, roadmapLinkConfigure and roadmapLinkMint are client-guarded above.
   [WS_METHODS.roadmapSubscribe]: AuthOrchestrationReadScope,
+  [WS_METHODS.roadmapLinkStatus]: AuthOrchestrationReadScope,
   [WS_METHODS.providerAuthComplete]: AuthProvidersManageScope,
   [WS_METHODS.chatGptReconnectProfile]: AuthProvidersManageScope,
   [WS_METHODS.chatGptImportProfile]: AuthProvidersManageScope,

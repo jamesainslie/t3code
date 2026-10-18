@@ -9,13 +9,17 @@ import {
   ThreadId,
 } from "@lathe/contracts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import * as RoadmapContextBlock from "./RoadmapContextBlock.ts";
 import type * as RoadmapProgress from "./RoadmapProgress.ts";
+import * as RoadmapLinkTestkit from "./RoadmapLink.testkit.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 import * as RoadmapTurnContext from "./RoadmapTurnContext.ts";
 
@@ -97,7 +101,7 @@ describe("renderRoadmapContext", () => {
     });
 
     expect(
-      RoadmapTurnContext.renderRoadmapContext(
+      RoadmapContextBlock.renderRoadmapContext(
         feature,
         byIdOf(objective, epic, openBlocker, doneBlocker, feature),
       ),
@@ -117,7 +121,7 @@ describe("renderRoadmapContext", () => {
 
   it("says when a top-level item has no due date, criteria or blockers", () => {
     const item = workItem("root", { type: "objective", title: "Ship it" });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
     expect(rendered).toContain(
       'Objective "Ship it" (id root), state Backlog, priority P2, no due date.',
     );
@@ -132,8 +136,8 @@ describe("renderRoadmapContext", () => {
         criterion(`c${index}`, `Criterion number ${index} with some explanatory words`),
       ),
     });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toContain("[ ] Criterion number 0 with some explanatory words");
     expect(rendered).not.toContain("Criterion number 59");
     expect(rendered).toMatch(/\.\.\. and \d+ more criteria\./);
@@ -142,8 +146,8 @@ describe("renderRoadmapContext", () => {
 
   it("shortens a very long title instead of dropping the footer", () => {
     const item = workItem("wordy", { title: "word ".repeat(1_000).trim() });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item));
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    const rendered = RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item));
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toMatch(/update this item\.$/);
   });
 });
@@ -164,7 +168,7 @@ describe("renderRoadmapContext progress line", () => {
   it("puts the forecast and progress right after the state line", () => {
     const parent = workItem("parent", { type: "epic", title: "Roadmap" });
     const item = workItem("feature", { parentId: parent.id, dueDate: "2026-10-23" });
-    const lines = RoadmapTurnContext.renderRoadmapContext(
+    const lines = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(parent, item),
       progress(),
@@ -176,7 +180,7 @@ describe("renderRoadmapContext progress line", () => {
 
   it("shows progress alone when there is no forecast, in the area's unit", () => {
     const item = workItem("feature");
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({
@@ -192,7 +196,7 @@ describe("renderRoadmapContext progress line", () => {
 
   it("leaves the line out with no forecast and nothing done", () => {
     const item = workItem("feature");
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({
@@ -200,7 +204,7 @@ describe("renderRoadmapContext progress line", () => {
         forecast: { status: "no-forecast", projected: null, slackDays: null },
       }),
     );
-    expect(rendered).toBe(RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item)));
+    expect(rendered).toBe(RoadmapContextBlock.renderRoadmapContext(item, byIdOf(item)));
     expect(rendered).not.toMatch(/^(Forecast|Progress):/m);
   });
 
@@ -211,12 +215,12 @@ describe("renderRoadmapContext progress line", () => {
         criterion(`c${index}`, `Criterion number ${index} with some explanatory words`),
       ),
     });
-    const rendered = RoadmapTurnContext.renderRoadmapContext(
+    const rendered = RoadmapContextBlock.renderRoadmapContext(
       item,
       byIdOf(item),
       progress({ forecast: { status: "late", projected: "2026-11-02", slackDays: -3 } }),
     );
-    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapContextBlock.ROADMAP_CONTEXT_MAX_CHARS);
     expect(rendered).toContain("Forecast: Late, projected 2026-11-02; 6 of 10 pts done.");
     expect(rendered).toMatch(/update this item\.$/);
   });
@@ -226,6 +230,7 @@ const roadmapLayer = (homeEnvironmentId: EnvironmentId | null) =>
   RoadmapService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        RoadmapLinkTestkit.layerNotLinked,
         IdAllocator.layer,
         ServerSettingsService.layerTest({ roadmap: { homeEnvironmentId } }),
         Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -317,12 +322,13 @@ describe("RoadmapTurnContext.forThread", () => {
       const failing = turnContextLayer(
         Layer.mock(RoadmapService.RoadmapService)({
           isHome: Effect.succeed(true),
-          forThread: () => Effect.fail(new RoadmapError({ code: "internal", message: "down" })),
+          threadContext: () => Effect.fail(new RoadmapError({ code: "internal", message: "down" })),
         }),
       );
       const dying = turnContextLayer(
         Layer.mock(RoadmapService.RoadmapService)({
-          isHome: Effect.die(new Error("settings exploded")),
+          isHome: Effect.succeed(true),
+          threadContext: () => Effect.die(new Error("settings exploded")),
         }),
       );
       for (const roadmap of [failing, dying]) {
@@ -333,5 +339,73 @@ describe("RoadmapTurnContext.forThread", () => {
         expect(block).toBe("");
       }
     }),
+  );
+});
+
+describe("RoadmapTurnContext.forThread off the home", () => {
+  const makeLinked = Effect.fn("makeLinkedTurnContext")(function* () {
+    const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+    const thread = { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID };
+    yield* home.roadmap.dispatch(
+      create("remote", false, { attachThread: thread } as Partial<RoadmapCommand>),
+      user,
+    );
+    const services = yield* Layer.build(
+      RoadmapTurnContext.layer.pipe(
+        Layer.provideMerge(
+          RoadmapLinkTestkit.layerLinkedEnvironment(home, {
+            environmentId: ENVIRONMENT_ID,
+            homeEnvironmentId: EnvironmentId.make("environment-home"),
+          }),
+        ),
+      ),
+    );
+    const roadmap = Context.get(services, RoadmapService.RoadmapService);
+    yield* roadmap.configureLink({
+      homeUrl: RoadmapLinkTestkit.HOME_URL,
+      credential: yield* home.linkGrant(ENVIRONMENT_ID),
+    });
+    return { home, roadmap, context: Context.get(services, RoadmapTurnContext.RoadmapTurnContext) };
+  });
+
+  it.effect("renders the home's block for a thread on a linked environment", () =>
+    Effect.gen(function* () {
+      const { context } = yield* makeLinked();
+      const block = yield* context.forThread(THREAD_ID);
+      expect(block).toMatch(/^Roadmap work item for this thread/);
+      expect(block).toContain('Story "Story remote" (id remote)');
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "keeps the last block it got, marked possibly out of date, while the home is down",
+    () =>
+      Effect.gen(function* () {
+        const { home, context } = yield* makeLinked();
+        const fresh = yield* context.forThread(THREAD_ID);
+        yield* TestClock.adjust("90 minutes");
+        home.setReachable(false);
+
+        const stale = yield* context.forThread(THREAD_ID);
+        const [marker, ...rest] = stale.split("\n");
+        expect(marker).toBe(
+          "Possibly out of date: the roadmap home could not be reached, so this is the copy from 1970-01-01T00:00:00.000Z.",
+        );
+        expect(rest.join("\n")).toBe(fresh);
+        // A thread the home never answered for has nothing to fall back on.
+        expect(yield* context.forThread(ThreadId.make("thread-never-seen"))).toBe("");
+
+        home.setReachable(true);
+        expect(yield* context.forThread(THREAD_ID)).toBe(fresh);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("drops the block once the environment is unlinked", () =>
+    Effect.gen(function* () {
+      const { roadmap, context } = yield* makeLinked();
+      expect(yield* context.forThread(THREAD_ID)).not.toBe("");
+      yield* roadmap.configureLink(null);
+      expect(yield* context.forThread(THREAD_ID)).toBe("");
+    }).pipe(Effect.scoped),
   );
 });

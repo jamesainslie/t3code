@@ -1,5 +1,16 @@
 import * as Context from "effect/Context";
 import { ProjectSyncRequest, ProjectSyncResponse, ProjectSyncError } from "./projectSync.ts";
+// Fork: roadmap.
+import {
+  RoadmapDispatchResult,
+  RoadmapError,
+  RoadmapItemId,
+  RoadmapLinkDispatchInput,
+  RoadmapLinkItem,
+  RoadmapLinkSnapshot,
+  RoadmapThreadContext,
+  RoadmapThreadRef,
+} from "./roadmap.ts";
 import type * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -47,6 +58,7 @@ import {
 import {
   DpopFailureReason,
   AuthSessionId,
+  EnvironmentId,
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
@@ -391,6 +403,24 @@ export class EnvironmentAuthenticatedAuth extends HttpApiMiddleware.Service<
   EnvironmentAuthenticatedAuth,
   { provides: EnvironmentAuthenticatedPrincipal }
 >()("EnvironmentAuthenticatedAuth", {
+  error: EnvironmentAuthenticationErrors,
+}) {}
+
+// Fork: roadmap. The other environment a roadmap-link session speaks for.
+export class EnvironmentRoadmapLinkPrincipal extends Context.Service<
+  EnvironmentRoadmapLinkPrincipal,
+  {
+    readonly sessionId: AuthSessionId;
+    readonly environmentId: EnvironmentId;
+    readonly scopes: ReadonlySet<AuthEnvironmentScope>;
+  }
+>()("@lathe/contracts/environmentHttp/EnvironmentRoadmapLinkPrincipal") {}
+
+// Fork: roadmap. Accepts roadmap-link sessions and nothing else.
+export class EnvironmentRoadmapLinkAuth extends HttpApiMiddleware.Service<
+  EnvironmentRoadmapLinkAuth,
+  { provides: EnvironmentRoadmapLinkPrincipal }
+>()("EnvironmentRoadmapLinkAuth", {
   error: EnvironmentAuthenticationErrors,
 }) {}
 
@@ -764,7 +794,50 @@ class EnvironmentWebhooksHttpApi extends HttpApiGroup.make("webhooks")
   .add(HttpApiEndpoint.patch("webhookPatch", WEBHOOK_PATH, webhookEndpoint))
   .add(HttpApiEndpoint.get("webhookGet", WEBHOOK_PATH, webhookEndpoint)) {}
 
+// Fork: roadmap. The home's roadmap for linked environments. Only roadmap-link
+// sessions reach it; handlers check roadmap:read or roadmap:write.
+const roadmapLinkErrors = [
+  EnvironmentAuthInvalidError,
+  EnvironmentScopeRequiredError,
+  EnvironmentInternalError,
+] as const;
+
+class EnvironmentRoadmapHttpApi extends HttpApiGroup.make("roadmap")
+  .add(
+    HttpApiEndpoint.get("snapshot", "/api/roadmap/snapshot", {
+      headers: OptionalBearerHeaders,
+      success: RoadmapLinkSnapshot,
+      error: [RoadmapError, ...roadmapLinkErrors],
+    }).middleware(EnvironmentRoadmapLinkAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("item", "/api/roadmap/items/:itemId", {
+      headers: OptionalBearerHeaders,
+      params: Schema.Struct({ itemId: RoadmapItemId }),
+      success: RoadmapLinkItem,
+      error: [RoadmapError, ...roadmapLinkErrors],
+    }).middleware(EnvironmentRoadmapLinkAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("forThread", "/api/roadmap/for-thread", {
+      headers: OptionalBearerHeaders,
+      payload: Schema.Struct({ thread: RoadmapThreadRef }),
+      success: RoadmapThreadContext,
+      error: [RoadmapError, ...roadmapLinkErrors],
+    }).middleware(EnvironmentRoadmapLinkAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("dispatch", "/api/roadmap/dispatch", {
+      headers: OptionalBearerHeaders,
+      payload: RoadmapLinkDispatchInput,
+      success: RoadmapDispatchResult,
+      error: [RoadmapError, ...roadmapLinkErrors],
+    }).middleware(EnvironmentRoadmapLinkAuth),
+  ) {}
+
 export class EnvironmentHttpApi extends HttpApi.make("environment")
+  // Fork: roadmap.
+  .add(EnvironmentRoadmapHttpApi)
   .add(EnvironmentProjectSyncHttpApi)
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)

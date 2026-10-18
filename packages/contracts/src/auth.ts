@@ -45,6 +45,10 @@ export const AuthAccessReadScope = "access:read" as const;
 export const AuthAccessWriteScope = "access:write" as const;
 export const AuthRelayReadScope = "relay:read" as const;
 export const AuthRelayWriteScope = "relay:write" as const;
+// Fork: roadmap. Only roadmap-link sessions, which another environment uses to
+// reach this one's roadmap, hold these; no client grant includes them.
+export const AuthRoadmapReadScope = "roadmap:read" as const;
+export const AuthRoadmapWriteScope = "roadmap:write" as const;
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -63,6 +67,9 @@ export const AuthEnvironmentScope = Schema.Literals([
   AuthAccessWriteScope,
   AuthRelayReadScope,
   AuthRelayWriteScope,
+  // Fork: roadmap.
+  AuthRoadmapReadScope,
+  AuthRoadmapWriteScope,
 ]);
 export type AuthEnvironmentScope = typeof AuthEnvironmentScope.Type;
 export const AuthEnvironmentScopes = Schema.Array(AuthEnvironmentScope);
@@ -107,6 +114,9 @@ const legacyParents: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>>
   [AuthSourceControlWriteScope]: AuthOrchestrationOperateScope,
   [AuthFilesystemWriteScope]: AuthOrchestrationOperateScope,
   [AuthTerminalReadScope]: AuthTerminalOperateScope,
+  // Fork: roadmap. Only so a denial stays decodable; no client checks these scopes.
+  [AuthRoadmapReadScope]: AuthOrchestrationReadScope,
+  [AuthRoadmapWriteScope]: AuthOrchestrationOperateScope,
 };
 
 /** Keep permission denials decodable by clients with the original scope enum. */

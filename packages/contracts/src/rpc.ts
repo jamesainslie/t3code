@@ -13,6 +13,11 @@ import {
   RoadmapDispatchInput,
   RoadmapDispatchResult,
   RoadmapError,
+  RoadmapLinkConfigureInput,
+  RoadmapLinkError,
+  RoadmapLinkMintInput,
+  RoadmapLinkMintResult,
+  RoadmapLinkStatus,
   RoadmapStreamItem,
   RoadmapSubscribeInput,
 } from "./roadmap.ts";
@@ -607,6 +612,9 @@ export const WS_METHODS = {
   // Fork: roadmap (roadmap.ts).
   roadmapSubscribe: "roadmap.subscribe",
   roadmapDispatch: "roadmap.dispatch",
+  roadmapLinkStatus: "roadmap.link.status",
+  roadmapLinkConfigure: "roadmap.link.configure",
+  roadmapLinkMint: "roadmap.link.mint",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -1945,6 +1953,27 @@ const WsRoadmapDispatchRpc = Rpc.make(WS_METHODS.roadmapDispatch, {
   error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
 });
 
+/** This environment's link to the roadmap home, when it is not the home. */
+const WsRoadmapLinkStatusRpc = Rpc.make(WS_METHODS.roadmapLinkStatus, {
+  payload: Schema.Struct({}),
+  success: RoadmapLinkStatus,
+  error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
+});
+
+/** Links this environment with a grant minted on the home, or unlinks it; answers the new status. */
+const WsRoadmapLinkConfigureRpc = Rpc.make(WS_METHODS.roadmapLinkConfigure, {
+  payload: RoadmapLinkConfigureInput,
+  success: RoadmapLinkStatus,
+  error: Schema.Union([RoadmapLinkError, RoadmapError, EnvironmentAuthorizationError]),
+});
+
+/** On the home: a one-time grant another environment spends to link itself. */
+const WsRoadmapLinkMintRpc = Rpc.make(WS_METHODS.roadmapLinkMint, {
+  payload: RoadmapLinkMintInput,
+  success: RoadmapLinkMintResult,
+  error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
+});
+
 export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthorization>()(
   "lathe/contracts/RpcScopeAuthorization",
   { error: EnvironmentAuthorizationError },
@@ -2160,8 +2189,12 @@ export const WsCoreRpcGroup = RpcGroup.make(
  * instantiation limit. The server builds handlers per group, so a fork RPC
  * here costs the core group's handler layer nothing.
  */
-export const WsForkRpcGroup = RpcGroup.make(WsRoadmapSubscribeRpc, WsRoadmapDispatchRpc).middleware(
-  RpcScopeAuthorization,
-);
+export const WsForkRpcGroup = RpcGroup.make(
+  WsRoadmapSubscribeRpc,
+  WsRoadmapDispatchRpc,
+  WsRoadmapLinkStatusRpc,
+  WsRoadmapLinkConfigureRpc,
+  WsRoadmapLinkMintRpc,
+).middleware(RpcScopeAuthorization);
 
 export const WsRpcGroup = WsCoreRpcGroup.merge(WsForkRpcGroup);

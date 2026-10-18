@@ -16,6 +16,8 @@ import * as Stream from "effect/Stream";
 import type { Tool } from "effect/ai";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import * as RoadmapLinkTestkit from "../../../fork/roadmap/RoadmapLink.testkit.ts";
+import * as RoadmapLinkOutbox from "../../../fork/roadmap/RoadmapLinkOutbox.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
@@ -53,6 +55,7 @@ const roadmapLayer = (homeEnvironmentId: EnvironmentId | null) =>
     // The handlers read area settings too.
     Layer.provideMerge(
       Layer.mergeAll(
+        RoadmapLinkTestkit.layerNotLinked,
         IdAllocator.layer,
         ServerSettingsService.layerTest({ roadmap: { homeEnvironmentId } }),
         Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -73,14 +76,37 @@ const threadsLayer = Layer.mock(ThreadManagement.ThreadManagementService)({
 type Tools = typeof RoadmapToolkit.tools;
 
 const makeHarness = Effect.fn("makeRoadmapToolkitHarness")(function* (
-  options: { readonly homeEnvironmentId?: EnvironmentId | null } = {},
+  options: {
+    readonly homeEnvironmentId?: EnvironmentId | null;
+    /** Runs this environment off the home, linked to the given home. */
+    readonly linkedTo?: RoadmapLinkTestkit.InProcessHome;
+  } = {},
 ) {
   const dependencies = Layer.mergeAll(
     threadsLayer,
     NodeCrypto.layer,
-    roadmapLayer(options.homeEnvironmentId ?? null),
+    options.linkedTo === undefined
+      ? roadmapLayer(options.homeEnvironmentId ?? null)
+      : RoadmapLinkTestkit.layerLinkedEnvironment(options.linkedTo, {
+          environmentId: ENVIRONMENT_ID,
+          homeEnvironmentId: EnvironmentId.make("environment-home"),
+        }),
   );
   const services = yield* Layer.build(dependencies);
+  if (options.linkedTo !== undefined) {
+    yield* RoadmapLinkOutbox.runWorker.pipe(Effect.provideContext(services), Effect.forkScoped);
+    yield* RoadmapService.RoadmapService.pipe(
+      Effect.flatMap((roadmap) =>
+        Effect.gen(function* () {
+          yield* roadmap.configureLink({
+            homeUrl: RoadmapLinkTestkit.HOME_URL,
+            credential: yield* options.linkedTo!.linkGrant(ENVIRONMENT_ID),
+          });
+        }),
+      ),
+      Effect.provideContext(services),
+    );
+  }
   const toolkit = yield* RoadmapToolkit.pipe(
     Effect.provide(
       McpToolAccess.HandlersLayer.layer(RoadmapHandlers.layer).pipe(
@@ -265,7 +291,7 @@ describe("roadmap toolkit handlers", () => {
 
       const second = yield* harness.call("lathe_roadmap_log_hours", { hours: 2 });
       expect(second.entryId).not.toBe(first.entryId);
-      expect(second.totalHours).toBe(3.5);
+      expect(second).toMatchObject({ totalHours: 3.5 });
 
       const item = Option.getOrThrow(yield* harness.roadmap.get(feature));
       expect(item.hours).toHaveLength(2);
@@ -453,6 +479,67 @@ describe("roadmap toolkit handlers", () => {
         .call("lathe_roadmap_create", { type: "story", title: "Nowhere" })
         .pipe(Effect.flip);
       expect(write).toMatchObject({ code: "roadmap_home_elsewhere" });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reads and changes the home's roadmap from an environment linked to it", () =>
+    Effect.gen(function* () {
+      const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+      const harness = yield* makeHarness({ linkedTo: home });
+      const created = yield* harness.call("lathe_roadmap_create", {
+        type: "feature",
+        title: "From the laptop",
+        criteria: ["Ships"],
+        attachCaller: true,
+      });
+      expect(created).toMatchObject({ itemId: expect.any(String), sequence: expect.any(Number) });
+      expect("queued" in created).toBe(false);
+
+      const read = yield* harness.call("lathe_roadmap_read", {});
+      expect(read.item).toMatchObject({ id: created.itemId, title: "From the laptop" });
+      expect(read.item.createdBy).toMatchObject({ _tag: "agent", thread: callerRef });
+      const listed = yield* harness.call("lathe_roadmap_list", {});
+      expect(listed.items.map((row) => row.id)).toEqual([created.itemId]);
+
+      const logged = yield* harness.call("lathe_roadmap_log_hours", { hours: 2 });
+      expect(logged).toMatchObject({ itemId: created.itemId, totalHours: 2 });
+      const onHome = Option.getOrThrow(yield* home.roadmap.get(created.itemId));
+      expect(onHome.hours.map((entry) => entry.hours)).toEqual([2]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("queues a change for a named item while the home cannot be reached", () =>
+    Effect.gen(function* () {
+      const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+      const harness = yield* makeHarness({ linkedTo: home });
+      const created = yield* harness.call("lathe_roadmap_create", {
+        type: "feature",
+        title: "Queue me",
+        criteria: ["One"],
+      });
+      const [criterion] = Option.getOrThrow(yield* home.roadmap.get(created.itemId)).criteria;
+      home.setReachable(false);
+
+      const ticked = yield* harness.call("lathe_roadmap_criterion_tick", {
+        itemId: created.itemId,
+        criterionId: criterion!.id,
+        ticked: true,
+        evidence: "Merged",
+      });
+      expect(ticked).toEqual({ itemId: created.itemId, queued: true });
+      const logged = yield* harness.call("lathe_roadmap_log_hours", {
+        itemId: created.itemId,
+        hours: 1,
+      });
+      expect(logged).toMatchObject({ itemId: created.itemId, queued: true });
+      expect("totalHours" in logged).toBe(false);
+      expect((yield* harness.roadmap.linkStatus).queued).toBe(2);
+
+      // The thread's own item needs the home to say which it is.
+      const attached = yield* harness
+        .call("lathe_roadmap_log_hours", { hours: 1 })
+        .pipe(Effect.flip);
+      expect(attached).toMatchObject({ _tag: "RoadmapToolFailure", code: "internal" });
     }).pipe(Effect.scoped),
   );
 });

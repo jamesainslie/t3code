@@ -4,6 +4,7 @@ import {
   EnvironmentAuthenticatedAuth,
   EnvironmentAuthenticatedPrincipal,
   EnvironmentHttpApi,
+  EnvironmentRoadmapLinkAuth,
   type AuthBrowserSessionRequest,
   type AuthBrowserSessionResult,
   type AuthCreatePairingCredentialInput,
@@ -119,6 +120,10 @@ export async function installEnvironmentHttpTest(scenario: EnvironmentHttpTestSc
         ),
       ]),
       Effect.provideService(EnvironmentAuthenticatedAuth, authenticatedAuth),
+      // Fork: roadmap. The client under test never calls the roadmap link group.
+      Effect.provideService(EnvironmentRoadmapLinkAuth, () =>
+        Effect.die(new Error("Unexpected roadmap link request")),
+      ),
       Effect.scoped,
     ),
   );

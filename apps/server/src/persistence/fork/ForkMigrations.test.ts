@@ -125,6 +125,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [6, "ProjectSyncRecords"],
           [7, "Roadmap"],
           [8, "RoadmapCalendar"],
+          [9, "RoadmapLinkOutbox"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
@@ -208,6 +209,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           "projection_roadmap_items",
           "projection_roadmap_attachments",
           "projection_roadmap_sprints",
+          "roadmap_link_outbox",
         ]) {
           assert.isTrue(yield* hasTable(table), table);
         }

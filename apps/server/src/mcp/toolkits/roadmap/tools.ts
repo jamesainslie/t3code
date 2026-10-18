@@ -257,19 +257,32 @@ export const RoadmapReadResult = Schema.Struct({
 });
 export type RoadmapReadResult = typeof RoadmapReadResult.Type;
 
-export const RoadmapChangeResult = Schema.Struct({
+const RoadmapApplied = Schema.Struct({
   itemId: RoadmapItemId,
   sequence: NonNegativeInt,
 });
-export type RoadmapChangeResult = typeof RoadmapChangeResult.Type;
 
-export const RoadmapLogHoursResult = Schema.Struct({
-  ...RoadmapChangeResult.fields,
-  entryId: Schema.String,
-  totalHours: NonNegativeNumber.annotate({
-    description: "Every hour logged against the item so far.",
+const RoadmapQueued = Schema.Struct({
+  itemId: RoadmapItemId,
+  queued: Schema.Literal(true).annotate({
+    description:
+      "The roadmap home could not be reached, so the change waits in this environment's queue and is sent, in order, once it can be.",
   }),
 });
+
+export const RoadmapChangeResult = Schema.Union([RoadmapApplied, RoadmapQueued]);
+export type RoadmapChangeResult = typeof RoadmapChangeResult.Type;
+
+export const RoadmapLogHoursResult = Schema.Union([
+  Schema.Struct({
+    ...RoadmapApplied.fields,
+    entryId: Schema.String,
+    totalHours: NonNegativeNumber.annotate({
+      description: "Every hour logged against the item so far.",
+    }),
+  }),
+  Schema.Struct({ ...RoadmapQueued.fields, entryId: Schema.String }),
+]);
 export type RoadmapLogHoursResult = typeof RoadmapLogHoursResult.Type;
 
 const ListTool = Tool.make("lathe_roadmap_list", {

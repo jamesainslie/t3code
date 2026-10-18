@@ -49,6 +49,10 @@ above its ceiling. Inside MCP the credential sets the limits and tool
 parameters only pick targets; see
 [threadAccess](../../apps/server/src/mcp/threadAccess.ts).
 
+Roadmap-link sessions, subject `roadmap-link:<environmentId>`, are the second
+restricted audience. Only the roadmap HTTP group accepts them, for the reason
+given in [the roadmap's one-way link](./roadmap.md#the-one-way-link).
+
 Issuer and resource URLs come from the request's Host and
 `X-Forwarded-Proto`, so one server answers over loopback, Tailscale Serve and a
 T3 Connect tunnel. A proxy that rewrites Host or drops the protocol header

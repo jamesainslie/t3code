@@ -217,6 +217,9 @@ const RPC_AGGREGATES = {
   [WS_METHODS.subscribeThreadDocumentComments]: "orchestration",
   [WS_METHODS.roadmapSubscribe]: "orchestration",
   [WS_METHODS.roadmapDispatch]: "orchestration",
+  [WS_METHODS.roadmapLinkStatus]: "orchestration",
+  [WS_METHODS.roadmapLinkConfigure]: "auth",
+  [WS_METHODS.roadmapLinkMint]: "auth",
   [WS_METHODS.terminalBrowserLaunchComplete]: "terminal",
   [WS_METHODS.terminalBrowserLaunchCancel]: "terminal",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;

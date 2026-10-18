@@ -62,6 +62,9 @@ import * as DocumentComments from "./fork/DocumentComments.ts";
 // Fork: roadmap.
 import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
 import * as RoadmapTurnContext from "./fork/roadmap/RoadmapTurnContext.ts";
+import * as RoadmapHttp from "./fork/roadmap/http.ts";
+import * as RoadmapLink from "./fork/roadmap/RoadmapLink.ts";
+import * as RoadmapLinkOutbox from "./fork/roadmap/RoadmapLinkOutbox.ts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
@@ -493,9 +496,12 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
   }),
 );
 
-// Fork: roadmap. One layer value for the turn context and the fork services,
-// so both get the same RoadmapService instance.
-const layerRoadmapService = RoadmapService.layer.pipe(Layer.provide(IdAllocator.layer));
+// Fork: roadmap. One layer value for the turn context, the fork services and
+// the link worker, so all get the same RoadmapService and link outbox.
+const layerRoadmapService = RoadmapService.layer.pipe(
+  Layer.provide(IdAllocator.layer),
+  Layer.provide(RoadmapLink.layer),
+);
 
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   // Fork: roadmap. Turn start reads the attached work item for each turn.
@@ -521,8 +527,10 @@ const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
 const layerForkServices = Layer.mergeAll(
   RuntimeLayer.layerEventSink,
   DocumentComments.layer,
-  // Fork: roadmap.
+  // Fork: roadmap. The worker sends queued writes to the home when this
+  // environment is linked to one, and idles otherwise.
   layerRoadmapService,
+  RoadmapLinkOutbox.layerWorker.pipe(Layer.provide(layerRoadmapService)),
   ProjectSyncService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -719,6 +727,9 @@ const layerMakeRoutes = Layer.mergeAll(
       Layer.provide(PullRequestHttp.layer),
       Layer.provide(ProjectHttp.layer),
       Layer.provide(projectSyncHttpApiLayer),
+      // Fork: roadmap.
+      Layer.provide(RoadmapHttp.layer),
+      Layer.provide(RoadmapHttp.layerRoadmapLinkAuth),
       Layer.provide(ServerHttp.layerServerEnvironmentHttpApi),
       Layer.provide(WebhookRoute.layer.pipe(Layer.provide(RelayDeliveryProof.layer))),
       Layer.provide(AuthHttp.layerAuthenticatedAuth),

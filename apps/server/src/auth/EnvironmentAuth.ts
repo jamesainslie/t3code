@@ -4,9 +4,12 @@ import {
   AuthAdministrativeScopes,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
+  AuthRoadmapReadScope,
+  AuthRoadmapWriteScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   AuthStandardClientScopes,
+  EnvironmentId,
   type AuthAccessTokenResult,
   type AuthBrowserSessionResult,
   type AuthClientMetadata,
@@ -92,6 +95,29 @@ export const mcpClientScopes = (
           AuthSourceControlWriteScope,
         ]
       : [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+
+/**
+ * Fork: roadmap. Another environment's credential for this one's roadmap. Like
+ * MCP client sessions, only the roadmap HTTP API accepts them: the subject
+ * names the environment the link speaks for, and the roadmap API binds agent
+ * actors to it, which no other path would check.
+ */
+const ROADMAP_LINK_SUBJECT_PREFIX = "roadmap-link:";
+// A link lives as long as the other environment keeps it; a short life would
+// break agents' roadmap access on whichever day it lapsed.
+const ROADMAP_LINK_SESSION_TTL = Duration.days(365);
+const ROADMAP_LINK_SCOPES = [AuthRoadmapReadScope, AuthRoadmapWriteScope] as const;
+
+export const roadmapLinkSubject = (environmentId: EnvironmentId) =>
+  `${ROADMAP_LINK_SUBJECT_PREFIX}${environmentId}`;
+
+const isRoadmapLinkSubject = (subject: string) => subject.startsWith(ROADMAP_LINK_SUBJECT_PREFIX);
+
+export interface RoadmapLinkSession {
+  readonly sessionId: AuthSessionId;
+  readonly environmentId: EnvironmentId;
+  readonly scopes: ReadonlySet<AuthEnvironmentScope>;
+}
 
 export interface McpClientSession {
   readonly sessionId: AuthSessionId;
@@ -576,6 +602,19 @@ export class EnvironmentAuth extends Context.Service<
     readonly authenticateBrowserSession: (
       request: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError>;
+    // Fork: roadmap.
+    /**
+     * A one-time grant that exchanges at `/oauth/token` for a year-long bearer
+     * session holding the roadmap scopes, on behalf of `environmentId`.
+     */
+    readonly issueRoadmapLinkGrant: (input: {
+      readonly environmentId: EnvironmentId;
+      readonly label?: string;
+    }) => Effect.Effect<AuthPairingCredentialResult, ServerAuthInternalError>;
+    /** Accepts only roadmap-link bearer sessions; the roadmap HTTP API is their one audience. */
+    readonly authenticateRoadmapLink: (
+      request: HttpServerRequest.HttpServerRequest,
+    ) => Effect.Effect<RoadmapLinkSession, ServerAuthCredentialError | ServerAuthInternalError>;
   }
 >()("lathe/auth/EnvironmentAuth") {}
 
@@ -621,7 +660,18 @@ const rejectMcpClientAudience = <S extends { readonly subject: string }>(session
           diagnostic: "MCP client sessions are only accepted by the MCP endpoint.",
         }),
       ).pipe(Effect.tap(() => Effect.logWarning("Rejected an MCP client session outside /mcp.")))
-    : Effect.succeed(session);
+    : // Fork: roadmap.
+      isRoadmapLinkSubject(session.subject)
+      ? Effect.fail(
+          new ServerAuthInvalidCredentialError({
+            diagnostic: "Roadmap link sessions are only accepted by the roadmap API.",
+          }),
+        ).pipe(
+          Effect.tap(() =>
+            Effect.logWarning("Rejected a roadmap link session outside the roadmap API."),
+          ),
+        )
+      : Effect.succeed(session);
 
 const mapSessionVerificationErrors = <A, R>(
   effect: Effect.Effect<A, SessionStore.SessionCredentialError, R>,
@@ -985,7 +1035,10 @@ export const make = Effect.gen(function* () {
                       proofKeyThumbprint: input.proofKeyThumbprint,
                       ttl: Duration.hours(1),
                     }
-                  : {}),
+                  : // Fork: roadmap.
+                    isRoadmapLinkSubject(grant.subject)
+                    ? { ttl: ROADMAP_LINK_SESSION_TTL }
+                    : {}),
                 replaceActiveForSubjectAndMethod: grant.method === "desktop-bootstrap",
                 client: {
                   ...requestMetadata,
@@ -1338,7 +1391,44 @@ export const make = Effect.gen(function* () {
       Effect.withSpan("EnvironmentAuth.consumeMcpApprovalCode"),
     );
 
+  // Fork: roadmap.
+  const issueRoadmapLinkGrant: EnvironmentAuth["Service"]["issueRoadmapLinkGrant"] = (input) =>
+    issuePairingCredentialForSubject({
+      scopes: ROADMAP_LINK_SCOPES,
+      subject: roadmapLinkSubject(input.environmentId),
+      label: input.label ?? `Roadmap link from ${input.environmentId}`,
+    }).pipe(Effect.withSpan("EnvironmentAuth.issueRoadmapLinkGrant"));
+
+  const authenticateRoadmapLink: EnvironmentAuth["Service"]["authenticateRoadmapLink"] = (
+    request,
+  ) => {
+    const token = parseBearerToken(request);
+    if (token === null) return Effect.fail(new ServerAuthMissingCredentialError({}));
+    return sessions.verify(token).pipe(
+      mapSessionVerificationErrors,
+      Effect.flatMap((session) => {
+        const environmentId = isRoadmapLinkSubject(session.subject)
+          ? session.subject.slice(ROADMAP_LINK_SUBJECT_PREFIX.length)
+          : "";
+        return environmentId.length > 0 && session.method === "bearer-access-token"
+          ? Effect.succeed({
+              sessionId: session.sessionId,
+              environmentId: EnvironmentId.make(environmentId),
+              scopes: new Set(session.scopes),
+            } satisfies RoadmapLinkSession)
+          : Effect.fail(
+              new ServerAuthInvalidCredentialError({
+                diagnostic: "Only roadmap link sessions are accepted here.",
+              }),
+            );
+      }),
+      Effect.withSpan("EnvironmentAuth.authenticateRoadmapLink"),
+    );
+  };
+
   return EnvironmentAuth.of({
+    issueRoadmapLinkGrant,
+    authenticateRoadmapLink,
     getDescriptor: () =>
       Effect.succeed(descriptor).pipe(Effect.withSpan("EnvironmentAuth.getDescriptor")),
     getSessionState,

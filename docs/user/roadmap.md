@@ -127,8 +127,8 @@ alone, and agents cannot change them.
 Agents work from the server's calendar, which is UTC. Near midnight, the forecast an agent sees can
 be a day off from the one on your Roadmap.
 
-Agents can reach the roadmap only on threads that run on the roadmap home. Agents on other
-environments cannot use it yet.
+Agents on threads that run on another environment reach the roadmap once that environment is
+linked to the roadmap home. See [Link a second environment](#link-a-second-environment).
 
 ## Choose the roadmap home
 
@@ -141,3 +141,24 @@ environment** keeps a separate roadmap of its own, and agents there use that one
 
 Changing the home does not move any work items. The new home shows its own roadmap, and the old
 items stay on the previous home.
+
+## Link a second environment
+
+An environment that is not the roadmap home needs a link to the home before its agents can use the
+roadmap. Linking needs an administrative session on both environments.
+
+1. Connect this client to both environments.
+2. Open **Settings → Roadmap** and select the environment you want to link.
+3. Under **Roadmap home**, choose the home. Lathe links the environment straight away.
+
+The link uses the address this client reaches the home at. If the environment reaches the home
+another way, such as over Tailscale, change the address under **Link to the roadmap home** and
+choose **Link again**.
+
+**Link status** shows whether the home is answering. While the home is offline, changes agents make
+wait on their own environment and are sent in order once the home is back. Their tools report such
+a change as queued. Agents keep the last copy of their work item, marked as possibly out of date.
+A change the home refuses is counted under **Link status** and is not sent again.
+
+To end a link, choose **Unlink**. You can also revoke the link's session on the home, under
+**Settings → Connections**.

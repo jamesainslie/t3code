@@ -103,6 +103,8 @@ import {
   WS_METHODS,
   WsCoreRpcGroup,
   WsForkRpcGroup,
+  // Fork: roadmap.
+  RoadmapError,
   WsRpcGroup,
 } from "@lathe/contracts";
 import { resolveServerBackgroundActivitySettings } from "@lathe/shared/backgroundActivitySettings";
@@ -1169,10 +1171,27 @@ const CoreServerWsRpcGroup = WsCoreRpcGroup.middleware(RpcInstrumentation);
 const layerForkWsRpc = WsForkRpcGroup.middleware(RpcInstrumentation).toLayer(
   Effect.gen(function* () {
     const roadmap = yield* RoadmapService.RoadmapService;
+    const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
     return {
       [WS_METHODS.roadmapSubscribe]: (_input) => roadmap.stream(),
       // Agents reach the same service through MCP tools, acting as themselves.
       [WS_METHODS.roadmapDispatch]: (input) => roadmap.dispatch(input.command, { _tag: "user" }),
+      [WS_METHODS.roadmapLinkStatus]: (_input) => roadmap.linkStatus,
+      [WS_METHODS.roadmapLinkConfigure]: (input) => roadmap.configureLink(input.link),
+      [WS_METHODS.roadmapLinkMint]: (input) =>
+        serverAuth.issueRoadmapLinkGrant(input).pipe(
+          Effect.map((grant) => ({
+            credential: grant.credential,
+            expiresAt: DateTime.formatIso(grant.expiresAt),
+          })),
+          Effect.tapError((cause) =>
+            Effect.logWarning("Could not create a roadmap link.", { cause }),
+          ),
+          Effect.mapError(
+            () =>
+              new RoadmapError({ code: "internal", message: "Could not create a roadmap link." }),
+          ),
+        ),
     };
   }),
 );
