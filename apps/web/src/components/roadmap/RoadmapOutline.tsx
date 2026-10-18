@@ -14,11 +14,13 @@ import type {
   RoadmapItemId,
   RoadmapItemPatch,
   RoadmapItemType,
+  RoadmapSprint,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { blockedState, buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useRoadmapAreaSettings } from "~/state/roadmap";
 import { toastManager } from "../ui/toast";
 import { OUTLINE_GRID_CLASS, RoadmapItemRow, type RoadmapRowActions } from "./RoadmapItemRow";
 import {
@@ -26,10 +28,14 @@ import {
   canNestInside,
   filterOutlineTree,
   flattenOutline,
+  forecastLabel,
+  isOutlineFiltered,
   outlineDropZone,
   resolveOutlineDrop,
+  roadmapForecasts,
   typeOptionsFor,
   type OutlineDropZone,
+  type RoadmapForecastLabel,
   type RoadmapOutlineFilter,
 } from "./roadmapPage.logic";
 import { newRoadmapCommandId, useRoadmapDispatch } from "./useRoadmapDispatch";
@@ -65,6 +71,7 @@ interface DropTarget {
 export interface RoadmapOutlineProps {
   readonly home: EnvironmentId;
   readonly items: ReadonlyArray<RoadmapWorkItem>;
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
   readonly filter: RoadmapOutlineFilter;
   readonly selectedId: RoadmapItemId | null;
   readonly canEdit: boolean;
@@ -76,6 +83,7 @@ export interface RoadmapOutlineProps {
 export function RoadmapOutline({
   home,
   items,
+  sprints,
   filter,
   selectedId,
   canEdit,
@@ -84,13 +92,21 @@ export function RoadmapOutline({
   onEdit,
 }: RoadmapOutlineProps) {
   const dispatch = useRoadmapDispatch(home);
+  const areaSettings = useRoadmapAreaSettings(home);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const tree = useMemo(() => buildTree(items), [items]);
   const filtered = useMemo(() => filterOutlineTree(tree, filter), [filter, tree]);
-  const filtering =
-    filter.area !== undefined || filter.type !== undefined || filter.state !== undefined;
+  const filtering = isOutlineFiltered(filter);
+  const forecasts = useMemo(() => {
+    const labels = new Map<RoadmapItemId, RoadmapForecastLabel>();
+    for (const [itemId, value] of roadmapForecasts({ items, sprints, areaSettings, today })) {
+      const label = forecastLabel(value, today);
+      if (label !== null) labels.set(itemId, label);
+    }
+    return labels;
+  }, [areaSettings, items, sprints, today]);
   // A selected item is revealed even when an ancestor is collapsed.
   const effectiveCollapsed = useMemo(() => {
     if (selectedId === null) return collapsed;
@@ -245,6 +261,7 @@ export function RoadmapOutline({
         <span>Pri</span>
         <span>State</span>
         <span>Due</span>
+        <span>Forecast</span>
         <span>Est</span>
         <span>Criteria</span>
         <span />
@@ -259,6 +276,7 @@ export function RoadmapOutline({
       >
         {rows.map(({ node, depth, hasChildren, expanded }) => {
           const facts = rowFacts.get(node.item.id);
+          const forecast = forecasts.get(node.item.id) ?? null;
           return (
             <RoadmapItemRow
               key={node.item.id}
@@ -277,6 +295,8 @@ export function RoadmapOutline({
               dropZone={dropTarget?.overId === node.item.id ? dropTarget.zone : null}
               canEdit={canEdit}
               today={today}
+              forecastText={forecast?.text ?? null}
+              forecastStatus={forecast?.status ?? null}
               actions={actions}
             />
           );

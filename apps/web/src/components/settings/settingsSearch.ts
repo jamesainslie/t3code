@@ -184,6 +184,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["work items objectives epics stories planning environment owns roadmap"],
   },
   {
+    id: "roadmap-areas",
+    title: "Roadmap areas",
+    to: "/settings/roadmap",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: [
+      "velocity unit points hours items criteria working days weekdays going cold forecast",
+    ],
+  },
+  {
     id: "project-defaults",
     title: "Project defaults and overrides",
     to: "/settings/general",

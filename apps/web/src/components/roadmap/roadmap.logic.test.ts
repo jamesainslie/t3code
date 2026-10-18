@@ -5,6 +5,7 @@ import {
   criteriaProgress,
   localIsoDate,
   workingDaysLeft,
+  workingWeekdaysFrom,
 } from "./roadmap.logic";
 
 const at = "2026-10-18T09:00:00.000Z";
@@ -61,6 +62,26 @@ describe("workingDaysLeft", () => {
 
   it("crosses month and year ends", () => {
     expect(workingDaysLeft("2026-12-31", "2027-01-04")).toBe(2);
+  });
+
+  it("counts only the area's working weekdays when given them", () => {
+    // Sunday to Thursday: Friday 2026-10-23 and Saturday do not count.
+    const sundayToThursday = [0, 1, 2, 3, 4];
+    expect(workingDaysLeft("2026-10-22", "2026-10-25", sundayToThursday)).toBe(1);
+    expect(workingDaysLeft("2026-10-19", "2026-10-23", sundayToThursday)).toBe(3);
+    expect(workingDaysLeft("2026-10-26", "2026-10-23", sundayToThursday)).toBe(-2);
+  });
+});
+
+describe("workingWeekdaysFrom", () => {
+  it("keeps valid weekdays once, in week order", () => {
+    expect(workingWeekdaysFrom(["5", "1", "3", "1"])).toEqual([1, 3, 5]);
+    expect(workingWeekdaysFrom(["0", "6", "7", "x"])).toEqual([0, 6]);
+  });
+
+  it("refuses an empty week, which would leave no day to count", () => {
+    expect(workingWeekdaysFrom([])).toBeNull();
+    expect(workingWeekdaysFrom(["9"])).toBeNull();
   });
 });
 
