@@ -6,6 +6,7 @@
 import {
   type EventId,
   isRoadmapSprintCommand,
+  ROADMAP_NOTE_LIMIT,
   ROADMAP_PIN_LIMIT,
   type IsoDateTime,
   type RoadmapActor,
@@ -17,6 +18,7 @@ import {
   type RoadmapEvent,
   type RoadmapItemEvent,
   type RoadmapItemId,
+  type RoadmapNoteKind,
   type RoadmapRejectionCode,
   type RoadmapSprint,
   type RoadmapSprintCommand,
@@ -217,6 +219,7 @@ export function planRoadmapCommand(input: {
         snoozedUntil: null,
         sprintId: command.sprintId ?? null,
         hours: [],
+        progressNotes: [],
       };
       return Result.succeed({ ...base, type: "roadmap.item.created", payload: { item } });
     }
@@ -584,7 +587,70 @@ export function planRoadmapCommand(input: {
         payload: { entryId: command.entryId },
       });
     }
+
+    case "roadmap.note.add": {
+      const forbidden = noteKindForbidden(actor, command.kind);
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      const item = current.success;
+      if (item.progressNotes.some((note) => note.id === command.noteId)) {
+        return reject("already_exists", `${label(item)} already has note ${command.noteId}.`);
+      }
+      const criterionId = command.criterionId ?? null;
+      if (
+        criterionId !== null &&
+        !item.criteria.some((criterion) => criterion.id === criterionId)
+      ) {
+        return reject("criterion_not_found", `${label(item)} has no criterion ${criterionId}.`);
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.note.added",
+        payload: {
+          note: {
+            id: command.noteId,
+            at: occurredAt,
+            actor,
+            kind: command.kind,
+            text: command.text,
+            criterionId,
+          },
+        },
+      });
+    }
+
+    case "roadmap.note.remove": {
+      const forbidden = userOnly(actor, "notes");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (!current.success.progressNotes.some((note) => note.id === command.noteId)) {
+        return reject("not_found", `${label(current.success)} has no note ${command.noteId}.`);
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.note.removed",
+        payload: { noteId: command.noteId },
+      });
+    }
   }
+}
+
+/**
+ * Agents and the user report progress. Sync notes record what GitHub changed
+ * and drift and unsure notes are the steward's judgement, so only that actor
+ * may write them.
+ */
+function noteKindForbidden(actor: RoadmapActor, kind: RoadmapNoteKind) {
+  const owner =
+    kind === "sync" ? "github" : kind === "drift" || kind === "unsure" ? "steward" : null;
+  return owner === null || owner === actor._tag
+    ? undefined
+    : new RoadmapError({
+        code: "forbidden_actor",
+        message: `Only ${owner === "github" ? "GitHub" : "the steward"} can add ${kind} notes.`,
+      });
 }
 
 function planSprintCommand(input: {
@@ -807,6 +873,18 @@ export function projectRoadmapEvent(
         return {
           ...item,
           hours: item.hours.filter((entry) => entry.id !== event.payload.entryId),
+        };
+      case "roadmap.note.added":
+        return item.progressNotes.some((note) => note.id === event.payload.note.id)
+          ? item
+          : {
+              ...item,
+              progressNotes: [...item.progressNotes, event.payload.note].slice(-ROADMAP_NOTE_LIMIT),
+            };
+      case "roadmap.note.removed":
+        return {
+          ...item,
+          progressNotes: item.progressNotes.filter((note) => note.id !== event.payload.noteId),
         };
     }
   })();

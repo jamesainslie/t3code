@@ -56,6 +56,7 @@ const workItem = (id: string, fields: Partial<RoadmapWorkItem> = {}): RoadmapWor
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
   ...fields,
 });
 

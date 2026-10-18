@@ -54,6 +54,7 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
   ...overrides,
 });
 
@@ -195,6 +196,67 @@ it.layer(layer)("RoadmapStore", (it) => {
       yield* store.rebuild();
       assert.deepEqual(yield* store.list(), before);
       assert.lengthOf(yield* store.forThread(thread), 1);
+    }),
+  );
+
+  it.effect("projects notes, keeps them in history and rebuilds them", () =>
+    Effect.gen(function* () {
+      const store = yield* RoadmapStore.RoadmapStore;
+      const sql = yield* SqlClient.SqlClient;
+      const itemId = RoadmapItemId.make("noted");
+      const note = (id: string) => ({
+        id,
+        at: later,
+        actor: user,
+        kind: "progress" as const,
+        text: `Note ${id}`,
+        criterionId: null,
+      });
+      // Stored before notes existed: the created payload has no progressNotes.
+      const { progressNotes: _, ...withoutNotes } = item("noted");
+      yield* sql`
+        INSERT INTO roadmap_events (
+          event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
+        ) VALUES (
+          'event-noted', 'cmd-noted', 'noted', 'roadmap.item.created', '{"_tag":"user"}',
+          ${JSON.stringify({ item: withoutNotes })}, ${at}
+        )
+      `;
+      yield* store.rebuild();
+      assert.deepEqual(Option.getOrThrow(yield* store.get(itemId)).item.progressNotes, []);
+
+      const [added] = yield* commit({
+        ...meta("noted", later),
+        type: "roadmap.note.added",
+        payload: { note: note("n1") },
+      }).pipe(Effect.map((change) => change.items));
+      assert.deepEqual(added!.item.progressNotes, [note("n1")]);
+      yield* commit({
+        ...meta("noted", later),
+        type: "roadmap.note.added",
+        payload: { note: note("n2") },
+      });
+      yield* commit({
+        ...meta("noted", later),
+        type: "roadmap.note.removed",
+        payload: { noteId: "n1" },
+      });
+
+      const history = yield* store.history(itemId);
+      assert.deepEqual(
+        history.map((entry) => entry.event.type),
+        [
+          "roadmap.item.created",
+          "roadmap.note.added",
+          "roadmap.note.added",
+          "roadmap.note.removed",
+        ],
+      );
+      const before = Option.getOrThrow(yield* store.get(itemId));
+      assert.deepEqual(before.item.progressNotes, [note("n2")]);
+      yield* sql`UPDATE projection_roadmap_items SET payload_json = '{}'`;
+      yield* store.rebuild();
+      assert.deepEqual(Option.getOrThrow(yield* store.get(itemId)), before);
     }),
   );
 

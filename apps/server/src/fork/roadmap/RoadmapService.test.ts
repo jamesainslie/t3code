@@ -144,6 +144,41 @@ describe("RoadmapService", () => {
       }),
     );
 
+    it.effect("streams an added note in the item's upsert", () =>
+      Effect.gen(function* () {
+        const roadmap = yield* RoadmapService.RoadmapService;
+        yield* roadmap.dispatch(create("noted"), user);
+        const subscribed = yield* Deferred.make<void>();
+        const seen = yield* roadmap.stream().pipe(
+          Stream.tap(() => Deferred.succeed(subscribed, undefined)),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(subscribed);
+        const steward = { _tag: "steward", environmentId: HOME } as const;
+        const added = yield* roadmap.dispatch(
+          {
+            type: "roadmap.note.add",
+            commandId: CommandId.make("cmd-note"),
+            itemId: RoadmapItemId.make("noted"),
+            noteId: "n1",
+            kind: "unsure",
+            text: "No test shows the retry path",
+          },
+          steward,
+        );
+        const [, upserted] = yield* Fiber.join(seen);
+        assert.equal(upserted?.type, "item.upserted");
+        if (upserted?.type !== "item.upserted") return;
+        assert.equal(upserted.sequence, added.sequence);
+        assert.deepEqual(
+          upserted.item.progressNotes.map((note) => [note.id, note.kind, note.actor._tag]),
+          [["n1", "unsure", "steward"]],
+        );
+      }),
+    );
+
     it.effect("manages sprints, streaming them and the items a delete clears", () =>
       Effect.gen(function* () {
         const roadmap = yield* RoadmapService.RoadmapService;

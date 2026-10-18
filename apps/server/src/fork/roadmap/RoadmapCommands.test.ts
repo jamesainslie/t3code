@@ -7,6 +7,9 @@ import {
   type RoadmapActor,
   type RoadmapCommand,
   RoadmapItemId,
+  ROADMAP_NOTE_LIMIT,
+  type RoadmapNoteKind,
+  type RoadmapProgressNote,
   type RoadmapSprint,
   RoadmapSprintId,
   type RoadmapThreadRef,
@@ -35,6 +38,8 @@ const thread = (threadId: string): RoadmapThreadRef => ({
   threadId: ThreadId.make(threadId),
 });
 const agent: RoadmapActor = { _tag: "agent", thread: thread("t-agent"), threadTitle: "Agent" };
+const steward: RoadmapActor = { _tag: "steward", environmentId: EnvironmentId.make("env-home") };
+const github: RoadmapActor = { _tag: "github" };
 
 const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): RoadmapWorkItem => ({
   id: id(itemId),
@@ -65,6 +70,7 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   snoozedUntil: null,
   sprintId: null,
   hours: [],
+  progressNotes: [],
   ...overrides,
 });
 
@@ -599,7 +605,7 @@ describe("planRoadmapCommand", () => {
     const setState = (state: RoadmapWorkItem["state"], extra: object = {}) =>
       cmd("roadmap.item.update", { itemId: id("a"), patch: { state, ...extra } });
 
-    it("starts a new item's history at creation, with nothing pinned, snoozed or logged", () => {
+    it("starts a new item's history at creation, with nothing pinned, snoozed, logged or noted", () => {
       const created = payloadOf(plan(create())).item as RoadmapWorkItem;
       assert.deepInclude(created, {
         stateChangedAt: nowIso,
@@ -608,6 +614,7 @@ describe("planRoadmapCommand", () => {
         snoozedUntil: null,
         sprintId: null,
         hours: [],
+        progressNotes: [],
       });
     });
 
@@ -700,7 +707,6 @@ describe("planRoadmapCommand", () => {
     });
 
     it("refuses pins from anyone but the user", () => {
-      const steward: RoadmapActor = { _tag: "steward", environmentId: EnvironmentId.make("e") };
       for (const actor of [agent, steward]) {
         for (const command of [pin("a"), unpin("a")]) {
           const failure = failureOf(plan(command, [live(item("a"))], { actor }));
@@ -795,6 +801,128 @@ describe("planRoadmapCommand", () => {
       const remove = (entryId: string) => cmd("roadmap.hours.remove", { itemId: id("a"), entryId });
       assert.deepEqual(run(remove("h1"), records).get(id("a"))!.item.hours, entries.slice(1));
       assert.equal(failureOf(plan(remove("nope"), records)).code, "not_found");
+    });
+  });
+
+  describe("notes", () => {
+    const add = (
+      noteId: string,
+      kind: RoadmapNoteKind = "progress",
+      extra: { readonly criterionId?: string | null; readonly itemId?: string } = {},
+    ) =>
+      cmd("roadmap.note.add", {
+        itemId: id(extra.itemId ?? "a"),
+        noteId,
+        kind,
+        text: `Note ${noteId}`,
+        ...(extra.criterionId === undefined ? {} : { criterionId: extra.criterionId }),
+      });
+    const remove = (noteId: string) => cmd("roadmap.note.remove", { itemId: id("a"), noteId });
+    const note = (
+      noteId: string,
+      overrides: Partial<RoadmapProgressNote> = {},
+    ): RoadmapProgressNote => ({
+      id: noteId,
+      at: earlier,
+      actor: user,
+      kind: "progress",
+      text: `Note ${noteId}`,
+      criterionId: null,
+      ...overrides,
+    });
+    const criterion = {
+      id: "c1",
+      text: "Ships",
+      tickedAt: null,
+      tickedBy: null,
+      evidence: null,
+    };
+    const records = [live(item("a", { criteria: [criterion] }))];
+
+    it("adds a progress note from every actor, with the actor and the event time", () => {
+      for (const actor of [user, agent, steward, github]) {
+        const after = run(add("n1"), records, { actor }).get(id("a"))!.item;
+        assert.deepEqual(after.progressNotes, [
+          {
+            id: "n1",
+            at: nowIso,
+            actor,
+            kind: "progress",
+            text: "Note n1",
+            criterionId: null,
+          },
+        ]);
+      }
+    });
+
+    it("keeps sync notes to GitHub", () => {
+      for (const actor of [user, agent, steward]) {
+        assert.equal(
+          failureOf(plan(add("n1", "sync"), records, { actor })).code,
+          "forbidden_actor",
+        );
+      }
+      const after = run(add("n1", "sync"), records, { actor: github }).get(id("a"))!.item;
+      assert.equal(after.progressNotes[0]!.kind, "sync");
+    });
+
+    it("keeps drift and unsure notes to the steward", () => {
+      for (const kind of ["drift", "unsure"] as const) {
+        for (const actor of [user, agent, github]) {
+          assert.equal(
+            failureOf(plan(add("n1", kind), records, { actor })).code,
+            "forbidden_actor",
+          );
+        }
+        const after = run(add("n1", kind), records, { actor: steward }).get(id("a"))!.item;
+        assert.equal(after.progressNotes[0]!.kind, kind);
+      }
+    });
+
+    it("ties a note to a criterion on the item and refuses one the item lacks", () => {
+      const after = run(add("n1", "progress", { criterionId: "c1" }), records, { actor: agent });
+      assert.equal(after.get(id("a"))!.item.progressNotes[0]!.criterionId, "c1");
+      assert.equal(
+        failureOf(plan(add("n1", "progress", { criterionId: "c9" }), records)).code,
+        "criterion_not_found",
+      );
+    });
+
+    it("refuses a note id already on the item", () => {
+      assert.equal(
+        failureOf(plan(add("n1"), [live(item("a", { progressNotes: [note("n1")] }))])).code,
+        "already_exists",
+      );
+    });
+
+    it("refuses a missing or deleted item", () => {
+      assert.equal(failureOf(plan(add("n1", "progress", { itemId: "nope" }))).code, "not_found");
+      assert.equal(failureOf(plan(add("n1"), [gone(item("a"))])).code, "deleted");
+    });
+
+    it("appends the newest note last and keeps only the newest 50", () => {
+      const full = Array.from({ length: ROADMAP_NOTE_LIMIT }, (_, index) => note(`old-${index}`));
+      const after = run(add("new"), [live(item("a", { progressNotes: full }))]).get(id("a"))!.item;
+      assert.equal(after.progressNotes.length, ROADMAP_NOTE_LIMIT);
+      assert.equal(after.progressNotes[0]!.id, "old-1");
+      assert.equal(after.progressNotes.at(-1)!.id, "new");
+    });
+
+    it("removes a note for the user and refuses an unknown one", () => {
+      const notes = [note("n1"), note("n2", { actor: steward, kind: "unsure" })];
+      const withNotes = [live(item("a", { progressNotes: notes }))];
+      assert.deepEqual(
+        run(remove("n2"), withNotes).get(id("a"))!.item.progressNotes,
+        notes.slice(0, 1),
+      );
+      assert.equal(failureOf(plan(remove("nope"), withNotes)).code, "not_found");
+    });
+
+    it("refuses note removal from anyone but the user", () => {
+      const withNotes = [live(item("a", { progressNotes: [note("n1", { actor: agent })] }))];
+      for (const actor of [agent, steward, github]) {
+        assert.equal(failureOf(plan(remove("n1"), withNotes, { actor })).code, "forbidden_actor");
+      }
     });
   });
 
