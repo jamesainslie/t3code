@@ -202,6 +202,14 @@ const LATHE_MCP_TOOLS: Readonly<Record<string, LatheMcpToolDefinition>> = {
     ["Add", "Adding", "Added", "a progress note to a work item"],
     "roadmap-update",
   ),
+  lathe_roadmap_import_issue: tool(
+    ["Import", "Importing", "Imported", "a GitHub issue to the roadmap"],
+    "roadmap-create",
+  ),
+  lathe_roadmap_link_pull_request: tool(
+    ["Link", "Linking", "Linked", "a pull request to a work item"],
+    "roadmap-update",
+  ),
   lathe_thread_send: tool(["Send", "Sending", "Sent", "to a Lathe thread"], "thread-send"),
   lathe_thread_wait: tool(["Wait", "Waiting", "Waited", "for a Lathe thread"], "thread-wait"),
   lathe_workflow_stop: tool(

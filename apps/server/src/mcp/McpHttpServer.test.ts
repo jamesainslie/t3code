@@ -32,6 +32,7 @@ import {
 
 import * as ProjectService from "../project/ProjectService.ts";
 import * as DocumentComments from "../fork/DocumentComments.ts";
+import * as RoadmapGitHubSync from "../fork/roadmap/RoadmapGitHubSync.ts";
 import * as RoadmapService from "../fork/roadmap/RoadmapService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ThreadSearch from "../orchestration-v2/ThreadSearch.ts";
@@ -608,6 +609,8 @@ it.effect("registers the roadmap toolkit and surfaces a missing capability as a 
         "lathe_roadmap_link_blocker",
         "lathe_roadmap_log_hours",
         "lathe_roadmap_add_note",
+        "lathe_roadmap_import_issue",
+        "lathe_roadmap_link_pull_request",
       ]),
     );
     const readTool = server.tools.find(({ tool }) => tool.name === "lathe_roadmap_read");
@@ -632,6 +635,7 @@ it.effect("registers the roadmap toolkit and surfaces a missing capability as a 
         Layer.provide(
           Layer.mergeAll(
             Layer.mock(RoadmapService.RoadmapService)({}),
+            Layer.mock(RoadmapGitHubSync.RoadmapGitHubSync)({}),
             ServerSettings.ServerSettingsService.layerTest(),
             McpToolAccessTestkit.liveThreadsLayer,
             NodeServices.layer,

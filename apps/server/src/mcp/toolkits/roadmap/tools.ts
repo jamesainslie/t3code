@@ -24,6 +24,7 @@ import * as Schema from "effect/Schema";
 import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
 
+import * as RoadmapGitHubSync from "../../../fork/roadmap/RoadmapGitHubSync.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
 import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
@@ -176,6 +177,39 @@ export const RoadmapAddNoteInput = Schema.Struct({
   clientRequestId: Schema.optional(ClientRequestId),
 });
 export type RoadmapAddNoteInput = typeof RoadmapAddNoteInput.Type;
+
+export const RoadmapImportIssueToolInput = Schema.Struct({
+  url: TrimmedNonEmptyString.annotate({
+    description: "The GitHub issue's URL, such as https://github.com/owner/repo/issues/12.",
+  }),
+  parentId: Schema.optional(
+    RoadmapItemId.annotate({ description: "Put the issue under this work item." }),
+  ),
+  area: Schema.optional(
+    RoadmapArea.annotate({
+      description:
+        "Area for a top-level issue. The area its repository's GitHub account maps to wins.",
+    }),
+  ),
+});
+export type RoadmapImportIssueToolInput = typeof RoadmapImportIssueToolInput.Type;
+
+export const RoadmapImportIssueToolResult = Schema.Struct({
+  itemId: RoadmapItemId,
+  imported: NonNegativeInt.annotate({
+    description: "Items created, the issue's sub-issues included; 0 when it was already imported.",
+  }),
+});
+export type RoadmapImportIssueToolResult = typeof RoadmapImportIssueToolResult.Type;
+
+export const RoadmapLinkPullRequestInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  url: TrimmedNonEmptyString.annotate({
+    description: "The pull request's URL, such as https://github.com/owner/repo/pull/7.",
+  }),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapLinkPullRequestInput = typeof RoadmapLinkPullRequestInput.Type;
 
 /** A roadmap refusal, with its code first in the message the agent reads. */
 export class RoadmapToolFailure extends Schema.TaggedError<RoadmapToolFailure>()(
@@ -441,6 +475,34 @@ const AddNoteTool = Tool.make("lathe_roadmap_add_note", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
+const ImportIssueTool = Tool.make("lathe_roadmap_import_issue", {
+  description:
+    "Import a GitHub issue and its sub-issues as roadmap work items, kept in sync with GitHub from then on. Runs on the roadmap home with its GitHub logins. An issue already imported returns its item.",
+  parameters: RoadmapImportIssueToolInput,
+  success: RoadmapImportIssueToolResult,
+  failure: RoadmapToolError,
+  dependencies: [...dependencies, RoadmapGitHubSync.RoadmapGitHubSync],
+})
+  .annotate(Tool.Title, "Import a GitHub issue to the roadmap")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, true);
+
+const LinkPullRequestTool = Tool.make("lathe_roadmap_link_pull_request", {
+  description:
+    "Link a pull request to a roadmap feature, story, bug or support ticket, so its card shows the pull request. Omit itemId for the item this thread is attached to.",
+  parameters: RoadmapLinkPullRequestInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Link a pull request to a work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
 export const RoadmapToolkit = Toolkit.make(
   ListTool,
   ReadTool,
@@ -452,4 +514,6 @@ export const RoadmapToolkit = Toolkit.make(
   LinkBlockerTool,
   LogHoursTool,
   AddNoteTool,
+  ImportIssueTool,
+  LinkPullRequestTool,
 );

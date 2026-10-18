@@ -9,12 +9,14 @@ import {
   type RoadmapWorkItem,
   type ThreadId,
 } from "@lathe/contracts";
+import { parseChangeRequestUrl } from "@lathe/shared/changeRequestUrl";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
 import * as RoadmapProgress from "../../../fork/roadmap/RoadmapProgress.ts";
+import * as RoadmapGitHubSync from "../../../fork/roadmap/RoadmapGitHubSync.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -433,6 +435,45 @@ const make = Effect.gen(function* () {
           };
         });
         return { ...result, noteId };
+      }),
+    ),
+    // Imports run on the home with its gh logins and are attributed to
+    // GitHub sync, which keeps the items afterwards, rather than the agent.
+    lathe_roadmap_import_issue: McpToolAccess.actsAsCaller((input) =>
+      Effect.gen(function* () {
+        yield* requireRoadmap;
+        const sync = yield* RoadmapGitHubSync.RoadmapGitHubSync;
+        return yield* fromService(
+          sync.importIssue({
+            url: input.url,
+            ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+            ...(input.area === undefined ? {} : { area: input.area }),
+          }),
+        );
+      }),
+    ),
+    lathe_roadmap_link_pull_request: McpToolAccess.actsAsCaller((input) =>
+      Effect.gen(function* () {
+        const scope = yield* requireRoadmap;
+        const link = parseChangeRequestUrl(input.url);
+        if (link === null) {
+          return yield* new RoadmapToolFailure({
+            code: "invalid_request",
+            reason: `${input.url} is not a pull request URL.`,
+          });
+        }
+        const itemId = yield* targetItemId(scope, input.itemId);
+        return yield* dispatch(scope, "link-pull-request", input.clientRequestId, (commandId) => ({
+          type: "roadmap.pull-request.link",
+          commandId,
+          itemId,
+          pullRequest: {
+            host: link.host,
+            repository: link.repository,
+            number: link.number,
+            url: input.url,
+          },
+        }));
       }),
     ),
   } satisfies McpToolAccess.Handlers<typeof RoadmapToolkit.tools>;
