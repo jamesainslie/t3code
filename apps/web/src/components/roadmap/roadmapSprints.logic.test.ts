@@ -15,6 +15,7 @@ import {
   sprintDraftFor,
   sprintItemCount,
   sprintOptionsFor,
+  withSprintDraftArea,
 } from "./roadmapSprints.logic";
 
 const sprintId = RoadmapSprintId.make;
@@ -103,6 +104,25 @@ describe("sprint drafts", () => {
     expect(
       emptySprintDraft([sprint("w1"), sprint("p1", { area: "personal" })], "work", "2026-10-19"),
     ).toEqual({ name: "Sprint 2", area: "work", startDate: "2026-10-19", endDate: "2026-11-01" });
+  });
+
+  it("renames a new sprint for its area only while the name is still the default", () => {
+    const sprints = [
+      sprint("w1"),
+      sprint("p1", { area: "personal" }),
+      sprint("p2", { area: "personal" }),
+    ];
+    const draft = { ...emptySprintDraft(sprints, "work", "2026-10-19"), endDate: "2026-10-30" };
+    expect(withSprintDraftArea(draft, "personal", sprints)).toEqual({
+      ...draft,
+      name: "Sprint 3",
+      area: "personal",
+    });
+    expect(withSprintDraftArea({ ...draft, name: "Polish" }, "personal", sprints)).toEqual({
+      ...draft,
+      name: "Polish",
+      area: "personal",
+    });
   });
 
   it("creates a sprint from a draft with a trimmed name", () => {
