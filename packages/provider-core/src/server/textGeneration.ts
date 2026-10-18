@@ -6,6 +6,7 @@ import type {
   TextGenerationError,
 } from "@lathe/contracts";
 import type * as Effect from "effect/Effect";
+import type * as Schema from "effect/Schema";
 
 import type { TextGenerationPolicy } from "./textGenerationPolicy.ts";
 
@@ -93,6 +94,20 @@ export type ReviewGuideGenerationResult = Omit<
   "headSha" | "generatedAt" | "modelSelection"
 >;
 
+/**
+ * Fork: roadmap. A one-shot answer decoded into `outputSchema`, for features
+ * that bring their own prompt. The schema may need no services to decode, so
+ * every provider wrapper can pass the effect through unchanged.
+ */
+export interface StructuredGenerationInput<S extends StructuredOutputSchema> {
+  cwd: string;
+  prompt: string;
+  outputSchema: S;
+  modelSelection: ModelSelection;
+}
+
+export type StructuredOutputSchema = Schema.Top & { readonly DecodingServices: never };
+
 export interface ProviderTextGeneration {
   readonly generateCommitMessage: (
     input: CommitMessageGenerationInput,
@@ -113,4 +128,9 @@ export interface ProviderTextGeneration {
   readonly generateReviewGuide: (
     input: ReviewGuideGenerationInput,
   ) => Effect.Effect<ReviewGuideGenerationResult, TextGenerationError>;
+
+  // Fork: roadmap.
+  readonly generateStructured: <S extends StructuredOutputSchema>(
+    input: StructuredGenerationInput<S>,
+  ) => Effect.Effect<S["Type"], TextGenerationError>;
 }

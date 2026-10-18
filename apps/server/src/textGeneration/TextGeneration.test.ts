@@ -2,6 +2,7 @@ import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { describe, expect } from "vite-plus/test";
 
@@ -25,6 +26,7 @@ const makeStubTextGeneration = (
     generateBranchName: () => Effect.die("generateBranchName stub not configured for this test"),
     generateThreadTitle: () => Effect.die("generateThreadTitle stub not configured for this test"),
     generateReviewGuide: () => Effect.die("generateReviewGuide stub not configured for this test"),
+    generateStructured: () => Effect.die("generateStructured stub not configured for this test"),
     ...overrides,
   });
 
@@ -139,6 +141,53 @@ describe("TextGeneration.make", () => {
 
       expect(result.branch).toBe("personal-branch");
       expect(personalCalls).toEqual(["Refactor the routing layer"]);
+    }),
+  );
+
+  it.effect("routes structured generation to the selected instance", () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("claude_cheap");
+      const prompts: Array<string> = [];
+      const Answer = Schema.Struct({ answer: Schema.String });
+      const instance = makeStubInstance(
+        instanceId,
+        makeStubTextGeneration({
+          generateStructured: (input) => {
+            prompts.push(input.prompt);
+            return Effect.succeed({ answer: "yes" } as typeof input.outputSchema.Type);
+          },
+        }),
+      );
+      const tg = yield* TextGeneration.make.pipe(
+        Effect.provideService(
+          ProviderInstanceRegistry.ProviderInstanceRegistry,
+          makeStubRegistry([instance]),
+        ),
+        Effect.provide(
+          Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+            resolveLink: () => Effect.die("No link lookup expected"),
+          }),
+        ),
+      );
+
+      const result = yield* tg.generateStructured({
+        cwd: process.cwd(),
+        prompt: "Is it done?",
+        outputSchema: Answer,
+        modelSelection: createModelSelection(instanceId, "haiku"),
+      });
+      expect(result).toEqual({ answer: "yes" });
+      expect(prompts).toEqual(["Is it done?"]);
+
+      const missing = yield* tg
+        .generateStructured({
+          cwd: process.cwd(),
+          prompt: "Is it done?",
+          outputSchema: Answer,
+          modelSelection: createModelSelection(ProviderInstanceId.make("gone"), "haiku"),
+        })
+        .pipe(Effect.flip);
+      expect(missing.operation).toBe("generateStructured");
     }),
   );
 

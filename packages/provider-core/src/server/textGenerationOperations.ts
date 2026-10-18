@@ -168,11 +168,22 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  // Fork: roadmap.
+  const generateStructured: ProviderTextGeneration["generateStructured"] = (input) =>
+    run({
+      operation: "generateStructured",
+      cwd: input.cwd,
+      prompt: input.prompt,
+      outputSchema: input.outputSchema,
+      modelSelection: input.modelSelection,
+    }).pipe(Effect.withSpan(`${name}.generateStructured`));
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateReviewGuide,
+    generateStructured,
   } satisfies ProviderTextGeneration;
 }

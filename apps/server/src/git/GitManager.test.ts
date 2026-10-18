@@ -112,7 +112,8 @@ function fakeGhOutput(stdout: string): VcsProcess.VcsProcessOutput {
   };
 }
 
-type FakeGitTextGeneration = TextGeneration.TextGeneration["Service"];
+// Fork: roadmap. Git workflows never ask for structured text.
+type FakeGitTextGeneration = Omit<TextGeneration.TextGeneration["Service"], "generateStructured">;
 
 type FakePullRequest = NonNullable<FakeGhScenario["pullRequest"]>;
 
@@ -395,6 +396,8 @@ function createTextGeneration(
         ),
       ),
     generateReviewGuide: (input) => implementation.generateReviewGuide(input),
+    // Fork: roadmap.
+    generateStructured: () => Effect.die("generateStructured is not faked for git workflows"),
   };
 }
 

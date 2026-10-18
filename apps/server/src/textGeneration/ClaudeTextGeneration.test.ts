@@ -228,6 +228,34 @@ it.layer(layerClaudeTextGenerationTest)("ClaudeTextGeneration", (it) => {
     ),
   );
 
+  it.effect("answers a structured prompt with its schema through the Claude CLI", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({
+          structured_output: { ticks: [{ criterionId: "c1", turn: 3 }] },
+        }),
+        argsMustContain: '"criterionId"',
+        stdinMustContain: "Relate these turns to the criteria.",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateStructured({
+            cwd: process.cwd(),
+            prompt: "Relate these turns to the criteria.",
+            outputSchema: Schema.Struct({
+              ticks: Schema.Array(Schema.Struct({ criterionId: Schema.String, turn: Schema.Int })),
+            }),
+            modelSelection: createModelSelection(
+              ProviderInstanceId.make("claudeAgent"),
+              SYNTHETIC_CLAUDE_STANDARD_MODEL,
+            ),
+          });
+
+          expect(generated).toEqual({ ticks: [{ criterionId: "c1", turn: 3 }] });
+        }),
+    ),
+  );
+
   it.effect("keeps a configured custom alias opaque to the Claude CLI", () =>
     withFakeClaudeEnv(
       {
