@@ -12,6 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   addWorkingDays,
+  daysBetween,
   averageLeafSize,
   burndown,
   burned,
@@ -145,6 +146,12 @@ describe("working days", () => {
       expect(workingDaysBetween(from, to, [3])).toBe(naive(from, to, [3]));
       expect(workingDaysBetween(to, from, MON_FRI)).toBe(-naive(from, to, MON_FRI));
     }
+  });
+
+  it("counts calendar days between dates, either way and across months", () => {
+    expect(daysBetween("2026-10-19", "2026-11-15")).toBe(27);
+    expect(daysBetween("2026-10-19", "2026-10-01")).toBe(-18);
+    expect(daysBetween("2026-03-28", "2026-03-30")).toBe(2);
   });
 
   it("adds working days, skipping weekends", () => {
@@ -699,6 +706,16 @@ describe("compareRank", () => {
     expect(compareRank(underTop, underOther, byId)).toBeLessThan(0);
     expect(compareRank(sibling, underTop, byId)).toBeLessThan(0);
     expect(compareRank(underTop, underTop, byId)).toBe(0);
+  });
+
+  it("keeps a child with its parent when the other item is a root", () => {
+    const parent = item("parent", { type: "epic", priority: "p0", sortKey: "a" });
+    const kid = child("kid", "parent", { priority: "p0", sortKey: "z" });
+    const root = item("root", { priority: "p0", sortKey: "m" });
+    const byId = byIdOf(parent, kid, root);
+    expect(
+      [root, kid, parent].sort((a, b) => compareRank(a, b, byId)).map((entry) => entry.id),
+    ).toEqual(["parent", "kid", "root"]);
   });
 
   it("orders a list with inherited priorities", () => {

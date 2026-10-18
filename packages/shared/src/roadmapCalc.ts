@@ -73,6 +73,11 @@ export function addDays(date: IsoDate, days: number): IsoDate {
   return dateOfDay(dayNumber(date) + days);
 }
 
+/** Calendar days from `from` to `to`; negative when `to` is earlier. */
+export function daysBetween(from: IsoDate, to: IsoDate): number {
+  return dayNumber(to) - dayNumber(from);
+}
+
 export function isWorkingDay(date: IsoDate, weekdays: RoadmapWeekdays): boolean {
   return workingSet(weekdays).has(weekdayOfDay(dayNumber(date)));
 }
@@ -602,13 +607,9 @@ export function compareRank(
     if (isAncestor(b, a, byId)) return 1;
     const parentA = a.parentId === null ? undefined : byId.get(a.parentId);
     const parentB = b.parentId === null ? undefined : byId.get(b.parentId);
-    if (
-      parentA !== undefined &&
-      parentB !== undefined &&
-      parentA.id !== parentB.id &&
-      depth < MAX_RANK_DEPTH
-    ) {
-      const byParent = compare(parentA, parentB, depth + 1);
+    if (depth < MAX_RANK_DEPTH && parentA?.id !== parentB?.id) {
+      // Against a root, a child ranks where its parent does, so it stays with its tree.
+      const byParent = compare(parentA ?? a, parentB ?? b, depth + 1);
       if (byParent !== 0) return byParent;
     }
     return bySiblingOrder(a, b);
