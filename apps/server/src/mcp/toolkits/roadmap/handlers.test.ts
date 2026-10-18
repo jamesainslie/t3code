@@ -312,6 +312,50 @@ describe("roadmap toolkit handlers", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("adds a progress note on the attached item as the calling agent, once per retry", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.userDispatch(createAsUser("feature", { attachThread: callerRef } as never));
+      yield* harness.userDispatch(createAsUser("other"));
+      const feature = RoadmapItemId.make("feature");
+
+      const input = { text: "Wired the retry path", clientRequestId: "note-1" };
+      const first = yield* harness.call("lathe_roadmap_add_note", input);
+      const retried = yield* harness.call("lathe_roadmap_add_note", input);
+      expect(retried).toEqual(first);
+      expect(first).toMatchObject({ itemId: feature, sequence: expect.any(Number) });
+
+      const item = Option.getOrThrow(yield* harness.roadmap.get(feature));
+      expect(item.progressNotes).toEqual([
+        {
+          id: first.noteId,
+          at: expect.any(String),
+          actor: { _tag: "agent", thread: callerRef, threadTitle: THREAD_ID },
+          kind: "progress",
+          text: "Wired the retry path",
+          criterionId: null,
+        },
+      ]);
+
+      yield* harness.call("lathe_roadmap_add_note", {
+        itemId: RoadmapItemId.make("other"),
+        text: "Unblocked by the release",
+      });
+      const other = Option.getOrThrow(yield* harness.roadmap.get(RoadmapItemId.make("other")));
+      expect(other.progressNotes.map((note) => note.text)).toEqual(["Unblocked by the release"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses a note for a caller with no work item", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      const error = yield* harness
+        .call("lathe_roadmap_add_note", { text: "Lost" })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "RoadmapToolFailure", code: "not_attached" });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("refuses to log hours for a caller with no work item", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();

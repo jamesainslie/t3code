@@ -63,6 +63,11 @@ describe("resolveLatheMcpToolPresentation", () => {
       logo: "lathe",
     });
     expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_log_hours")).toBe("roadmap-log-hours");
+    expect(resolveLatheMcpToolPresentation("mcp__lathe__lathe_roadmap_add_note")).toEqual({
+      displayName: "Add a progress note to a work item",
+      logo: "lathe",
+    });
+    expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_add_note")).toBe("roadmap-update");
   });
 
   it("pretty prints bare Lathe MCP toolkit names", () => {

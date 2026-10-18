@@ -413,6 +413,28 @@ const make = Effect.gen(function* () {
         };
       }),
     ),
+    lathe_roadmap_add_note: McpToolAccess.actsAsCaller((input) =>
+      Effect.gen(function* () {
+        const scope = yield* requireRoadmap;
+        const itemId = yield* targetItemId(scope, input.itemId);
+        // The note takes the command id, as an hours entry does, so a retry
+        // reports the note the first attempt added.
+        let noteId = "";
+        const result = yield* dispatch(scope, "add-note", input.clientRequestId, (commandId) => {
+          noteId = commandId;
+          return {
+            type: "roadmap.note.add",
+            commandId,
+            itemId,
+            noteId: commandId,
+            // Agents report progress; the other kinds belong to GitHub and the steward.
+            kind: "progress",
+            text: input.text,
+          };
+        });
+        return { ...result, noteId };
+      }),
+    ),
   } satisfies McpToolAccess.Handlers<typeof RoadmapToolkit.tools>;
 });
 

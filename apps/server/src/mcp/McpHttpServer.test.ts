@@ -607,6 +607,7 @@ it.effect("registers the roadmap toolkit and surfaces a missing capability as a 
         "lathe_roadmap_detach",
         "lathe_roadmap_link_blocker",
         "lathe_roadmap_log_hours",
+        "lathe_roadmap_add_note",
       ]),
     );
     const readTool = server.tools.find(({ tool }) => tool.name === "lathe_roadmap_read");

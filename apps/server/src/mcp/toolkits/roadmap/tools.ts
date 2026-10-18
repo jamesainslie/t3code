@@ -168,6 +168,15 @@ export const RoadmapLogHoursInput = Schema.Struct({
 });
 export type RoadmapLogHoursInput = typeof RoadmapLogHoursInput.Type;
 
+export const RoadmapAddNoteInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  text: TrimmedNonEmptyString.annotate({
+    description: "What moved, in a sentence or two: what was done, found or decided.",
+  }),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapAddNoteInput = typeof RoadmapAddNoteInput.Type;
+
 /** A roadmap refusal, with its code first in the message the agent reads. */
 export class RoadmapToolFailure extends Schema.TaggedError<RoadmapToolFailure>()(
   "RoadmapToolFailure",
@@ -284,6 +293,12 @@ export const RoadmapLogHoursResult = Schema.Union([
   Schema.Struct({ ...RoadmapQueued.fields, entryId: Schema.String }),
 ]);
 export type RoadmapLogHoursResult = typeof RoadmapLogHoursResult.Type;
+
+export const RoadmapAddNoteResult = Schema.Union([
+  Schema.Struct({ ...RoadmapApplied.fields, noteId: Schema.String }),
+  Schema.Struct({ ...RoadmapQueued.fields, noteId: Schema.String }),
+]);
+export type RoadmapAddNoteResult = typeof RoadmapAddNoteResult.Type;
 
 const ListTool = Tool.make("lathe_roadmap_list", {
   description:
@@ -412,6 +427,20 @@ const LogHoursTool = Tool.make("lathe_roadmap_log_hours", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
+const AddNoteTool = Tool.make("lathe_roadmap_add_note", {
+  description:
+    "Add a progress note to a roadmap work item, shown on its card for the user. Omit itemId for the item this thread is attached to. Reuse clientRequestId when retrying so the note is added once.",
+  parameters: RoadmapAddNoteInput,
+  success: RoadmapAddNoteResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Add a progress note to a work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
 export const RoadmapToolkit = Toolkit.make(
   ListTool,
   ReadTool,
@@ -422,4 +451,5 @@ export const RoadmapToolkit = Toolkit.make(
   DetachTool,
   LinkBlockerTool,
   LogHoursTool,
+  AddNoteTool,
 );
