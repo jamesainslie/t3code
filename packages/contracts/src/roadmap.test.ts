@@ -206,6 +206,18 @@ describe("RoadmapCommand", () => {
     expect(update(null)).toMatchObject({ patch: { sprintId: null } });
   });
 
+  it("decodes a create that puts the new item in a sprint", () => {
+    const decoded = decodeCommand({
+      type: "roadmap.item.create",
+      commandId: "cmd-4",
+      itemId: "item-2",
+      itemType: "feature",
+      title: "Sprinted",
+      sprintId: "sprint-1",
+    } as never);
+    expect(decoded).toMatchObject({ sprintId: "sprint-1" });
+  });
+
   it.each([
     { type: "roadmap.item.pin", itemId: "item-1" },
     { type: "roadmap.item.unpin", itemId: "item-1" },

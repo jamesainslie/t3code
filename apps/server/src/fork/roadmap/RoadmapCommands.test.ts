@@ -904,5 +904,32 @@ describe("planRoadmapCommand", () => {
         "forbidden_actor",
       );
     });
+
+    describe("creating an item into a sprint", () => {
+      const createIn = (sprintId: RoadmapSprintId | null) =>
+        cmd("roadmap.item.create", {
+          itemId: id("new"),
+          itemType: "feature",
+          title: "New",
+          sprintId,
+        });
+
+      it("creates the item in the sprint", () => {
+        const after = run(createIn(sid("s1")), [], { sprints: [sprint("s1")] });
+        assert.equal(after.get(id("new"))!.item.sprintId, "s1");
+        assert.isNull(run(createIn(null), []).get(id("new"))!.item.sprintId);
+      });
+
+      it("refuses a sprint from an agent", () => {
+        assert.equal(
+          failureOf(plan(createIn(sid("s1")), [], { actor: agent, sprints: [sprint("s1")] })).code,
+          "forbidden_actor",
+        );
+      });
+
+      it("refuses an unknown sprint", () => {
+        assert.equal(failureOf(plan(createIn(sid("s1")))).code, "invalid_request");
+      });
+    });
   });
 });

@@ -123,17 +123,10 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
     if (saving) return;
     if (editing === null) {
       const itemId = newRoadmapItemId();
-      const built = buildCreateCommand(draft, {
-        itemId,
-        commandId: newRoadmapCommandId(),
-        sprintCommandId: newRoadmapCommandId(),
-      });
+      const built = buildCreateCommand(draft, { itemId, commandId: newRoadmapCommandId() });
       if ("error" in built) return setError(built.error);
       setSaving(true);
-      const ok = await dispatch(
-        [built.command, ...(built.followUp ?? [])],
-        "Could not create the work item",
-      );
+      const ok = await dispatch([built.command], "Could not create the work item");
       setSaving(false);
       if (ok) onClose(itemId);
       return;

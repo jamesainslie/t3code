@@ -233,6 +233,7 @@ export const RoadmapItemCreateCommand = command("roadmap.item.create", {
   state: Schema.optionalKey(RoadmapItemState),
   dueDate: Schema.optionalKey(Schema.NullOr(IsoDate)),
   estimate: Schema.optionalKey(Schema.NullOr(NonNegativeNumber)),
+  sprintId: Schema.optionalKey(Schema.NullOr(RoadmapSprintId)),
   criteria: Schema.optionalKey(Schema.Array(RoadmapCriterionInput)),
   origin: Schema.optionalKey(Schema.NullOr(RoadmapThreadRef)),
   attachThread: Schema.optionalKey(RoadmapThreadRef),

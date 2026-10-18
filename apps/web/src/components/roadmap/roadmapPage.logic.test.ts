@@ -489,24 +489,22 @@ describe("editor commands", () => {
     });
   });
 
-  it("puts a new item in its sprint with an update after the create", () => {
+  it("creates a new item straight into its sprint", () => {
     const draft = {
       ...emptyEditorDraft(null),
       title: "Sprinted",
       sprintId: RoadmapSprintId.make("s1"),
     };
-    expect(
-      buildCreateCommand(draft, { ...ids, sprintCommandId: CommandId.make("cmd-2") }),
-    ).toMatchObject({
-      command: { type: "roadmap.item.create", itemId: id("new-1") },
-      followUp: [
-        {
-          type: "roadmap.item.update",
-          commandId: CommandId.make("cmd-2"),
-          itemId: id("new-1"),
-          patch: { sprintId: "s1" },
-        },
-      ],
+    expect(buildCreateCommand(draft, ids)).toEqual({
+      command: {
+        type: "roadmap.item.create",
+        commandId,
+        itemId: id("new-1"),
+        itemType: "objective",
+        title: "Sprinted",
+        parentId: null,
+        sprintId: "s1",
+      },
     });
   });
 

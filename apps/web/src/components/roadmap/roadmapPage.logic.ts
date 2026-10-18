@@ -502,20 +502,10 @@ const MISSING_TITLE = "Give the work item a title.";
 
 type CreateCommand = Extract<RoadmapCommand, { type: "roadmap.item.create" }>;
 
-/**
- * The create command, and when the draft names a sprint, the update that puts
- * the new item in it: creating takes no sprint, so it follows in its own command.
- */
 export function buildCreateCommand(
   draft: RoadmapEditorDraft,
-  ids: {
-    readonly itemId: RoadmapItemId;
-    readonly commandId: CommandId;
-    readonly sprintCommandId?: CommandId;
-  },
-):
-  | { readonly command: CreateCommand; readonly followUp?: ReadonlyArray<RoadmapCommand> }
-  | { readonly error: string } {
+  ids: { readonly itemId: RoadmapItemId; readonly commandId: CommandId },
+): { readonly command: CreateCommand } | { readonly error: string } {
   const title = draft.title.trim();
   if (title === "") return { error: MISSING_TITLE };
   const criteria = criteriaLines(draft.criteriaText);
@@ -533,20 +523,9 @@ export function buildCreateCommand(
       ...(draft.priority === null ? {} : { priority: draft.priority }),
       ...(draft.dueDate === null ? {} : { dueDate: draft.dueDate }),
       ...(draft.estimate === null ? {} : { estimate: draft.estimate }),
+      ...(draft.sprintId === null ? {} : { sprintId: draft.sprintId }),
       ...(criteria.length === 0 ? {} : { criteria: criteria.map((text) => ({ text })) }),
     },
-    ...(draft.sprintId === null || ids.sprintCommandId === undefined
-      ? {}
-      : {
-          followUp: [
-            {
-              type: "roadmap.item.update",
-              commandId: ids.sprintCommandId,
-              itemId: ids.itemId,
-              patch: { sprintId: draft.sprintId },
-            },
-          ],
-        }),
   };
 }
 

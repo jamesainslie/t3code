@@ -172,6 +172,13 @@ export function planRoadmapCommand(input: {
         const other = attachedElsewhere(command.attachThread, command.itemId);
         if (other !== undefined) return alreadyAttached(other);
       }
+      if (command.sprintId !== undefined) {
+        const forbidden = userOnly(actor, "sprints");
+        if (forbidden !== undefined) return Result.fail(forbidden);
+        if (command.sprintId !== null && state.sprints?.has(command.sprintId) !== true) {
+          return reject("invalid_request", `Sprint ${command.sprintId} does not exist.`);
+        }
+      }
       const siblings = siblingsOf(parentId, command.itemId);
       const item: RoadmapWorkItem = {
         id: command.itemId,
@@ -208,7 +215,7 @@ export function planRoadmapCommand(input: {
         completedAt: command.state === "done" ? occurredAt : null,
         pinnedAt: null,
         snoozedUntil: null,
-        sprintId: null,
+        sprintId: command.sprintId ?? null,
         hours: [],
       };
       return Result.succeed({ ...base, type: "roadmap.item.created", payload: { item } });
