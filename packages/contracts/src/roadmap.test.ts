@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
@@ -67,6 +67,24 @@ const fullItem = {
     { id: "h1", at, hours: 1.5, actor: { _tag: "user" }, note: "Pairing" },
     { id: "h2", at, hours: 0.25, actor: { _tag: "agent", thread, threadTitle: "x" }, note: null },
   ],
+  progressNotes: [
+    {
+      id: "n1",
+      at,
+      actor: { _tag: "agent", thread, threadTitle: "x" },
+      kind: "progress",
+      text: "Tokens wired into the build",
+      criterionId: "c1",
+    },
+    {
+      id: "n2",
+      at,
+      actor: { _tag: "steward", environmentId: "env-home" },
+      kind: "unsure",
+      text: "No test covers the installer art yet",
+      criterionId: null,
+    },
+  ],
 };
 
 const sprint = {
@@ -102,6 +120,17 @@ describe("RoadmapWorkItem", () => {
   it("rejects an hours entry that is not positive", () => {
     const entry = { id: "h", at, hours: 0, actor: { _tag: "user" }, note: null };
     expect(() => decodeItem({ ...fullItem, hours: [entry] })).toThrow();
+  });
+
+  it("decodes an item stored before notes with no notes", () => {
+    const { progressNotes: _, ...withoutNotes } = fullItem;
+    expect(decodeItem(withoutNotes).progressNotes).toEqual([]);
+  });
+
+  it("rejects a note of an unknown kind or with blank text", () => {
+    const note = fullItem.progressNotes[0]!;
+    expect(() => decodeItem({ ...fullItem, progressNotes: [{ ...note, kind: "idea" }] })).toThrow();
+    expect(() => decodeItem({ ...fullItem, progressNotes: [{ ...note, text: "  " }] })).toThrow();
   });
 });
 
@@ -226,6 +255,16 @@ describe("RoadmapCommand", () => {
     { type: "roadmap.hours.log", itemId: "item-1", entryId: "h1", hours: 2 },
     { type: "roadmap.hours.log", itemId: "item-1", entryId: "h1", hours: 2, note: "Review" },
     { type: "roadmap.hours.remove", itemId: "item-1", entryId: "h1" },
+    { type: "roadmap.note.add", itemId: "item-1", noteId: "n1", kind: "progress", text: "Done" },
+    {
+      type: "roadmap.note.add",
+      itemId: "item-1",
+      noteId: "n1",
+      kind: "drift",
+      text: "Scope grew",
+      criterionId: "c1",
+    },
+    { type: "roadmap.note.remove", itemId: "item-1", noteId: "n1" },
     {
       type: "roadmap.sprint.create",
       sprintId: "sprint-1",
@@ -248,6 +287,12 @@ describe("RoadmapCommand", () => {
     expect(() =>
       decodeCommand({ ...base, type: "roadmap.hours.log", entryId: "h1", hours: -1 } as never),
     ).toThrow();
+  });
+
+  it("rejects a note of an unknown kind or with blank text", () => {
+    const base = { commandId: "cmd-6", type: "roadmap.note.add", itemId: "item-1", noteId: "n1" };
+    expect(() => decodeCommand({ ...base, kind: "idea", text: "x" } as never)).toThrow();
+    expect(() => decodeCommand({ ...base, kind: "progress", text: " " } as never)).toThrow();
   });
 });
 
@@ -288,9 +333,25 @@ describe("RoadmapEvent", () => {
       { ...base, type: "roadmap.item.unsnoozed", payload: {} },
       { ...base, type: "roadmap.hours.logged", payload: { entry: fullItem.hours[0] } },
       { ...base, type: "roadmap.hours.removed", payload: { entryId: "h1" } },
+      { ...base, type: "roadmap.note.added", payload: { note: fullItem.progressNotes[1] } },
+      { ...base, type: "roadmap.note.removed", payload: { noteId: "n1" } },
     ]) {
       expect(decodeEvent(event as never).type).toBe(event.type);
     }
+  });
+
+  it("decodes a created event stored before notes, giving the item no notes", () => {
+    const { progressNotes: _, ...withoutNotes } = fullItem;
+    const decoded = decodeEvent({
+      type: "roadmap.item.created",
+      eventId: "event-4",
+      itemId: "item-1",
+      actor: { _tag: "user" },
+      occurredAt: at,
+      payload: { item: withoutNotes },
+    } as never);
+    assert(decoded.type === "roadmap.item.created");
+    expect(decoded.payload.item.progressNotes).toEqual([]);
   });
 });
 

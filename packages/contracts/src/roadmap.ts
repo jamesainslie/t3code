@@ -97,6 +97,26 @@ export const RoadmapHoursEntry = Schema.Struct({
 });
 export type RoadmapHoursEntry = typeof RoadmapHoursEntry.Type;
 
+/**
+ * Who may write which kind is the planner's rule: `progress` comes from
+ * anyone, `sync` only from GitHub, `drift` and `unsure` only from the steward.
+ */
+export const RoadmapNoteKind = Schema.Literals(["progress", "drift", "unsure", "sync"]);
+export type RoadmapNoteKind = typeof RoadmapNoteKind.Type;
+
+export const RoadmapProgressNote = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  at: IsoDateTime,
+  actor: RoadmapActor,
+  kind: RoadmapNoteKind,
+  text: TrimmedNonEmptyString,
+  criterionId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type RoadmapProgressNote = typeof RoadmapProgressNote.Type;
+
+/** An item keeps its newest notes; older ones drop off as new ones arrive. */
+export const ROADMAP_NOTE_LIMIT = 50;
+
 export const RoadmapSprint = Schema.Struct({
   id: RoadmapSprintId,
   name: TrimmedNonEmptyString,
@@ -183,6 +203,13 @@ export const RoadmapWorkItem = Schema.Struct({
   snoozedUntil: Schema.NullOr(IsoDate),
   sprintId: Schema.NullOr(RoadmapSprintId),
   hours: Schema.Array(RoadmapHoursEntry),
+  /**
+   * Oldest first, at most `ROADMAP_NOTE_LIMIT`. The default lets items and
+   * created events stored before notes decode, so a rebuild needs no upgrade.
+   */
+  progressNotes: Schema.Array(RoadmapProgressNote).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 export type RoadmapWorkItem = typeof RoadmapWorkItem.Type;
 
@@ -321,6 +348,18 @@ export const RoadmapHoursRemoveCommand = command("roadmap.hours.remove", {
   itemId: RoadmapItemId,
   entryId: TrimmedNonEmptyString,
 });
+/** `noteId` is the caller's, so a retried add never writes the note twice. */
+export const RoadmapNoteAddCommand = command("roadmap.note.add", {
+  itemId: RoadmapItemId,
+  noteId: TrimmedNonEmptyString,
+  kind: RoadmapNoteKind,
+  text: TrimmedNonEmptyString,
+  criterionId: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
+});
+export const RoadmapNoteRemoveCommand = command("roadmap.note.remove", {
+  itemId: RoadmapItemId,
+  noteId: TrimmedNonEmptyString,
+});
 export const RoadmapSprintCreateCommand = command("roadmap.sprint.create", {
   sprintId: RoadmapSprintId,
   name: TrimmedNonEmptyString,
@@ -362,6 +401,8 @@ export const RoadmapItemCommand = Schema.Union([
   RoadmapItemUnsnoozeCommand,
   RoadmapHoursLogCommand,
   RoadmapHoursRemoveCommand,
+  RoadmapNoteAddCommand,
+  RoadmapNoteRemoveCommand,
 ]);
 export type RoadmapItemCommand = typeof RoadmapItemCommand.Type;
 
@@ -448,6 +489,8 @@ export const RoadmapItemEvent = Schema.Union([
   event("roadmap.item.unsnoozed", Schema.Struct({})),
   event("roadmap.hours.logged", Schema.Struct({ entry: RoadmapHoursEntry })),
   event("roadmap.hours.removed", Schema.Struct({ entryId: TrimmedNonEmptyString })),
+  event("roadmap.note.added", Schema.Struct({ note: RoadmapProgressNote })),
+  event("roadmap.note.removed", Schema.Struct({ noteId: TrimmedNonEmptyString })),
 ]);
 export type RoadmapItemEvent = typeof RoadmapItemEvent.Type;
 
@@ -495,7 +538,10 @@ export const RoadmapRejectionCode = Schema.Literals([
   "roadmap_home_elsewhere",
   /** Today holds at most three picks. */
   "pin_limit",
-  /** Pins, snoozes and sprints are the user's; agents and other actors cannot change them. */
+  /**
+   * Pins, snoozes, sprints and removing notes are the user's; a note kind
+   * other than `progress` belongs to one actor.
+   */
   "forbidden_actor",
   /** Well-formed but meaningless, such as a snooze into the past or a sprint ending first. */
   "invalid_request",
