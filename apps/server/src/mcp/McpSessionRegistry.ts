@@ -125,6 +125,8 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
           "worktree",
           "pull-requests",
           "document-comments",
+          // Fork: roadmap.
+          "roadmap",
           ...(request.capabilities ?? (browserToolsAvailable ? (["preview"] as const) : [])),
         ]),
         issuedAt,

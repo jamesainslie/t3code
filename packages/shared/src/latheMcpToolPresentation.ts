@@ -69,7 +69,11 @@ export type LatheMcpToolSummaryAction =
   | "html-render"
   // Fork: document comment tools.
   | "comment-list"
-  | "comment-resolve";
+  | "comment-resolve"
+  // Fork: roadmap.
+  | "roadmap-read"
+  | "roadmap-create"
+  | "roadmap-update";
 
 export interface LatheMcpToolDefinition {
   readonly displayName: string;
@@ -161,6 +165,33 @@ const LATHE_MCP_TOOLS: Readonly<Record<string, LatheMcpToolDefinition>> = {
   resolve_document_comment: tool(
     ["Resolve", "Resolving", "Resolved", "a document comment"],
     "comment-resolve",
+  ),
+  // Fork: roadmap.
+  lathe_roadmap_list: tool(["List", "Listing", "Listed", "roadmap work items"], "roadmap-read"),
+  lathe_roadmap_read: tool(["Read", "Reading", "Read", "a roadmap work item"], "roadmap-read"),
+  lathe_roadmap_create: tool(
+    ["Create", "Creating", "Created", "a roadmap work item"],
+    "roadmap-create",
+  ),
+  lathe_roadmap_update: tool(
+    ["Update", "Updating", "Updated", "a roadmap work item"],
+    "roadmap-update",
+  ),
+  lathe_roadmap_criterion_tick: tool(
+    ["Tick", "Ticking", "Ticked", "an acceptance criterion"],
+    "roadmap-update",
+  ),
+  lathe_roadmap_attach: tool(
+    ["Attach", "Attaching", "Attached", "a thread to a work item"],
+    "roadmap-update",
+  ),
+  lathe_roadmap_detach: tool(
+    ["Detach", "Detaching", "Detached", "a thread from a work item"],
+    "roadmap-update",
+  ),
+  lathe_roadmap_link_blocker: tool(
+    ["Link", "Linking", "Linked", "a roadmap blocker"],
+    "roadmap-update",
   ),
   lathe_thread_send: tool(["Send", "Sending", "Sent", "to a Lathe thread"], "thread-send"),
   lathe_thread_wait: tool(["Wait", "Waiting", "Waited", "for a Lathe thread"], "thread-wait"),

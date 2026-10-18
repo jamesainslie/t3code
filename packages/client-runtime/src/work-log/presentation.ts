@@ -619,6 +619,9 @@ function summaryActionPriority(action: ToolGroupAction | LatheMcpToolSummaryActi
     case "attachment-prepare":
     case "attachment-discard":
     case "attachment-send":
+    // Fork: roadmap.
+    case "roadmap-create":
+    case "roadmap-update":
       return 0;
     case "other":
     case "update":

@@ -1,0 +1,350 @@
+/**
+ * Fork: roadmap tools. Agents read and change the roadmap through the same
+ * service the clients use, acting as their own thread.
+ */
+import {
+  IsoDate,
+  IsoDateTime,
+  McpCapabilityUnavailableError,
+  NonNegativeInt,
+  OrchestratorMcpFailure,
+  RoadmapActor,
+  RoadmapArea,
+  RoadmapErrorCode,
+  RoadmapItemId,
+  RoadmapItemState,
+  RoadmapItemType,
+  RoadmapPriority,
+  RoadmapWorkItem,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "@lathe/contracts";
+import * as Schema from "effect/Schema";
+import * as Tool from "effect/ai/Tool";
+import * as Toolkit from "effect/ai/Toolkit";
+
+import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
+
+const dependencies = [
+  McpInvocationContext.McpInvocationContext,
+  // The access gate reads the calling thread through it.
+  ThreadManagementService.ThreadManagementService,
+  RoadmapService.RoadmapService,
+];
+
+const NonNegativeNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
+
+const ClientRequestId = TrimmedNonEmptyString.check(Schema.isMaxLength(256)).annotate({
+  description: "Stable idempotency key to reuse when retrying this mutation.",
+});
+
+const ItemIdOrAttached = RoadmapItemId.annotate({
+  description: "The work item. Omit for the item this thread is attached to.",
+});
+
+export const RoadmapListInput = Schema.Struct({
+  area: Schema.optional(
+    RoadmapArea.annotate({ description: "Only items in this area, inherited areas included." }),
+  ),
+  type: Schema.optional(RoadmapItemType.annotate({ description: "Only items of this type." })),
+  state: Schema.optional(RoadmapItemState.annotate({ description: "Only items in this state." })),
+  underItemId: Schema.optional(
+    RoadmapItemId.annotate({ description: "Only items below this one in the tree." }),
+  ),
+});
+export type RoadmapListInput = typeof RoadmapListInput.Type;
+
+export const RoadmapReadInput = Schema.Struct({ itemId: Schema.optional(ItemIdOrAttached) });
+export type RoadmapReadInput = typeof RoadmapReadInput.Type;
+
+export const RoadmapCreateInput = Schema.Struct({
+  type: RoadmapItemType,
+  title: TrimmedNonEmptyString,
+  description: Schema.optional(Schema.String.annotate({ description: "Markdown." })),
+  parentId: Schema.optional(
+    RoadmapItemId.annotate({ description: "The parent item. Omit for a top-level item." }),
+  ),
+  priority: Schema.optional(
+    RoadmapPriority.annotate({ description: "Omit to inherit the parent's priority." }),
+  ),
+  area: Schema.optional(
+    RoadmapArea.annotate({ description: "Omit to inherit the parent's area." }),
+  ),
+  state: Schema.optional(RoadmapItemState.annotate({ description: "Defaults to backlog." })),
+  dueDate: Schema.optional(IsoDate.annotate({ description: "A calendar date, YYYY-MM-DD." })),
+  estimate: Schema.optional(NonNegativeNumber),
+  criteria: Schema.optional(
+    Schema.Array(TrimmedNonEmptyString).annotate({ description: "Acceptance criteria, in order." }),
+  ),
+  attachCaller: Schema.optional(
+    Schema.Boolean.annotate({ description: "Also attach this thread to the new item." }),
+  ),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapCreateInput = typeof RoadmapCreateInput.Type;
+
+export const RoadmapUpdateInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  type: Schema.optional(RoadmapItemType),
+  title: Schema.optional(TrimmedNonEmptyString),
+  description: Schema.optional(Schema.String),
+  state: Schema.optional(
+    RoadmapItemState.annotate({
+      description: "done is refused while any acceptance criterion is unticked.",
+    }),
+  ),
+  priority: Schema.optional(
+    Schema.NullOr(RoadmapPriority).annotate({ description: "null inherits from the parent." }),
+  ),
+  area: Schema.optional(
+    Schema.NullOr(RoadmapArea).annotate({ description: "null inherits from the parent." }),
+  ),
+  dueDate: Schema.optional(Schema.NullOr(IsoDate).annotate({ description: "null clears it." })),
+  startDate: Schema.optional(Schema.NullOr(IsoDate).annotate({ description: "null clears it." })),
+  estimate: Schema.optional(
+    Schema.NullOr(NonNegativeNumber).annotate({ description: "null clears it." }),
+  ),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapUpdateInput = typeof RoadmapUpdateInput.Type;
+
+export const RoadmapCriterionTickInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  criterionId: TrimmedNonEmptyString.annotate({
+    description: "The criterion id from lathe_roadmap_read.",
+  }),
+  ticked: Schema.Boolean.annotate({ description: "false unticks it." }),
+  evidence: Schema.optional(
+    Schema.String.annotate({
+      description: "What shows the criterion is met: a test, a commit, a file, a PR.",
+    }),
+  ),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapCriterionTickInput = typeof RoadmapCriterionTickInput.Type;
+
+export const RoadmapAttachInput = Schema.Struct({
+  itemId: RoadmapItemId,
+  threadId: Schema.optional(
+    ThreadId.annotate({ description: "A thread in this environment. Omit for this thread." }),
+  ),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapAttachInput = typeof RoadmapAttachInput.Type;
+
+export const RoadmapDetachInput = Schema.Struct({
+  itemId: Schema.optional(
+    RoadmapItemId.annotate({ description: "Omit for the item the thread is attached to." }),
+  ),
+  threadId: Schema.optional(
+    ThreadId.annotate({ description: "A thread in this environment. Omit for this thread." }),
+  ),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapDetachInput = typeof RoadmapDetachInput.Type;
+
+export const RoadmapLinkBlockerInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  blockedById: RoadmapItemId.annotate({ description: "The item that must finish first." }),
+  linked: Schema.Boolean.annotate({ description: "false removes the link." }),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapLinkBlockerInput = typeof RoadmapLinkBlockerInput.Type;
+
+/** A roadmap refusal, with its code first in the message the agent reads. */
+export class RoadmapToolFailure extends Schema.TaggedError<RoadmapToolFailure>()(
+  "RoadmapToolFailure",
+  {
+    code: Schema.Literals([
+      ...RoadmapErrorCode.literals,
+      /** Agents may not mark an item done while a criterion is open. */
+      "open_criteria",
+    ]),
+    reason: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `${this.code}: ${this.reason}`;
+  }
+}
+
+export const RoadmapToolError = Schema.Union([
+  OrchestratorMcpFailure,
+  McpCapabilityUnavailableError,
+  RoadmapToolFailure,
+]);
+export type RoadmapToolError = typeof RoadmapToolError.Type;
+
+export const RoadmapListEntry = Schema.Struct({
+  id: RoadmapItemId,
+  type: RoadmapItemType,
+  title: Schema.String,
+  state: RoadmapItemState,
+  priority: RoadmapPriority.annotate({ description: "Effective priority, inherited if unset." }),
+  area: RoadmapArea.annotate({ description: "Effective area, inherited if unset." }),
+  parentId: Schema.NullOr(RoadmapItemId),
+  dueDate: Schema.NullOr(IsoDate),
+  criteriaTicked: NonNegativeInt,
+  criteriaTotal: NonNegativeInt,
+  attachedThreads: NonNegativeInt,
+  needsReview: Schema.Boolean,
+});
+export type RoadmapListEntry = typeof RoadmapListEntry.Type;
+
+export const RoadmapListResult = Schema.Struct({ items: Schema.Array(RoadmapListEntry) });
+export type RoadmapListResult = typeof RoadmapListResult.Type;
+
+const ItemSummary = Schema.Struct({
+  id: RoadmapItemId,
+  type: RoadmapItemType,
+  title: Schema.String,
+});
+
+export const RoadmapReadResult = Schema.Struct({
+  item: RoadmapWorkItem,
+  effectivePriority: RoadmapPriority,
+  effectiveArea: RoadmapArea,
+  parents: Schema.Array(ItemSummary).annotate({ description: "Ancestors, top-level first." }),
+  blockedBy: Schema.Array(Schema.Struct({ ...ItemSummary.fields, state: RoadmapItemState })),
+  history: Schema.Array(
+    Schema.Struct({
+      sequence: NonNegativeInt,
+      type: Schema.String,
+      actor: RoadmapActor,
+      occurredAt: IsoDateTime,
+    }),
+  ).annotate({ description: "The latest changes, oldest first." }),
+});
+export type RoadmapReadResult = typeof RoadmapReadResult.Type;
+
+export const RoadmapChangeResult = Schema.Struct({
+  itemId: RoadmapItemId,
+  sequence: NonNegativeInt,
+});
+export type RoadmapChangeResult = typeof RoadmapChangeResult.Type;
+
+const ListTool = Tool.make("lathe_roadmap_list", {
+  description:
+    "List the Lathe roadmap's work items as compact rows, in tree order. Filter by area, type, state, or a subtree.",
+  parameters: RoadmapListInput,
+  success: RoadmapListResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "List roadmap work items")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const ReadTool = Tool.make("lathe_roadmap_read", {
+  description:
+    "Read one roadmap work item with its acceptance criteria and their ids, blockers, attached threads, parents, and latest changes. Omit itemId for the item this thread is attached to.",
+  parameters: RoadmapReadInput,
+  success: RoadmapReadResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Read a roadmap work item")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+// Every change tool is idempotent: a repeated clientRequestId replays the first outcome.
+const CreateTool = Tool.make("lathe_roadmap_create", {
+  description:
+    "Create a roadmap work item, marked for the user's review. Set attachCaller to attach this thread to it.",
+  parameters: RoadmapCreateInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Create a roadmap work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const UpdateTool = Tool.make("lathe_roadmap_update", {
+  description:
+    "Change a roadmap work item's fields. Omit itemId for the item this thread is attached to. Setting state to done is refused while any acceptance criterion is unticked.",
+  parameters: RoadmapUpdateInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Update a roadmap work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const CriterionTickTool = Tool.make("lathe_roadmap_criterion_tick", {
+  description:
+    "Tick or untick one acceptance criterion of a roadmap work item. Give evidence when ticking. Omit itemId for the item this thread is attached to.",
+  parameters: RoadmapCriterionTickInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Tick an acceptance criterion")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const AttachTool = Tool.make("lathe_roadmap_attach", {
+  description:
+    "Attach this thread, or a named thread in this environment, to a roadmap work item. A thread is attached to one item at a time, so detach it first to move it.",
+  parameters: RoadmapAttachInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Attach a thread to a work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const DetachTool = Tool.make("lathe_roadmap_detach", {
+  description:
+    "Detach this thread, or a named thread in this environment, from its roadmap work item.",
+  parameters: RoadmapDetachInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Detach a thread from a work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+const LinkBlockerTool = Tool.make("lathe_roadmap_link_blocker", {
+  description:
+    "Record that a roadmap work item is blocked by another, or remove that link with linked=false. Omit itemId for the item this thread is attached to.",
+  parameters: RoadmapLinkBlockerInput,
+  success: RoadmapChangeResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Link a roadmap blocker")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
+export const RoadmapToolkit = Toolkit.make(
+  ListTool,
+  ReadTool,
+  CreateTool,
+  UpdateTool,
+  CriterionTickTool,
+  AttachTool,
+  DetachTool,
+  LinkBlockerTool,
+);
