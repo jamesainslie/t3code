@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { RoadmapItemId, RoadmapWorkItem } from "@lathe/contracts";
+import type { RoadmapItemId, RoadmapSprint, RoadmapWorkItem } from "@lathe/contracts";
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { MapIcon, PlusIcon } from "lucide-react";
@@ -33,6 +33,9 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { RoadmapBoard } from "./RoadmapBoard";
 import { RoadmapItemEditor, type RoadmapItemEditorMode } from "./RoadmapItemEditor";
 import { RoadmapOutline } from "./RoadmapOutline";
+import { RoadmapSprintsButton } from "./RoadmapSprints";
+import { RoadmapTimeline } from "./RoadmapTimeline";
+import { RoadmapToday } from "./RoadmapToday";
 import {
   ROADMAP_AREA_LABELS,
   ROADMAP_AREAS,
@@ -44,12 +47,24 @@ import {
 } from "./roadmap.logic";
 import {
   boardUnderOptions,
+  DEFAULT_ROADMAP_VIEW,
+  knownSprintFilter,
+  ROADMAP_VIEWS,
   roadmapEditorRequest,
+  roadmapViewOf,
   withoutEditorRequest,
   type RoadmapSearch,
+  type RoadmapSprintFilter,
+  type RoadmapView,
 } from "./roadmapPage.logic";
 
 const ALL = "all";
+const VIEW_LABELS: Readonly<Record<RoadmapView, string>> = {
+  today: "Today",
+  outline: "Outline",
+  timeline: "Timeline",
+  board: "Board",
+};
 const IGNORE_ESCAPE = () => {};
 const SKELETON_ROWS = ["a", "b", "c", "d", "e"] as const;
 
@@ -61,9 +76,10 @@ export function RoadmapPage() {
   const live = useRoadmapLive(supported ? home : null);
   const canEdit = useAtomValue(roadmapEnvironment.dispatchRoadmap.permissionAtom(home));
   const items = useMemo(() => live.data?.items ?? [], [live.data]);
+  const sprints = useMemo(() => live.data?.sprints ?? [], [live.data]);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const today = localIsoDate(new Date());
-  const view = search.view ?? "outline";
+  const view = roadmapViewOf(search);
   const underOptions = useMemo(() => boardUnderOptions(items), [items]);
   // An item that was deleted or never existed falls back to the whole board.
   const underId =
@@ -78,10 +94,11 @@ export function RoadmapPage() {
       ]),
     [underOptions],
   );
+  const sprintFilter = knownSprintFilter(search, sprints);
   // A stable object keeps the Outline's filtered tree memoized across unrelated renders.
   const outlineFilter = useMemo(
-    () => ({ area: search.area, type: search.type, state: search.itemState }),
-    [search.area, search.itemState, search.type],
+    () => ({ area: search.area, type: search.type, state: search.itemState, sprint: sprintFilter }),
+    [search.area, search.itemState, search.type, sprintFilter],
   );
 
   const [localEditor, setLocalEditor] = useState<{
@@ -120,6 +137,10 @@ export function RoadmapPage() {
     (item: RoadmapWorkItem) => openEditor({ kind: "edit", item }),
     [openEditor],
   );
+  const onSelect = useCallback(
+    (itemId: RoadmapItemId) => setSearch((current) => ({ ...current, item: itemId })),
+    [setSearch],
+  );
   const closeEditor = (createdId?: RoadmapItemId) => {
     setLocalEditor(null);
     if (search.new === undefined && createdId === undefined) return;
@@ -151,26 +172,44 @@ export function RoadmapPage() {
               }))
             }
           />
-        ) : (
-          <OutlineFilters search={search} setSearch={setSearch} />
-        )}
+        ) : view === "outline" ? (
+          <OutlineFilters
+            search={search}
+            sprints={sprints}
+            sprintFilter={sprintFilter}
+            setSearch={setSearch}
+          />
+        ) : view === "timeline" ? (
+          <AreaFilter search={search} setSearch={setSearch} />
+        ) : null}
         <ToggleGroup
           aria-label="Roadmap view"
           variant="segmented"
           value={[view]}
           onValueChange={(next) => {
-            const value = next[0];
-            if (value === "outline" || value === "board") {
-              setSearch(({ view: _view, ...rest }) => ({
-                ...rest,
-                ...(value === "outline" ? {} : { view: value }),
-              }));
-            }
+            const value = ROADMAP_VIEWS.find((candidate) => candidate === next[0]);
+            if (value === undefined) return;
+            setSearch(({ view: _view, ...rest }) => ({
+              ...rest,
+              ...(value === DEFAULT_ROADMAP_VIEW ? {} : { view: value }),
+            }));
           }}
         >
-          <Toggle value="outline">Outline</Toggle>
-          <Toggle value="board">Board</Toggle>
+          {ROADMAP_VIEWS.map((value) => (
+            <Toggle key={value} value={value}>
+              {VIEW_LABELS[value]}
+            </Toggle>
+          ))}
         </ToggleGroup>
+        {home !== null && live.data !== null ? (
+          <RoadmapSprintsButton
+            home={home}
+            items={items}
+            sprints={sprints}
+            canEdit={canEdit}
+            today={today}
+          />
+        ) : null}
         <Button
           size="xs"
           variant="outline"
@@ -229,10 +268,30 @@ export function RoadmapPage() {
                   </Button>
                 </EmptyContent>
               </Empty>
+            ) : view === "today" ? (
+              <RoadmapToday
+                home={home}
+                items={items}
+                sprints={sprints}
+                canEdit={canEdit}
+                today={today}
+                onOpen={onEdit}
+              />
+            ) : view === "timeline" ? (
+              <RoadmapTimeline
+                home={home}
+                items={items}
+                sprints={sprints}
+                area={search.area ?? null}
+                today={today}
+                selectedId={search.item ?? null}
+                onSelect={onSelect}
+              />
             ) : view === "board" ? (
               <RoadmapBoard
                 home={home}
                 items={items}
+                sprints={sprints}
                 underId={underId}
                 canEdit={canEdit}
                 today={today}
@@ -242,6 +301,7 @@ export function RoadmapPage() {
               <RoadmapOutline
                 home={home}
                 items={items}
+                sprints={sprints}
                 filter={outlineFilter}
                 selectedId={search.item ?? null}
                 canEdit={canEdit}
@@ -258,6 +318,7 @@ export function RoadmapPage() {
           key={editor.key}
           home={home}
           items={items}
+          sprints={sprints}
           mode={editor.mode}
           onClose={closeEditor}
         />
@@ -268,25 +329,27 @@ export function RoadmapPage() {
 
 function OutlineFilters({
   search,
+  sprints,
+  sprintFilter,
   setSearch,
 }: {
   readonly search: RoadmapSearch;
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
+  readonly sprintFilter: RoadmapSprintFilter | undefined;
   readonly setSearch: (next: (current: RoadmapSearch) => RoadmapSearch) => void;
 }) {
+  const sprintLabels = useMemo(
+    () =>
+      Object.fromEntries([
+        [ALL, "Any"],
+        ["none", "None"],
+        ...sprints.map((sprint) => [sprint.id, sprint.name]),
+      ]),
+    [sprints],
+  );
   return (
     <>
-      <FilterSelect
-        label="Area"
-        value={search.area ?? ALL}
-        options={{ [ALL]: "All", ...ROADMAP_AREA_LABELS }}
-        order={[ALL, ...ROADMAP_AREAS]}
-        onChange={(value) =>
-          setSearch(({ area: _area, ...rest }) => ({
-            ...rest,
-            ...(value === ALL ? {} : { area: value as NonNullable<RoadmapSearch["area"]> }),
-          }))
-        }
-      />
+      <AreaFilter search={search} setSearch={setSearch} />
       <FilterSelect
         label="Type"
         value={search.type ?? ALL}
@@ -313,7 +376,44 @@ function OutlineFilters({
           }))
         }
       />
+      {sprints.length > 0 ? (
+        <FilterSelect
+          label="Sprint"
+          value={sprintFilter ?? ALL}
+          options={sprintLabels}
+          order={[ALL, "none", ...sprints.map((sprint) => sprint.id)]}
+          onChange={(value) =>
+            setSearch(({ sprint: _sprint, ...rest }) => ({
+              ...rest,
+              ...(value === ALL ? {} : { sprint: value as RoadmapSprintFilter }),
+            }))
+          }
+        />
+      ) : null}
     </>
+  );
+}
+
+function AreaFilter({
+  search,
+  setSearch,
+}: {
+  readonly search: RoadmapSearch;
+  readonly setSearch: (next: (current: RoadmapSearch) => RoadmapSearch) => void;
+}) {
+  return (
+    <FilterSelect
+      label="Area"
+      value={search.area ?? ALL}
+      options={{ [ALL]: "All", ...ROADMAP_AREA_LABELS }}
+      order={[ALL, ...ROADMAP_AREAS]}
+      onChange={(value) =>
+        setSearch(({ area: _area, ...rest }) => ({
+          ...rest,
+          ...(value === ALL ? {} : { area: value as NonNullable<RoadmapSearch["area"]> }),
+        }))
+      }
+    />
   );
 }
 

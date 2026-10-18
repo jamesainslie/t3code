@@ -7,15 +7,19 @@ import type {
   RoadmapItemId,
   RoadmapItemState,
   RoadmapItemType,
+  RoadmapUnit,
   RoadmapWorkItem,
   ThreadId,
 } from "@lathe/contracts";
+import type { RoadmapForecastStatus } from "@lathe/shared/roadmapCalc";
 import { effectivePriority } from "@lathe/shared/roadmap";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
+import * as RoadmapProgress from "./RoadmapProgress.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 
 /** Roughly five hundred tokens: enough for the item, small enough to send every turn. */
@@ -47,6 +51,19 @@ const ANCESTOR_TITLE_MAX = 60;
 const CRITERION_MAX = 200;
 const BLOCKERS_SHOWN = 5;
 
+const FORECAST_LABEL: Readonly<Record<Exclude<RoadmapForecastStatus, "no-forecast">, string>> = {
+  "on-track": "On track",
+  "at-risk": "At risk",
+  late: "Late",
+};
+
+const UNIT_LABEL: Readonly<Record<RoadmapUnit, string>> = {
+  items: "items",
+  criteria: "criteria",
+  points: "pts",
+  hours: "hours",
+};
+
 const INTRO = "Roadmap work item for this thread (Lathe roadmap, refreshed each turn):";
 const FOOTER =
   "Use lathe_roadmap_read for criterion ids, and the lathe_roadmap_* tools to tick criteria with evidence or update this item.";
@@ -64,6 +81,23 @@ function ancestorsOf(item: RoadmapWorkItem, byId: ReadonlyMap<RoadmapItemId, Roa
     parent = parent.parentId === null ? undefined : byId.get(parent.parentId);
   }
   return ancestors;
+}
+
+// One decimal is plenty for an agent, and keeps float noise out of the block.
+const amount = (value: number) => String(Math.round(value * 10) / 10);
+
+/** Null when there is neither a forecast nor anything done, so the line is left out. */
+function progressLine(progress: RoadmapProgress.RoadmapItemProgress): string | null {
+  const { forecast } = progress;
+  if (forecast.status === "no-forecast" && progress.burned === 0) return null;
+  const unit = UNIT_LABEL[progress.unit];
+  const done =
+    progress.total === null
+      ? `${amount(progress.burned)} ${unit} done`
+      : `${amount(progress.burned)} of ${amount(progress.total)} ${unit} done`;
+  if (forecast.status === "no-forecast") return `Progress: ${done}.`;
+  const projected = forecast.projected === null ? "" : `, projected ${forecast.projected}`;
+  return `Forecast: ${FORECAST_LABEL[forecast.status]}${projected}; ${done}.`;
 }
 
 function blockedByLine(item: RoadmapWorkItem, byId: ReadonlyMap<RoadmapItemId, RoadmapWorkItem>) {
@@ -90,13 +124,16 @@ function blockedByLine(item: RoadmapWorkItem, byId: ReadonlyMap<RoadmapItemId, R
 export function renderRoadmapContext(
   item: RoadmapWorkItem,
   byId: ReadonlyMap<RoadmapItemId, RoadmapWorkItem>,
+  progress?: RoadmapProgress.RoadmapItemProgress,
 ): string {
   const priority = effectivePriority(item.id, byId).priority.toUpperCase();
   const due = item.dueDate === null ? "no due date" : `due ${item.dueDate}`;
   const ancestors = ancestorsOf(item, byId);
+  const forecastLine = progress === undefined ? null : progressLine(progress);
   const header = [
     INTRO,
     `${TYPE_LABEL[item.type]} "${clip(item.title, TITLE_MAX)}" (id ${clip(item.id, ID_MAX)}), state ${STATE_LABEL[item.state]}, priority ${priority}, ${due}.`,
+    ...(forecastLine === null ? [] : [forecastLine]),
     ...(ancestors.length === 0
       ? []
       : [
@@ -140,6 +177,7 @@ export class RoadmapTurnContext extends Context.Service<
 const make = Effect.gen(function* () {
   const roadmap = yield* RoadmapService.RoadmapService;
   const identity = yield* ServerEnvironment.ServerEnvironmentIdentity;
+  const serverSettings = yield* ServerSettingsService;
 
   return RoadmapTurnContext.of({
     forThread: (threadId) =>
@@ -150,7 +188,15 @@ const make = Effect.gen(function* () {
         const [item] = yield* roadmap.forThread({ environmentId, threadId });
         if (item === undefined) return "";
         const items = yield* roadmap.list();
-        return renderRoadmapContext(item, new Map(items.map((live) => [live.id, live])));
+        const sprints = yield* roadmap.listSprints();
+        const settings = yield* serverSettings.getSettings;
+        const { byId, progressOf } = RoadmapProgress.progressCalculator({
+          items,
+          sprints,
+          areas: settings.roadmap.areas,
+          today: yield* RoadmapProgress.todayUtc,
+        });
+        return renderRoadmapContext(item, byId, progressOf(item));
       }).pipe(
         Effect.catch((error) =>
           Effect.logWarning("Roadmap context skipped for this turn", { threadId, error }).pipe(

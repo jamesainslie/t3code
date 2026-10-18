@@ -606,6 +606,7 @@ it.effect("registers the roadmap toolkit and surfaces a missing capability as a 
         "lathe_roadmap_attach",
         "lathe_roadmap_detach",
         "lathe_roadmap_link_blocker",
+        "lathe_roadmap_log_hours",
       ]),
     );
     const readTool = server.tools.find(({ tool }) => tool.name === "lathe_roadmap_read");
@@ -630,6 +631,7 @@ it.effect("registers the roadmap toolkit and surfaces a missing capability as a 
         Layer.provide(
           Layer.mergeAll(
             Layer.mock(RoadmapService.RoadmapService)({}),
+            ServerSettings.ServerSettingsService.layerTest(),
             McpToolAccessTestkit.liveThreadsLayer,
             NodeServices.layer,
           ),

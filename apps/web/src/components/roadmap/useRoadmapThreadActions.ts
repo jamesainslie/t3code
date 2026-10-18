@@ -296,6 +296,10 @@ export function useRoadmapThreadActions() {
     succeeded(result, "Could not update work item");
   };
 
+  /** Any other card edit, such as pinning, snoozing or logging hours; true once applied. */
+  const runCommand = async (command: RoadmapCommand, failureTitle: string) =>
+    succeeded(await send(command), failureTitle);
+
   const tickCriterion = async (itemId: RoadmapItemId, criterionId: string, ticked: boolean) => {
     const result = await send({
       type: "roadmap.criterion.tick",
@@ -351,6 +355,7 @@ export function useRoadmapThreadActions() {
   const stableCreateFromThread = useStableCallback(createFromThread);
   const stableUpdateItem = useStableCallback(updateItem);
   const stableTickCriterion = useStableCallback(tickCriterion);
+  const stableRunCommand = useStableCallback(runCommand);
   const stableMenuState = useStableCallback(menuState);
   const stableHandleMenuAction = useStableCallback(handleMenuAction);
   const stableOpenInRoadmap = useStableCallback(openInRoadmap);
@@ -361,6 +366,7 @@ export function useRoadmapThreadActions() {
       createFromThread: stableCreateFromThread,
       updateItem: stableUpdateItem,
       tickCriterion: stableTickCriterion,
+      runCommand: stableRunCommand,
       menuState: stableMenuState,
       handleMenuAction: stableHandleMenuAction,
       openInRoadmap: stableOpenInRoadmap,
@@ -372,6 +378,7 @@ export function useRoadmapThreadActions() {
       stableHandleMenuAction,
       stableMenuState,
       stableOpenInRoadmap,
+      stableRunCommand,
       stableTickCriterion,
       stableUpdateItem,
     ],

@@ -2,6 +2,7 @@ import {
   type CommandId,
   type IsoDate,
   type RoadmapArea,
+  type RoadmapAreasSettings,
   type RoadmapCommand,
   type RoadmapCriterionInput,
   RoadmapItemId,
@@ -9,16 +10,36 @@ import {
   type RoadmapItemState,
   type RoadmapItemType,
   type RoadmapPriority,
+  type RoadmapSprint,
+  RoadmapSprintId,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
 import { buildTree, type RoadmapTreeNode } from "@lathe/client-runtime/roadmap/tree";
-import { canParent, wouldCreateParentCycle } from "@lathe/shared/roadmap";
+import { canParent, effectiveArea, wouldCreateParentCycle } from "@lathe/shared/roadmap";
+import {
+  forecast,
+  localDateOf,
+  type RoadmapDateOf,
+  type RoadmapForecast,
+  type RoadmapForecastStatus,
+  type RoadmapItemsById,
+  type RoadmapVelocity,
+  velocity,
+} from "@lathe/shared/roadmapCalc";
 
 import { ROADMAP_AREAS, ROADMAP_STATES, ROADMAP_TYPES, workingDaysLeft } from "./roadmap.logic";
 
-export type RoadmapView = "outline" | "board";
+export const ROADMAP_VIEWS = ["today", "outline", "timeline", "board"] as const;
+export type RoadmapView = (typeof ROADMAP_VIEWS)[number];
+/** The view Roadmap opens on; its URL carries no `view`. */
+export const DEFAULT_ROADMAP_VIEW: RoadmapView = "today";
+
+export const roadmapViewOf = (search: RoadmapSearch): RoadmapView =>
+  search.view ?? DEFAULT_ROADMAP_VIEW;
 /** "open" is every state but done. */
 export type RoadmapStateFilter = RoadmapItemState | "open";
+/** "none" is items in no sprint. */
+export type RoadmapSprintFilter = RoadmapSprintId | "none";
 
 export interface RoadmapSearch {
   readonly view?: RoadmapView;
@@ -28,6 +49,7 @@ export interface RoadmapSearch {
   /** Not `state`: search params share one type across routes, and pull requests use `state`. */
   readonly itemState?: RoadmapStateFilter;
   readonly under?: RoadmapItemId;
+  readonly sprint?: RoadmapSprintFilter;
   /** Opens the item editor; set by "Create work item" in the command palette. */
   readonly new?: 1;
   readonly parent?: RoadmapItemId;
@@ -37,10 +59,20 @@ const includes = <T extends string>(values: ReadonlyArray<T>, value: unknown): v
   typeof value === "string" && (values as ReadonlyArray<string>).includes(value);
 
 /** The router parses query values as JSON, so an id can arrive as a number. */
-function readItemId(value: unknown): RoadmapItemId | null {
+function readId(value: unknown): string | null {
   const text =
     typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
-  return text === "" ? null : RoadmapItemId.make(text.slice(0, 200));
+  return text === "" ? null : text.slice(0, 200);
+}
+
+function readItemId(value: unknown): RoadmapItemId | null {
+  const text = readId(value);
+  return text === null ? null : RoadmapItemId.make(text);
+}
+
+function readSprintFilter(value: unknown): RoadmapSprintFilter | null {
+  const text = readId(value);
+  return text === null ? null : text === "none" ? "none" : RoadmapSprintId.make(text);
 }
 
 export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSearch {
@@ -48,8 +80,9 @@ export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSear
   const under = readItemId(raw.under);
   const isNew = raw.new === 1 || raw.new === "1" || raw.new === true || raw.new === "true";
   const parent = isNew ? readItemId(raw.parent) : null;
+  const sprint = readSprintFilter(raw.sprint);
   return {
-    ...(raw.view === "outline" || raw.view === "board" ? { view: raw.view } : {}),
+    ...(includes(ROADMAP_VIEWS, raw.view) ? { view: raw.view } : {}),
     ...(item === null ? {} : { item }),
     ...(includes(ROADMAP_AREAS, raw.area) ? { area: raw.area } : {}),
     ...(includes(ROADMAP_TYPES, raw.type) ? { type: raw.type } : {}),
@@ -57,6 +90,7 @@ export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSear
       ? { itemState: raw.itemState }
       : {}),
     ...(under === null ? {} : { under }),
+    ...(sprint === null ? {} : { sprint }),
     ...(isNew ? { new: 1 as const } : {}),
     ...(parent === null ? {} : { parent }),
   };
@@ -78,30 +112,50 @@ export function withoutEditorRequest(search: RoadmapSearch): RoadmapSearch {
   return rest;
 }
 
-export type RoadmapFilterKey = "area" | "type" | "itemState";
+export type RoadmapFilterKey = "area" | "type" | "itemState" | "sprint";
 
 export function activeRoadmapFilters(search: RoadmapSearch): ReadonlyArray<RoadmapFilterKey> {
-  return (["area", "type", "itemState"] as const).filter((key) => search[key] !== undefined);
+  return (["area", "type", "itemState", "sprint"] as const).filter(
+    (key) => search[key] !== undefined,
+  );
+}
+
+/** The URL's sprint filter, unless it names a sprint since deleted, which shows everything. */
+export function knownSprintFilter(
+  search: RoadmapSearch,
+  sprints: ReadonlyArray<RoadmapSprint>,
+): RoadmapSprintFilter | undefined {
+  const { sprint } = search;
+  if (sprint === undefined || sprint === "none") return sprint;
+  return sprints.some((entry) => entry.id === sprint) ? sprint : undefined;
 }
 
 export interface RoadmapOutlineFilter {
   readonly area?: RoadmapArea | undefined;
   readonly type?: RoadmapItemType | undefined;
   readonly state?: RoadmapStateFilter | undefined;
+  readonly sprint?: RoadmapSprintFilter | undefined;
 }
+
+export const isOutlineFiltered = (filter: RoadmapOutlineFilter): boolean =>
+  filter.area !== undefined ||
+  filter.type !== undefined ||
+  filter.state !== undefined ||
+  filter.sprint !== undefined;
 
 /** Matches with their ancestors kept, so each match stays where it sits in the tree. */
 export function filterOutlineTree(
   tree: ReadonlyArray<RoadmapTreeNode>,
   filter: RoadmapOutlineFilter,
 ): ReadonlyArray<RoadmapTreeNode> {
-  const { area, type, state } = filter;
-  if (area === undefined && type === undefined && state === undefined) return tree;
+  const { area, type, state, sprint } = filter;
+  if (!isOutlineFiltered(filter)) return tree;
   const matches = (node: RoadmapTreeNode) =>
     (area === undefined || node.area.area === area) &&
     (type === undefined || node.item.type === type) &&
     (state === undefined ||
-      (state === "open" ? node.item.state !== "done" : node.item.state === state));
+      (state === "open" ? node.item.state !== "done" : node.item.state === state)) &&
+    (sprint === undefined || node.item.sprintId === (sprint === "none" ? null : sprint));
   const prune = (nodes: ReadonlyArray<RoadmapTreeNode>): ReadonlyArray<RoadmapTreeNode> =>
     nodes.flatMap((node) => {
       const children = prune(node.children);
@@ -260,17 +314,107 @@ export interface BoardDueLabel {
   readonly tone: "default" | "soon" | "late" | "done";
 }
 
+/** `weekdays` is the item's area calendar. */
 export function boardDueLabel(
   item: Pick<RoadmapWorkItem, "dueDate" | "state">,
   today: IsoDate,
+  weekdays?: ReadonlyArray<number>,
 ): BoardDueLabel {
   if (item.dueDate === null) return { date: null, left: null, tone: "default" };
   const date = formatRoadmapDate(item.dueDate, today);
   if (item.state === "done") return { date, left: "done", tone: "done" };
-  const days = workingDaysLeft(today, item.dueDate);
+  const days = workingDaysLeft(today, item.dueDate, weekdays);
   if (days < 0) return { date, left: `${-days} wd late`, tone: "late" };
   if (days === 0) return { date, left: "due today", tone: "soon" };
   return { date, left: `${days} wd`, tone: days <= 1 ? "soon" : "default" };
+}
+
+export interface RoadmapForecastsInput {
+  readonly items: ReadonlyArray<RoadmapWorkItem>;
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
+  readonly areaSettings: RoadmapAreasSettings;
+  readonly today: IsoDate;
+  /** Defaults to the user's local calendar, which is what due dates mean to them. */
+  readonly dateOf?: RoadmapDateOf;
+}
+
+/**
+ * Velocity per area, computed once per area and per source: an item in a
+ * sprint measures against the area's recent sprints, any other item against
+ * the trailing window.
+ */
+export function roadmapVelocityLookup(
+  input: RoadmapForecastsInput,
+): (area: RoadmapArea, inSprint: boolean) => RoadmapVelocity | null {
+  const cache = new Map<string, RoadmapVelocity | null>();
+  return (area, inSprint) => {
+    const key = `${area}:${inSprint}`;
+    if (!cache.has(key)) {
+      cache.set(
+        key,
+        velocity({
+          items: input.items,
+          area,
+          settings: input.areaSettings[area],
+          today: input.today,
+          sprints: input.sprints,
+          useSprints: inSprint,
+          dateOf: input.dateOf ?? localDateOf,
+        }),
+      );
+    }
+    return cache.get(key) ?? null;
+  };
+}
+
+/** Forecasts for every item that has one; done, unsized and history-less items are left out. */
+export function roadmapForecasts(
+  input: RoadmapForecastsInput,
+): ReadonlyMap<RoadmapItemId, RoadmapForecast> {
+  const byId: RoadmapItemsById = new Map(input.items.map((entry) => [entry.id, entry]));
+  const velocityOf = roadmapVelocityLookup(input);
+  const forecasts = new Map<RoadmapItemId, RoadmapForecast>();
+  for (const item of input.items) {
+    if (item.state === "done") continue;
+    const area = effectiveArea(item.id, byId).area;
+    const settings = input.areaSettings[area];
+    const result = forecast({
+      item,
+      byId,
+      unit: settings.unit,
+      velocity: velocityOf(area, item.sprintId !== null),
+      today: input.today,
+      weekdays: settings.workingWeekdays,
+    });
+    if (result.status !== "no-forecast") forecasts.set(item.id, result);
+  }
+  return forecasts;
+}
+
+export type RoadmapForecastShownStatus = Exclude<RoadmapForecastStatus, "no-forecast">;
+
+export const ROADMAP_FORECAST_LABELS: Readonly<Record<RoadmapForecastShownStatus, string>> = {
+  "on-track": "On track",
+  "at-risk": "At risk",
+  late: "Late",
+};
+
+export interface RoadmapForecastLabel {
+  readonly text: string;
+  readonly status: RoadmapForecastShownStatus;
+}
+
+/** "On track", or the status with the projected date once off track; null with no forecast. */
+export function forecastLabel(value: RoadmapForecast, today: IsoDate): RoadmapForecastLabel | null {
+  if (value.status === "no-forecast") return null;
+  const label = ROADMAP_FORECAST_LABELS[value.status];
+  return {
+    text:
+      value.status === "on-track" || value.projected === null
+        ? label
+        : `${label}, ${formatRoadmapDate(value.projected, today)}`,
+    status: value.status,
+  };
 }
 
 export interface BoardUnderOption {
@@ -310,6 +454,7 @@ export interface RoadmapEditorDraft {
   readonly priority: RoadmapPriority | null;
   readonly dueDate: IsoDate | null;
   readonly estimate: number | null;
+  readonly sprintId: RoadmapSprintId | null;
   /** One criterion per line. */
   readonly criteriaText: string;
 }
@@ -327,6 +472,7 @@ export function emptyEditorDraft(
     priority: null,
     dueDate: null,
     estimate: null,
+    sprintId: null,
     criteriaText: "",
   };
 }
@@ -341,6 +487,7 @@ export function editorDraftFor(item: RoadmapWorkItem): RoadmapEditorDraft {
     priority: item.priority,
     dueDate: item.dueDate,
     estimate: item.estimate,
+    sprintId: item.sprintId,
     criteriaText: item.criteria.map((criterion) => criterion.text).join("\n"),
   };
 }
@@ -376,6 +523,7 @@ export function buildCreateCommand(
       ...(draft.priority === null ? {} : { priority: draft.priority }),
       ...(draft.dueDate === null ? {} : { dueDate: draft.dueDate }),
       ...(draft.estimate === null ? {} : { estimate: draft.estimate }),
+      ...(draft.sprintId === null ? {} : { sprintId: draft.sprintId }),
       ...(criteria.length === 0 ? {} : { criteria: criteria.map((text) => ({ text })) }),
     },
   };
@@ -403,6 +551,7 @@ export function buildEditCommands(
   if (draft.priority !== item.priority) patch.priority = draft.priority;
   if (draft.dueDate !== item.dueDate) patch.dueDate = draft.dueDate;
   if (draft.estimate !== item.estimate) patch.estimate = draft.estimate;
+  if (draft.sprintId !== item.sprintId) patch.sprintId = draft.sprintId;
 
   const update =
     Object.keys(patch).length === 0

@@ -1,4 +1,10 @@
-import { CommandId, RoadmapItemId, type RoadmapWorkItem } from "@lathe/contracts";
+import {
+  CommandId,
+  RoadmapItemId,
+  RoadmapSprintId,
+  type RoadmapSprint,
+  type RoadmapWorkItem,
+} from "@lathe/contracts";
 import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -15,10 +21,14 @@ import {
   emptyEditorDraft,
   filterOutlineTree,
   flattenOutline,
+  forecastLabel,
   formatRoadmapDate,
+  knownSprintFilter,
   outlineDropZone,
   resolveOutlineDrop,
   roadmapEditorRequest,
+  roadmapForecasts,
+  roadmapViewOf,
   typeOptionsFor,
   validateRoadmapSearch,
   withoutEditorRequest,
@@ -50,7 +60,29 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   createdAt: at,
   updatedAt: at,
   createdBy: { _tag: "user" },
+  stateChangedAt: "2026-10-18T00:00:00.000Z",
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...overrides,
+});
+
+const sprint = (sprintId: string, overrides: Partial<RoadmapSprint> = {}): RoadmapSprint => ({
+  id: RoadmapSprintId.make(sprintId),
+  name: `Sprint ${sprintId}`,
+  area: "work",
+  startDate: "2026-10-19",
+  endDate: "2026-10-30",
+  ...overrides,
+});
+
+describe("roadmapViewOf", () => {
+  it("opens on Today unless the URL names another view", () => {
+    expect(roadmapViewOf({})).toBe("today");
+    expect(roadmapViewOf({ view: "timeline" })).toBe("timeline");
+  });
 });
 
 describe("validateRoadmapSearch", () => {
@@ -74,8 +106,14 @@ describe("validateRoadmapSearch", () => {
       under: id("epic-1"),
     });
     expect(
-      validateRoadmapSearch({ view: "timeline", area: "home", type: "task", itemState: "blocked" }),
+      validateRoadmapSearch({ view: "gantt", area: "home", type: "task", itemState: "blocked" }),
     ).toEqual({});
+  });
+
+  it("keeps each of the four views", () => {
+    for (const view of ["today", "outline", "timeline", "board"] as const) {
+      expect(validateRoadmapSearch({ view })).toEqual({ view });
+    }
   });
 
   it("reads new=1 in every form the URL parser can produce", () => {
@@ -101,6 +139,13 @@ describe("validateRoadmapSearch", () => {
       parent: id("42"),
       item: id("7"),
     });
+  });
+
+  it("keeps a sprint filter, including none for items in no sprint", () => {
+    expect(validateRoadmapSearch({ sprint: "s1" })).toEqual({ sprint: RoadmapSprintId.make("s1") });
+    expect(validateRoadmapSearch({ sprint: 3 })).toEqual({ sprint: RoadmapSprintId.make("3") });
+    expect(validateRoadmapSearch({ sprint: "none" })).toEqual({ sprint: "none" });
+    expect(validateRoadmapSearch({ sprint: "  " })).toEqual({});
   });
 });
 
@@ -138,6 +183,18 @@ describe("activeRoadmapFilters", () => {
       "area",
       "itemState",
     ]);
+    expect(activeRoadmapFilters({ sprint: "none" })).toEqual(["sprint"]);
+  });
+});
+
+describe("knownSprintFilter", () => {
+  const sprints = [sprint("s1")];
+
+  it("keeps none and sprints that exist, and drops a deleted sprint", () => {
+    expect(knownSprintFilter({ sprint: "none" }, sprints)).toBe("none");
+    expect(knownSprintFilter({ sprint: RoadmapSprintId.make("s1") }, sprints)).toBe("s1");
+    expect(knownSprintFilter({ sprint: RoadmapSprintId.make("gone") }, sprints)).toBeUndefined();
+    expect(knownSprintFilter({}, sprints)).toBeUndefined();
   });
 });
 
@@ -169,6 +226,20 @@ describe("filterOutlineTree", () => {
       "open",
     ]);
     expect(flat(filterOutlineTree(tree, { area: "personal" }))).toEqual([]);
+  });
+
+  it("filters by sprint, or to items in no sprint", () => {
+    const inSprint = [
+      item("obj", { type: "objective" }),
+      item("a", { type: "story", parentId: id("obj"), sprintId: RoadmapSprintId.make("s1") }),
+      item("b", { type: "story", parentId: id("obj"), sortKey: "o" }),
+    ];
+    const sprintTree = buildTree(inSprint);
+    expect(flat(filterOutlineTree(sprintTree, { sprint: RoadmapSprintId.make("s1") }))).toEqual([
+      "obj",
+      "a",
+    ]);
+    expect(flat(filterOutlineTree(sprintTree, { sprint: "none" }))).toEqual(["obj", "b"]);
   });
 });
 
@@ -317,9 +388,77 @@ describe("dates", () => {
     expect(boardDueLabel(item("x"), today)).toEqual({ date: null, left: null, tone: "default" });
   });
 
+  it("counts a card's working days on its area's calendar", () => {
+    // Sunday to Thursday: from Monday to Friday Oct 23 is Tue, Wed, Thu.
+    expect(
+      boardDueLabel(item("x", { dueDate: "2026-10-23" }), "2026-10-19", [0, 1, 2, 3, 4]).left,
+    ).toBe("3 wd");
+  });
+
   it("formats a date briefly and adds the year only when it differs", () => {
     expect(formatRoadmapDate("2026-10-21", "2026-10-19")).toBe("Oct 21");
     expect(formatRoadmapDate("2027-01-04", "2026-10-19")).toBe("Jan 4, 2027");
+  });
+});
+
+describe("forecasts", () => {
+  // 2026-10-19 is a Monday. Five done 3 point leaves in the window make 1 point a day.
+  const today = "2026-10-19";
+  const history = ["a", "b", "c", "d", "e"].map((name) =>
+    item(`done-${name}`, {
+      type: "story",
+      state: "done",
+      estimate: 3,
+      completedAt: "2026-10-14T12:00:00.000Z",
+    }),
+  );
+  const areaSettings = {
+    work: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
+    personal: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
+  };
+  const target = (itemId: string, estimate: number | null, dueDate: string) =>
+    item(itemId, { type: "story", estimate, dueDate });
+
+  it("forecasts each open item with an estimate from its area's velocity", () => {
+    const items = [
+      ...history,
+      target("tight", 4, "2026-10-23"),
+      target("over", 10, "2026-10-23"),
+      target("easy", 1, "2026-10-30"),
+      target("unsized", null, "2026-10-30"),
+    ];
+    const forecasts = roadmapForecasts({ items, sprints: [], areaSettings, today });
+    expect(forecasts.get(id("tight"))).toMatchObject({
+      status: "at-risk",
+      projected: "2026-10-23",
+    });
+    expect(forecasts.get(id("over"))).toMatchObject({ status: "late", projected: "2026-11-02" });
+    expect(forecasts.get(id("easy"))).toMatchObject({
+      status: "on-track",
+      projected: "2026-10-20",
+    });
+    expect(forecasts.has(id("unsized"))).toBe(false);
+    expect(forecasts.has(id("done-a"))).toBe(false);
+  });
+
+  it("forecasts nothing without enough history for a velocity", () => {
+    const items = [...history.slice(0, 4), target("tight", 4, "2026-10-23")];
+    expect(roadmapForecasts({ items, sprints: [], areaSettings, today }).size).toBe(0);
+  });
+
+  it("labels a forecast with the projected date only when it is off track", () => {
+    expect(
+      forecastLabel({ status: "on-track", projected: "2026-10-20", slackDays: 8 }, today),
+    ).toEqual({ text: "On track", status: "on-track" });
+    expect(
+      forecastLabel({ status: "at-risk", projected: "2026-10-23", slackDays: 0 }, today),
+    ).toEqual({ text: "At risk, Oct 23", status: "at-risk" });
+    expect(
+      forecastLabel({ status: "late", projected: "2027-01-04", slackDays: -3 }, today),
+    ).toEqual({ text: "Late, Jan 4, 2027", status: "late" });
+    expect(
+      forecastLabel({ status: "no-forecast", projected: null, slackDays: null }, today),
+    ).toBeNull();
   });
 });
 
@@ -347,6 +486,25 @@ describe("editor commands", () => {
   it("refuses to create without a title", () => {
     expect(buildCreateCommand({ ...emptyEditorDraft(null), title: "  " }, ids)).toEqual({
       error: "Give the work item a title.",
+    });
+  });
+
+  it("creates a new item straight into its sprint", () => {
+    const draft = {
+      ...emptyEditorDraft(null),
+      title: "Sprinted",
+      sprintId: RoadmapSprintId.make("s1"),
+    };
+    expect(buildCreateCommand(draft, ids)).toEqual({
+      command: {
+        type: "roadmap.item.create",
+        commandId,
+        itemId: id("new-1"),
+        itemType: "objective",
+        title: "Sprinted",
+        parentId: null,
+        sprintId: "s1",
+      },
     });
   });
 
@@ -431,6 +589,25 @@ describe("editor commands", () => {
           commandId: CommandId.make("cmd-3"),
           itemId: id("x"),
           criteria: [{ id: "c1", text: "Keep" }, { text: "Add" }],
+        },
+      ],
+    });
+  });
+
+  it("moves an item between sprints with its other edits", () => {
+    const existing = item("x", { title: "Same", sprintId: RoadmapSprintId.make("s1") });
+    expect(editorDraftFor(existing).sprintId).toBe("s1");
+    expect(
+      buildEditCommands(existing, { ...editorDraftFor(existing), sprintId: null }, () =>
+        CommandId.make("c"),
+      ),
+    ).toEqual({
+      commands: [
+        {
+          type: "roadmap.item.update",
+          commandId: CommandId.make("c"),
+          itemId: id("x"),
+          patch: { sprintId: null },
         },
       ],
     });

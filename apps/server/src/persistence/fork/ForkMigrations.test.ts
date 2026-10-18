@@ -13,6 +13,7 @@ import ProjectionThreadDocumentComments from "./migrations/003_ProjectionThreadD
 import ProjectionThreadsSnoozeReminder from "./migrations/004_ProjectionThreadsSnoozeReminder.ts";
 import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsContinuedFrom.ts";
 import Roadmap from "./migrations/007_Roadmap.ts";
+import RoadmapCalendar from "./migrations/008_RoadmapCalendar.ts";
 
 /** What the server's persistence setup runs, in order. */
 const migrateLikeTheServer = Effect.gen(function* () {
@@ -123,6 +124,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         assert.deepStrictEqual(first.fork, [
           [6, "ProjectSyncRecords"],
           [7, "Roadmap"],
+          [8, "RoadmapCalendar"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
@@ -205,6 +207,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           "roadmap_command_receipts",
           "projection_roadmap_items",
           "projection_roadmap_attachments",
+          "projection_roadmap_sprints",
         ]) {
           assert.isTrue(yield* hasTable(table), table);
         }
@@ -222,6 +225,125 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         yield* Roadmap;
         const rows = yield* sql`SELECT event_id FROM roadmap_events`;
         assert.strictEqual(rows.length, 1);
+      }),
+    );
+  },
+);
+
+/** A work item as phase 1 stored it, before the calendar fields existed. */
+const phaseOneItem = (itemId: string, state: string, createdAt: string, updatedAt: string) =>
+  JSON.stringify({
+    id: itemId,
+    type: "story",
+    title: `Story ${itemId}`,
+    description: "",
+    parentId: null,
+    sortKey: "n",
+    state,
+    priority: null,
+    area: null,
+    dueDate: null,
+    startDate: null,
+    estimate: 2,
+    criteria: [],
+    blockedBy: [],
+    externalBlockers: [],
+    related: [],
+    attachments: [],
+    origin: null,
+    needsReview: false,
+    createdAt,
+    updatedAt,
+    createdBy: { _tag: "user" },
+  });
+
+const calendarFields = (payload: string) => {
+  const parsed = JSON.parse(payload) as Record<string, unknown>;
+  return {
+    stateChangedAt: parsed.stateChangedAt,
+    completedAt: parsed.completedAt,
+    pinnedAt: parsed.pinnedAt,
+    snoozedUntil: parsed.snoozedUntil,
+    sprintId: parsed.sprintId,
+    hours: parsed.hours,
+  };
+};
+
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "roadmap calendar migration on a phase 1 roadmap",
+  (it) => {
+    it.effect("backfills history fields on items and created events, and adds sprints", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations();
+        yield* Roadmap;
+        const created = "2026-10-01T09:00:00.000Z";
+        const doneAt = "2026-10-10T09:00:00.000Z";
+        const touchedAt = "2026-10-12T09:00:00.000Z";
+        yield* sql`
+          INSERT INTO projection_roadmap_items (
+            item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+          ) VALUES
+            ('done-1', NULL, 'n', NULL, ${phaseOneItem("done-1", "done", created, doneAt)}, 2),
+            ('open-1', NULL, 'p', NULL, ${phaseOneItem("open-1", "backlog", created, touchedAt)}, 3)
+        `;
+        yield* sql`
+          INSERT INTO roadmap_events (
+            event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
+          ) VALUES
+            ('event-1', 'cmd-1', 'done-1', 'roadmap.item.created', '{"_tag":"user"}',
+              ${`{"item":${phaseOneItem("done-1", "done", created, created)}}`}, ${created}),
+            ('event-2', 'cmd-2', 'open-1', 'roadmap.item.created', '{"_tag":"user"}',
+              ${`{"item":${phaseOneItem("open-1", "backlog", created, created)}}`}, ${created}),
+            ('event-3', 'cmd-3', 'open-1', 'roadmap.item.updated', '{"_tag":"user"}',
+              '{"title":"Renamed"}', ${touchedAt})
+        `;
+
+        yield* RoadmapCalendar;
+
+        const items = yield* sql<{ readonly id: string; readonly payload: string }>`
+          SELECT item_id AS id, payload_json AS payload FROM projection_roadmap_items
+          ORDER BY item_id
+        `;
+        const empty = { pinnedAt: null, snoozedUntil: null, sprintId: null, hours: [] };
+        assert.deepStrictEqual(
+          items.map((row) => [row.id, calendarFields(row.payload)]),
+          [
+            ["done-1", { stateChangedAt: doneAt, completedAt: doneAt, ...empty }],
+            ["open-1", { stateChangedAt: touchedAt, completedAt: null, ...empty }],
+          ],
+        );
+        const events = yield* sql<{ readonly id: string; readonly payload: string }>`
+          SELECT event_id AS id, payload_json AS payload FROM roadmap_events ORDER BY sequence
+        `;
+        // A replay starts each item from its creation, so created events take the creation time.
+        assert.deepStrictEqual(
+          events.map((row): readonly [string, unknown] => {
+            const payload = JSON.parse(row.payload) as { readonly item?: unknown };
+            return [
+              row.id,
+              payload.item === undefined ? payload : calendarFields(JSON.stringify(payload.item)),
+            ];
+          }),
+          [
+            ["event-1", { stateChangedAt: created, completedAt: created, ...empty }],
+            ["event-2", { stateChangedAt: created, completedAt: null, ...empty }],
+            ["event-3", { title: "Renamed" }],
+          ],
+        );
+        assert.isTrue(yield* hasTable("projection_roadmap_sprints"));
+
+        // Running again never overwrites values written since.
+        yield* sql`
+          UPDATE projection_roadmap_items
+          SET payload_json = json_set(payload_json, '$.pinnedAt', ${touchedAt})
+          WHERE item_id = 'open-1'
+        `;
+        yield* RoadmapCalendar;
+        const rerun = yield* sql<{ readonly payload: string }>`
+          SELECT payload_json AS payload FROM projection_roadmap_items WHERE item_id = 'open-1'
+        `;
+        assert.strictEqual(calendarFields(rerun[0]!.payload).pinnedAt, touchedAt);
       }),
     );
   },

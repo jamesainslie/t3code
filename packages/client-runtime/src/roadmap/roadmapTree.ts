@@ -8,6 +8,7 @@ import type {
   RoadmapItemState,
   RoadmapItemType,
   RoadmapPriority,
+  RoadmapSprint,
   RoadmapStreamItem,
   RoadmapThreadRef,
   RoadmapWorkItem,
@@ -20,17 +21,50 @@ export interface RoadmapLiveState {
   /** The latest sequence applied; one event can change several items at the same sequence. */
   readonly sequence: number;
   readonly items: ReadonlyArray<RoadmapWorkItem>;
+  /** Ordered by start date. */
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
 }
+
+const byStartDate = (left: RoadmapSprint, right: RoadmapSprint) =>
+  left.startDate < right.startDate
+    ? -1
+    : left.startDate > right.startDate
+      ? 1
+      : left.id < right.id
+        ? -1
+        : left.id > right.id
+          ? 1
+          : 0;
 
 export function applyRoadmapStreamItem(
   state: RoadmapLiveState | null,
   change: RoadmapStreamItem,
 ): RoadmapLiveState | null {
   if (change.type === "snapshot") {
-    return { snapshotSequence: change.sequence, sequence: change.sequence, items: change.items };
+    return {
+      snapshotSequence: change.sequence,
+      sequence: change.sequence,
+      items: change.items,
+      sprints: [...change.sprints].sort(byStartDate),
+    };
   }
   if (state === null || change.sequence <= state.snapshotSequence) return state;
   const sequence = Math.max(state.sequence, change.sequence);
+  if (change.type === "sprint.removed") {
+    return {
+      ...state,
+      sequence,
+      sprints: state.sprints.filter((sprint) => sprint.id !== change.sprintId),
+    };
+  }
+  if (change.type === "sprint.upserted") {
+    // The copy is local, so sorting in place is safe; Hermes (mobile) has no toSorted.
+    const sprints = [
+      ...state.sprints.filter((sprint) => sprint.id !== change.sprint.id),
+      change.sprint,
+    ];
+    return { ...state, sequence, sprints: sprints.sort(byStartDate) };
+  }
   if (change.type === "item.removed") {
     return {
       ...state,

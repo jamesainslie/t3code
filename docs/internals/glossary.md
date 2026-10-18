@@ -62,6 +62,10 @@ Terms whose meaning matters across Lathe. Architecture and lifecycle constraints
 | Item type           | Objective, Key result, Initiative, Epic, Feature, Story, Bug, or Support ticket. The type limits which items can be its parent.           |
 | Acceptance criteria | A work item's ordered checklist. Distinct from the provider goal.                                                                         |
 | Area                | Work or Personal. An item without one inherits its parent's, and a root without one counts as Personal.                                   |
+| Sprint              | A named date range in one area. Its items forecast from the area's last three finished sprints once there are three.                      |
+| Velocity            | Units an area completes per working day, over the trailing 15 working days or its last three finished sprints.                            |
+| Forecast            | A work item's projected finish date from its remaining units and its area's velocity: On track, At risk, or Late.                         |
+| Capacity line       | Where Today stops counting rows: one day of work at the area's velocity. No line until the area has five completions.                     |
 
 ## Composer context
 

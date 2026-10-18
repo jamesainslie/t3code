@@ -5,10 +5,14 @@
  */
 import {
   CommandId,
+  isRoadmapSprintEvent,
   IsoDateTime,
   RoadmapError,
   RoadmapEvent,
+  type RoadmapItemEvent,
   RoadmapItemId,
+  RoadmapSprint,
+  type RoadmapSprintId,
   RoadmapStoredEvent,
   type RoadmapThreadRef,
   RoadmapWorkItem,
@@ -21,7 +25,12 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
-import { projectRoadmapEvent, type RoadmapItemRecord } from "./RoadmapCommands.ts";
+import {
+  projectRoadmapEvent,
+  projectRoadmapSprintEvent,
+  type RoadmapItemRecord,
+  type RoadmapSprintChange,
+} from "./RoadmapCommands.ts";
 
 export class RoadmapStoreError extends Schema.TaggedError<RoadmapStoreError>()(
   "RoadmapStoreError",
@@ -55,6 +64,14 @@ const ItemDbRow = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 
+const SprintDbRow = Schema.Struct({ sprint: Schema.fromJsonString(RoadmapSprint) });
+
+/** What one event changed, for the live stream. */
+interface RoadmapProjectionChange {
+  readonly items: ReadonlyArray<RoadmapItemRecord>;
+  readonly sprints: ReadonlyArray<RoadmapSprintChange>;
+}
+
 // The event union decodes after the row is reassembled, so payloads read as plain JSON here.
 const UnknownJson = Schema.fromJsonString(Schema.Unknown);
 
@@ -62,7 +79,8 @@ const EventDbRow = Schema.Struct({
   sequence: Schema.Number,
   commandId: Schema.String,
   eventId: Schema.String,
-  itemId: Schema.String,
+  /** The `item_id` column, which holds the sprint id for sprint events. */
+  subjectId: Schema.String,
   type: Schema.String,
   actor: UnknownJson,
   payload: UnknownJson,
@@ -81,11 +99,11 @@ export class RoadmapStore extends Context.Service<
       event: RoadmapEvent,
       commandId: CommandId,
     ) => Effect.Effect<number, RoadmapStoreError>;
-    /** Returns the records the event changed. */
+    /** Returns the items and sprints the event changed. */
     readonly apply: (
       event: RoadmapEvent,
       sequence: number,
-    ) => Effect.Effect<ReadonlyArray<RoadmapItemRecord>, RoadmapStoreError>;
+    ) => Effect.Effect<RoadmapProjectionChange, RoadmapStoreError>;
     readonly get: (
       itemId: RoadmapItemId,
       options?: { readonly includeDeleted?: boolean },
@@ -94,6 +112,8 @@ export class RoadmapStore extends Context.Service<
     readonly list: (options?: {
       readonly includeDeleted?: boolean;
     }) => Effect.Effect<ReadonlyArray<RoadmapItemRecord>, RoadmapStoreError>;
+    /** Ordered by start date. */
+    readonly listSprints: () => Effect.Effect<ReadonlyArray<RoadmapSprint>, RoadmapStoreError>;
     readonly forThread: (
       thread: RoadmapThreadRef,
     ) => Effect.Effect<ReadonlyArray<RoadmapWorkItem>, RoadmapStoreError>;
@@ -120,6 +140,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const encodeEvent = Schema.encodeEffect(RoadmapEvent);
   const encodeItem = Schema.encodeEffect(ItemDbRow);
+  const encodeSprint = Schema.encodeEffect(SprintDbRow);
   const encodeReceipt = Schema.encodeEffect(ReceiptDbRow);
   const decodeStoredEvent = Schema.decodeUnknownEffect(RoadmapStoredEvent);
   const encodeJson = Schema.encodeEffect(UnknownJson);
@@ -147,6 +168,17 @@ const make = Effect.gen(function* () {
     `,
   });
 
+  const selectSprints = SqlSchema.findAll({
+    Request: Schema.Struct({ sprintId: Schema.optional(Schema.String) }),
+    Result: SprintDbRow,
+    execute: (request) => sql`
+      SELECT payload_json AS "sprint"
+      FROM projection_roadmap_sprints
+      WHERE ${sql.and(request.sprintId === undefined ? [] : [sql`sprint_id = ${request.sprintId}`])}
+      ORDER BY start_date ASC, sprint_id ASC
+    `,
+  });
+
   const selectThreadItems = SqlSchema.findAll({
     Request: Schema.Struct({ environmentId: Schema.String, threadId: Schema.String }),
     Result: ItemDbRow,
@@ -169,7 +201,7 @@ const make = Effect.gen(function* () {
         sequence,
         command_id AS "commandId",
         event_id AS "eventId",
-        item_id AS "itemId",
+        item_id AS "subjectId",
         event_type AS "type",
         actor_json AS "actor",
         payload_json AS "payload",
@@ -204,7 +236,9 @@ const make = Effect.gen(function* () {
         event: {
           type: row.type,
           eventId: row.eventId,
-          itemId: row.itemId,
+          ...(row.type.startsWith("roadmap.sprint.")
+            ? { sprintId: row.subjectId }
+            : { itemId: row.subjectId }),
           actor: row.actor,
           occurredAt: row.occurredAt,
           payload: row.payload,
@@ -254,7 +288,42 @@ const make = Effect.gen(function* () {
       }
     });
 
-  const touchedIds = (event: RoadmapEvent): ReadonlyArray<RoadmapItemId> => {
+  const writeSprint = (change: RoadmapSprintChange, sequence: number) =>
+    Effect.gen(function* () {
+      if (change.removed) {
+        yield* sql`DELETE FROM projection_roadmap_sprints WHERE sprint_id = ${change.sprint.id}`;
+        return;
+      }
+      const encoded = yield* encodeSprint(change);
+      yield* sql`
+        INSERT INTO projection_roadmap_sprints (
+          sprint_id, area, start_date, payload_json, updated_sequence
+        ) VALUES (
+          ${change.sprint.id},
+          ${change.sprint.area},
+          ${change.sprint.startDate},
+          ${encoded.sprint},
+          ${sequence}
+        )
+        ON CONFLICT (sprint_id) DO UPDATE SET
+          area = excluded.area,
+          start_date = excluded.start_date,
+          payload_json = excluded.payload_json,
+          updated_sequence = excluded.updated_sequence
+      `;
+    });
+
+  const readRecords = (itemIds: ReadonlyArray<RoadmapItemId>) =>
+    Effect.gen(function* () {
+      const current = new Map<RoadmapItemId, RoadmapItemRecord>();
+      for (const itemId of itemIds) {
+        const rows = yield* selectItems({ itemId, includeDeleted: true });
+        if (rows[0] !== undefined) current.set(itemId, rows[0]);
+      }
+      return current;
+    });
+
+  const touchedIds = (event: RoadmapItemEvent): ReadonlyArray<RoadmapItemId> => {
     switch (event.type) {
       case "roadmap.item.created":
         return [];
@@ -269,14 +338,27 @@ const make = Effect.gen(function* () {
 
   const applyEvent = (event: RoadmapEvent, sequence: number) =>
     Effect.gen(function* () {
-      const current = new Map<RoadmapItemId, RoadmapItemRecord>();
-      for (const itemId of touchedIds(event)) {
-        const rows = yield* selectItems({ itemId, includeDeleted: true });
-        if (rows[0] !== undefined) current.set(itemId, rows[0]);
+      if (isRoadmapSprintEvent(event)) {
+        const current = yield* readRecords(
+          event.type === "roadmap.sprint.deleted" ? event.payload.clearedItemIds : [],
+        );
+        const sprintRows = yield* selectSprints({ sprintId: event.sprintId });
+        const sprints = new Map<RoadmapSprintId, RoadmapSprint>(
+          sprintRows.map((row) => [row.sprint.id, row.sprint]),
+        );
+        const changed = projectRoadmapSprintEvent(
+          { item: (itemId) => current.get(itemId), sprint: (sprintId) => sprints.get(sprintId) },
+          event,
+        );
+        for (const change of changed.sprints) yield* writeSprint(change, sequence);
+        for (const record of changed.items) yield* writeRecord(record, sequence);
+        return changed;
       }
-      const changed = projectRoadmapEvent((itemId) => current.get(itemId), event);
-      for (const record of changed) yield* writeRecord(record, sequence);
-      return changed;
+      const current = yield* readRecords(touchedIds(event));
+      const items = projectRoadmapEvent((itemId) => current.get(itemId), event);
+      for (const record of items) yield* writeRecord(record, sequence);
+      const change: RoadmapProjectionChange = { items, sprints: [] };
+      return change;
     });
 
   const apply: RoadmapStore["Service"]["apply"] = (event, sequence) =>
@@ -291,7 +373,7 @@ const make = Effect.gen(function* () {
         ) VALUES (
           ${encoded.eventId},
           ${commandId},
-          ${encoded.itemId},
+          ${"sprintId" in encoded ? encoded.sprintId : encoded.itemId},
           ${encoded.type},
           ${yield* encodeJson(encoded.actor)},
           ${yield* encodeJson(encoded.payload)},
@@ -352,6 +434,7 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* sql`DELETE FROM projection_roadmap_attachments`;
           yield* sql`DELETE FROM projection_roadmap_items`;
+          yield* sql`DELETE FROM projection_roadmap_sprints`;
           const events = yield* toStoredEvents(yield* selectEvents({}));
           for (const stored of events) yield* applyEvent(stored.event, stored.sequence);
         }),
@@ -364,6 +447,11 @@ const make = Effect.gen(function* () {
     get,
     list: (options) =>
       selectItems({ includeDeleted: options?.includeDeleted === true }).pipe(mapError("list")),
+    listSprints: () =>
+      selectSprints({}).pipe(
+        Effect.map((rows) => rows.map((row) => row.sprint)),
+        mapError("listSprints"),
+      ),
     forThread: (thread) =>
       selectThreadItems({ environmentId: thread.environmentId, threadId: thread.threadId }).pipe(
         Effect.map((rows) => rows.map((row) => row.item)),

@@ -55,7 +55,12 @@ export function browseInputEndPaddingClass(input: {
 export type SearchOverlayMode = "command" | "files" | "content";
 
 export type CommandPaletteOpenIntent =
-  | { readonly kind: "add-project" | "new-thread-in" | "change-theme" }
+  | { readonly kind: "add-project" | "change-theme" }
+  // Fork: roadmap. Today's "New thread" attaches the thread the picker starts to its item.
+  | {
+      readonly kind: "new-thread-in";
+      readonly onThreadCreated?: (thread: ScopedThreadRef) => void;
+    }
   // The picker parks one thread, so the waiting thread rides with the intent
   // rather than being read from the route: the menu can be opened from a
   // sidebar row for a thread that is not the one on screen.
@@ -83,7 +88,10 @@ export type CommandPaletteUiAction =
       readonly linkedThreads?: CommandPaletteLinkedThreads;
     }
   | { readonly _tag: "OpenAddProject" }
-  | { readonly _tag: "OpenNewThreadIn" }
+  | {
+      readonly _tag: "OpenNewThreadIn";
+      readonly onThreadCreated?: (thread: ScopedThreadRef) => void;
+    }
   | { readonly _tag: "OpenChangeTheme" }
   | { readonly _tag: "OpenDependsOn"; readonly blockedThreadRef: ScopedThreadRef }
   // Fork: roadmap.
@@ -116,7 +124,14 @@ export function reduceCommandPaletteUiState(
     case "OpenAddProject":
       return { open: true, mode: "command", openIntent: { kind: "add-project" } };
     case "OpenNewThreadIn":
-      return { open: true, mode: "command", openIntent: { kind: "new-thread-in" } };
+      return {
+        open: true,
+        mode: "command",
+        openIntent: {
+          kind: "new-thread-in",
+          ...(action.onThreadCreated ? { onThreadCreated: action.onThreadCreated } : {}),
+        },
+      };
     case "OpenChangeTheme":
       return { open: true, mode: "command", openIntent: { kind: "change-theme" } };
     case "OpenDependsOn":

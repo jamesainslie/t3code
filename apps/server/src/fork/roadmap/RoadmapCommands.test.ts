@@ -3,9 +3,12 @@ import {
   CommandId,
   EnvironmentId,
   EventId,
+  isRoadmapSprintEvent,
   type RoadmapActor,
   type RoadmapCommand,
   RoadmapItemId,
+  type RoadmapSprint,
+  RoadmapSprintId,
   type RoadmapThreadRef,
   type RoadmapWorkItem,
   ThreadId,
@@ -16,6 +19,7 @@ import * as Result from "effect/Result";
 import {
   planRoadmapCommand,
   projectRoadmapEvent,
+  projectRoadmapSprintEvent,
   type RoadmapItemRecord,
 } from "./RoadmapCommands.ts";
 
@@ -23,6 +27,7 @@ const now = DateTime.makeUnsafe("2026-10-18T09:00:00.000Z");
 const nowIso = "2026-10-18T09:00:00.000Z";
 const earlier = "2026-10-01T00:00:00.000Z";
 const id = RoadmapItemId.make;
+const sid = RoadmapSprintId.make;
 const commandId = CommandId.make("cmd-1");
 const user: RoadmapActor = { _tag: "user" };
 const thread = (threadId: string): RoadmapThreadRef => ({
@@ -54,6 +59,21 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   createdAt: earlier,
   updatedAt: earlier,
   createdBy: user,
+  stateChangedAt: earlier,
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
+  ...overrides,
+});
+
+const sprint = (sprintId: string, overrides: Partial<RoadmapSprint> = {}): RoadmapSprint => ({
+  id: sid(sprintId),
+  name: `Sprint ${sprintId}`,
+  area: "work",
+  startDate: "2026-10-19",
+  endDate: "2026-10-30",
   ...overrides,
 });
 
@@ -68,13 +88,18 @@ type CommandBody<T extends RoadmapCommand["type"]> = Omit<
 const plan = (
   command: RoadmapCommand,
   records: ReadonlyArray<RoadmapItemRecord> = [],
-  options: { readonly actor?: RoadmapActor; readonly lastDeletion?: ReadonlyArray<string> } = {},
+  options: {
+    readonly actor?: RoadmapActor;
+    readonly lastDeletion?: ReadonlyArray<string>;
+    readonly sprints?: ReadonlyArray<RoadmapSprint>;
+  } = {},
 ) =>
   planRoadmapCommand({
     command,
     actor: options.actor ?? user,
     state: {
       items: new Map(records.map((record) => [record.item.id, record])),
+      sprints: new Map((options.sprints ?? []).map((value) => [value.id, value])),
       ...(options.lastDeletion === undefined
         ? {}
         : { lastDeletion: options.lastDeletion.map((value) => id(value)) }),
@@ -104,12 +129,36 @@ const run = (
   options: Parameters<typeof plan>[2] = {},
 ) => {
   const byId = new Map(records.map((record) => [record.item.id, record]));
-  const changed = projectRoadmapEvent(
-    (itemId) => byId.get(itemId),
-    eventOf(plan(command, records, options)),
-  );
+  const event = eventOf(plan(command, records, options));
+  assert.isFalse(isRoadmapSprintEvent(event), "expected an item event");
+  if (isRoadmapSprintEvent(event)) return byId;
+  const changed = projectRoadmapEvent((itemId) => byId.get(itemId), event);
   for (const record of changed) byId.set(record.item.id, record);
   return byId;
+};
+
+/** Plans a sprint command then projects it, returning sprints and items after. */
+const runSprint = (
+  command: RoadmapCommand,
+  records: ReadonlyArray<RoadmapItemRecord>,
+  sprints: ReadonlyArray<RoadmapSprint>,
+  options: Parameters<typeof plan>[2] = {},
+) => {
+  const items = new Map(records.map((record) => [record.item.id, record]));
+  const sprintsById = new Map(sprints.map((value) => [value.id, value]));
+  const event = eventOf(plan(command, records, { ...options, sprints }));
+  assert.isTrue(isRoadmapSprintEvent(event), "expected a sprint event");
+  if (!isRoadmapSprintEvent(event)) return { items, sprints: sprintsById };
+  const changed = projectRoadmapSprintEvent(
+    { item: (itemId) => items.get(itemId), sprint: (sprintId) => sprintsById.get(sprintId) },
+    event,
+  );
+  for (const record of changed.items) items.set(record.item.id, record);
+  for (const change of changed.sprints) {
+    if (change.removed) sprintsById.delete(change.sprint.id);
+    else sprintsById.set(change.sprint.id, change.sprint);
+  }
+  return { items, sprints: sprintsById };
 };
 
 describe("planRoadmapCommand", () => {
@@ -537,5 +586,350 @@ describe("planRoadmapCommand", () => {
     ]);
     assert.isFalse(after.get(id("a"))!.item.needsReview);
     assert.equal(after.get(id("a"))!.item.updatedAt, nowIso);
+  });
+
+  describe("state history", () => {
+    const create = (state?: RoadmapWorkItem["state"]) =>
+      cmd("roadmap.item.create", {
+        itemId: id("new"),
+        itemType: "story",
+        title: "New",
+        ...(state === undefined ? {} : { state }),
+      });
+    const setState = (state: RoadmapWorkItem["state"], extra: object = {}) =>
+      cmd("roadmap.item.update", { itemId: id("a"), patch: { state, ...extra } });
+
+    it("starts a new item's history at creation, with nothing pinned, snoozed or logged", () => {
+      const created = payloadOf(plan(create())).item as RoadmapWorkItem;
+      assert.deepInclude(created, {
+        stateChangedAt: nowIso,
+        completedAt: null,
+        pinnedAt: null,
+        snoozedUntil: null,
+        sprintId: null,
+        hours: [],
+      });
+    });
+
+    it("completes an item created as done", () => {
+      const created = payloadOf(plan(create("done"))).item as RoadmapWorkItem;
+      assert.equal(created.completedAt, nowIso);
+    });
+
+    it("moves stateChangedAt only when the state changes", () => {
+      const records = [live(item("a", { state: "in-progress" }))];
+      const renamed = run(
+        cmd("roadmap.item.update", { itemId: id("a"), patch: { title: "Renamed" } }),
+        records,
+      ).get(id("a"))!.item;
+      assert.equal(renamed.stateChangedAt, earlier);
+      const same = run(setState("in-progress"), records).get(id("a"))!.item;
+      assert.equal(same.stateChangedAt, earlier);
+      const moved = run(setState("in-review"), records).get(id("a"))!.item;
+      assert.equal(moved.stateChangedAt, nowIso);
+      assert.isNull(moved.completedAt);
+    });
+
+    it("sets completedAt on entering done and clears it on reopening", () => {
+      const done = run(setState("done"), [live(item("a", { state: "in-review" }))]).get(
+        id("a"),
+      )!.item;
+      assert.equal(done.completedAt, nowIso);
+      const reopened = run(setState("in-progress"), [
+        live(item("a", { state: "done", completedAt: earlier })),
+      ]).get(id("a"))!.item;
+      assert.isNull(reopened.completedAt);
+      assert.equal(reopened.stateChangedAt, nowIso);
+    });
+
+    it("keeps the first completion when done is set again", () => {
+      const again = run(setState("done"), [
+        live(item("a", { state: "done", completedAt: earlier, stateChangedAt: earlier })),
+      ]).get(id("a"))!.item;
+      assert.equal(again.completedAt, earlier);
+      assert.equal(again.stateChangedAt, earlier);
+    });
+
+    it("frees a pick when it is finished", () => {
+      const done = run(setState("done"), [live(item("a", { pinnedAt: earlier }))]).get(
+        id("a"),
+      )!.item;
+      assert.isNull(done.pinnedAt);
+    });
+  });
+
+  describe("pins", () => {
+    const pin = (itemId: string) => cmd("roadmap.item.pin", { itemId: id(itemId) });
+    const unpin = (itemId: string) => cmd("roadmap.item.unpin", { itemId: id(itemId) });
+    const pinned = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}) =>
+      live(item(itemId, { pinnedAt: earlier, ...overrides }));
+
+    it("pins an item at the event time and unpins it", () => {
+      const after = run(pin("a"), [live(item("a"))]).get(id("a"))!.item;
+      assert.equal(after.pinnedAt, nowIso);
+      const cleared = run(unpin("a"), [pinned("a")]).get(id("a"))!.item;
+      assert.isNull(cleared.pinnedAt);
+    });
+
+    it("refuses a fourth pick", () => {
+      const records = [pinned("p1"), pinned("p2"), pinned("p3"), live(item("a"))];
+      assert.equal(failureOf(plan(pin("a"), records)).code, "pin_limit");
+    });
+
+    it("does not count deleted or finished picks toward the limit", () => {
+      const records = [
+        pinned("p1"),
+        pinned("p2"),
+        gone(item("p3", { pinnedAt: earlier })),
+        pinned("p4", { state: "done" }),
+        live(item("a")),
+      ];
+      assert.equal(run(pin("a"), records).get(id("a"))!.item.pinnedAt, nowIso);
+    });
+
+    it("treats pinning a pinned item as a no-op, even at the limit", () => {
+      const records = [pinned("p1"), pinned("p2"), pinned("a")];
+      assert.equal(run(pin("a"), records).get(id("a"))!.item.pinnedAt, earlier);
+    });
+
+    it("refuses to pin a finished item", () => {
+      assert.equal(
+        failureOf(plan(pin("a"), [live(item("a", { state: "done" }))])).code,
+        "invalid_request",
+      );
+    });
+
+    it("refuses pins from anyone but the user", () => {
+      const steward: RoadmapActor = { _tag: "steward", environmentId: EnvironmentId.make("e") };
+      for (const actor of [agent, steward]) {
+        for (const command of [pin("a"), unpin("a")]) {
+          const failure = failureOf(plan(command, [live(item("a"))], { actor }));
+          assert.equal(failure.code, "forbidden_actor");
+        }
+      }
+    });
+
+    it("refuses a missing item", () => {
+      assert.equal(failureOf(plan(pin("nope"))).code, "not_found");
+    });
+  });
+
+  describe("snooze", () => {
+    const snooze = (until: string) => cmd("roadmap.item.snooze", { itemId: id("a"), until });
+    const records = [live(item("a"))];
+
+    it("snoozes until a later date and unsnoozes", () => {
+      assert.equal(
+        run(snooze("2026-10-20"), records).get(id("a"))!.item.snoozedUntil,
+        "2026-10-20",
+      );
+      const cleared = run(cmd("roadmap.item.unsnooze", { itemId: id("a") }), [
+        live(item("a", { snoozedUntil: "2026-10-20" })),
+      ]).get(id("a"))!.item;
+      assert.isNull(cleared.snoozedUntil);
+    });
+
+    it("refuses a date that is today or earlier everywhere on Earth", () => {
+      // At 09:00 UTC it is still the 17th west of UTC-9, so only the 17th and before are past for everyone.
+      for (const until of ["2026-10-17", "2026-10-01"]) {
+        assert.equal(failureOf(plan(snooze(until), records)).code, "invalid_request");
+      }
+      assert.equal(
+        run(snooze("2026-10-18"), records).get(id("a"))!.item.snoozedUntil,
+        "2026-10-18",
+      );
+    });
+
+    it("refuses snoozes from an agent", () => {
+      assert.equal(
+        failureOf(plan(snooze("2026-10-20"), records, { actor: agent })).code,
+        "forbidden_actor",
+      );
+      assert.equal(
+        failureOf(
+          plan(cmd("roadmap.item.unsnooze", { itemId: id("a") }), records, { actor: agent }),
+        ).code,
+        "forbidden_actor",
+      );
+    });
+  });
+
+  describe("hours", () => {
+    const log = (entryId: string, hours: number, note?: string) =>
+      cmd("roadmap.hours.log", {
+        itemId: id("a"),
+        entryId,
+        hours,
+        ...(note === undefined ? {} : { note }),
+      });
+
+    it("appends an entry with the actor and time, from the user or an agent", () => {
+      const byUser = run(log("h1", 1.5, "Pairing"), [live(item("a"))]).get(id("a"))!.item;
+      assert.deepEqual(byUser.hours, [
+        { id: "h1", at: nowIso, hours: 1.5, actor: user, note: "Pairing" },
+      ]);
+      const existing = { id: "h0", at: earlier, hours: 2, actor: user, note: null };
+      const byAgent = run(log("h2", 0.5), [live(item("a", { hours: [existing] }))], {
+        actor: agent,
+      }).get(id("a"))!.item;
+      assert.deepEqual(byAgent.hours, [
+        existing,
+        { id: "h2", at: nowIso, hours: 0.5, actor: agent, note: null },
+      ]);
+    });
+
+    it("refuses an entry id already logged", () => {
+      const existing = { id: "h1", at: earlier, hours: 2, actor: user, note: null };
+      assert.equal(
+        failureOf(plan(log("h1", 1), [live(item("a", { hours: [existing] }))])).code,
+        "already_exists",
+      );
+    });
+
+    it("removes an entry by id and refuses an unknown one", () => {
+      const entries = [
+        { id: "h1", at: earlier, hours: 2, actor: user, note: null },
+        { id: "h2", at: earlier, hours: 1, actor: user, note: null },
+      ];
+      const records = [live(item("a", { hours: entries }))];
+      const remove = (entryId: string) => cmd("roadmap.hours.remove", { itemId: id("a"), entryId });
+      assert.deepEqual(run(remove("h1"), records).get(id("a"))!.item.hours, entries.slice(1));
+      assert.equal(failureOf(plan(remove("nope"), records)).code, "not_found");
+    });
+  });
+
+  describe("sprints", () => {
+    const create = (overrides: Partial<CommandBody<"roadmap.sprint.create">> = {}) =>
+      cmd("roadmap.sprint.create", {
+        sprintId: sid("s1"),
+        name: "Sprint 1",
+        area: "work",
+        startDate: "2026-10-19",
+        endDate: "2026-10-30",
+        ...overrides,
+      });
+
+    it("creates a sprint", () => {
+      const event = eventOf(plan(create()));
+      assert.equal(event.type, "roadmap.sprint.created");
+      const after = runSprint(create(), [], []);
+      assert.deepEqual(after.sprints.get(sid("s1")), {
+        id: sid("s1"),
+        name: "Sprint 1",
+        area: "work",
+        startDate: "2026-10-19",
+        endDate: "2026-10-30",
+      });
+    });
+
+    it("refuses a sprint that ends before it starts, and accepts a one-day sprint", () => {
+      assert.equal(
+        failureOf(plan(create({ startDate: "2026-10-19", endDate: "2026-10-18" }))).code,
+        "invalid_request",
+      );
+      eventOf(plan(create({ startDate: "2026-10-19", endDate: "2026-10-19" })));
+    });
+
+    it("refuses an id already in use", () => {
+      assert.equal(
+        failureOf(plan(create(), [], { sprints: [sprint("s1")] })).code,
+        "already_exists",
+      );
+    });
+
+    it("updates a sprint and refuses a patch that would end it first", () => {
+      const update = (patch: CommandBody<"roadmap.sprint.update">["patch"]) =>
+        cmd("roadmap.sprint.update", { sprintId: sid("s1"), patch });
+      const after = runSprint(
+        update({ name: "Renamed", endDate: "2026-11-06" }),
+        [],
+        [sprint("s1")],
+      );
+      assert.deepInclude(after.sprints.get(sid("s1"))!, { name: "Renamed", endDate: "2026-11-06" });
+      assert.equal(
+        failureOf(plan(update({ endDate: "2026-10-01" }), [], { sprints: [sprint("s1")] })).code,
+        "invalid_request",
+      );
+      assert.equal(failureOf(plan(update({ name: "x" }))).code, "not_found");
+    });
+
+    it("deletes a sprint and clears it from its items, deleted ones included", () => {
+      const records = [
+        live(item("in", { sprintId: sid("s1") })),
+        gone(item("gone", { sprintId: sid("s1") })),
+        live(item("other", { sprintId: sid("s2") })),
+      ];
+      const remove = cmd("roadmap.sprint.delete", { sprintId: sid("s1") });
+      const event = eventOf(plan(remove, records, { sprints: [sprint("s1"), sprint("s2")] }));
+      assert.deepEqual(event.payload, { clearedItemIds: [id("in"), id("gone")] });
+      const after = runSprint(remove, records, [sprint("s1"), sprint("s2")]);
+      assert.isFalse(after.sprints.has(sid("s1")));
+      assert.isTrue(after.sprints.has(sid("s2")));
+      assert.isNull(after.items.get(id("in"))!.item.sprintId);
+      assert.isNull(after.items.get(id("gone"))!.item.sprintId);
+      assert.isNotNull(after.items.get(id("gone"))!.deletedAt);
+      assert.equal(after.items.get(id("other"))!.item.sprintId, sid("s2"));
+      assert.equal(failureOf(plan(remove)).code, "not_found");
+    });
+
+    it("refuses sprint changes from an agent", () => {
+      for (const command of [
+        create(),
+        cmd("roadmap.sprint.update", { sprintId: sid("s1"), patch: { name: "x" } }),
+        cmd("roadmap.sprint.delete", { sprintId: sid("s1") }),
+      ]) {
+        const failure = failureOf(plan(command, [], { actor: agent, sprints: [sprint("s1")] }));
+        assert.equal(failure.code, "forbidden_actor");
+      }
+    });
+
+    it("puts an item in a sprint and takes it out again", () => {
+      const assign = (sprintId: RoadmapSprintId | null) =>
+        cmd("roadmap.item.update", { itemId: id("a"), patch: { sprintId } });
+      const records = [live(item("a"))];
+      const options = { sprints: [sprint("s1")] };
+      assert.equal(run(assign(sid("s1")), records, options).get(id("a"))!.item.sprintId, "s1");
+      const out = run(assign(null), [live(item("a", { sprintId: sid("s1") }))], options);
+      assert.isNull(out.get(id("a"))!.item.sprintId);
+    });
+
+    it("refuses an unknown sprint, and sprint changes on an item from an agent", () => {
+      const assign = cmd("roadmap.item.update", {
+        itemId: id("a"),
+        patch: { sprintId: sid("s1") },
+      });
+      assert.equal(failureOf(plan(assign, [live(item("a"))])).code, "not_found");
+      assert.equal(
+        failureOf(plan(assign, [live(item("a"))], { actor: agent, sprints: [sprint("s1")] })).code,
+        "forbidden_actor",
+      );
+    });
+
+    describe("creating an item into a sprint", () => {
+      const createIn = (sprintId: RoadmapSprintId | null) =>
+        cmd("roadmap.item.create", {
+          itemId: id("new"),
+          itemType: "feature",
+          title: "New",
+          sprintId,
+        });
+
+      it("creates the item in the sprint", () => {
+        const after = run(createIn(sid("s1")), [], { sprints: [sprint("s1")] });
+        assert.equal(after.get(id("new"))!.item.sprintId, "s1");
+        assert.isNull(run(createIn(null), []).get(id("new"))!.item.sprintId);
+      });
+
+      it("refuses a sprint from an agent", () => {
+        assert.equal(
+          failureOf(plan(createIn(sid("s1")), [], { actor: agent, sprints: [sprint("s1")] })).code,
+          "forbidden_actor",
+        );
+      });
+
+      it("refuses an unknown sprint", () => {
+        assert.equal(failureOf(plan(createIn(sid("s1")))).code, "invalid_request");
+      });
+    });
   });
 });

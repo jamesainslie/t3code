@@ -4,11 +4,13 @@
  * live stream behave the same for users and agents.
  */
 import {
+  isRoadmapSprintCommand,
   type RoadmapActor,
   type RoadmapCommand,
   type RoadmapDispatchResult,
   RoadmapError,
   type RoadmapItemId,
+  type RoadmapSprint,
   type RoadmapStoredEvent,
   type RoadmapStreamItem,
   type RoadmapThreadRef,
@@ -43,6 +45,8 @@ export class RoadmapService extends Context.Service<
     ) => Effect.Effect<RoadmapDispatchResult, RoadmapError>;
     /** Live items, ordered by parent then sibling order. */
     readonly list: () => Effect.Effect<ReadonlyArray<RoadmapWorkItem>, RoadmapError>;
+    /** Sprints, ordered by start date. */
+    readonly listSprints: () => Effect.Effect<ReadonlyArray<RoadmapSprint>, RoadmapError>;
     /** A live item; deleted ones read as none. */
     readonly get: (
       itemId: RoadmapItemId,
@@ -55,7 +59,7 @@ export class RoadmapService extends Context.Service<
     readonly history: (
       itemId: RoadmapItemId,
     ) => Effect.Effect<ReadonlyArray<RoadmapStoredEvent>, RoadmapError>;
-    /** A snapshot, then a delta per changed item after every later commit. */
+    /** A snapshot, then a delta per changed item or sprint after every later commit. */
     readonly stream: () => Stream.Stream<RoadmapStreamItem, RoadmapError>;
   }
 >()("lathe/fork/roadmap/RoadmapService") {}
@@ -82,7 +86,7 @@ const make = Effect.gen(function* () {
   });
 
   const replay = (receipt: RoadmapStore.RoadmapCommandReceipt) =>
-    receipt.status === "accepted" && receipt.resultSequence !== null && receipt.itemId !== null
+    receipt.status === "accepted" && receipt.resultSequence !== null
       ? Effect.succeed({ sequence: receipt.resultSequence, itemId: receipt.itemId })
       : Effect.fail(
           receipt.error ??
@@ -104,6 +108,7 @@ const make = Effect.gen(function* () {
         const records = yield* store
           .list({ includeDeleted: true })
           .pipe(Effect.mapError(readFailed));
+        const sprints = yield* store.listSprints().pipe(Effect.mapError(readFailed));
         const lastDeletion =
           command.type === "roadmap.item.restore"
             ? Option.getOrUndefined(
@@ -119,12 +124,14 @@ const make = Effect.gen(function* () {
           actor,
           state: {
             items: new Map(records.map((record) => [record.item.id, record])),
+            sprints: new Map(sprints.map((sprint) => [sprint.id, sprint])),
             ...(lastDeletion === undefined ? {} : { lastDeletion }),
           },
           eventId,
           now,
         });
         const acceptedAt = DateTime.formatIso(now);
+        const itemId = isRoadmapSprintCommand(command) ? null : command.itemId;
 
         if (Result.isFailure(planned)) {
           yield* store
@@ -132,7 +139,7 @@ const make = Effect.gen(function* () {
               commandId: command.commandId,
               status: "rejected",
               resultSequence: null,
-              itemId: command.itemId,
+              itemId,
               error: planned.failure,
               acceptedAt,
             })
@@ -150,7 +157,7 @@ const make = Effect.gen(function* () {
                 commandId: command.commandId,
                 status: "accepted",
                 resultSequence: sequence,
-                itemId: command.itemId,
+                itemId,
                 error: null,
                 acceptedAt,
               });
@@ -159,7 +166,15 @@ const make = Effect.gen(function* () {
           )
           .pipe(Effect.mapError(writeFailed));
 
-        for (const record of changed) {
+        for (const change of changed.sprints) {
+          yield* PubSub.publish(
+            changes,
+            change.removed
+              ? { type: "sprint.removed", sequence, sprintId: change.sprint.id }
+              : { type: "sprint.upserted", sequence, sprint: change.sprint },
+          );
+        }
+        for (const record of changed.items) {
           yield* PubSub.publish(
             changes,
             record.deletedAt === null
@@ -167,7 +182,7 @@ const make = Effect.gen(function* () {
               : { type: "item.removed", sequence, itemId: record.item.id },
           );
         }
-        return { sequence, itemId: command.itemId };
+        return { sequence, itemId };
       }),
     );
 
@@ -184,13 +199,20 @@ const make = Effect.gen(function* () {
         // sequence filter drops whatever the snapshot already holds.
         const subscription = yield* PubSub.subscribe(changes);
         const snapshot = yield* sql
-          .withTransaction(Effect.all({ sequence: store.latestSequence(), records: store.list() }))
+          .withTransaction(
+            Effect.all({
+              sequence: store.latestSequence(),
+              records: store.list(),
+              sprints: store.listSprints(),
+            }),
+          )
           .pipe(Effect.mapError(readFailed));
         return Stream.concat(
           Stream.succeed<RoadmapStreamItem>({
             type: "snapshot",
             sequence: snapshot.sequence,
             items: snapshot.records.map((record) => record.item),
+            sprints: snapshot.sprints,
           }),
           Stream.fromSubscription(subscription).pipe(
             Stream.filter((change) => change.sequence > snapshot.sequence),
@@ -203,6 +225,7 @@ const make = Effect.gen(function* () {
     isHome,
     dispatch,
     list,
+    listSprints: () => store.listSprints().pipe(Effect.mapError(readFailed)),
     get: (itemId) =>
       store
         .get(itemId)

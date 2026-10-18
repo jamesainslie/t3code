@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   LATHE_MCP_TOOL_NAMES,
   resolveLatheMcpToolPresentation,
+  resolveLatheMcpToolSummaryAction,
 } from "./latheMcpToolPresentation.ts";
 
 describe("resolveLatheMcpToolPresentation", () => {
@@ -57,6 +58,11 @@ describe("resolveLatheMcpToolPresentation", () => {
       displayName: "Create a roadmap work item",
       logo: "lathe",
     });
+    expect(resolveLatheMcpToolPresentation("mcp__lathe__lathe_roadmap_log_hours")).toEqual({
+      displayName: "Log hours on a work item",
+      logo: "lathe",
+    });
+    expect(resolveLatheMcpToolSummaryAction("lathe_roadmap_log_hours")).toBe("roadmap-log-hours");
   });
 
   it("pretty prints bare Lathe MCP toolkit names", () => {

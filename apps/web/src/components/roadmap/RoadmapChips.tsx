@@ -14,6 +14,7 @@ import {
   ROADMAP_STATE_LABELS,
   ROADMAP_TYPE_LABELS,
 } from "./roadmap.logic";
+import type { RoadmapForecastLabel, RoadmapForecastShownStatus } from "./roadmapPage.logic";
 
 // Eight types need eight hues and the theme declares only a few, so each type
 // carries its own; the label badge mixes it into surfaces that suit both themes.
@@ -29,6 +30,11 @@ const TYPE_TAGS: Readonly<
   bug: { label: "BUG", hue: "#f87171" },
   "support-ticket": { label: "SUPPORT", hue: "#fbbf24" },
 };
+
+/** For surfaces coloured by type beyond the tag itself, such as Timeline bars. */
+export function roadmapTypeHue(type: RoadmapItemType): string {
+  return TYPE_TAGS[type].hue;
+}
 
 export function RoadmapTypeTag({ type }: { readonly type: RoadmapItemType }) {
   const tag = TYPE_TAGS[type];
@@ -107,6 +113,26 @@ export function RoadmapNeedsReviewBadge() {
   return (
     <Badge size="sm" variant="info">
       Needs review
+    </Badge>
+  );
+}
+
+export const ROADMAP_FORECAST_TONE: Readonly<Record<RoadmapForecastShownStatus, string>> = {
+  "on-track": "text-success-foreground",
+  "at-risk": "text-warning-foreground",
+  late: "text-destructive-foreground",
+};
+
+const FORECAST_VARIANT = {
+  "on-track": "success",
+  "at-risk": "warning",
+  late: "error",
+} as const satisfies Record<RoadmapForecastShownStatus, "success" | "warning" | "error">;
+
+export function RoadmapForecastBadge({ forecast }: { readonly forecast: RoadmapForecastLabel }) {
+  return (
+    <Badge size="sm" variant={FORECAST_VARIANT[forecast.status]}>
+      {forecast.text}
     </Badge>
   );
 }

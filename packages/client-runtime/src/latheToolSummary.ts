@@ -461,6 +461,25 @@ export function summarizeLatheToolCalls(
         quantity(countEntities(entityIds("itemId")), "work item"),
       );
       break;
+    case "roadmap-log-hours": {
+      // A retried call replays its entry, so hours count once per entry.
+      const hoursByEntry = new Map<string, number>();
+      selected.forEach((call, index) => {
+        const hours = call.input?.hours;
+        hoursByEntry.set(
+          id(call.output?.entryId) ?? `call-${index}`,
+          typeof hours === "number" && Number.isFinite(hours) ? hours : 0,
+        );
+      });
+      const hours =
+        Math.round([...hoursByEntry.values()].reduce((sum, value) => sum + value, 0) * 100) / 100;
+      label = phrase(
+        "Logged",
+        "log",
+        `${quantity(hours, "hour")} on ${quantity(countEntities(entityIds("itemId")), "work item")}`,
+      );
+      break;
+    }
   }
   return { label, failedCount };
 }

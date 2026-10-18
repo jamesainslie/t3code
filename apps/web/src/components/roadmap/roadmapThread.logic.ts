@@ -5,18 +5,25 @@
 import type { RoadmapItemId, RoadmapThreadRef, RoadmapWorkItem } from "@lathe/contracts";
 import { buildTree, type RoadmapTreeNode } from "@lathe/client-runtime/roadmap/tree";
 
+import { DEFAULT_ROADMAP_VIEW, type RoadmapView } from "./roadmapPage.logic";
+
 /**
- * A link into the Roadmap page. The page owns these search params: `item`
- * selects an item, `new` opens the editor, `parent` preselects its parent.
+ * A link into the Roadmap page. The page owns these search params: `view`
+ * picks the tab (Today when absent), `item` selects an item, `new` opens the
+ * editor, `parent` preselects its parent.
  */
 export function roadmapHref(
   target: {
+    readonly view?: RoadmapView;
     readonly item?: RoadmapItemId;
     readonly new?: boolean;
     readonly parent?: RoadmapItemId | null;
   } = {},
 ): string {
   const params = new URLSearchParams();
+  // Today shows no selection, so a link to an item opens the Outline unless told otherwise.
+  const view = target.view ?? (target.item === undefined ? DEFAULT_ROADMAP_VIEW : "outline");
+  if (view !== DEFAULT_ROADMAP_VIEW) params.set("view", view);
   if (target.item !== undefined) params.set("item", target.item);
   if (target.new) params.set("new", "1");
   if (target.new && target.parent) params.set("parent", target.parent);

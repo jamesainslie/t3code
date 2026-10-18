@@ -4,7 +4,9 @@ import {
   EnvironmentId,
   type RoadmapCommand,
   RoadmapItemId,
+  RoadmapSprintId,
   type RoadmapStreamItem,
+  ThreadId,
 } from "@lathe/contracts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as Deferred from "effect/Deferred";
@@ -135,6 +137,97 @@ describe("RoadmapService", () => {
           sequence: removed.sequence,
           itemId: RoadmapItemId.make("after"),
         });
+      }),
+    );
+
+    it.effect("manages sprints, streaming them and the items a delete clears", () =>
+      Effect.gen(function* () {
+        const roadmap = yield* RoadmapService.RoadmapService;
+        const sprintId = RoadmapSprintId.make("sprint-a");
+        const createSprint: RoadmapCommand = {
+          type: "roadmap.sprint.create",
+          commandId: CommandId.make("cmd-sprint-a"),
+          sprintId,
+          name: "Sprint A",
+          area: "work",
+          startDate: "2026-10-19",
+          endDate: "2026-10-30",
+        };
+        const created = yield* roadmap.dispatch(createSprint, user);
+        assert.isNull(created.itemId);
+        assert.deepEqual(yield* roadmap.dispatch(createSprint, user), created);
+        yield* roadmap.dispatch(create("sprinted"), user);
+        yield* roadmap.dispatch(
+          {
+            type: "roadmap.item.update",
+            commandId: CommandId.make("cmd-assign"),
+            itemId: RoadmapItemId.make("sprinted"),
+            patch: { sprintId },
+          },
+          user,
+        );
+
+        const subscribed = yield* Deferred.make<void>();
+        const seen = yield* roadmap.stream().pipe(
+          Stream.tap(() => Deferred.succeed(subscribed, undefined)),
+          Stream.take(3),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(subscribed);
+        const deleted = yield* roadmap.dispatch(
+          { type: "roadmap.sprint.delete", commandId: CommandId.make("cmd-sprint-del"), sprintId },
+          user,
+        );
+        const [snapshot, ...deltas] = yield* Fiber.join(seen);
+        assert.equal(snapshot?.type, "snapshot");
+        if (snapshot?.type !== "snapshot") return;
+        assert.deepEqual(
+          snapshot.sprints.map((value) => value.id),
+          [sprintId],
+        );
+        assert.sameDeepMembers(
+          deltas.map((delta) =>
+            delta.type === "sprint.removed"
+              ? [delta.type, delta.sequence, delta.sprintId]
+              : delta.type === "item.upserted"
+                ? [delta.type, delta.sequence, delta.item.id, delta.item.sprintId]
+                : [delta.type],
+          ),
+          [
+            ["sprint.removed", deleted.sequence, sprintId],
+            ["item.upserted", deleted.sequence, RoadmapItemId.make("sprinted"), null],
+          ],
+        );
+        const item = Option.getOrThrow(yield* roadmap.get(RoadmapItemId.make("sprinted")));
+        assert.isNull(item.sprintId);
+        assert.deepEqual(yield* roadmap.listSprints(), []);
+      }),
+    );
+
+    it.effect("refuses sprint changes from an agent", () =>
+      Effect.gen(function* () {
+        const roadmap = yield* RoadmapService.RoadmapService;
+        const agent = {
+          _tag: "agent",
+          thread: { environmentId: HOME, threadId: ThreadId.make("t-agent") },
+          threadTitle: "Agent",
+        } as const;
+        const error = yield* Effect.flip(
+          roadmap.dispatch(
+            {
+              type: "roadmap.sprint.create",
+              commandId: CommandId.make("cmd-agent-sprint"),
+              sprintId: RoadmapSprintId.make("sprint-agent"),
+              name: "Agent sprint",
+              area: "work",
+              startDate: "2026-10-19",
+              endDate: "2026-10-30",
+            },
+            agent,
+          ),
+        );
+        assert.equal(error.code, "forbidden_actor");
       }),
     );
   });

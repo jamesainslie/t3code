@@ -54,8 +54,32 @@ describe("ServerSettings response streaming", () => {
 });
 
 describe("roadmap settings", () => {
-  it("makes this environment the roadmap home by default", () => {
-    expect(decodeServerSettings({}).roadmap).toEqual({ homeEnvironmentId: null });
+  const defaultArea = { unit: "points", workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 };
+
+  it("makes this environment the roadmap home by default, with default areas", () => {
+    expect(decodeServerSettings({}).roadmap).toEqual({
+      homeEnvironmentId: null,
+      areas: { work: defaultArea, personal: defaultArea },
+    });
+  });
+
+  it("fills area defaults for a settings file written before areas existed", () => {
+    const decoded = decodeServerSettings({
+      roadmap: { homeEnvironmentId: "env-home", areas: { work: { unit: "hours" } } },
+    });
+    expect(decoded.roadmap).toEqual({
+      homeEnvironmentId: "env-home",
+      areas: { work: { ...defaultArea, unit: "hours" }, personal: defaultArea },
+    });
+  });
+
+  it("accepts a partial area patch", () => {
+    expect(
+      decodeServerSettingsPatch({ roadmap: { areas: { personal: { workingWeekdays: [0, 6] } } } }),
+    ).toEqual({ roadmap: { areas: { personal: { workingWeekdays: [0, 6] } } } });
+    expect(() =>
+      decodeServerSettingsPatch({ roadmap: { areas: { work: { goingColdDays: 0 } } } }),
+    ).toThrow();
   });
 
   it("accepts a home environment and clearing it in a patch", () => {

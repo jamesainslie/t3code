@@ -291,6 +291,18 @@ describe("reduceCommandPaletteUiState", () => {
     expect(reduceCommandPaletteUiState(opened, { _tag: "ClearOpenIntent" }).openIntent).toBeNull();
   });
 
+  // Fork: roadmap.
+  it("carries who wants the thread the new-thread picker starts", () => {
+    const onThreadCreated = () => {};
+    expect(
+      reduceCommandPaletteUiState(closedState, { _tag: "OpenNewThreadIn", onThreadCreated }),
+    ).toEqual({
+      open: true,
+      mode: "command",
+      openIntent: { kind: "new-thread-in", onThreadCreated },
+    });
+  });
+
   it("preserves the mode on close and resets it on open", () => {
     const filesOpen = reduceCommandPaletteUiState(closedState, {
       _tag: "ToggleMode",

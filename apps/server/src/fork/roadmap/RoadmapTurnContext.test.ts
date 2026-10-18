@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import type * as RoadmapProgress from "./RoadmapProgress.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 import * as RoadmapTurnContext from "./RoadmapTurnContext.ts";
 
@@ -45,6 +46,12 @@ const workItem = (id: string, fields: Partial<RoadmapWorkItem> = {}): RoadmapWor
   createdAt: "2026-10-18T00:00:00.000Z",
   updatedAt: "2026-10-18T00:00:00.000Z",
   createdBy: user,
+  stateChangedAt: "2026-10-18T00:00:00.000Z",
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...fields,
 });
 
@@ -141,6 +148,80 @@ describe("renderRoadmapContext", () => {
   });
 });
 
+describe("renderRoadmapContext progress line", () => {
+  const progress = (
+    fields: Partial<RoadmapProgress.RoadmapItemProgress> = {},
+  ): RoadmapProgress.RoadmapItemProgress => ({
+    unit: "points",
+    burned: 6,
+    remaining: 4,
+    total: 10,
+    velocity: null,
+    forecast: { status: "at-risk", projected: "2026-10-23", slackDays: 0 },
+    ...fields,
+  });
+
+  it("puts the forecast and progress right after the state line", () => {
+    const parent = workItem("parent", { type: "epic", title: "Roadmap" });
+    const item = workItem("feature", { parentId: parent.id, dueDate: "2026-10-23" });
+    const lines = RoadmapTurnContext.renderRoadmapContext(
+      item,
+      byIdOf(parent, item),
+      progress(),
+    ).split("\n");
+    expect(lines[1]).toContain("state Backlog");
+    expect(lines[2]).toBe("Forecast: At risk, projected 2026-10-23; 6 of 10 pts done.");
+    expect(lines[3]).toBe("Parent: Roadmap.");
+  });
+
+  it("shows progress alone when there is no forecast, in the area's unit", () => {
+    const item = workItem("feature");
+    const rendered = RoadmapTurnContext.renderRoadmapContext(
+      item,
+      byIdOf(item),
+      progress({
+        unit: "hours",
+        burned: 3.25,
+        remaining: null,
+        total: null,
+        forecast: { status: "no-forecast", projected: null, slackDays: null },
+      }),
+    );
+    expect(rendered.split("\n")[2]).toBe("Progress: 3.3 hours done.");
+  });
+
+  it("leaves the line out with no forecast and nothing done", () => {
+    const item = workItem("feature");
+    const rendered = RoadmapTurnContext.renderRoadmapContext(
+      item,
+      byIdOf(item),
+      progress({
+        burned: 0,
+        forecast: { status: "no-forecast", projected: null, slackDays: null },
+      }),
+    );
+    expect(rendered).toBe(RoadmapTurnContext.renderRoadmapContext(item, byIdOf(item)));
+    expect(rendered).not.toMatch(/^(Forecast|Progress):/m);
+  });
+
+  it("keeps the cap with the line present", () => {
+    const item = workItem("long", {
+      title: "word ".repeat(1_000).trim(),
+      criteria: Array.from({ length: 60 }, (_, index) =>
+        criterion(`c${index}`, `Criterion number ${index} with some explanatory words`),
+      ),
+    });
+    const rendered = RoadmapTurnContext.renderRoadmapContext(
+      item,
+      byIdOf(item),
+      progress({ forecast: { status: "late", projected: "2026-11-02", slackDays: -3 } }),
+    );
+    expect(rendered.length).toBeLessThanOrEqual(RoadmapTurnContext.ROADMAP_CONTEXT_MAX_CHARS);
+    expect(rendered).toContain("Forecast: Late, projected 2026-11-02; 6 of 10 pts done.");
+    expect(rendered).toMatch(/update this item\.$/);
+  });
+});
+
 const roadmapLayer = (homeEnvironmentId: EnvironmentId | null) =>
   RoadmapService.layer.pipe(
     Layer.provide(
@@ -159,20 +240,30 @@ const turnContextLayer = <E>(roadmap: Layer.Layer<RoadmapService.RoadmapService,
   RoadmapTurnContext.layer.pipe(
     Layer.provideMerge(roadmap),
     Layer.provide(
-      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
-        getEnvironmentId: Effect.succeed(ENVIRONMENT_ID),
-      }),
+      Layer.mergeAll(
+        // Area settings at their defaults: points, Monday to Friday.
+        ServerSettingsService.layerTest(),
+        Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+          getEnvironmentId: Effect.succeed(ENVIRONMENT_ID),
+        }),
+      ),
     ),
   );
 
-const create = (itemId: string, attach: boolean): RoadmapCommand => ({
-  type: "roadmap.item.create",
-  commandId: CommandId.make(`create-${itemId}`),
-  itemId: RoadmapItemId.make(itemId),
-  itemType: "story",
-  title: `Story ${itemId}`,
-  ...(attach ? { attachThread: { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID } } : {}),
-});
+const create = (
+  itemId: string,
+  attach: boolean,
+  fields: Partial<RoadmapCommand> = {},
+): RoadmapCommand =>
+  ({
+    type: "roadmap.item.create",
+    commandId: CommandId.make(`create-${itemId}`),
+    itemId: RoadmapItemId.make(itemId),
+    itemType: "story",
+    title: `Story ${itemId}`,
+    ...(attach ? { attachThread: { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID } } : {}),
+    ...fields,
+  }) as RoadmapCommand;
 
 describe("RoadmapTurnContext.forThread", () => {
   it.effect("renders the attached item on the roadmap home", () =>
@@ -182,6 +273,28 @@ describe("RoadmapTurnContext.forThread", () => {
       yield* roadmap.dispatch(create("mine", true), user);
       const block = yield* (yield* RoadmapTurnContext.RoadmapTurnContext).forThread(THREAD_ID);
       expect(block).toContain('Story "Story mine" (id mine)');
+      expect(block).not.toMatch(/^(Forecast|Progress):/m);
+    }).pipe(Effect.provide(turnContextLayer(roadmapLayer(null)))),
+  );
+
+  it.effect("adds the forecast from the area's velocity, dated in UTC", () =>
+    Effect.gen(function* () {
+      const roadmap = yield* RoadmapService.RoadmapService;
+      // The test clock starts at 1970-01-01, a Thursday, so these finish today.
+      for (const index of [1, 2, 3, 4, 5]) {
+        yield* roadmap.dispatch(
+          create(`done-${index}`, false, { state: "done", estimate: 3 } as Partial<RoadmapCommand>),
+          user,
+        );
+      }
+      yield* roadmap.dispatch(
+        create("mine", true, { estimate: 4, dueDate: "1970-01-07" } as Partial<RoadmapCommand>),
+        user,
+      );
+      const block = yield* (yield* RoadmapTurnContext.RoadmapTurnContext).forThread(THREAD_ID);
+      expect(block.split("\n")[2]).toBe(
+        "Forecast: At risk, projected 1970-01-07; 0 of 4 pts done.",
+      );
     }).pipe(Effect.provide(turnContextLayer(roadmapLayer(null)))),
   );
 

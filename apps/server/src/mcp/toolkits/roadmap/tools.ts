@@ -15,6 +15,7 @@ import {
   RoadmapItemState,
   RoadmapItemType,
   RoadmapPriority,
+  RoadmapUnit,
   RoadmapWorkItem,
   ThreadId,
   TrimmedNonEmptyString,
@@ -24,6 +25,7 @@ import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
 
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
+import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -32,9 +34,14 @@ const dependencies = [
   // The access gate reads the calling thread through it.
   ThreadManagementService.ThreadManagementService,
   RoadmapService.RoadmapService,
+  // Area settings decide the unit and working days behind forecasts.
+  ServerSettingsService,
 ];
 
 const NonNegativeNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
+const PositiveNumber = Schema.Finite.check(Schema.isGreaterThan(0));
+
+const RoadmapForecastStatus = Schema.Literals(["on-track", "at-risk", "late", "no-forecast"]);
 
 const ClientRequestId = TrimmedNonEmptyString.check(Schema.isMaxLength(256)).annotate({
   description: "Stable idempotency key to reuse when retrying this mutation.",
@@ -153,6 +160,14 @@ export const RoadmapLinkBlockerInput = Schema.Struct({
 });
 export type RoadmapLinkBlockerInput = typeof RoadmapLinkBlockerInput.Type;
 
+export const RoadmapLogHoursInput = Schema.Struct({
+  itemId: Schema.optional(ItemIdOrAttached),
+  hours: PositiveNumber.annotate({ description: "Hours spent, such as 1.5." }),
+  note: Schema.optional(Schema.String.annotate({ description: "What the time went on." })),
+  clientRequestId: Schema.optional(ClientRequestId),
+});
+export type RoadmapLogHoursInput = typeof RoadmapLogHoursInput.Type;
+
 /** A roadmap refusal, with its code first in the message the agent reads. */
 export class RoadmapToolFailure extends Schema.TaggedError<RoadmapToolFailure>()(
   "RoadmapToolFailure",
@@ -190,6 +205,10 @@ export const RoadmapListEntry = Schema.Struct({
   criteriaTotal: NonNegativeInt,
   attachedThreads: NonNegativeInt,
   needsReview: Schema.Boolean,
+  forecast: RoadmapForecastStatus.annotate({
+    description:
+      "no-forecast when the item is done, has no estimate to count, or its area has under five finished samples.",
+  }),
 });
 export type RoadmapListEntry = typeof RoadmapListEntry.Type;
 
@@ -216,6 +235,25 @@ export const RoadmapReadResult = Schema.Struct({
       occurredAt: IsoDateTime,
     }),
   ).annotate({ description: "The latest changes, oldest first." }),
+  unit: RoadmapUnit.annotate({
+    description: "What the item's area counts progress in: burned, remaining and velocity use it.",
+  }),
+  burned: NonNegativeNumber,
+  remaining: Schema.NullOr(NonNegativeNumber).annotate({
+    description: "null without an estimate to burn against; 0 once done.",
+  }),
+  velocity: Schema.NullOr(
+    Schema.Struct({
+      perDay: NonNegativeNumber.annotate({ description: "Units finished per working day." }),
+      sampleSize: NonNegativeInt,
+    }),
+  ).annotate({ description: "The area's pace; null under five finished samples." }),
+  forecast: Schema.Struct({
+    status: RoadmapForecastStatus,
+    projected: Schema.NullOr(IsoDate).annotate({
+      description: "When the remaining work lands at the area's velocity, as a UTC date.",
+    }),
+  }),
 });
 export type RoadmapReadResult = typeof RoadmapReadResult.Type;
 
@@ -225,9 +263,18 @@ export const RoadmapChangeResult = Schema.Struct({
 });
 export type RoadmapChangeResult = typeof RoadmapChangeResult.Type;
 
+export const RoadmapLogHoursResult = Schema.Struct({
+  ...RoadmapChangeResult.fields,
+  entryId: Schema.String,
+  totalHours: NonNegativeNumber.annotate({
+    description: "Every hour logged against the item so far.",
+  }),
+});
+export type RoadmapLogHoursResult = typeof RoadmapLogHoursResult.Type;
+
 const ListTool = Tool.make("lathe_roadmap_list", {
   description:
-    "List the Lathe roadmap's work items as compact rows, in tree order. Filter by area, type, state, or a subtree.",
+    "List the Lathe roadmap's work items as compact rows with their forecast status, in tree order. Filter by area, type, state, or a subtree.",
   parameters: RoadmapListInput,
   success: RoadmapListResult,
   failure: RoadmapToolError,
@@ -241,7 +288,7 @@ const ListTool = Tool.make("lathe_roadmap_list", {
 
 const ReadTool = Tool.make("lathe_roadmap_read", {
   description:
-    "Read one roadmap work item with its acceptance criteria and their ids, blockers, attached threads, parents, and latest changes. Omit itemId for the item this thread is attached to.",
+    "Read one roadmap work item with its acceptance criteria and their ids, blockers, attached threads, parents, latest changes, and its forecast, progress and velocity in the area's unit. Omit itemId for the item this thread is attached to.",
   parameters: RoadmapReadInput,
   success: RoadmapReadResult,
   failure: RoadmapToolError,
@@ -338,6 +385,20 @@ const LinkBlockerTool = Tool.make("lathe_roadmap_link_blocker", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
+const LogHoursTool = Tool.make("lathe_roadmap_log_hours", {
+  description:
+    "Log hours spent on a roadmap work item. Omit itemId for the item this thread is attached to. Reuse clientRequestId when retrying so the hours are logged once.",
+  parameters: RoadmapLogHoursInput,
+  success: RoadmapLogHoursResult,
+  failure: RoadmapToolError,
+  dependencies,
+})
+  .annotate(Tool.Title, "Log hours on a work item")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false);
+
 export const RoadmapToolkit = Toolkit.make(
   ListTool,
   ReadTool,
@@ -347,4 +408,5 @@ export const RoadmapToolkit = Toolkit.make(
   AttachTool,
   DetachTool,
   LinkBlockerTool,
+  LogHoursTool,
 );

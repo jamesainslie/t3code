@@ -9,7 +9,9 @@ import {
   type RoadmapItemState,
   RoadmapItemType,
   type RoadmapPriority,
+  type RoadmapUnit,
 } from "@lathe/contracts";
+import { workingDaysBetween } from "@lathe/shared/roadmapCalc";
 
 /** Hierarchy order, which is also the order the create menus list them in. */
 export const ROADMAP_TYPES: ReadonlyArray<RoadmapItemType> = RoadmapItemType.literals;
@@ -59,40 +61,51 @@ export function criteriaProgress(criteria: ReadonlyArray<RoadmapCriterion>): {
   };
 }
 
-const DAY_MS = 86_400_000;
-const dayNumber = (iso: IsoDate) => {
-  const [year, month, day] = iso.split("-").map(Number);
-  return Math.round(Date.UTC(year!, month! - 1, day!) / DAY_MS);
-};
-// Day 0 of the epoch was a Thursday.
-const isWeekday = (dayIndex: number) => {
-  const weekday = (((dayIndex + 4) % 7) + 7) % 7;
-  return weekday !== 0 && weekday !== 6;
-};
-/** Weekdays in [fromDay, toDay), counting whole weeks at once so far dates stay cheap. */
-const weekdaysIn = (fromDay: number, toDay: number) => {
-  const span = toDay - fromDay;
-  const fullWeeks = Math.floor(span / 7);
-  let count = fullWeeks * 5;
-  for (let day = fromDay + fullWeeks * 7; day < toDay; day += 1) {
-    if (isWeekday(day)) count += 1;
-  }
-  return count;
+export const ROADMAP_UNITS: ReadonlyArray<RoadmapUnit> = ["points", "hours", "items", "criteria"];
+export const ROADMAP_UNIT_LABELS: Readonly<Record<RoadmapUnit, string>> = {
+  points: "Points",
+  hours: "Hours",
+  items: "Items",
+  criteria: "Criteria",
 };
 
+/** Monday to Friday, for a caller with no area calendar to hand. */
+const DEFAULT_WORKING_WEEKDAYS: ReadonlyArray<number> = [1, 2, 3, 4, 5];
+
+/** Indexed 0 for Sunday, as area settings number the days. */
+export const ROADMAP_WEEKDAY_LABELS: ReadonlyArray<string> = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+];
+
 /**
- * Working days left until a due date: weekdays after today up to and
- * including the due date. Once it has passed, the weekdays after the due date
- * up to and including today, negated, so the count is symmetric about the due
- * date. Phase 1 counts plain weekdays; per-area calendars come later.
+ * Working days left until a due date: working days after today up to and
+ * including the due date. Once it has passed, the working days after the due
+ * date up to and including today, negated, so the count is symmetric about the
+ * due date. `weekdays` is the item's area calendar.
  */
-export function workingDaysLeft(today: IsoDate, due: IsoDate): number {
-  const todayDay = dayNumber(today);
-  const dueDay = dayNumber(due);
-  // Subtracting from 0 rather than negating keeps a weekend-only gap at 0, not -0.
-  return dueDay >= todayDay
-    ? weekdaysIn(todayDay + 1, dueDay + 1)
-    : 0 - weekdaysIn(dueDay + 1, todayDay + 1);
+export function workingDaysLeft(
+  today: IsoDate,
+  due: IsoDate,
+  weekdays: ReadonlyArray<number> = DEFAULT_WORKING_WEEKDAYS,
+): number {
+  return workingDaysBetween(today, due, weekdays);
+}
+
+/**
+ * The days a multi-select toggle reports, as area settings store them. Null
+ * for an empty week, which settings refuse.
+ */
+export function workingWeekdaysFrom(values: ReadonlyArray<string>): ReadonlyArray<number> | null {
+  const days = [...new Set(values.map(Number))]
+    .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+    .sort((left, right) => left - right);
+  return days.length === 0 ? null : days;
 }
 
 /** The local calendar date, which is what a due date means to the user. */

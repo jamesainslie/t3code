@@ -5,6 +5,8 @@
  */
 import {
   type EventId,
+  isRoadmapSprintCommand,
+  ROADMAP_PIN_LIMIT,
   type IsoDateTime,
   type RoadmapActor,
   type RoadmapArea,
@@ -13,8 +15,13 @@ import {
   type RoadmapCriterionInput,
   RoadmapError,
   type RoadmapEvent,
+  type RoadmapItemEvent,
   type RoadmapItemId,
   type RoadmapRejectionCode,
+  type RoadmapSprint,
+  type RoadmapSprintCommand,
+  type RoadmapSprintEvent,
+  type RoadmapSprintId,
   type RoadmapThreadRef,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
@@ -36,8 +43,14 @@ export interface RoadmapItemRecord {
 export interface RoadmapCommandState {
   /** Every item, deleted ones included. */
   readonly items: ReadonlyMap<RoadmapItemId, RoadmapItemRecord>;
+  readonly sprints?: ReadonlyMap<RoadmapSprintId, RoadmapSprint>;
   /** For restore: the ids the latest delete covering the target removed. */
   readonly lastDeletion?: ReadonlyArray<RoadmapItemId>;
+}
+
+export interface RoadmapSprintChange {
+  readonly sprint: RoadmapSprint;
+  readonly removed: boolean;
 }
 
 const sameThread = (left: RoadmapThreadRef, right: RoadmapThreadRef) =>
@@ -45,6 +58,19 @@ const sameThread = (left: RoadmapThreadRef, right: RoadmapThreadRef) =>
 
 const reject = (code: RoadmapRejectionCode, message: string) =>
   Result.fail(new RoadmapError({ code, message }));
+
+const userOnly = (actor: RoadmapActor, what: string) =>
+  actor._tag === "user"
+    ? undefined
+    : new RoadmapError({ code: "forbidden_actor", message: `Only the user can change ${what}.` });
+
+/**
+ * The earliest calendar date it can be anywhere (UTC-12). The server does not
+ * know the user's zone, so only a date on or before this one is surely past
+ * for them; a date in the one-day ambiguity is accepted and simply expires.
+ */
+const earliestToday = (now: DateTime.Utc) =>
+  DateTime.formatIsoDateUtc(DateTime.subtract(now, { hours: 12 }));
 
 const bySortKey = (left: RoadmapWorkItem, right: RoadmapWorkItem) =>
   left.sortKey < right.sortKey
@@ -89,6 +115,9 @@ export function planRoadmapCommand(input: {
   readonly now: DateTime.Utc;
 }): Result.Result<RoadmapEvent, RoadmapError> {
   const { command, actor, state, eventId } = input;
+  if (isRoadmapSprintCommand(command)) {
+    return planSprintCommand({ ...input, command });
+  }
   const occurredAt = DateTime.formatIso(input.now);
   const base = { eventId, itemId: command.itemId, actor, occurredAt };
   const records = state.items;
@@ -143,6 +172,13 @@ export function planRoadmapCommand(input: {
         const other = attachedElsewhere(command.attachThread, command.itemId);
         if (other !== undefined) return alreadyAttached(other);
       }
+      if (command.sprintId !== undefined) {
+        const forbidden = userOnly(actor, "sprints");
+        if (forbidden !== undefined) return Result.fail(forbidden);
+        if (command.sprintId !== null && state.sprints?.has(command.sprintId) !== true) {
+          return reject("invalid_request", `Sprint ${command.sprintId} does not exist.`);
+        }
+      }
       const siblings = siblingsOf(parentId, command.itemId);
       const item: RoadmapWorkItem = {
         id: command.itemId,
@@ -175,6 +211,12 @@ export function planRoadmapCommand(input: {
         createdAt: occurredAt,
         updatedAt: occurredAt,
         createdBy: actor,
+        stateChangedAt: occurredAt,
+        completedAt: command.state === "done" ? occurredAt : null,
+        pinnedAt: null,
+        snoozedUntil: null,
+        sprintId: command.sprintId ?? null,
+        hours: [],
       };
       return Result.succeed({ ...base, type: "roadmap.item.created", payload: { item } });
     }
@@ -194,6 +236,14 @@ export function planRoadmapCommand(input: {
         );
         if (child !== undefined) {
           return reject("invalid_parent", `A ${nextType} cannot hold ${label(child)}.`);
+        }
+      }
+      const sprintId = command.patch.sprintId;
+      if (sprintId !== undefined) {
+        const forbidden = userOnly(actor, "sprints");
+        if (forbidden !== undefined) return Result.fail(forbidden);
+        if (sprintId !== null && state.sprints?.has(sprintId) !== true) {
+          return reject("not_found", `Sprint ${sprintId} does not exist.`);
         }
       }
       return Result.succeed({ ...base, type: "roadmap.item.updated", payload: command.patch });
@@ -440,6 +490,172 @@ export function planRoadmapCommand(input: {
       if (Result.isFailure(current)) return Result.fail(current.failure);
       return Result.succeed({ ...base, type: "roadmap.item.reviewed", payload: {} });
     }
+
+    case "roadmap.item.pin": {
+      const forbidden = userOnly(actor, "Today's picks");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      const item = current.success;
+      if (item.pinnedAt === null) {
+        if (item.state === "done") {
+          return reject("invalid_request", `${label(item)} is done, so it cannot be a pick.`);
+        }
+        const picks = liveItems().filter(
+          (other) => other.pinnedAt !== null && other.state !== "done",
+        );
+        if (picks.length >= ROADMAP_PIN_LIMIT) {
+          return reject(
+            "pin_limit",
+            `Today holds ${ROADMAP_PIN_LIMIT} picks. Unpin one of ${picks.map(label).join(", ")} first.`,
+          );
+        }
+      }
+      return Result.succeed({ ...base, type: "roadmap.item.pinned", payload: {} });
+    }
+
+    case "roadmap.item.unpin": {
+      const forbidden = userOnly(actor, "Today's picks");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      return Result.succeed({ ...base, type: "roadmap.item.unpinned", payload: {} });
+    }
+
+    case "roadmap.item.snooze": {
+      const forbidden = userOnly(actor, "snoozes");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (command.until <= earliestToday(input.now)) {
+        return reject("invalid_request", `Snooze until a date after today, not ${command.until}.`);
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.item.snoozed",
+        payload: { until: command.until },
+      });
+    }
+
+    case "roadmap.item.unsnooze": {
+      const forbidden = userOnly(actor, "snoozes");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      return Result.succeed({ ...base, type: "roadmap.item.unsnoozed", payload: {} });
+    }
+
+    case "roadmap.hours.log": {
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (current.success.hours.some((entry) => entry.id === command.entryId)) {
+        return reject(
+          "already_exists",
+          `${label(current.success)} already has hours entry ${command.entryId}.`,
+        );
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.hours.logged",
+        payload: {
+          entry: {
+            id: command.entryId,
+            at: occurredAt,
+            hours: command.hours,
+            actor,
+            note: command.note ?? null,
+          },
+        },
+      });
+    }
+
+    case "roadmap.hours.remove": {
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      if (!current.success.hours.some((entry) => entry.id === command.entryId)) {
+        return reject(
+          "not_found",
+          `${label(current.success)} has no hours entry ${command.entryId}.`,
+        );
+      }
+      return Result.succeed({
+        ...base,
+        type: "roadmap.hours.removed",
+        payload: { entryId: command.entryId },
+      });
+    }
+  }
+}
+
+function planSprintCommand(input: {
+  readonly command: RoadmapSprintCommand;
+  readonly actor: RoadmapActor;
+  readonly state: RoadmapCommandState;
+  readonly eventId: EventId;
+  readonly now: DateTime.Utc;
+}): Result.Result<RoadmapSprintEvent, RoadmapError> {
+  const { command, actor, state, eventId } = input;
+  const forbidden = userOnly(actor, "sprints");
+  if (forbidden !== undefined) return Result.fail(forbidden);
+  const base = {
+    eventId,
+    sprintId: command.sprintId,
+    actor,
+    occurredAt: DateTime.formatIso(input.now),
+  };
+  const sprints = state.sprints ?? new Map<RoadmapSprintId, RoadmapSprint>();
+  const existing = sprints.get(command.sprintId);
+  const missing = () => reject("not_found", `Sprint ${command.sprintId} does not exist.`);
+  const endsFirst = (startDate: string, endDate: string) =>
+    endDate < startDate
+      ? reject(
+          "invalid_request",
+          `A sprint cannot end (${endDate}) before it starts (${startDate}).`,
+        )
+      : undefined;
+
+  switch (command.type) {
+    case "roadmap.sprint.create": {
+      if (existing !== undefined) {
+        return reject("already_exists", `Sprint ${command.sprintId} already exists.`);
+      }
+      const invalid = endsFirst(command.startDate, command.endDate);
+      if (invalid !== undefined) return invalid;
+      return Result.succeed({
+        ...base,
+        type: "roadmap.sprint.created",
+        payload: {
+          sprint: {
+            id: command.sprintId,
+            name: command.name,
+            area: command.area,
+            startDate: command.startDate,
+            endDate: command.endDate,
+          },
+        },
+      });
+    }
+
+    case "roadmap.sprint.update": {
+      if (existing === undefined) return missing();
+      const next = { ...existing, ...command.patch };
+      const invalid = endsFirst(next.startDate, next.endDate);
+      if (invalid !== undefined) return invalid;
+      return Result.succeed({ ...base, type: "roadmap.sprint.updated", payload: command.patch });
+    }
+
+    case "roadmap.sprint.delete": {
+      if (existing === undefined) return missing();
+      // Deleted items too, so restoring one never brings back a dangling sprint.
+      const clearedItemIds = [...state.items.values()].flatMap((record) =>
+        record.item.sprintId === command.sprintId ? [record.item.id] : [],
+      );
+      return Result.succeed({
+        ...base,
+        type: "roadmap.sprint.deleted",
+        payload: { clearedItemIds },
+      });
+    }
   }
 }
 
@@ -458,7 +674,7 @@ function lastUserRootArea(items: ReadonlyArray<RoadmapWorkItem>): RoadmapArea {
  */
 export function projectRoadmapEvent(
   lookup: (itemId: RoadmapItemId) => RoadmapItemRecord | undefined,
-  event: RoadmapEvent,
+  event: RoadmapItemEvent,
 ): ReadonlyArray<RoadmapItemRecord> {
   const at = event.occurredAt;
   if (event.type === "roadmap.item.created") {
@@ -485,12 +701,23 @@ export function projectRoadmapEvent(
     values.filter((entry) => entry !== value);
   const next = ((): RoadmapWorkItem => {
     switch (event.type) {
-      case "roadmap.item.updated":
+      case "roadmap.item.updated": {
+        const state = event.payload.state;
+        const stateChanged = state !== undefined && state !== item.state;
         return {
           ...item,
           ...event.payload,
           needsReview: event.actor._tag === "user" ? false : item.needsReview,
+          ...(stateChanged
+            ? {
+                stateChangedAt: at,
+                completedAt: state === "done" ? at : null,
+                // A finished pick frees its slot on Today.
+                ...(state === "done" ? { pinnedAt: null } : {}),
+              }
+            : {}),
         };
+      }
       case "roadmap.item.moved":
         return { ...item, parentId: event.payload.parentId, sortKey: event.payload.sortKey };
       case "roadmap.criteria.set":
@@ -564,7 +791,63 @@ export function projectRoadmapEvent(
         };
       case "roadmap.item.reviewed":
         return { ...item, needsReview: false };
+      case "roadmap.item.pinned":
+        return item.pinnedAt === null ? { ...item, pinnedAt: at } : item;
+      case "roadmap.item.unpinned":
+        return { ...item, pinnedAt: null };
+      case "roadmap.item.snoozed":
+        return { ...item, snoozedUntil: event.payload.until };
+      case "roadmap.item.unsnoozed":
+        return { ...item, snoozedUntil: null };
+      case "roadmap.hours.logged":
+        return item.hours.some((entry) => entry.id === event.payload.entry.id)
+          ? item
+          : { ...item, hours: [...item.hours, event.payload.entry] };
+      case "roadmap.hours.removed":
+        return {
+          ...item,
+          hours: item.hours.filter((entry) => entry.id !== event.payload.entryId),
+        };
     }
   })();
   return [{ item: { ...next, updatedAt: at }, deletedAt: record.deletedAt }];
+}
+
+/**
+ * The sprints and items a sprint event changes. A delete also takes the sprint
+ * off every item it names, deleted ones included.
+ */
+export function projectRoadmapSprintEvent(
+  lookup: {
+    readonly item: (itemId: RoadmapItemId) => RoadmapItemRecord | undefined;
+    readonly sprint: (sprintId: RoadmapSprintId) => RoadmapSprint | undefined;
+  },
+  event: RoadmapSprintEvent,
+): {
+  readonly sprints: ReadonlyArray<RoadmapSprintChange>;
+  readonly items: ReadonlyArray<RoadmapItemRecord>;
+} {
+  switch (event.type) {
+    case "roadmap.sprint.created":
+      return { sprints: [{ sprint: event.payload.sprint, removed: false }], items: [] };
+    case "roadmap.sprint.updated": {
+      const current = lookup.sprint(event.sprintId);
+      if (current === undefined) return { sprints: [], items: [] };
+      return { sprints: [{ sprint: { ...current, ...event.payload }, removed: false }], items: [] };
+    }
+    case "roadmap.sprint.deleted": {
+      const current = lookup.sprint(event.sprintId);
+      const items = event.payload.clearedItemIds.flatMap((itemId) => {
+        const record = lookup.item(itemId);
+        if (record === undefined) return [];
+        return [
+          {
+            item: { ...record.item, sprintId: null, updatedAt: event.occurredAt },
+            deletedAt: record.deletedAt,
+          },
+        ];
+      });
+      return { sprints: current === undefined ? [] : [{ sprint: current, removed: true }], items };
+    }
+  }
 }

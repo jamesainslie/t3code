@@ -2,7 +2,7 @@ import {
   CommandId,
   OrchestratorMcpFailure,
   type RoadmapActor,
-  type RoadmapCommand,
+  type RoadmapItemCommand,
   type RoadmapError,
   RoadmapItemId,
   type RoadmapThreadRef,
@@ -14,7 +14,9 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
+import * as RoadmapProgress from "../../../fork/roadmap/RoadmapProgress.ts";
 import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
+import { ServerSettingsService } from "../../../serverSettings.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -57,6 +59,7 @@ const make = Effect.gen(function* () {
   const roadmap = yield* RoadmapService.RoadmapService;
   const threads = yield* ThreadManagementService.ThreadManagementService;
   const crypto = yield* Crypto.Crypto;
+  const serverSettings = yield* ServerSettingsService;
 
   const fromService = <A>(effect: Effect.Effect<A, RoadmapError>) =>
     effect.pipe(Effect.mapError(toolFailure));
@@ -73,6 +76,27 @@ const make = Effect.gen(function* () {
       });
     }
     return scope;
+  });
+
+  /** Forecasts over the whole roadmap as it stands now, in each area's unit. */
+  const progressSnapshot = Effect.gen(function* () {
+    const items = yield* fromService(roadmap.list());
+    const sprints = yield* fromService(roadmap.listSprints());
+    const settings = yield* serverSettings.getSettings.pipe(
+      Effect.mapError(
+        () =>
+          new RoadmapToolFailure({
+            code: "internal",
+            reason: "Could not read the roadmap settings.",
+          }),
+      ),
+    );
+    return RoadmapProgress.progressCalculator({
+      items,
+      sprints,
+      areas: settings.roadmap.areas,
+      today: yield* RoadmapProgress.todayUtc,
+    });
   });
 
   const threadRef = (
@@ -136,12 +160,14 @@ const make = Effect.gen(function* () {
     scope: McpInvocationContext.McpThreadInvocationScope,
     tool: string,
     clientRequestId: string | undefined,
-    build: (commandId: CommandId) => RoadmapCommand,
+    build: (commandId: CommandId) => RoadmapItemCommand,
   ) =>
     Effect.gen(function* () {
       const actor = yield* agentActor(scope);
       const command = build(yield* commandId(scope, tool, clientRequestId));
-      return yield* fromService(roadmap.dispatch(command, actor));
+      const result = yield* fromService(roadmap.dispatch(command, actor));
+      // A replayed create returns the item the first attempt made, not this attempt's new id.
+      return { sequence: result.sequence, itemId: result.itemId ?? command.itemId };
     });
 
   const refuseDoneWithOpenCriteria = (texts: ReadonlyArray<string>) =>
@@ -175,13 +201,12 @@ const make = Effect.gen(function* () {
     lathe_roadmap_list: McpToolAccess.readsAsCaller((input) =>
       Effect.gen(function* () {
         yield* requireRoadmap;
-        const items = yield* fromService(roadmap.list());
-        const byId = new Map(items.map((item) => [item.id, item]));
+        const { byId, progressOf } = yield* progressSnapshot;
         if (input.underItemId !== undefined && !byId.has(input.underItemId)) {
           return yield* notFound(input.underItemId);
         }
         const rows: Array<RoadmapListEntry> = [];
-        for (const item of items) {
+        for (const item of byId.values()) {
           if (input.type !== undefined && item.type !== input.type) continue;
           if (input.state !== undefined && item.state !== input.state) continue;
           const area = effectiveArea(item.id, byId).area;
@@ -205,6 +230,7 @@ const make = Effect.gen(function* () {
             criteriaTotal: item.criteria.length,
             attachedThreads: item.attachments.length,
             needsReview: item.needsReview,
+            forecast: progressOf(item).forecast.status,
           });
         }
         return { items: rows };
@@ -214,8 +240,8 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const scope = yield* requireRoadmap;
         const item = yield* targetItem(scope, input.itemId);
-        const items = yield* fromService(roadmap.list());
-        const byId = new Map(items.map((candidate) => [candidate.id, candidate]));
+        const { byId, progressOf } = yield* progressSnapshot;
+        const progress = progressOf(item);
         const history = yield* fromService(roadmap.history(item.id));
         const summary = (candidate: RoadmapWorkItem) => ({
           id: candidate.id,
@@ -237,6 +263,14 @@ const make = Effect.gen(function* () {
             actor: event.actor,
             occurredAt: event.occurredAt,
           })),
+          unit: progress.unit,
+          burned: progress.burned,
+          remaining: progress.remaining,
+          velocity:
+            progress.velocity === null
+              ? null
+              : { perDay: progress.velocity.perDay, sampleSize: progress.velocity.sampleSize },
+          forecast: { status: progress.forecast.status, projected: progress.forecast.projected },
         } satisfies RoadmapReadResult;
       }),
     ),
@@ -342,6 +376,32 @@ const make = Effect.gen(function* () {
           itemId: item.id,
           blockedById: input.blockedById,
         }));
+      }),
+    ),
+    lathe_roadmap_log_hours: McpToolAccess.actsAsCaller((input) =>
+      Effect.gen(function* () {
+        const scope = yield* requireRoadmap;
+        const item = yield* targetItem(scope, input.itemId);
+        // The entry takes the command id, so a retry that replays the first
+        // attempt's receipt reports the same entry instead of a new one.
+        let entryId = "";
+        const result = yield* dispatch(scope, "log-hours", input.clientRequestId, (commandId) => {
+          entryId = commandId;
+          return {
+            type: "roadmap.hours.log",
+            commandId,
+            itemId: item.id,
+            entryId: commandId,
+            hours: input.hours,
+            ...(input.note === undefined ? {} : { note: input.note }),
+          };
+        });
+        const logged = yield* getItem(item.id);
+        return {
+          ...result,
+          entryId,
+          totalHours: logged.hours.reduce((sum, entry) => sum + entry.hours, 0),
+        };
       }),
     ),
   } satisfies McpToolAccess.Handlers<typeof RoadmapToolkit.tools>;

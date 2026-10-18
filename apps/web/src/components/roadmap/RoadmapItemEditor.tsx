@@ -4,9 +4,12 @@ import type {
   RoadmapItemId,
   RoadmapItemType,
   RoadmapPriority,
+  RoadmapSprint,
+  RoadmapSprintId,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
+import { effectiveArea } from "@lathe/shared/roadmap";
 import { useEffect, useId, useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -42,6 +45,7 @@ import {
   typeOptionsFor,
   type RoadmapEditorDraft,
 } from "./roadmapPage.logic";
+import { sprintOptionsFor } from "./roadmapSprints.logic";
 import { newRoadmapCommandId, newRoadmapItemId, useRoadmapDispatch } from "./useRoadmapDispatch";
 
 export type RoadmapItemEditorMode =
@@ -51,6 +55,7 @@ export type RoadmapItemEditorMode =
 export interface RoadmapItemEditorProps {
   readonly home: EnvironmentId;
   readonly items: ReadonlyArray<RoadmapWorkItem>;
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
   readonly mode: RoadmapItemEditorMode;
   /** Receives the new item's id when the editor created one. */
   readonly onClose: (createdId?: RoadmapItemId) => void;
@@ -58,9 +63,10 @@ export interface RoadmapItemEditorProps {
 
 const NO_PARENT = "none";
 const INHERIT = "inherit";
+const NO_SPRINT = "none";
 
 /** Creates a work item, or edits every field of one, in a dialog. */
-export function RoadmapItemEditor({ home, items, mode, onClose }: RoadmapItemEditorProps) {
+export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: RoadmapItemEditorProps) {
   const id = useId();
   const dispatch = useRoadmapDispatch(home);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
@@ -120,7 +126,7 @@ export function RoadmapItemEditor({ home, items, mode, onClose }: RoadmapItemEdi
       const built = buildCreateCommand(draft, { itemId, commandId: newRoadmapCommandId() });
       if ("error" in built) return setError(built.error);
       setSaving(true);
-      const ok = await dispatch(built.command, "Could not create the work item");
+      const ok = await dispatch([built.command], "Could not create the work item");
       setSaving(false);
       if (ok) onClose(itemId);
       return;
@@ -132,6 +138,20 @@ export function RoadmapItemEditor({ home, items, mode, onClose }: RoadmapItemEdi
     setSaving(false);
     if (ok) onClose();
   };
+
+  // The area the item will have once saved, so the select offers that area's sprints.
+  const area =
+    draft.area ??
+    (draft.parentId !== null && byId.has(draft.parentId)
+      ? effectiveArea(draft.parentId, byId).area
+      : editing !== null
+        ? effectiveArea(editing.id, byId).area
+        : null);
+  const sprintOptions = sprintOptionsFor(sprints, area, draft.sprintId);
+  const sprintItems = Object.fromEntries([
+    [NO_SPRINT, "No sprint"],
+    ...sprintOptions.map((sprint) => [sprint.id, sprint.name]),
+  ]);
 
   const parentItems = Object.fromEntries([
     [NO_PARENT, "No parent"],
@@ -295,6 +315,33 @@ export function RoadmapItemEditor({ home, items, mode, onClose }: RoadmapItemEdi
                   />
                 </div>
               </div>
+              {sprints.length > 0 ? (
+                <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-sprint`}>
+                  Sprint
+                  <Select
+                    value={draft.sprintId ?? NO_SPRINT}
+                    items={sprintItems}
+                    onValueChange={(value) =>
+                      update({
+                        sprintId:
+                          value === null || value === NO_SPRINT ? null : (value as RoadmapSprintId),
+                      })
+                    }
+                  >
+                    <SelectTrigger id={`${id}-sprint`} className="min-w-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup>
+                      <SelectItem value={NO_SPRINT}>No sprint</SelectItem>
+                      {sprintOptions.map((sprint) => (
+                        <SelectItem key={sprint.id} value={sprint.id}>
+                          {sprint.name}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                </Label>
+              ) : null}
               <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-criteria`}>
                 Acceptance criteria
                 <Textarea

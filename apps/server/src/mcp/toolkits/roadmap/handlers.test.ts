@@ -50,7 +50,8 @@ const invocation = (
 
 const roadmapLayer = (homeEnvironmentId: EnvironmentId | null) =>
   RoadmapService.layer.pipe(
-    Layer.provide(
+    // The handlers read area settings too.
+    Layer.provideMerge(
       Layer.mergeAll(
         IdAllocator.layer,
         ServerSettingsService.layerTest({ roadmap: { homeEnvironmentId } }),
@@ -191,6 +192,108 @@ describe("roadmap toolkit handlers", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("reads the forecast, burn and velocity in the area's unit, and lists the status", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      // The test clock starts at 1970-01-01, a Thursday, so these finish today.
+      for (const index of [1, 2, 3, 4, 5]) {
+        yield* harness.userDispatch(
+          createAsUser(`done-${index}`, { state: "done", estimate: 3 } as Partial<RoadmapCommand>),
+        );
+      }
+      yield* harness.userDispatch(
+        createAsUser("feature", {
+          estimate: 4,
+          dueDate: "1970-01-07",
+          attachThread: callerRef,
+        } as Partial<RoadmapCommand>),
+      );
+
+      const read = yield* harness.call("lathe_roadmap_read", {});
+      // 15 points over 15 working days is 1 a day, so 4 points land on Wednesday, the due date.
+      expect(read).toMatchObject({
+        unit: "points",
+        burned: 0,
+        remaining: 4,
+        velocity: { perDay: 1, sampleSize: 5 },
+        forecast: { status: "at-risk", projected: "1970-01-07" },
+      });
+      const done = yield* harness.call("lathe_roadmap_read", {
+        itemId: RoadmapItemId.make("done-1"),
+      });
+      expect(done).toMatchObject({
+        burned: 3,
+        remaining: 0,
+        forecast: { status: "no-forecast", projected: null },
+      });
+
+      const list = yield* harness.call("lathe_roadmap_list", {});
+      expect(list.items.find((row) => row.id === "feature")?.forecast).toBe("at-risk");
+      expect(list.items.find((row) => row.id === "done-1")?.forecast).toBe("no-forecast");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reports no velocity under five finished items", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.userDispatch(
+        createAsUser("feature", { estimate: 2, attachThread: callerRef } as never),
+      );
+      const read = yield* harness.call("lathe_roadmap_read", {});
+      expect(read).toMatchObject({
+        unit: "points",
+        burned: 0,
+        remaining: 2,
+        velocity: null,
+        forecast: { status: "no-forecast", projected: null },
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("logs hours on the attached item as the calling agent, once per clientRequestId", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.userDispatch(createAsUser("feature", { attachThread: callerRef } as never));
+      yield* harness.userDispatch(createAsUser("other"));
+      const feature = RoadmapItemId.make("feature");
+
+      const input = { hours: 1.5, note: "Wrote the tool", clientRequestId: "hours-1" };
+      const first = yield* harness.call("lathe_roadmap_log_hours", input);
+      const retried = yield* harness.call("lathe_roadmap_log_hours", input);
+      expect(retried).toEqual(first);
+      expect(first).toMatchObject({ itemId: feature, totalHours: 1.5 });
+
+      const second = yield* harness.call("lathe_roadmap_log_hours", { hours: 2 });
+      expect(second.entryId).not.toBe(first.entryId);
+      expect(second.totalHours).toBe(3.5);
+
+      const item = Option.getOrThrow(yield* harness.roadmap.get(feature));
+      expect(item.hours).toHaveLength(2);
+      expect(item.hours[0]).toMatchObject({
+        id: first.entryId,
+        hours: 1.5,
+        note: "Wrote the tool",
+        actor: { _tag: "agent", thread: callerRef, threadTitle: THREAD_ID },
+      });
+      expect(item.hours[1]).toMatchObject({ hours: 2, note: null });
+
+      yield* harness.call("lathe_roadmap_log_hours", {
+        itemId: RoadmapItemId.make("other"),
+        hours: 0.25,
+      });
+      const other = Option.getOrThrow(yield* harness.roadmap.get(RoadmapItemId.make("other")));
+      expect(other.hours.map((entry) => entry.hours)).toEqual([0.25]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses to log hours for a caller with no work item", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      const error = yield* harness.call("lathe_roadmap_log_hours", { hours: 1 }).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "RoadmapToolFailure", code: "not_attached" });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("asks for an item id when the caller is not attached", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
@@ -233,6 +336,7 @@ describe("roadmap toolkit handlers", () => {
         criteriaTotal: 2,
         attachedThreads: 0,
         needsReview: false,
+        forecast: "no-forecast",
       });
       const features = yield* harness.call("lathe_roadmap_list", { type: "feature" });
       expect(features.items.map((row) => row.id).sort()).toEqual(["child", "loose"]);
