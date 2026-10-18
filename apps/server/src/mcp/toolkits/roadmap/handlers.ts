@@ -21,6 +21,7 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { unavailable } from "../../threadAccess.ts";
 import {
+  type RoadmapChangeResult,
   type RoadmapListEntry,
   type RoadmapReadResult,
   RoadmapToolFailure,
@@ -62,15 +63,16 @@ const make = Effect.gen(function* () {
   const fromService = <A>(effect: Effect.Effect<A, RoadmapError>) =>
     effect.pipe(Effect.mapError(toolFailure));
 
-  // Reads are refused too off the home: the local tables there are empty, not the roadmap.
+  // Off the home, an unlinked environment has no roadmap to read or change:
+  // its own tables are empty, not the roadmap.
   const requireRoadmap = Effect.gen(function* () {
     const invocation = yield* McpInvocationContext.requireMcpCapability("roadmap");
     const scope = yield* McpInvocationContext.requireThreadScope(invocation, "Roadmap tools");
-    if (!(yield* fromService(roadmap.isHome))) {
+    if ((yield* fromService(roadmap.location)) === "not-linked") {
       return yield* new RoadmapToolFailure({
         code: "roadmap_home_elsewhere",
         reason:
-          "The roadmap lives on another environment, and agents can only reach it from there for now.",
+          "The roadmap lives on another environment, and this one is not linked to it. Link it in Settings, Roadmap.",
       });
     }
     return scope;
@@ -116,6 +118,16 @@ const make = Effect.gen(function* () {
     itemId?: RoadmapItemId,
   ) => (itemId === undefined ? attachedItem(threadRef(scope)) : getItem(itemId));
 
+  // A named item needs no read: the home refuses a missing one itself, and off
+  // the home a write can then queue while the home is unreachable.
+  const targetItemId = (
+    scope: McpInvocationContext.McpThreadInvocationScope,
+    itemId?: RoadmapItemId,
+  ) =>
+    itemId === undefined
+      ? attachedItem(threadRef(scope)).pipe(Effect.map((item) => item.id))
+      : Effect.succeed(itemId);
+
   const agentActor = (scope: McpInvocationContext.McpThreadInvocationScope) =>
     threads.getThreadShell(scope.thread.threadId).pipe(
       Effect.mapError(unavailable),
@@ -151,9 +163,13 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const actor = yield* agentActor(scope);
       const command = build(yield* commandId(scope, tool, clientRequestId));
-      const result = yield* fromService(roadmap.dispatch(command, actor));
+      const result = yield* fromService(roadmap.submit(command, actor));
       // A replayed create returns the item the first attempt made, not this attempt's new id.
-      return { sequence: result.sequence, itemId: result.itemId ?? command.itemId };
+      const itemId = result.itemId ?? command.itemId;
+      const change: RoadmapChangeResult = result.queued
+        ? { itemId, queued: true }
+        : { itemId, sequence: result.sequence };
+      return change;
     });
 
   const refuseDoneWithOpenCriteria = (texts: ReadonlyArray<string>) =>
@@ -293,18 +309,24 @@ const make = Effect.gen(function* () {
             message: "Pass at least one field to change.",
           });
         }
-        const item = yield* targetItem(scope, itemId);
-        if (patch.state === "done") {
-          yield* refuseDoneWithOpenCriteria(
-            item.criteria
-              .filter((criterion) => criterion.tickedAt === null)
-              .map((criterion) => criterion.text),
-          );
-        }
+        // Done needs the criteria, so only that change reads the item first.
+        const targetId =
+          patch.state === "done"
+            ? yield* targetItem(scope, itemId).pipe(
+                Effect.tap((item) =>
+                  refuseDoneWithOpenCriteria(
+                    item.criteria
+                      .filter((criterion) => criterion.tickedAt === null)
+                      .map((criterion) => criterion.text),
+                  ),
+                ),
+                Effect.map((item) => item.id),
+              )
+            : yield* targetItemId(scope, itemId);
         return yield* dispatch(scope, "update", clientRequestId, (commandId) => ({
           type: "roadmap.item.update",
           commandId,
-          itemId: item.id,
+          itemId: targetId,
           patch,
         }));
       }),
@@ -312,11 +334,11 @@ const make = Effect.gen(function* () {
     lathe_roadmap_criterion_tick: McpToolAccess.actsAsCaller((input) =>
       Effect.gen(function* () {
         const scope = yield* requireRoadmap;
-        const item = yield* targetItem(scope, input.itemId);
+        const itemId = yield* targetItemId(scope, input.itemId);
         return yield* dispatch(scope, "criterion-tick", input.clientRequestId, (commandId) => ({
           type: "roadmap.criterion.tick",
           commandId,
-          itemId: item.id,
+          itemId,
           criterionId: input.criterionId,
           ticked: input.ticked,
           evidence: input.evidence ?? null,
@@ -355,11 +377,11 @@ const make = Effect.gen(function* () {
     lathe_roadmap_link_blocker: McpToolAccess.actsAsCaller((input) =>
       Effect.gen(function* () {
         const scope = yield* requireRoadmap;
-        const item = yield* targetItem(scope, input.itemId);
+        const itemId = yield* targetItemId(scope, input.itemId);
         return yield* dispatch(scope, "link-blocker", input.clientRequestId, (commandId) => ({
           type: input.linked ? "roadmap.blocker.link" : "roadmap.blocker.unlink",
           commandId,
-          itemId: item.id,
+          itemId,
           blockedById: input.blockedById,
         }));
       }),
@@ -367,7 +389,7 @@ const make = Effect.gen(function* () {
     lathe_roadmap_log_hours: McpToolAccess.actsAsCaller((input) =>
       Effect.gen(function* () {
         const scope = yield* requireRoadmap;
-        const item = yield* targetItem(scope, input.itemId);
+        const itemId = yield* targetItemId(scope, input.itemId);
         // The entry takes the command id, so a retry that replays the first
         // attempt's receipt reports the same entry instead of a new one.
         let entryId = "";
@@ -376,13 +398,14 @@ const make = Effect.gen(function* () {
           return {
             type: "roadmap.hours.log",
             commandId,
-            itemId: item.id,
+            itemId,
             entryId: commandId,
             hours: input.hours,
             ...(input.note === undefined ? {} : { note: input.note }),
           };
         });
-        const logged = yield* getItem(item.id);
+        if ("queued" in result) return { itemId: result.itemId, queued: true, entryId } as const;
+        const logged = yield* getItem(itemId);
         return {
           ...result,
           entryId,

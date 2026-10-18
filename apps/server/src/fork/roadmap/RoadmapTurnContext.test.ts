@@ -9,14 +9,17 @@ import {
   ThreadId,
 } from "@lathe/contracts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import * as RoadmapContextBlock from "./RoadmapContextBlock.ts";
 import type * as RoadmapProgress from "./RoadmapProgress.ts";
+import * as RoadmapLinkTestkit from "./RoadmapLink.testkit.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 import * as RoadmapTurnContext from "./RoadmapTurnContext.ts";
 
@@ -227,6 +230,7 @@ const roadmapLayer = (homeEnvironmentId: EnvironmentId | null) =>
   RoadmapService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        RoadmapLinkTestkit.layerNotLinked,
         IdAllocator.layer,
         ServerSettingsService.layerTest({ roadmap: { homeEnvironmentId } }),
         Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -323,7 +327,8 @@ describe("RoadmapTurnContext.forThread", () => {
       );
       const dying = turnContextLayer(
         Layer.mock(RoadmapService.RoadmapService)({
-          isHome: Effect.die(new Error("settings exploded")),
+          isHome: Effect.succeed(true),
+          threadContext: () => Effect.die(new Error("settings exploded")),
         }),
       );
       for (const roadmap of [failing, dying]) {
@@ -334,5 +339,73 @@ describe("RoadmapTurnContext.forThread", () => {
         expect(block).toBe("");
       }
     }),
+  );
+});
+
+describe("RoadmapTurnContext.forThread off the home", () => {
+  const makeLinked = Effect.fn("makeLinkedTurnContext")(function* () {
+    const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+    const thread = { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID };
+    yield* home.roadmap.dispatch(
+      create("remote", false, { attachThread: thread } as Partial<RoadmapCommand>),
+      user,
+    );
+    const services = yield* Layer.build(
+      RoadmapTurnContext.layer.pipe(
+        Layer.provideMerge(
+          RoadmapLinkTestkit.layerLinkedEnvironment(home, {
+            environmentId: ENVIRONMENT_ID,
+            homeEnvironmentId: EnvironmentId.make("environment-home"),
+          }),
+        ),
+      ),
+    );
+    const roadmap = Context.get(services, RoadmapService.RoadmapService);
+    yield* roadmap.configureLink({
+      homeUrl: RoadmapLinkTestkit.HOME_URL,
+      credential: yield* home.linkGrant(ENVIRONMENT_ID),
+    });
+    return { home, roadmap, context: Context.get(services, RoadmapTurnContext.RoadmapTurnContext) };
+  });
+
+  it.effect("renders the home's block for a thread on a linked environment", () =>
+    Effect.gen(function* () {
+      const { context } = yield* makeLinked();
+      const block = yield* context.forThread(THREAD_ID);
+      expect(block).toMatch(/^Roadmap work item for this thread/);
+      expect(block).toContain('Story "Story remote" (id remote)');
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "keeps the last block it got, marked possibly out of date, while the home is down",
+    () =>
+      Effect.gen(function* () {
+        const { home, context } = yield* makeLinked();
+        const fresh = yield* context.forThread(THREAD_ID);
+        yield* TestClock.adjust("90 minutes");
+        home.setReachable(false);
+
+        const stale = yield* context.forThread(THREAD_ID);
+        const [marker, ...rest] = stale.split("\n");
+        expect(marker).toBe(
+          "Possibly out of date: the roadmap home could not be reached, so this is the copy from 1970-01-01T00:00:00.000Z.",
+        );
+        expect(rest.join("\n")).toBe(fresh);
+        // A thread the home never answered for has nothing to fall back on.
+        expect(yield* context.forThread(ThreadId.make("thread-never-seen"))).toBe("");
+
+        home.setReachable(true);
+        expect(yield* context.forThread(THREAD_ID)).toBe(fresh);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("drops the block once the environment is unlinked", () =>
+    Effect.gen(function* () {
+      const { roadmap, context } = yield* makeLinked();
+      expect(yield* context.forThread(THREAD_ID)).not.toBe("");
+      yield* roadmap.configureLink(null);
+      expect(yield* context.forThread(THREAD_ID)).toBe("");
+    }).pipe(Effect.scoped),
   );
 });

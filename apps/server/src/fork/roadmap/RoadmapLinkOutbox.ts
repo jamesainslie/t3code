@@ -29,9 +29,11 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 
 import * as RoadmapLink from "./RoadmapLink.ts";
 
+/** `queued`: the home did not answer, so the write waits in the queue. */
 export type RoadmapLinkOutcome =
   | { readonly _tag: "accepted"; readonly result: RoadmapDispatchResult }
-  | { readonly _tag: "rejected"; readonly error: RoadmapError };
+  | { readonly _tag: "rejected"; readonly error: RoadmapError }
+  | { readonly _tag: "queued" };
 
 /** What one step of the worker did. */
 export type RoadmapLinkStep = "sent" | "rejected" | "retry" | "idle" | "unlinked";
@@ -48,14 +50,15 @@ export class RoadmapLinkOutbox extends Context.Service<
       actor: RoadmapActor,
     ) => Effect.Effect<void, RoadmapError>;
     /**
-     * Queues the command and waits up to `wait` for the home's answer. A command
-     * the home already refused answers with that refusal at once.
+     * Queues the command and waits up to `wait` for the home's answer, or for a
+     * try at the home to fail. A command the home already refused answers with
+     * that refusal at once.
      */
     readonly submit: (
       command: RoadmapCommand,
       actor: RoadmapActor,
       wait: Duration.Input,
-    ) => Effect.Effect<RoadmapLinkOutcome | { readonly _tag: "queued" }, RoadmapError>;
+    ) => Effect.Effect<RoadmapLinkOutcome, RoadmapError>;
     readonly counts: Effect.Effect<
       { readonly queued: number; readonly rejected: number },
       RoadmapError
@@ -147,6 +150,16 @@ const make = Effect.gen(function* () {
       return waiting === undefined ? Effect.void : Deferred.succeed(waiting, outcome);
     });
 
+  // A failed head holds every row behind it, so none of their writers should
+  // keep waiting for an answer that will not come soon.
+  const settleAllQueued = Effect.suspend(() => {
+    const waiting = [...outcomes.values()];
+    outcomes.clear();
+    return Effect.forEach(waiting, (deferred) => Deferred.succeed(deferred, { _tag: "queued" }), {
+      discard: true,
+    });
+  });
+
   /** The recorded refusal, when the home already refused this command. */
   const insert = (command: RoadmapCommand, actor: RoadmapActor) =>
     Effect.gen(function* () {
@@ -225,6 +238,9 @@ const make = Effect.gen(function* () {
     });
 
   const runOnce: RoadmapLinkOutbox["Service"]["runOnce"] = Effect.gen(function* () {
+    // This step reads the table, so it answers any wake that came before it; a
+    // stale wake left behind would cut the next backoff short.
+    yield* Queue.poll(signal);
     if (!(yield* link.isLinked)) return "unlinked" as const;
     const head = yield* selectHead(undefined);
     if (Option.isNone(head)) return "idle" as const;
@@ -251,6 +267,7 @@ const make = Effect.gen(function* () {
     if (failure._tag === "RoadmapError" && !RETRYABLE_CODES.has(failure.code)) {
       return yield* reject(row, failure);
     }
+    yield* settleAllQueued;
     return "retry" as const;
   }).pipe(
     Effect.catchCause((cause) =>

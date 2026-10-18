@@ -33,6 +33,7 @@ import * as Schema from "effect/Schema";
 
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as RoadmapLinkTestkit from "../fork/roadmap/RoadmapLink.testkit.ts";
 import * as RoadmapService from "../fork/roadmap/RoadmapService.ts";
 import * as RoadmapTurnContext from "../fork/roadmap/RoadmapTurnContext.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -1077,6 +1078,7 @@ const makeRoadmap = Effect.gen(function* () {
       Layer.provideMerge(RoadmapService.layer),
       Layer.provide(
         Layer.mergeAll(
+          RoadmapLinkTestkit.layerNotLinked,
           IdAllocator.layer,
           ServerSettingsService.layerTest({}),
           Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {

@@ -180,6 +180,28 @@ describe("RoadmapLinkOutbox", () => {
   );
 });
 
+describe("RoadmapLinkOutbox waiting writes", () => {
+  it.effect("hear they are queued as soon as a try at the home fails", () =>
+    Effect.gen(function* () {
+      const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+      const { outbox } = yield* makeLinkedOutbox(home);
+      yield* RoadmapLinkOutbox.runWorker.pipe(
+        Effect.provideService(RoadmapLinkOutbox.RoadmapLinkOutbox, outbox),
+        Effect.forkScoped,
+      );
+      home.setReachable(false);
+      // An hour's wait under the test clock never runs out; only the failed try ends it.
+      expect(yield* outbox.submit(create("first"), agent, Duration.hours(1))).toEqual({
+        _tag: "queued",
+      });
+      expect(yield* outbox.submit(create("second"), agent, Duration.hours(1))).toEqual({
+        _tag: "queued",
+      });
+      expect(yield* outbox.counts).toEqual({ queued: 2, rejected: 0 });
+    }).pipe(Effect.scoped),
+  );
+});
+
 describe("RoadmapLinkOutbox worker", () => {
   it("backs off exponentially from a second to a minute", () => {
     expect(
@@ -218,14 +240,16 @@ describe("RoadmapLinkOutbox worker", () => {
       );
       const outbox = Context.get(services, RoadmapLinkOutbox.RoadmapLinkOutbox);
       yield* RoadmapLinkOutbox.runWorker.pipe(Effect.provideContext(services), Effect.forkScoped);
-      const waiting = yield* outbox
-        .submit(create("eventually"), agent, Duration.hours(1))
-        .pipe(Effect.forkChild);
+      // The writer hears "queued" after the first failure; the worker keeps going.
+      expect(yield* outbox.submit(create("eventually"), agent, Duration.hours(1))).toEqual({
+        _tag: "queued",
+      });
 
+      // The test clock runs each woken retry until the worker waits again.
       yield* TestClock.adjust("1 minute");
 
-      expect(yield* Fiber.join(waiting)).toMatchObject({ _tag: "accepted" });
       expect(attempts).toEqual([0, 1_000, 3_000, 7_000, 15_000]);
+      expect(yield* outbox.counts).toEqual({ queued: 0, rejected: 0 });
     }).pipe(Effect.scoped),
   );
 

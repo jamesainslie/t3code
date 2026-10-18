@@ -27,6 +27,7 @@ import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import * as RoadmapHttp from "./http.ts";
+import * as RoadmapLink from "./RoadmapLink.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 
 class HomeTestApi extends HttpApi.make("environment")
@@ -68,6 +69,14 @@ export const makeMemorySecretStore = (initial: Record<string, string> = {}) => {
   return { store, read };
 };
 
+/** A link that was never configured, for environments that are the home or stay unlinked. */
+export const layerNotLinked = RoadmapLink.layer.pipe(
+  Layer.provide(
+    Layer.sync(ServerSecretStore.ServerSecretStore, () => makeMemorySecretStore().store),
+  ),
+  Layer.provide(FetchHttpClient.layer),
+);
+
 /**
  * A roadmap home. `fetch` serves its HTTP API; `setReachable(false)` makes
  * every call fail as a network error would, and `dropNextResponses(n)` lets
@@ -82,6 +91,7 @@ export const makeInProcessHome = Effect.fn("makeInProcessHome")(function* (
       RoadmapService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
+            layerNotLinked,
             IdAllocator.layer,
             ServerSettingsService.layerTest({
               roadmap: { homeEnvironmentId: options.homeEnvironmentId ?? null },
@@ -156,3 +166,37 @@ export type InProcessHome = Effect.Success<ReturnType<typeof makeInProcessHome>>
 /** The HTTP client a linked environment uses, wired to the in-process home. */
 export const layerHttpClientTo = (home: InProcessHome) =>
   FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, home.fetch)));
+
+/**
+ * An environment off the home, with its own database, whose link reaches the
+ * in-process home. It starts unlinked; configure it through `RoadmapService`.
+ */
+export const layerLinkedEnvironment = (
+  home: InProcessHome,
+  options: {
+    readonly environmentId: EnvironmentId;
+    readonly homeEnvironmentId: EnvironmentId;
+  },
+) =>
+  RoadmapService.layer.pipe(
+    Layer.provideMerge(
+      RoadmapLink.layer.pipe(
+        Layer.provide(
+          Layer.sync(ServerSecretStore.ServerSecretStore, () => makeMemorySecretStore().store),
+        ),
+        Layer.provide(layerHttpClientTo(home)),
+      ),
+    ),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        IdAllocator.layer,
+        ServerSettingsService.layerTest({
+          roadmap: { homeEnvironmentId: options.homeEnvironmentId },
+        }),
+        Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+          getEnvironmentId: Effect.succeed(options.environmentId),
+        }),
+      ),
+    ),
+    Layer.provideMerge(Layer.fresh(SqlitePersistence.layerMemory)),
+  );

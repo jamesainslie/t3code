@@ -9,6 +9,7 @@ import {
   ThreadId,
 } from "@lathe/contracts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -21,6 +22,8 @@ import * as Stream from "effect/Stream";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import * as RoadmapLinkTestkit from "./RoadmapLink.testkit.ts";
+import * as RoadmapLinkOutbox from "./RoadmapLinkOutbox.ts";
 import * as RoadmapService from "./RoadmapService.ts";
 
 const HOME = EnvironmentId.make("env-home");
@@ -30,6 +33,7 @@ const testLayer = (homeEnvironmentId: EnvironmentId | null) =>
   RoadmapService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        RoadmapLinkTestkit.layerNotLinked,
         IdAllocator.layer,
         ServerSettingsService.layerTest({ roadmap: { homeEnvironmentId } }),
         Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -254,6 +258,155 @@ describe("RoadmapService", () => {
           assert.equal(yield* countRows("roadmap_events"), 0);
         }),
       );
+
+      it.effect("refuses reads and writes while it is not linked to the home", () =>
+        Effect.gen(function* () {
+          const roadmap = yield* RoadmapService.RoadmapService;
+          assert.equal(yield* roadmap.location, "not-linked");
+          for (const refused of [
+            Effect.flip(roadmap.snapshot()),
+            Effect.flip(roadmap.forThread(laptopThread)),
+            Effect.flip(roadmap.submit(create("there"), laptopAgent)),
+          ]) {
+            assert.equal((yield* refused).code, "roadmap_home_elsewhere");
+          }
+          assert.deepEqual(yield* roadmap.linkStatus, {
+            state: "not-linked",
+            homeUrl: null,
+            unreachableSince: null,
+            queued: 0,
+            rejected: 0,
+          });
+        }),
+      );
     },
+  );
+});
+
+const LAPTOP = EnvironmentId.make("env-laptop");
+const laptopThread = { environmentId: LAPTOP, threadId: ThreadId.make("thread-laptop") };
+const laptopAgent = { _tag: "agent", thread: laptopThread, threadTitle: "Laptop work" } as const;
+
+/** The home in process, and the laptop's roadmap service linked to it. */
+const makeLinkedLaptop = Effect.fn("makeLinkedLaptop")(function* (
+  options: { readonly link?: boolean; readonly worker?: boolean } = {},
+) {
+  const home = yield* RoadmapLinkTestkit.makeInProcessHome();
+  const services = yield* Layer.build(
+    RoadmapLinkTestkit.layerLinkedEnvironment(home, {
+      environmentId: LAPTOP,
+      homeEnvironmentId: EnvironmentId.make("env-home"),
+    }),
+  );
+  const laptop = Context.get(services, RoadmapService.RoadmapService);
+  if (options.worker !== false) {
+    yield* RoadmapLinkOutbox.runWorker.pipe(Effect.provideContext(services), Effect.forkScoped);
+  }
+  if (options.link !== false) {
+    yield* laptop.configureLink({
+      homeUrl: RoadmapLinkTestkit.HOME_URL,
+      credential: yield* home.linkGrant(LAPTOP),
+    });
+  }
+  return {
+    home,
+    laptop,
+    localEvents: countRows("roadmap_events").pipe(Effect.provideContext(services)),
+  };
+});
+
+describe("RoadmapService off the home, linked", () => {
+  it.effect("reads the home's roadmap through the link", () =>
+    Effect.gen(function* () {
+      const { home, laptop, localEvents } = yield* makeLinkedLaptop();
+      yield* home.roadmap.dispatch(
+        { ...create("attached"), attachThread: laptopThread } as RoadmapCommand,
+        user,
+      );
+      yield* home.roadmap.dispatch(create("other"), user);
+
+      assert.equal(yield* laptop.location, "linked");
+      assert.deepEqual(
+        (yield* laptop.snapshot()).items.map((item) => item.id),
+        ["attached", "other"],
+      );
+      assert.deepEqual(
+        (yield* laptop.list()).map((item) => item.id),
+        ["attached", "other"],
+      );
+      assert.equal(
+        Option.getOrThrow(yield* laptop.get(RoadmapItemId.make("other"))).title,
+        "Objective other",
+      );
+      assert.deepEqual(
+        (yield* laptop.forThread(laptopThread)).map((item) => item.id),
+        ["attached"],
+      );
+      assert.include((yield* laptop.threadContext(laptopThread)).context, "(id attached)");
+      assert.equal((yield* laptop.item(RoadmapItemId.make("attached"))).history.length, 1);
+      // Nothing lands in the laptop's own tables.
+      assert.equal(yield* localEvents, 0);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("applies an agent's write on the home and answers with the home's result", () =>
+    Effect.gen(function* () {
+      const { home, laptop, localEvents } = yield* makeLinkedLaptop();
+      const result = yield* laptop.submit(create("from-laptop"), laptopAgent);
+      assert.isFalse(result.queued);
+      assert.equal(result.itemId, "from-laptop");
+      const item = Option.getOrThrow(yield* home.roadmap.get(RoadmapItemId.make("from-laptop")));
+      assert.deepEqual(item.createdBy, laptopAgent);
+      assert.equal(yield* localEvents, 0);
+      // The home's refusal reaches the agent as the home's own error.
+      const refused = yield* Effect.flip(
+        laptop.submit(
+          {
+            type: "roadmap.item.update",
+            commandId: CommandId.make("update-missing"),
+            itemId: RoadmapItemId.make("missing"),
+            patch: { title: "Renamed" },
+          },
+          laptopAgent,
+        ),
+      );
+      assert.equal(refused.code, "not_found");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("queues a write while the home is unreachable and reports it queued", () =>
+    Effect.gen(function* () {
+      const { home, laptop } = yield* makeLinkedLaptop();
+      home.setReachable(false);
+      const read = yield* Effect.flip(laptop.snapshot());
+      assert.equal(read.code, "internal");
+
+      const result = yield* laptop.submit(create("later"), laptopAgent);
+      assert.deepEqual(result, { queued: true, itemId: RoadmapItemId.make("later") });
+      const status = yield* laptop.linkStatus;
+      assert.equal(status.state, "unreachable");
+      assert.equal(status.homeUrl, RoadmapLinkTestkit.HOME_URL);
+      assert.equal(status.queued, 1);
+      assert.isTrue(Option.isNone(yield* home.roadmap.get(RoadmapItemId.make("later"))));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses writes until it is linked, and again once unlinked", () =>
+    Effect.gen(function* () {
+      const { home, laptop } = yield* makeLinkedLaptop({ link: false });
+      // Not linked: nothing queues, so a write cannot be lost to a link that never comes.
+      assert.equal(
+        (yield* Effect.flip(laptop.submit(create("early"), laptopAgent))).code,
+        "roadmap_home_elsewhere",
+      );
+      yield* laptop.configureLink({
+        homeUrl: RoadmapLinkTestkit.HOME_URL,
+        credential: yield* home.linkGrant(LAPTOP),
+      });
+      assert.isFalse((yield* laptop.submit(create("linked"), laptopAgent)).queued);
+      yield* laptop.configureLink(null);
+      assert.equal((yield* laptop.linkStatus).state, "not-linked");
+      assert.equal(yield* laptop.location, "not-linked");
+    }).pipe(Effect.scoped),
   );
 });
