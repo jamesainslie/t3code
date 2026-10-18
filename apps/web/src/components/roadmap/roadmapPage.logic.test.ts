@@ -414,8 +414,18 @@ describe("forecasts", () => {
     }),
   );
   const areaSettings = {
-    work: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
-    personal: { unit: "points" as const, workingWeekdays: [1, 2, 3, 4, 5], goingColdDays: 5 },
+    work: {
+      unit: "points" as const,
+      workingWeekdays: [1, 2, 3, 4, 5],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
+    personal: {
+      unit: "points" as const,
+      workingWeekdays: [1, 2, 3, 4, 5],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
   };
   const target = (itemId: string, estimate: number | null, dueDate: string) =>
     item(itemId, { type: "story", estimate, dueDate });

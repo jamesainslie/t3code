@@ -1290,6 +1290,14 @@ export const RoadmapSettings = Schema.Struct({
   areas: RoadmapAreasSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(RoadmapAreasSettings)({}))),
   ),
+  /**
+   * The model this environment's steward runs on. Each environment keeps its
+   * own, since provider logins differ per machine; null uses the text
+   * generation model.
+   */
+  stewardModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
 });
 export type RoadmapSettings = typeof RoadmapSettings.Type;
 
@@ -1653,6 +1661,7 @@ export const ServerSettingsPatch = Schema.Struct({
   roadmap: Schema.optionalKey(
     Schema.Struct({
       homeEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)),
+      stewardModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
       areas: Schema.optionalKey(
         Schema.Struct({
           work: Schema.optionalKey(RoadmapAreaSettingsPatch),

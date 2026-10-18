@@ -271,6 +271,45 @@ describe("RoadmapService", () => {
     );
   });
 
+  it.layer(testLayer(null))("a steward tick after an untick", (it) => {
+    it.effect("needs evidence newer than the untick the item's history records", () =>
+      Effect.gen(function* () {
+        const roadmap = yield* RoadmapService.RoadmapService;
+        const itemId = RoadmapItemId.make("ticked");
+        yield* roadmap.dispatch(
+          {
+            ...create("ticked"),
+            criteria: [{ id: "c1", text: "Ships" }],
+          } as RoadmapCommand,
+          user,
+        );
+        const tick = (commandId: string, ticked: boolean, evidenceAfter?: string) =>
+          ({
+            type: "roadmap.criterion.tick",
+            commandId: CommandId.make(commandId),
+            itemId,
+            criterionId: "c1",
+            ticked,
+            evidence: "Turn 2 passed its tests",
+            ...(evidenceAfter === undefined ? {} : { evidenceAfter }),
+          }) as RoadmapCommand;
+        const steward = { _tag: "steward", environmentId: HOME } as const;
+        yield* roadmap.dispatch(tick("user-tick", true), user);
+        yield* roadmap.dispatch(tick("user-untick", false), user);
+        // The test clock stands at the epoch, so every event above happened then.
+        const untickedAt = "1970-01-01T00:00:00.000Z";
+
+        const stale = yield* Effect.flip(
+          roadmap.dispatch(tick("steward-stale", true, untickedAt), steward),
+        );
+        assert.equal(stale.code, "stale_evidence");
+        yield* roadmap.dispatch(tick("steward-new", true, "1970-01-01T00:00:01.000Z"), steward);
+        const item = Option.getOrThrow(yield* roadmap.get(itemId));
+        assert.deepEqual(item.criteria[0]!.tickedBy, steward);
+      }),
+    );
+  });
+
   it.layer(testLayer(HOME))("when the setting names this environment", (it) => {
     it.effect("accepts commands", () =>
       Effect.gen(function* () {
