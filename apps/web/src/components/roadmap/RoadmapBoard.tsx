@@ -14,6 +14,7 @@ import type {
   IsoDate,
   RoadmapItemId,
   RoadmapItemState,
+  RoadmapSprint,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import {
@@ -22,23 +23,32 @@ import {
   boardColumns,
   roadmapItemsById,
 } from "@lathe/client-runtime/roadmap/tree";
-import { effectivePriority } from "@lathe/shared/roadmap";
+import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
 import { memo, useMemo, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
+import { useRoadmapAreaSettings } from "~/state/roadmap";
 import {
   RoadmapBlockedBadge,
+  RoadmapForecastBadge,
   RoadmapNeedsReviewBadge,
   RoadmapPriorityChip,
   RoadmapTypeTag,
 } from "./RoadmapChips";
 import { ROADMAP_STATE_LABELS, criteriaProgress } from "./roadmap.logic";
-import { boardDueLabel, type BoardDueLabel } from "./roadmapPage.logic";
+import {
+  boardDueLabel,
+  forecastLabel,
+  roadmapForecasts,
+  type BoardDueLabel,
+  type RoadmapForecastLabel,
+} from "./roadmapPage.logic";
 import { newRoadmapCommandId, useRoadmapDispatch } from "./useRoadmapDispatch";
 
 export interface RoadmapBoardProps {
   readonly home: EnvironmentId;
   readonly items: ReadonlyArray<RoadmapWorkItem>;
+  readonly sprints: ReadonlyArray<RoadmapSprint>;
   /** Only descendants of this item; null shows every item. */
   readonly underId: RoadmapItemId | null;
   readonly canEdit: boolean;
@@ -50,10 +60,28 @@ const isBoardState = (value: unknown): value is RoadmapItemState =>
   typeof value === "string" && (ROADMAP_BOARD_STATES as ReadonlyArray<string>).includes(value);
 
 /** Work items in columns by state; dragging a card to another column changes its state. */
-export function RoadmapBoard({ home, items, underId, canEdit, today, onOpen }: RoadmapBoardProps) {
+export function RoadmapBoard({
+  home,
+  items,
+  sprints,
+  underId,
+  canEdit,
+  today,
+  onOpen,
+}: RoadmapBoardProps) {
   const dispatch = useRoadmapDispatch(home);
+  const areaSettings = useRoadmapAreaSettings(home);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const columns = useMemo(() => boardColumns(items, { underId }), [items, underId]);
+  // Only slipping work gets a badge: a column of "On track" would bury the ones that matter.
+  const warnings = useMemo(() => {
+    const labels = new Map<RoadmapItemId, RoadmapForecastLabel>();
+    for (const [itemId, value] of roadmapForecasts({ items, sprints, areaSettings, today })) {
+      const label = forecastLabel(value, today);
+      if (label !== null && label.status !== "on-track") labels.set(itemId, label);
+    }
+    return labels;
+  }, [areaSettings, items, sprints, today]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
@@ -88,7 +116,12 @@ export function RoadmapBoard({ home, items, underId, canEdit, today, onOpen }: R
                   priorityInherited={priority.inherited}
                   parentTitle={parent?.title ?? null}
                   blocked={blockedState(item, byId).blocked}
-                  due={boardDueLabel(item, today)}
+                  due={boardDueLabel(
+                    item,
+                    today,
+                    areaSettings[effectiveArea(item.id, byId).area].workingWeekdays,
+                  )}
+                  forecast={warnings.get(item.id) ?? null}
                   ticked={progress.ticked}
                   total={progress.total}
                   canEdit={canEdit}
@@ -149,6 +182,7 @@ const BoardCard = memo(function BoardCard({
   parentTitle,
   blocked,
   due,
+  forecast,
   ticked,
   total,
   canEdit,
@@ -160,6 +194,7 @@ const BoardCard = memo(function BoardCard({
   readonly parentTitle: string | null;
   readonly blocked: boolean;
   readonly due: BoardDueLabel;
+  readonly forecast: RoadmapForecastLabel | null;
   readonly ticked: number;
   readonly total: number;
   readonly canEdit: boolean;
@@ -188,6 +223,7 @@ const BoardCard = memo(function BoardCard({
         <RoadmapTypeTag type={item.type} />
         <RoadmapPriorityChip priority={priority} inherited={priorityInherited} />
         <span className="ms-auto flex items-center gap-1">
+          {forecast !== null ? <RoadmapForecastBadge forecast={forecast} /> : null}
           {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
           {blocked ? <RoadmapBlockedBadge /> : null}
         </span>

@@ -36,6 +36,7 @@ import {
   RoadmapPriorityChip,
   RoadmapStateChip,
   RoadmapTypeTag,
+  ROADMAP_FORECAST_TONE,
 } from "./RoadmapChips";
 import { RoadmapDuePicker, RoadmapEstimatePicker } from "./RoadmapFieldPickers";
 import {
@@ -46,10 +47,14 @@ import {
   ROADMAP_TYPE_LABELS,
   criteriaProgress,
 } from "./roadmap.logic";
-import { canHaveChildren, type OutlineDropZone } from "./roadmapPage.logic";
+import {
+  canHaveChildren,
+  type OutlineDropZone,
+  type RoadmapForecastShownStatus,
+} from "./roadmapPage.logic";
 
 export const OUTLINE_GRID_CLASS =
-  "grid grid-cols-[minmax(0,1fr)_3.5rem_6.5rem_4.5rem_3.5rem_4.5rem_1.75rem] items-center gap-2";
+  "grid grid-cols-[minmax(0,1fr)_3.5rem_6.5rem_4.5rem_7rem_3.5rem_4.5rem_1.75rem] items-center gap-2";
 
 /** Stable across renders, so a memoized row only re-renders when its own data changes. */
 export interface RoadmapRowActions {
@@ -76,6 +81,9 @@ export interface RoadmapItemRowProps {
   readonly dropZone: OutlineDropZone | null;
   readonly canEdit: boolean;
   readonly today: IsoDate;
+  /** Text and status rather than the label object, so an unchanged forecast keeps the row memoized. */
+  readonly forecastText: string | null;
+  readonly forecastStatus: RoadmapForecastShownStatus | null;
   readonly actions: RoadmapRowActions;
 }
 
@@ -95,6 +103,8 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
   dropZone,
   canEdit,
   today,
+  forecastText,
+  forecastStatus,
   actions,
 }: RoadmapItemRowProps) {
   const {
@@ -287,6 +297,16 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
           onChange={(dueDate) => actions.update(item.id, { dueDate })}
         />
       </div>
+      <span
+        className={cn(
+          "min-w-0 truncate text-xs",
+          forecastStatus === null
+            ? "text-muted-foreground/60"
+            : ROADMAP_FORECAST_TONE[forecastStatus],
+        )}
+      >
+        {forecastText}
+      </span>
       <div className="min-w-0">
         <RoadmapEstimatePicker
           label={`Estimate of ${item.title}`}
