@@ -5,7 +5,7 @@
 import type { ScopedThreadRef } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
 import { useRouter } from "@tanstack/react-router";
-import { LinkIcon, MapIcon, PlusIcon, UnlinkIcon } from "lucide-react";
+import { LinkIcon, MapIcon, PlusIcon, SunIcon, UnlinkIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { useRoadmapLive } from "../../state/roadmap";
@@ -103,13 +103,23 @@ export function useRoadmapPaletteActionItems(input: {
   const result: CommandPaletteActionItem[] = [
     {
       kind: "action",
-      value: "action:roadmap",
-      searchTerms: ["roadmap", "work items", "objectives", "plan", "outline", "board"],
-      title: "Open roadmap",
-      icon: <MapIcon className={ITEM_ICON_CLASS} />,
+      value: "action:roadmap-today",
+      searchTerms: ["today", "roadmap", "what matters", "due", "waiting", "picks", "focus"],
+      title: "Open Today",
+      icon: <SunIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "roadmap.open",
       run: async () => {
-        await router.navigate({ href: roadmapHref() });
+        await router.navigate({ href: roadmapHref({ view: "today" }) });
+      },
+    },
+    {
+      kind: "action",
+      value: "action:roadmap",
+      searchTerms: ["roadmap", "work items", "objectives", "plan", "outline", "tree"],
+      title: "Open roadmap",
+      icon: <MapIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await router.navigate({ href: roadmapHref({ view: "outline" }) });
       },
     },
   ];

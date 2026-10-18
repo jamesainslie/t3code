@@ -37,13 +37,25 @@ const item = (
   createdAt: "2026-10-18T00:00:00.000Z",
   updatedAt: "2026-10-18T00:00:00.000Z",
   createdBy: { _tag: "user" },
+  stateChangedAt: "2026-10-18T00:00:00.000Z",
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...overrides,
 });
 
 describe("roadmapHref", () => {
   it("opens the page, an item, or the editor under a parent", () => {
     expect(roadmapHref()).toBe("/roadmap");
-    expect(roadmapHref({ item: RoadmapItemId.make("a b") })).toBe("/roadmap?item=a+b");
+    expect(roadmapHref({ view: "today" })).toBe("/roadmap");
+    expect(roadmapHref({ view: "timeline" })).toBe("/roadmap?view=timeline");
+    // Today does not show a selected item, so an item opens in the Outline.
+    expect(roadmapHref({ item: RoadmapItemId.make("a b") })).toBe("/roadmap?view=outline&item=a+b");
+    expect(roadmapHref({ view: "timeline", item: RoadmapItemId.make("a") })).toBe(
+      "/roadmap?view=timeline&item=a",
+    );
     expect(roadmapHref({ new: true })).toBe("/roadmap?new=1");
     expect(roadmapHref({ new: true, parent: RoadmapItemId.make("p1") })).toBe(
       "/roadmap?new=1&parent=p1",

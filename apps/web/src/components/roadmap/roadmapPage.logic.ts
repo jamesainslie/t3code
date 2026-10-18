@@ -16,7 +16,13 @@ import { canParent, wouldCreateParentCycle } from "@lathe/shared/roadmap";
 
 import { ROADMAP_AREAS, ROADMAP_STATES, ROADMAP_TYPES, workingDaysLeft } from "./roadmap.logic";
 
-export type RoadmapView = "outline" | "board";
+export const ROADMAP_VIEWS = ["today", "outline", "timeline", "board"] as const;
+export type RoadmapView = (typeof ROADMAP_VIEWS)[number];
+/** The view Roadmap opens on; its URL carries no `view`. */
+export const DEFAULT_ROADMAP_VIEW: RoadmapView = "today";
+
+export const roadmapViewOf = (search: RoadmapSearch): RoadmapView =>
+  search.view ?? DEFAULT_ROADMAP_VIEW;
 /** "open" is every state but done. */
 export type RoadmapStateFilter = RoadmapItemState | "open";
 
@@ -49,7 +55,7 @@ export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSear
   const isNew = raw.new === 1 || raw.new === "1" || raw.new === true || raw.new === "true";
   const parent = isNew ? readItemId(raw.parent) : null;
   return {
-    ...(raw.view === "outline" || raw.view === "board" ? { view: raw.view } : {}),
+    ...(includes(ROADMAP_VIEWS, raw.view) ? { view: raw.view } : {}),
     ...(item === null ? {} : { item }),
     ...(includes(ROADMAP_AREAS, raw.area) ? { area: raw.area } : {}),
     ...(includes(ROADMAP_TYPES, raw.type) ? { type: raw.type } : {}),

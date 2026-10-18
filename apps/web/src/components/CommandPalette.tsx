@@ -505,12 +505,12 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         void navigate({ to: "/usage" });
         return;
       }
-      // Fork: roadmap. Without a roadmap on the home the chord stays free.
+      // Fork: roadmap. Opens Today; without a roadmap on the home the chord stays free.
       if (command === "roadmap.open" && roadmapSupported) {
         event.preventDefault();
         event.stopPropagation();
         setOpen(false);
-        void navigate({ href: roadmapHref() });
+        void navigate({ href: roadmapHref({ view: "today" }) });
         return;
       }
       const mode = overlayModeForCommand(command);

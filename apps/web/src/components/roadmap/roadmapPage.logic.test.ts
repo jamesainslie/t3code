@@ -19,6 +19,7 @@ import {
   outlineDropZone,
   resolveOutlineDrop,
   roadmapEditorRequest,
+  roadmapViewOf,
   typeOptionsFor,
   validateRoadmapSearch,
   withoutEditorRequest,
@@ -50,7 +51,20 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   createdAt: at,
   updatedAt: at,
   createdBy: { _tag: "user" },
+  stateChangedAt: "2026-10-18T00:00:00.000Z",
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...overrides,
+});
+
+describe("roadmapViewOf", () => {
+  it("opens on Today unless the URL names another view", () => {
+    expect(roadmapViewOf({})).toBe("today");
+    expect(roadmapViewOf({ view: "timeline" })).toBe("timeline");
+  });
 });
 
 describe("validateRoadmapSearch", () => {
@@ -74,8 +88,14 @@ describe("validateRoadmapSearch", () => {
       under: id("epic-1"),
     });
     expect(
-      validateRoadmapSearch({ view: "timeline", area: "home", type: "task", itemState: "blocked" }),
+      validateRoadmapSearch({ view: "gantt", area: "home", type: "task", itemState: "blocked" }),
     ).toEqual({});
+  });
+
+  it("keeps each of the four views", () => {
+    for (const view of ["today", "outline", "timeline", "board"] as const) {
+      expect(validateRoadmapSearch({ view })).toEqual({ view });
+    }
   });
 
   it("reads new=1 in every form the URL parser can produce", () => {
