@@ -318,7 +318,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         `;
         // A replay starts each item from its creation, so created events take the creation time.
         assert.deepStrictEqual(
-          events.map((row) => {
+          events.map((row): readonly [string, unknown] => {
             const payload = JSON.parse(row.payload) as { readonly item?: unknown };
             return [
               row.id,

@@ -2,7 +2,7 @@ import {
   CommandId,
   OrchestratorMcpFailure,
   type RoadmapActor,
-  type RoadmapCommand,
+  type RoadmapItemCommand,
   type RoadmapError,
   RoadmapItemId,
   type RoadmapThreadRef,
@@ -136,12 +136,14 @@ const make = Effect.gen(function* () {
     scope: McpInvocationContext.McpThreadInvocationScope,
     tool: string,
     clientRequestId: string | undefined,
-    build: (commandId: CommandId) => RoadmapCommand,
+    build: (commandId: CommandId) => RoadmapItemCommand,
   ) =>
     Effect.gen(function* () {
       const actor = yield* agentActor(scope);
       const command = build(yield* commandId(scope, tool, clientRequestId));
-      return yield* fromService(roadmap.dispatch(command, actor));
+      const result = yield* fromService(roadmap.dispatch(command, actor));
+      // A replayed create returns the item the first attempt made, not this attempt's new id.
+      return { sequence: result.sequence, itemId: result.itemId ?? command.itemId };
     });
 
   const refuseDoneWithOpenCriteria = (texts: ReadonlyArray<string>) =>

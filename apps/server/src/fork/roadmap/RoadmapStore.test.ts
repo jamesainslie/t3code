@@ -6,6 +6,8 @@ import {
   type RoadmapEvent,
   RoadmapError,
   RoadmapItemId,
+  type RoadmapSprint,
+  RoadmapSprintId,
   type RoadmapWorkItem,
   ThreadId,
 } from "@lathe/contracts";
@@ -46,6 +48,12 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   createdAt: at,
   updatedAt: at,
   createdBy: user,
+  stateChangedAt: at,
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...overrides,
 });
 
@@ -187,6 +195,95 @@ it.layer(layer)("RoadmapStore", (it) => {
       yield* store.rebuild();
       assert.deepEqual(yield* store.list(), before);
       assert.lengthOf(yield* store.forThread(thread), 1);
+    }),
+  );
+
+  const sprintMeta = (sprintId: string, occurredAt = at) => ({
+    eventId: EventId.make(`event-${(eventCounter += 1)}`),
+    sprintId: RoadmapSprintId.make(sprintId),
+    actor: user,
+    occurredAt,
+  });
+  const sprint = (sprintId: string, startDate = "2026-10-19"): RoadmapSprint => ({
+    id: RoadmapSprintId.make(sprintId),
+    name: `Sprint ${sprintId}`,
+    area: "work",
+    startDate,
+    endDate: "2026-10-30",
+  });
+
+  it.effect("projects sprints, and a delete takes the sprint off its items", () =>
+    Effect.gen(function* () {
+      const store = yield* RoadmapStore.RoadmapStore;
+      const first = yield* commit({
+        ...sprintMeta("s-late"),
+        type: "roadmap.sprint.created",
+        payload: { sprint: sprint("s-late", "2026-11-02") },
+      });
+      assert.deepEqual(first, {
+        items: [],
+        sprints: [{ sprint: sprint("s-late", "2026-11-02"), removed: false }],
+      });
+      yield* commit({
+        ...sprintMeta("s-early"),
+        type: "roadmap.sprint.created",
+        payload: { sprint: sprint("s-early") },
+      });
+      yield* commit({
+        ...sprintMeta("s-early", later),
+        type: "roadmap.sprint.updated",
+        payload: { name: "Renamed" },
+      });
+      assert.deepEqual(
+        (yield* store.listSprints()).map((value) => [value.id, value.name]),
+        [
+          ["s-early", "Renamed"],
+          ["s-late", "Sprint s-late"],
+        ],
+      );
+
+      yield* commit(created(item("in-sprint", { sprintId: RoadmapSprintId.make("s-late") })));
+      const deleted = yield* commit({
+        ...sprintMeta("s-late", later),
+        type: "roadmap.sprint.deleted",
+        payload: { clearedItemIds: [RoadmapItemId.make("in-sprint")] },
+      });
+      assert.deepEqual(
+        deleted.sprints.map((change) => [change.sprint.id, change.removed]),
+        [["s-late", true]],
+      );
+      assert.deepEqual(
+        deleted.items.map((record) => [record.item.id, record.item.sprintId]),
+        [["in-sprint", null]],
+      );
+      const record = Option.getOrThrow(yield* store.get(RoadmapItemId.make("in-sprint")));
+      assert.isNull(record.item.sprintId);
+      assert.deepEqual(
+        (yield* store.listSprints()).map((value) => value.id),
+        ["s-early"],
+      );
+    }),
+  );
+
+  it.effect("keeps sprint events out of an item's history and rebuilds sprints", () =>
+    Effect.gen(function* () {
+      const store = yield* RoadmapStore.RoadmapStore;
+      const sql = yield* SqlClient.SqlClient;
+      yield* commit({
+        ...sprintMeta("s-rebuild"),
+        type: "roadmap.sprint.created",
+        payload: { sprint: sprint("s-rebuild") },
+      });
+      yield* commit(created(item("hist", { sprintId: RoadmapSprintId.make("s-rebuild") })));
+      const history = yield* store.history(RoadmapItemId.make("hist"));
+      assert.deepEqual(
+        history.map((entry) => entry.event.type),
+        ["roadmap.item.created"],
+      );
+      const before = yield* store.listSprints();
+      yield* sql`DELETE FROM projection_roadmap_sprints`;
+      yield* store.rebuild();
+      assert.deepEqual(yield* store.listSprints(), before);
     }),
   );
 });

@@ -501,6 +501,9 @@ export const RoadmapRejectionCode = Schema.Literals([
 ]);
 export type RoadmapRejectionCode = typeof RoadmapRejectionCode.Type;
 
+/** Today's picks; the planner refuses a fourth pin rather than bumping one. */
+export const ROADMAP_PIN_LIMIT = 3;
+
 export const RoadmapErrorCode = Schema.Literals([
   ...RoadmapRejectionCode.literals,
   /** Storage or other server failure; the command may be retried. */

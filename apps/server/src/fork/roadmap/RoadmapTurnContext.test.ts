@@ -45,6 +45,12 @@ const workItem = (id: string, fields: Partial<RoadmapWorkItem> = {}): RoadmapWor
   createdAt: "2026-10-18T00:00:00.000Z",
   updatedAt: "2026-10-18T00:00:00.000Z",
   createdBy: user,
+  stateChangedAt: "2026-10-18T00:00:00.000Z",
+  completedAt: null,
+  pinnedAt: null,
+  snoozedUntil: null,
+  sprintId: null,
+  hours: [],
   ...fields,
 });
 
