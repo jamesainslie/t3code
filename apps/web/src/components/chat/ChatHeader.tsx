@@ -35,6 +35,8 @@ import {
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { ProxyUsagePill } from "./ProxyUsagePill";
+// Fork: roadmap.
+import { RoadmapCardControl } from "../roadmap/RoadmapCard";
 import { ThreadContinuationBreadcrumbs } from "./ThreadContinuationBreadcrumbs";
 import { useClientSettings } from "../../hooks/useSettings";
 
@@ -417,6 +419,17 @@ export const ChatHeader = memo(function ChatHeader({
         ) : null}
       </WorkspaceBreadcrumb>
       <ProxyUsagePill environmentId={activeThreadEnvironmentId} />
+      {/* Fork: roadmap. */}
+      {isServerThread && activeProject !== null ? (
+        <RoadmapCardControl
+          thread={{
+            environmentId: activeThreadEnvironmentId,
+            id: activeThreadId,
+            projectId: activeProject.id,
+            title: activeThreadTitle,
+          }}
+        />
+      ) : null}
     </div>
   );
 });

@@ -443,6 +443,24 @@ export function summarizeLatheToolCalls(
     case "comment-resolve":
       label = phrase("Resolved", "resolve", quantity(selected.length, "document comment"));
       break;
+    // Fork: roadmap.
+    case "roadmap-read":
+      label = phrase("Read", "read", `the roadmap ${times}`);
+      break;
+    case "roadmap-create":
+      label = phrase(
+        "Created",
+        "create",
+        quantity(countEntities(entityIds("itemId")), "work item"),
+      );
+      break;
+    case "roadmap-update":
+      label = phrase(
+        "Updated",
+        "update",
+        quantity(countEntities(entityIds("itemId")), "work item"),
+      );
+      break;
   }
   return { label, failedCount };
 }

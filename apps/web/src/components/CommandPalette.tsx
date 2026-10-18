@@ -259,6 +259,15 @@ import {
 import type { Project } from "../types";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { readPullRequestListPreferences } from "~/components/pullRequest/pullRequestListPreferences";
+// Fork: roadmap.
+import { MapIcon as RoadmapMapIcon } from "lucide-react";
+import {
+  ROADMAP_ATTACH_VIEW,
+  useRoadmapAttachPickerGroups,
+  useRoadmapPaletteActionItems,
+} from "./roadmap/RoadmapPaletteItems";
+import { roadmapHref } from "./roadmap/roadmapThread.logic";
+import { useRoadmapAvailability } from "./roadmap/useRoadmapThreadActions";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -405,6 +414,12 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     (blockedThreadRef: ScopedThreadRef) => dispatch({ _tag: "OpenDependsOn", blockedThreadRef }),
     [],
   );
+  // Fork: roadmap.
+  const openRoadmapAttach = useCallback(
+    (threadRef: ScopedThreadRef) => dispatch({ _tag: "OpenRoadmapAttach", threadRef }),
+    [],
+  );
+  const roadmapSupported = useRoadmapAvailability().supported;
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { theme, themeHalves, resolvedTheme, appearanceMode, setAppearanceMode } = useTheme();
@@ -490,6 +505,14 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         void navigate({ to: "/usage" });
         return;
       }
+      // Fork: roadmap. Without a roadmap on the home the chord stays free.
+      if (command === "roadmap.open" && roadmapSupported) {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        void navigate({ href: roadmapHref() });
+        return;
+      }
       const mode = overlayModeForCommand(command);
       if (mode === null) {
         return;
@@ -506,6 +529,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     navigate,
     previewOpen,
     resolvedTheme,
+    roadmapSupported,
     setAppearanceMode,
     setOpen,
     terminalOpen,
@@ -523,6 +547,9 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           openAddProject();
         } else if (detail.open === "depends-on" && detail.blockedThreadRef) {
           openDependsOn(detail.blockedThreadRef);
+        } else if (detail.open === "roadmap-attach" && detail.roadmapThreadRef) {
+          // Fork: roadmap.
+          openRoadmapAttach(detail.roadmapThreadRef);
         } else if (detail.query !== undefined) {
           dispatch({
             _tag: "OpenSearch",
@@ -533,7 +560,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           setOpen(true);
         }
       }),
-    [openAddProject, openDependsOn, openNewThreadIn, setOpen],
+    [openAddProject, openDependsOn, openNewThreadIn, openRoadmapAttach, setOpen],
   );
 
   return (
@@ -1905,6 +1932,35 @@ function OpenCommandPaletteDialog(props: {
     });
   }, [browseNavigation, clearOpenIntent, openIntent, pushPaletteView]);
 
+  // Fork: roadmap. The work item picker, held like the "Depends on" thread.
+  const [roadmapAttachThreadRef, setRoadmapAttachThreadRef] = useState<ScopedThreadRef | null>(
+    openIntent?.kind === "roadmap-attach" ? openIntent.threadRef : null,
+  );
+  const roadmapAttachGroups = useRoadmapAttachPickerGroups(roadmapAttachThreadRef);
+  const showRoadmapAttachPicker = useCallback(
+    (threadRef: ScopedThreadRef) => {
+      setQuery("");
+      setRoadmapAttachThreadRef(threadRef);
+      pushPaletteView({
+        addonIcon: <RoadmapMapIcon className={ADDON_ICON_CLASS} />,
+        groups: [{ value: ROADMAP_ATTACH_VIEW, label: "Attach to work item", items: [] }],
+      });
+    },
+    [pushPaletteView],
+  );
+  useLayoutEffect(() => {
+    if (openIntent?.kind !== "roadmap-attach") return;
+    clearOpenIntent();
+    browseNavigation.invalidate();
+    setAddProjectCloneFlow(null);
+    setViewStack([]);
+    showRoadmapAttachPicker(openIntent.threadRef);
+  }, [browseNavigation, clearOpenIntent, openIntent, showRoadmapAttachPicker]);
+  const roadmapActionItems = useRoadmapPaletteActionItems({
+    activeThread,
+    onAttach: showRoadmapAttachPicker,
+  });
+
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
 
   if (projects.length > 0) {
@@ -2425,6 +2481,9 @@ function OpenCommandPaletteDialog(props: {
     },
   });
 
+  // Fork: roadmap.
+  actionItems.push(...roadmapActionItems);
+
   actionItems.push({
     kind: "action",
     value: "action:settings",
@@ -2510,7 +2569,10 @@ function OpenCommandPaletteDialog(props: {
           ? changeAppearanceItem.groups
           : currentView?.groups[0]?.value === "depends-on"
             ? dependsOnGroups
-            : (currentView?.groups ?? rootGroups);
+            : // Fork: roadmap.
+              currentView?.groups[0]?.value === ROADMAP_ATTACH_VIEW
+              ? roadmapAttachGroups
+              : (currentView?.groups ?? rootGroups);
 
   const filteredGroups = filterCommandPaletteGroups({
     activeGroups,

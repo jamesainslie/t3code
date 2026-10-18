@@ -59,6 +59,10 @@ import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
 import * as SourceControlBuiltInDrivers from "./sourceControl/builtInDrivers.ts";
 import * as DocumentComments from "./fork/DocumentComments.ts";
+// Fork: roadmap.
+import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
+import * as RoadmapTurnContext from "./fork/roadmap/RoadmapTurnContext.ts";
+import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceRegistryHydration.ts";
@@ -489,7 +493,13 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
   }),
 );
 
+// Fork: roadmap. One layer value for the turn context and the fork services,
+// so both get the same RoadmapService instance.
+const layerRoadmapService = RoadmapService.layer.pipe(Layer.provide(IdAllocator.layer));
+
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
+  // Fork: roadmap. Turn start reads the attached work item for each turn.
+  Layer.provide(RoadmapTurnContext.layer.pipe(Layer.provide(layerRoadmapService))),
   Layer.provide(layerScheduledTaskWebhookOrigin),
   Layer.provide(ProviderEventIngestor.layerAnalytics),
   Layer.provide(layerCheckpointStore),
@@ -511,6 +521,8 @@ const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
 const layerForkServices = Layer.mergeAll(
   RuntimeLayer.layerEventSink,
   DocumentComments.layer,
+  // Fork: roadmap.
+  layerRoadmapService,
   ProjectSyncService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(

@@ -32,6 +32,7 @@ import {
 
 import * as ProjectService from "../project/ProjectService.ts";
 import * as DocumentComments from "../fork/DocumentComments.ts";
+import * as RoadmapService from "../fork/roadmap/RoadmapService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ThreadSearch from "../orchestration-v2/ThreadSearch.ts";
 import * as PullRequestReviewGuideService from "../pullRequest/PullRequestReviewGuideService.ts";
@@ -589,6 +590,53 @@ it.effect(
         ),
       ),
     ),
+);
+
+it.effect("registers the roadmap toolkit and surfaces a missing capability as a tool error", () =>
+  Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const names = server.tools.map(({ tool }) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "lathe_roadmap_list",
+        "lathe_roadmap_read",
+        "lathe_roadmap_create",
+        "lathe_roadmap_update",
+        "lathe_roadmap_criterion_tick",
+        "lathe_roadmap_attach",
+        "lathe_roadmap_detach",
+        "lathe_roadmap_link_blocker",
+      ]),
+    );
+    const readTool = server.tools.find(({ tool }) => tool.name === "lathe_roadmap_read");
+    expect(readTool?.tool.annotations?.readOnlyHint).toBe(true);
+    const updateTool = server.tools.find(({ tool }) => tool.name === "lathe_roadmap_update");
+    expect(updateTool?.tool.annotations?.readOnlyHint).toBe(false);
+
+    const denied = yield* server
+      .callTool({ name: "lathe_roadmap_list", arguments: {} })
+      .pipe(
+        Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+        Effect.provideService(McpSchema.McpServerClient, client),
+      );
+    expect(denied.isError).toBe(true);
+    expect(denied.content).toEqual([
+      { type: "text", text: "MCP credential does not grant the roadmap capability." },
+    ]);
+  }).pipe(
+    Effect.provide(
+      McpHttpServer.layerRoadmapToolkit.pipe(
+        Layer.provideMerge(McpServer.McpServer.layer),
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(RoadmapService.RoadmapService)({}),
+            McpToolAccessTestkit.liveThreadsLayer,
+            NodeServices.layer,
+          ),
+        ),
+      ),
+    ),
+  ),
 );
 
 it.effect("thread history tools return plain text without structured content", () =>

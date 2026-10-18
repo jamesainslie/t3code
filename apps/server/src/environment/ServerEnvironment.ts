@@ -260,6 +260,8 @@ export const make = Effect.gen(function* () {
       pullRequestStackActions: true,
       threadPullRequestLinking: true,
       threadDocumentComments: true,
+      // Fork: roadmap.
+      roadmap: true,
       serverResolvedCommandContext: true,
       environmentIcon: true,
       projectCloneTracking: true,

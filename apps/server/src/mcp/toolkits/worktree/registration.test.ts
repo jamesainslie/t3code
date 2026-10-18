@@ -16,6 +16,7 @@ import * as GitWorkflowService from "../../../git/GitWorkflowService.ts";
 import * as ProviderAdapterRegistry from "../../../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as DocumentComments from "../../../fork/DocumentComments.ts";
+import * as RoadmapService from "../../../fork/roadmap/RoadmapService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
 import * as ProjectSetupScriptRunner from "../../../project/ProjectSetupScriptRunner.ts";
@@ -47,6 +48,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(SecretRequests.SecretRequests)({}),
   Layer.mock(ProjectService.ProjectService)({}),
   Layer.mock(DocumentComments.DocumentComments)({}),
+  Layer.mock(RoadmapService.RoadmapService)({}),
   Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
   ServerSettings.layerTest({}),
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),

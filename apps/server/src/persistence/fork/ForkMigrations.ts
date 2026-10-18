@@ -26,6 +26,7 @@ import ProjectionThreadDocumentComments from "./migrations/003_ProjectionThreadD
 import ProjectionThreadsSnoozeReminder from "./migrations/004_ProjectionThreadsSnoozeReminder.ts";
 import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsContinuedFrom.ts";
 import ProjectSyncRecords from "./migrations/006_ProjectSyncRecords.ts";
+import Roadmap from "./migrations/007_Roadmap.ts";
 
 const FORK_MIGRATIONS_TABLE = "fork_sql_migrations";
 
@@ -41,6 +42,7 @@ const forkMigrationEntries = [
   [4, "ProjectionThreadsSnoozeReminder", ProjectionThreadsSnoozeReminder],
   [5, "ProjectionThreadsContinuedFrom", ProjectionThreadsContinuedFrom],
   [6, "ProjectSyncRecords", ProjectSyncRecords],
+  [7, "Roadmap", Roadmap],
 ] as const;
 
 export const forkMigrationManifest = forkMigrationEntries.map(([id, name]) => [id, name] as const);

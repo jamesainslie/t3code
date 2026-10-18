@@ -101,6 +101,8 @@ import {
   type TerminalMetadataStreamEvent,
   type PullRequestRef,
   WS_METHODS,
+  WsCoreRpcGroup,
+  WsForkRpcGroup,
   WsRpcGroup,
 } from "@lathe/contracts";
 import { resolveServerBackgroundActivitySettings } from "@lathe/shared/backgroundActivitySettings";
@@ -255,6 +257,8 @@ import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as DocumentComments from "./fork/DocumentComments.ts";
+// Fork: roadmap.
+import * as RoadmapService from "./fork/roadmap/RoadmapService.ts";
 import { gatewayRoutedInstanceIds, sameInstanceIds } from "./usage/gatewayRoutedInstances.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
@@ -1158,6 +1162,21 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
+// Fork: one handler layer for every RPC sits at TypeScript's instantiation
+// limit, so fork RPCs build their handlers from their own group.
+const CoreServerWsRpcGroup = WsCoreRpcGroup.middleware(RpcInstrumentation);
+
+const layerForkWsRpc = WsForkRpcGroup.middleware(RpcInstrumentation).toLayer(
+  Effect.gen(function* () {
+    const roadmap = yield* RoadmapService.RoadmapService;
+    return {
+      [WS_METHODS.roadmapSubscribe]: (_input) => roadmap.stream(),
+      // Agents reach the same service through MCP tools, acting as themselves.
+      [WS_METHODS.roadmapDispatch]: (input) => roadmap.dispatch(input.command, { _tag: "user" }),
+    };
+  }),
+);
+
 const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientOrigin: OrchestrationClientOrigin,
@@ -1165,7 +1184,7 @@ const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  ServerWsRpcGroup.toLayer(
+  CoreServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1793,7 +1812,7 @@ const layerWsRpc = (
         return result;
       });
 
-      const handlers = ServerWsRpcGroup.of({
+      const handlers = CoreServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3133,7 +3152,7 @@ const layerWsRpc = (
       });
       return handlers;
     }),
-  );
+  ).pipe(Layer.merge(layerForkWsRpc));
 
 // RpcServer's default sends a socket-level Defect frame instead, and the client
 // ends every pending request on the socket with it.

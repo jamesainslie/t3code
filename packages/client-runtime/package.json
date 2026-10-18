@@ -287,6 +287,14 @@
       "types": "./src/state/documentComments.ts",
       "default": "./src/state/documentComments.ts"
     },
+    "./state/roadmap": {
+      "types": "./src/state/roadmap.ts",
+      "default": "./src/state/roadmap.ts"
+    },
+    "./roadmap/tree": {
+      "types": "./src/roadmap/roadmapTree.ts",
+      "default": "./src/roadmap/roadmapTree.ts"
+    },
     "./state/threads": {
       "types": "./src/state/threads.ts",
       "default": "./src/state/threads.ts"

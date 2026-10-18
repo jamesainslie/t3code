@@ -5,6 +5,7 @@
 - [Install Lathe](./user/install.md)
 - [Messages and context](./user/composer.md)
 - [Working with threads](./user/thread-sidebar.md)
+- [Roadmap](./user/roadmap.md)
 - [Permission modes](./user/permission-modes.md)
 - [Terminal history](./user/terminal.md)
 - [Source control](./user/source-control.md)
@@ -37,6 +38,7 @@ source alone does not explain. Most code changes do not need an internal documen
 
 - [Architecture overview](./internals/overview.md)
 - [Glossary](./internals/glossary.md)
+- [Roadmap](./internals/roadmap.md)
 - [Connection runtime](./internals/connection-runtime.md)
 - [Providers](./internals/providers.md)
 - [Adding a provider](./internals/adding-a-provider.md)

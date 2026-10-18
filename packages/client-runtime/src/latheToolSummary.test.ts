@@ -60,6 +60,24 @@ describe("summarizeLatheToolCalls", () => {
     ).toEqual({ label, failedCount: 0 });
   });
 
+  it("counts roadmap reads by call and roadmap changes by work item", () => {
+    expect(summarizeLatheToolCalls("roadmap-read", [completed({}), completed({})]).label).toBe(
+      "Read the roadmap 2 times",
+    );
+    expect(
+      summarizeLatheToolCalls("roadmap-create", [
+        completed({}, { itemId: "item-1", sequence: 1 }),
+        completed({}, { itemId: "item-2", sequence: 2 }),
+      ]).label,
+    ).toBe("Created 2 work items");
+    expect(
+      summarizeLatheToolCalls("roadmap-update", [
+        completed({ criterionId: "c1" }, { itemId: "item-1", sequence: 3 }),
+        completed({ state: "done" }, { itemId: "item-1", sequence: 4 }),
+      ]).label,
+    ).toBe("Updated 1 work item");
+  });
+
   it("counts answered requests rather than pretending every request contains one question", () => {
     expect(
       summarizeLatheToolCalls("question-respond", [

@@ -369,6 +369,96 @@ describe("buildThreadActionMenuItems", () => {
   });
 });
 
+// Fork: roadmap.
+describe("buildThreadActionMenuItems roadmap entries", () => {
+  const roadmapState = (
+    roadmap: Partial<NonNullable<ThreadActionMenuState["roadmap"]>> = {},
+    overrides: Partial<ThreadActionMenuState> = {},
+  ): ThreadActionMenuState => ({
+    ...baseState,
+    ...overrides,
+    supports: { ...baseState.supports, roadmap: true },
+    roadmap: { attachedTitle: null, createInNewThread: false, canChange: true, ...roadmap },
+  });
+
+  it("leaves the roadmap out when the home has no roadmap", () => {
+    expect(allIds(baseState).filter((id) => id.startsWith("roadmap"))).toEqual([]);
+    expect(
+      allIds({ ...roadmapState(), supports: { ...baseState.supports, roadmap: false } }).filter(
+        (id) => id.startsWith("roadmap"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("offers create and attach for a thread on no work item", () => {
+    const items = buildThreadActionMenuItems(roadmapState());
+    expect(items.map((item) => item.id).filter((id) => id.startsWith("roadmap"))).toEqual([
+      "roadmap-create",
+      "roadmap-attach",
+    ]);
+    expect(items.find((item) => item.id === "roadmap-attach")?.label).toBe("Attach to work item…");
+  });
+
+  it("offers detach from the attached item in place of attach", () => {
+    const items = buildThreadActionMenuItems(roadmapState({ attachedTitle: "Rebrand to Lathe" }));
+    expect(items.map((item) => item.id).filter((id) => id.startsWith("roadmap"))).toEqual([
+      "roadmap-create",
+      "roadmap-detach",
+    ]);
+    expect(items.find((item) => item.id === "roadmap-detach")?.label).toBe(
+      "Detach from Rebrand to Lathe",
+    );
+  });
+
+  it("shortens a long attached title in the detach label", () => {
+    const label = buildThreadActionMenuItems(roadmapState({ attachedTitle: "A".repeat(80) })).find(
+      (item) => item.id === "roadmap-detach",
+    )?.label;
+    expect(label?.length).toBeLessThanOrEqual("Detach from ".length + 40);
+    expect(label?.endsWith("…")).toBe(true);
+  });
+
+  it("lists the eight item types and the new-thread toggle under create", () => {
+    const create = buildThreadActionMenuItems(roadmapState()).find(
+      (item) => item.id === "roadmap-create",
+    );
+    expect(create?.label).toBe("Create work item from thread");
+    expect(create?.children?.map((child) => child.id)).toEqual([
+      "roadmap-create:objective",
+      "roadmap-create:key-result",
+      "roadmap-create:initiative",
+      "roadmap-create:epic",
+      "roadmap-create:feature",
+      "roadmap-create:story",
+      "roadmap-create:bug",
+      "roadmap-create:support-ticket",
+      "roadmap-create:new-thread",
+    ]);
+    expect(create?.children?.at(-1)).toMatchObject({
+      label: "Start a new thread for it",
+      checked: false,
+      separatorBefore: true,
+    });
+    expect(
+      buildThreadActionMenuItems(roadmapState({ createInNewThread: true }))
+        .find((item) => item.id === "roadmap-create")
+        ?.children?.at(-1)?.checked,
+    ).toBe(true);
+  });
+
+  it("follows the home's permission rather than the thread's environment", () => {
+    const roadmapItems = (state: ThreadActionMenuState) =>
+      buildThreadActionMenuItems(state).filter((item) => item.id.startsWith("roadmap"));
+    expect(roadmapItems(roadmapState()).length).toBe(2);
+    expect(
+      roadmapItems(roadmapState({}, { canOperate: false })).every((item) => !item.disabled),
+    ).toBe(true);
+    expect(roadmapItems(roadmapState({ canChange: false })).every((item) => item.disabled)).toBe(
+      true,
+    );
+  });
+});
+
 describe("buildDraftActionMenuItems", () => {
   it("offers only the copy values the draft has", () => {
     const items = buildDraftActionMenuItems({ hasPath: false, hasBranch: true, hasProject: true });

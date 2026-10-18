@@ -21,12 +21,8 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
 import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
-import {
-  PROXY_PILL_ATTRIBUTE,
-  ProxyStatusCard,
-  measureProxyCard,
-  useProxyCardPlacement,
-} from "./ProxyStatusCard";
+import { ProxyStatusCard } from "./ProxyStatusCard";
+import { measureThreadSideCard, useThreadSideCardPlacement } from "./useThreadSideCardPlacement";
 import {
   deriveProxyPill,
   selectProxySource,
@@ -614,7 +610,10 @@ export function ProxyUsagePill({
   const cardRequested = useAtomValue(proxyStatusCardOpenAtom);
   const setCardRequested = useAtomSet(proxyStatusCardOpenAtom);
   const [popoverRequested, setPopoverRequested] = useState(false);
-  const placement = useProxyCardPlacement(cardRequested || popoverRequested || loginFor !== null);
+  const placement = useThreadSideCardPlacement(
+    "iris",
+    cardRequested || popoverRequested || loginFor !== null,
+  );
   const mode = placement?.mode ?? null;
   const cardOpen =
     loginFor !== null || (mode === "inline" ? cardRequested : popoverRequested && mode !== null);
@@ -648,13 +647,13 @@ export function ProxyUsagePill({
               size="xs"
               variant="outline"
               data-toolbar-control=""
-              {...{ [PROXY_PILL_ATTRIBUTE]: "" }}
               aria-expanded={cardOpen}
               aria-label={`${pill.label}: ${pill.current ? `${pill.current.id} ${pill.current.headline}` : pillLabel(pill)}`}
               onClick={() => {
                 setHovered(false);
                 if (cardOpen) closeCard();
-                else if (measureProxyCard()?.mode === "popover") setPopoverRequested(true);
+                else if (measureThreadSideCard("iris")?.mode === "popover")
+                  setPopoverRequested(true);
                 else setCardRequested(true);
               }}
             />

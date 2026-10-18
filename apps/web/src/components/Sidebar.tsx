@@ -282,6 +282,8 @@ import {
 } from "../providerInstances";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useStableCallback } from "../hooks/useStableCallback";
+// Fork: roadmap.
+import { useRoadmapThreadActions } from "./roadmap/useRoadmapThreadActions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Button, InlineButton } from "./ui/button";
 import {
@@ -2370,6 +2372,8 @@ export default function Sidebar() {
     archiveThread,
     deleteThread,
   } = useThreadActions();
+  // Fork: roadmap.
+  const { actions: roadmapActions, availability: roadmapAvailability } = useRoadmapThreadActions();
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -4506,7 +4510,11 @@ export default function Sidebar() {
   );
 
   const handleThreadContextMenu = useStableCallback(
-    (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+    // Fork: roadmap. Named so the roadmap toggle can reopen the menu.
+    function showThreadContextMenu(
+      threadRef: ScopedThreadRef,
+      position: { x: number; y: number },
+    ): void {
       void (async () => {
         const api = readLocalApi();
         if (!api) return;
@@ -4594,13 +4602,24 @@ export default function Sidebar() {
                 highlight: supportsHighlight,
                 titleRegeneration: supportsTitleRegeneration,
                 dependencies: supportsDependencies,
+                // Fork: roadmap.
+                roadmap: roadmapAvailability.supported,
               },
               snoozePresets,
+              // Fork: roadmap.
+              roadmap: roadmapActions.menuState(threadRef),
             }),
             position,
           ),
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
+        // Fork: roadmap.
+        const roadmapOutcome = roadmapActions.handleMenuAction(clicked.value, thread);
+        if (roadmapOutcome === "reopen") {
+          showThreadContextMenu(threadRef, position);
+          return;
+        }
+        if (roadmapOutcome !== null) return;
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
         if (clicked.value.startsWith("highlight:") && clicked.value !== "highlight:default") {
           const entry = threadHighlightPalette[Number(clicked.value.slice("highlight:".length))];

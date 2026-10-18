@@ -8,6 +8,14 @@ import {
   UsageLimitSourceAccountLoginInput,
   UsageLimitSourceAccountLoginResult,
 } from "./forkUsageAccountLogin.ts";
+// Fork: roadmap.
+import {
+  RoadmapDispatchInput,
+  RoadmapDispatchResult,
+  RoadmapError,
+  RoadmapStreamItem,
+  RoadmapSubscribeInput,
+} from "./roadmap.ts";
 import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
@@ -596,6 +604,9 @@ export const WS_METHODS = {
   usageLimitSourceAccountLogin: "usageLimitSource.accountLogin",
   // Fork: live gateway status while a client watches.
   usageLimitSourceWatch: "usageLimitSource.watch",
+  // Fork: roadmap (roadmap.ts).
+  roadmapSubscribe: "roadmap.subscribe",
+  roadmapDispatch: "roadmap.dispatch",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -1920,12 +1931,26 @@ const WsSubscribeThreadDocumentCommentsRpc = Rpc.make(WS_METHODS.subscribeThread
   stream: true,
 });
 
+// Fork: roadmap.
+const WsRoadmapSubscribeRpc = Rpc.make(WS_METHODS.roadmapSubscribe, {
+  payload: RoadmapSubscribeInput,
+  success: RoadmapStreamItem,
+  error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const WsRoadmapDispatchRpc = Rpc.make(WS_METHODS.roadmapDispatch, {
+  payload: RoadmapDispatchInput,
+  success: RoadmapDispatchResult,
+  error: Schema.Union([RoadmapError, EnvironmentAuthorizationError]),
+});
+
 export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthorization>()(
   "lathe/contracts/RpcScopeAuthorization",
   { error: EnvironmentAuthorizationError },
 ) {}
 
-export const WsRpcGroup = RpcGroup.make(
+export const WsCoreRpcGroup = RpcGroup.make(
   WsThreadDocumentCommentsMutateRpc,
   WsSubscribeThreadDocumentCommentsRpc,
   WsServerProbeRpc,
@@ -2129,3 +2154,14 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
 ).middleware(RpcScopeAuthorization);
+
+/**
+ * Fork: RPCs the fork adds after the core group reached TypeScript's
+ * instantiation limit. The server builds handlers per group, so a fork RPC
+ * here costs the core group's handler layer nothing.
+ */
+export const WsForkRpcGroup = RpcGroup.make(WsRoadmapSubscribeRpc, WsRoadmapDispatchRpc).middleware(
+  RpcScopeAuthorization,
+);
+
+export const WsRpcGroup = WsCoreRpcGroup.merge(WsForkRpcGroup);
