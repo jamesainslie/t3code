@@ -26,9 +26,11 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { Skeleton } from "../ui/skeleton";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { RoadmapBoard } from "./RoadmapBoard";
 import { RoadmapItemEditor, type RoadmapItemEditorMode } from "./RoadmapItemEditor";
 import { RoadmapOutline } from "./RoadmapOutline";
 import {
@@ -38,6 +40,7 @@ import {
   ROADMAP_STATES,
   ROADMAP_TYPE_LABELS,
   ROADMAP_TYPES,
+  boardUnderOptions,
   localIsoDate,
   roadmapEditorRequest,
   withoutEditorRequest,
@@ -58,6 +61,21 @@ export function RoadmapPage() {
   const items = useMemo(() => live.data?.items ?? [], [live.data]);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const today = localIsoDate(new Date());
+  const view = search.view ?? "outline";
+  const underOptions = useMemo(() => boardUnderOptions(items), [items]);
+  // An item that was deleted or never existed falls back to the whole board.
+  const underId =
+    search.under !== undefined && underOptions.some((option) => option.id === search.under)
+      ? search.under
+      : null;
+  const underLabels = useMemo(
+    () =>
+      Object.fromEntries([
+        [ALL, "Everything"],
+        ...underOptions.map((option) => [option.id, option.title]),
+      ]),
+    [underOptions],
+  );
   // A stable object keeps the Outline's filtered tree memoized across unrelated renders.
   const outlineFilter = useMemo(
     () => ({ area: search.area, type: search.type, state: search.itemState }),
@@ -118,44 +136,39 @@ export function RoadmapPage() {
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
       <div className="ms-auto flex min-w-0 items-center gap-1">
-        <FilterSelect
-          label="Area"
-          value={search.area ?? ALL}
-          options={{ [ALL]: "All", ...ROADMAP_AREA_LABELS }}
-          order={[ALL, ...ROADMAP_AREAS]}
-          onChange={(value) =>
-            setSearch(({ area: _area, ...rest }) => ({
-              ...rest,
-              ...(value === ALL ? {} : { area: value as NonNullable<RoadmapSearch["area"]> }),
-            }))
-          }
-        />
-        <FilterSelect
-          label="Type"
-          value={search.type ?? ALL}
-          options={{ [ALL]: "All", ...ROADMAP_TYPE_LABELS }}
-          order={[ALL, ...ROADMAP_TYPES]}
-          onChange={(value) =>
-            setSearch(({ type: _type, ...rest }) => ({
-              ...rest,
-              ...(value === ALL ? {} : { type: value as NonNullable<RoadmapSearch["type"]> }),
-            }))
-          }
-        />
-        <FilterSelect
-          label="State"
-          value={search.itemState ?? ALL}
-          options={{ [ALL]: "All", open: "Open", ...ROADMAP_STATE_LABELS }}
-          order={[ALL, "open", ...ROADMAP_STATES]}
-          onChange={(value) =>
-            setSearch(({ itemState: _itemState, ...rest }) => ({
-              ...rest,
-              ...(value === ALL
-                ? {}
-                : { itemState: value as NonNullable<RoadmapSearch["itemState"]> }),
-            }))
-          }
-        />
+        {view === "board" ? (
+          <FilterSelect
+            label="Under"
+            value={underId ?? ALL}
+            options={underLabels}
+            order={[ALL, ...underOptions.map((option) => option.id)]}
+            onChange={(value) =>
+              setSearch(({ under: _under, ...rest }) => ({
+                ...rest,
+                ...(value === ALL ? {} : { under: value as RoadmapItemId }),
+              }))
+            }
+          />
+        ) : (
+          <OutlineFilters search={search} setSearch={setSearch} />
+        )}
+        <ToggleGroup
+          aria-label="Roadmap view"
+          variant="segmented"
+          value={[view]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (value === "outline" || value === "board") {
+              setSearch(({ view: _view, ...rest }) => ({
+                ...rest,
+                ...(value === "outline" ? {} : { view: value }),
+              }));
+            }
+          }}
+        >
+          <Toggle value="outline">Outline</Toggle>
+          <Toggle value="board">Board</Toggle>
+        </ToggleGroup>
         <Button
           size="xs"
           variant="outline"
@@ -211,6 +224,15 @@ export function RoadmapPage() {
                   </Button>
                 </EmptyContent>
               </Empty>
+            ) : view === "board" ? (
+              <RoadmapBoard
+                home={home}
+                items={items}
+                underId={underId}
+                canEdit={canEdit}
+                today={today}
+                onOpen={onEdit}
+              />
             ) : (
               <RoadmapOutline
                 home={home}
@@ -236,6 +258,57 @@ export function RoadmapPage() {
         />
       ) : null}
     </SidebarInset>
+  );
+}
+
+function OutlineFilters({
+  search,
+  setSearch,
+}: {
+  readonly search: RoadmapSearch;
+  readonly setSearch: (next: (current: RoadmapSearch) => RoadmapSearch) => void;
+}) {
+  return (
+    <>
+      <FilterSelect
+        label="Area"
+        value={search.area ?? ALL}
+        options={{ [ALL]: "All", ...ROADMAP_AREA_LABELS }}
+        order={[ALL, ...ROADMAP_AREAS]}
+        onChange={(value) =>
+          setSearch(({ area: _area, ...rest }) => ({
+            ...rest,
+            ...(value === ALL ? {} : { area: value as NonNullable<RoadmapSearch["area"]> }),
+          }))
+        }
+      />
+      <FilterSelect
+        label="Type"
+        value={search.type ?? ALL}
+        options={{ [ALL]: "All", ...ROADMAP_TYPE_LABELS }}
+        order={[ALL, ...ROADMAP_TYPES]}
+        onChange={(value) =>
+          setSearch(({ type: _type, ...rest }) => ({
+            ...rest,
+            ...(value === ALL ? {} : { type: value as NonNullable<RoadmapSearch["type"]> }),
+          }))
+        }
+      />
+      <FilterSelect
+        label="State"
+        value={search.itemState ?? ALL}
+        options={{ [ALL]: "All", open: "Open", ...ROADMAP_STATE_LABELS }}
+        order={[ALL, "open", ...ROADMAP_STATES]}
+        onChange={(value) =>
+          setSearch(({ itemState: _itemState, ...rest }) => ({
+            ...rest,
+            ...(value === ALL
+              ? {}
+              : { itemState: value as NonNullable<RoadmapSearch["itemState"]> }),
+          }))
+        }
+      />
+    </>
   );
 }
 
