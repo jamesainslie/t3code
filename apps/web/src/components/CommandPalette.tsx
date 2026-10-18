@@ -409,7 +409,11 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     [],
   );
   const openAddProject = useCallback(() => dispatch({ _tag: "OpenAddProject" }), []);
-  const openNewThreadIn = useCallback(() => dispatch({ _tag: "OpenNewThreadIn" }), []);
+  const openNewThreadIn = useCallback(
+    (onThreadCreated?: (thread: ScopedThreadRef) => void) =>
+      dispatch({ _tag: "OpenNewThreadIn", ...(onThreadCreated ? { onThreadCreated } : {}) }),
+    [],
+  );
   const openDependsOn = useCallback(
     (blockedThreadRef: ScopedThreadRef) => dispatch({ _tag: "OpenDependsOn", blockedThreadRef }),
     [],
@@ -542,7 +546,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     () =>
       onOpenCommandPalette((detail) => {
         if (detail.open === "new-thread-in") {
-          openNewThreadIn();
+          openNewThreadIn(detail.onThreadCreated);
         } else if (detail.open === "add-project") {
           openAddProject();
         } else if (detail.open === "depends-on" && detail.blockedThreadRef) {
@@ -1290,6 +1294,11 @@ function OpenCommandPaletteDialog(props: {
     ],
   );
 
+  // Fork: roadmap. The dialog mounts with the intent and remounts per open, so
+  // a callback never outlives the open that asked for it.
+  const [newThreadCreated, setNewThreadCreated] = useState(() =>
+    openIntent?.kind === "new-thread-in" ? (openIntent.onThreadCreated ?? null) : null,
+  );
   const projectThreadItems = useMemo(() => {
     const isScratch = (project: CommandPaletteProject) =>
       isScratchProject(project, scratchWorkspaceRootFor(project.environmentId));
@@ -1339,11 +1348,15 @@ function OpenCommandPaletteDialog(props: {
                 projectRef.environmentId === contextualProjectRef.environmentId &&
                 projectRef.projectId === contextualProjectRef.projectId,
             );
-          await handleNewThread(
-            contextualRefBelongsToGroup
-              ? contextualProjectRef
-              : scopeProjectRef(project.environmentId, project.id),
-          );
+          const projectRef = contextualRefBelongsToGroup
+            ? contextualProjectRef
+            : scopeProjectRef(project.environmentId, project.id);
+          // Fork: roadmap. Taken once, so a later pick in the same palette starts a plain thread.
+          setNewThreadCreated(null);
+          const opened = await handleNewThread(projectRef);
+          if (opened !== null) {
+            newThreadCreated?.(scopeThreadRef(projectRef.environmentId, opened.threadId));
+          }
         },
       }),
     );
@@ -1366,6 +1379,7 @@ function OpenCommandPaletteDialog(props: {
   }, [
     contextualProjectRef,
     handleNewThread,
+    newThreadCreated,
     pickerProjects,
     projectEnvironmentLocationById,
     projectGroupByTargetKey,
