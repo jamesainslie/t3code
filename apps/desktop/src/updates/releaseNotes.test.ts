@@ -60,6 +60,23 @@ describe("normalizeDesktopUpdateReleaseNotes", () => {
     });
   });
 
+  it("drops a Full Changelog line whose compare link renders as its tag range", () => {
+    // GitHub's rendered HTML shows the compare URL as "old...new", so the
+    // line no longer carries "/compare/" once the markup is stripped.
+    const result = normalizeDesktopUpdateReleaseNotes(
+      "<h2>What's Changed</h2><ul><li>A fix</li></ul>" +
+        '<p><strong>Full Changelog</strong>: <a href="https://github.com/o/r/compare/v1.2.2...v1.2.3">' +
+        "<tt>v1.2.2...v1.2.3</tt></a></p>",
+      "1.2.3",
+      "latest",
+    );
+
+    expect(result).toEqual({
+      releaseNotes: [{ version: "1.2.3", items: ["A fix"], totalItems: 1 }],
+      omittedReleaseCount: 0,
+    });
+  });
+
   it("does not count Markdown or HTML section headings as changes", () => {
     const changes = Array.from({ length: 8 }, (_, index) => `Change ${index + 1}`);
     const result = normalizeDesktopUpdateReleaseNotes(
