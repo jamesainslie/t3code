@@ -10,6 +10,7 @@ import { createRoadmapEnvironmentAtoms } from "@lathe/client-runtime/state/roadm
 import { useCallback } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { usePrimaryEnvironmentId } from "./environments";
 import { useEnvironmentQuery } from "./query";
 import { primaryServerSettingsAtom, serverEnvironment } from "./server";
@@ -71,5 +72,28 @@ export function useUpdateRoadmapAreaSettings(home: EnvironmentId | null) {
       return result._tag === "Success";
     },
     [home, update],
+  );
+}
+
+/** Whether the environment can link to a roadmap home, and mint links as one. */
+export function useRoadmapLinkSupported(environmentId: EnvironmentId | null): boolean {
+  const config = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  return config?.environment.capabilities.roadmapLink === true;
+}
+
+/** `useRoadmapLinkSupported` for event handlers. */
+export function readRoadmapLinkSupported(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(serverEnvironment.configValueAtom(environmentId))?.environment.capabilities
+      .roadmapLink === true
+  );
+}
+
+/** An environment's link to the roadmap home; `data` is null while loading or for null. */
+export function useRoadmapLinkStatus(environmentId: EnvironmentId | null) {
+  return useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : roadmapEnvironment.roadmapLinkStatus({ environmentId, input: {} }),
   );
 }

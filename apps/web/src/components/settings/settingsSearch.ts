@@ -194,6 +194,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "roadmap-link",
+    title: "Link to the roadmap home",
+    to: "/settings/roadmap",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["link unlink second environment agents queue unreachable roadmap home address"],
+  },
+  {
     id: "project-defaults",
     title: "Project defaults and overrides",
     to: "/settings/general",

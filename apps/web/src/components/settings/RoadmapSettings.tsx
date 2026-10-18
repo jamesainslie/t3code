@@ -1,4 +1,5 @@
 import {
+  AuthAccessWriteScope,
   EnvironmentId,
   type RoadmapArea,
   type RoadmapAreaSettings,
@@ -7,8 +8,12 @@ import {
 import { useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
+import { readEnvironmentScope, readPreparedConnection } from "~/state/session";
+import { RoadmapLinkSection } from "./RoadmapLinkSettings";
+import { useLinkToRoadmapHome } from "./useRoadmapLink";
 import { useEnvironments } from "~/state/environments";
 import {
+  readRoadmapLinkSupported,
   useRoadmapAreaSettings,
   useRoadmapHome,
   useRoadmapSupported,
@@ -53,6 +58,7 @@ export function RoadmapSettingsPanel() {
   const settings = useScopedSettings();
   const mixed = useScopedSettingsMixed(["roadmap"]);
   const updateSettings = useUpdateScopedSettings();
+  const linkToHome = useLinkToRoadmapHome();
 
   if (scope.kind === "project" || scope.kind === "checkout") {
     return (
@@ -82,6 +88,8 @@ export function RoadmapSettingsPanel() {
     ),
   };
   const homeId = settings.roadmap.homeEnvironmentId;
+  const ownLabel =
+    environments.find((environment) => environment.environmentId === ownId)?.label ?? ownId ?? "";
   const value = mixed ? null : homeId === null || homeId === ownId ? THIS_ENVIRONMENT : homeId;
 
   const choose = async (next: string) => {
@@ -92,6 +100,24 @@ export function RoadmapSettingsPanel() {
     );
     if (confirmed !== true) return;
     updateSettings({ roadmap: { homeEnvironmentId } });
+    // Choosing another environment as the home links this one to it, when the
+    // client may and knows an address; otherwise the link row below is there.
+    if (ownId === null || homeEnvironmentId === null || homeEnvironmentId === ownId) return;
+    const homeUrl = readPreparedConnection(homeEnvironmentId)?.httpBaseUrl;
+    if (
+      homeUrl !== undefined &&
+      readRoadmapLinkSupported(ownId) &&
+      readRoadmapLinkSupported(homeEnvironmentId) &&
+      readEnvironmentScope(ownId, AuthAccessWriteScope) &&
+      readEnvironmentScope(homeEnvironmentId, AuthAccessWriteScope)
+    ) {
+      void linkToHome({
+        environmentId: ownId,
+        environmentLabel: ownLabel,
+        home: homeEnvironmentId,
+        homeUrl,
+      });
+    }
   };
 
   return (
@@ -128,6 +154,9 @@ export function RoadmapSettingsPanel() {
             </Select>
           }
         />
+        {ownId !== null && !mixed && homeId !== null && homeId !== ownId ? (
+          <RoadmapLinkSection environmentId={ownId} environmentLabel={ownLabel} home={homeId} />
+        ) : null}
       </SettingsSection>
       <RoadmapAreaSections />
     </SettingsPageContainer>
