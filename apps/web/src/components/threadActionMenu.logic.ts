@@ -1,5 +1,7 @@
-import type { ContextMenuItem, ThreadHighlightPalette } from "@lathe/contracts";
+import type { ContextMenuItem, RoadmapItemType, ThreadHighlightPalette } from "@lathe/contracts";
 import type { SnoozePreset } from "@lathe/client-runtime/state/thread-settled";
+// Fork: roadmap.
+import { ROADMAP_ITEM_TYPE_LABELS, ROADMAP_ITEM_TYPES } from "./roadmap/roadmapThread.logic";
 
 /**
  * Ids for the per-thread action menu. Snooze presets are dispatched as
@@ -37,7 +39,12 @@ export type ThreadActionMenuId =
   | "copy-thread-id"
   | "copy-thread-chip"
   | "archive"
-  | "delete";
+  | "delete"
+  // Fork: roadmap. `roadmap-create:<type>` creates that type; `:new-thread` flips the toggle.
+  | "roadmap-create"
+  | `roadmap-create:${RoadmapItemType | "new-thread"}`
+  | "roadmap-attach"
+  | "roadmap-detach";
 
 export type DraftActionMenuId =
   | "copy"
@@ -116,12 +123,78 @@ export interface ThreadActionMenuState {
     readonly highlight: boolean;
     readonly titleRegeneration: boolean;
     readonly dependencies: boolean;
+    /** Fork: roadmap. The roadmap home serves a roadmap. */
+    readonly roadmap?: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+  /** Fork: roadmap. The thread's place on the roadmap, read from the roadmap home. */
+  readonly roadmap?: ThreadActionMenuRoadmapState;
+}
+
+// Fork: roadmap.
+export interface ThreadActionMenuRoadmapState {
+  /** The work item the thread is attached to, or null when it is on none. */
+  readonly attachedTitle: string | null;
+  /** The create submenu's "Start a new thread for it" toggle. */
+  readonly createInNewThread: boolean;
+  /**
+   * The roadmap lives on the home, so its permission decides these entries,
+   * not the thread environment's operate scope.
+   */
+  readonly canChange: boolean;
+}
+
+const ROADMAP_MENU_TITLE_MAX = 40;
+
+// Fork: roadmap.
+function roadmapMenuItems(
+  state: ThreadActionMenuState,
+): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
+  const roadmap = state.roadmap;
+  if (state.supports.roadmap !== true || roadmap === undefined) return [];
+  const disabled = !roadmap.canChange;
+  const title = roadmap.attachedTitle;
+  return [
+    {
+      id: "roadmap-create",
+      label: "Create work item from thread",
+      icon: "plus",
+      separatorBefore: true,
+      disabled,
+      children: [
+        ...ROADMAP_ITEM_TYPES.map((type) => ({
+          id: `roadmap-create:${type}` as const,
+          label: ROADMAP_ITEM_TYPE_LABELS[type],
+          disabled,
+        })),
+        {
+          id: "roadmap-create:new-thread" as const,
+          label: "Start a new thread for it",
+          checked: roadmap.createInNewThread,
+          separatorBefore: true,
+          disabled,
+        },
+      ],
+    },
+    title === null
+      ? { id: "roadmap-attach", label: "Attach to work item…", icon: "link", disabled }
+      : {
+          id: "roadmap-detach",
+          label: `Detach from ${
+            title.length > ROADMAP_MENU_TITLE_MAX
+              ? `${title.slice(0, ROADMAP_MENU_TITLE_MAX - 1)}…`
+              : title
+          }`,
+          icon: "unlink",
+          disabled,
+        },
+  ];
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
+  // Fork: roadmap. Roadmap entries carry the home's permission instead.
+  if (action.startsWith("roadmap-")) return false;
   return ![
     "new-thread-on-branch",
     "project-settings",
@@ -257,6 +330,8 @@ export function buildThreadActionMenuItems(
               ]
             : []),
         ]),
+    // Fork: roadmap.
+    ...roadmapMenuItems(state),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
     ...(state.supports.titleRegeneration
       ? [

@@ -273,6 +273,24 @@ describe("reduceCommandPaletteUiState", () => {
     expect(reduceCommandPaletteUiState(opened, { _tag: "ClearOpenIntent" }).openIntent).toBeNull();
   });
 
+  // Fork: roadmap.
+  it("opens the work item picker for the thread it attaches", () => {
+    const threadRef = {
+      environmentId: EnvironmentId.make("local"),
+      threadId: ThreadId.make("attaching"),
+    };
+    const opened = reduceCommandPaletteUiState(
+      { open: false, mode: "files", openIntent: null },
+      { _tag: "OpenRoadmapAttach", threadRef },
+    );
+    expect(opened).toEqual({
+      open: true,
+      mode: "command",
+      openIntent: { kind: "roadmap-attach", threadRef },
+    });
+    expect(reduceCommandPaletteUiState(opened, { _tag: "ClearOpenIntent" }).openIntent).toBeNull();
+  });
+
   it("preserves the mode on close and resets it on open", () => {
     const filesOpen = reduceCommandPaletteUiState(closedState, {
       _tag: "ToggleMode",

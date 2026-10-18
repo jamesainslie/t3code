@@ -115,6 +115,16 @@ vi.mock("../components/Sidebar.snooze", () => ({
 vi.mock("./useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: () => recordEffect("copy") }),
 }));
+// Fork: roadmap. Its entries have their own tests; here the home serves no roadmap.
+vi.mock("../components/roadmap/useRoadmapThreadActions", () => ({
+  useRoadmapThreadActions: () => ({
+    availability: { home: null, supported: false, homeConnected: false, canChange: false },
+    actions: {
+      menuState: () => ({ attachedTitle: null, createInNewThread: false, canChange: false }),
+      handleMenuAction: () => null,
+    },
+  }),
+}));
 vi.mock("./useHandleNewThread", () => ({
   useNewThreadHandler: () => async () => recordEffect("draft"),
 }));
