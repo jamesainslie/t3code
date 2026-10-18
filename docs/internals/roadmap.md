@@ -180,6 +180,17 @@ future required item field needs the same upgrade or a decoding default, or a re
 old events. The backfilled values are approximate. A phase 1 item that was done counts as completed
 on its last update, which can put it in the first velocity window.
 
+`progressNotes` took the decoding default instead, so migration 10 only writes the empty list into
+the item projection and leaves stored events alone.
+
+### Note kinds belong to actors
+
+Progress notes are the one place agents, GitHub sync and the steward all write prose onto an item,
+so the planner ties each kind to its writer: `progress` from any actor, `sync` only from `github`,
+`drift` and `unsure` only from `steward`. Only the user removes a note. GitHub sync and the steward
+rely on this, so a kind check belongs in `planRoadmapCommand`, never in the code that writes the
+note. An item keeps its newest 50 notes; the projection drops the oldest.
+
 ## Dates without a time zone
 
 The server does not know the user's time zone. Clients compute in local dates (`localDateOf`), and

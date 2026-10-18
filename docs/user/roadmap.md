@@ -118,8 +118,9 @@ At the start of every turn, the agent on an attached thread receives a short sum
 item and acceptance criteria, with its forecast and progress when it has them. Your message in the
 thread stays as you wrote it. Messages that start with a `/` command do not include the summary.
 
-Agents can read the roadmap, update their work item, tick criteria with evidence, log hours, create
-items, and attach threads. When an agent reads a work item it also sees the forecast, progress and
+Agents can read the roadmap, update their work item, tick criteria with evidence, log hours, add
+progress notes, create items, and attach threads. The **Notes** section of an item's card shows the
+latest notes, newest first, and removes one you no longer want. When an agent reads a work item it also sees the forecast, progress and
 pace. An agent cannot mark an item done while any of its criteria are unticked. Items an agent
 creates are marked **Needs review** until you open or edit them. Pins, snoozes and sprints are yours
 alone, and agents cannot change them.
