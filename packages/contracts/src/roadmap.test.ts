@@ -85,6 +85,32 @@ const fullItem = {
       criterionId: null,
     },
   ],
+  source: {
+    host: "github.com",
+    owner: "acme",
+    repo: "web",
+    number: 123,
+    nodeId: "I_kwDOA",
+    url: "https://github.com/acme/web/issues/123",
+    writable: true,
+    remoteUpdatedAt: "2026-10-18T08:00:00Z",
+    syncedAt: at,
+    base: {
+      title: "Build-time brand layer",
+      closed: false,
+      parentNodeId: null,
+      blockedByNodeIds: [],
+    },
+    localChangedAt: { title: at, closed: null, parent: null, blockedBy: null },
+  },
+  pullRequests: [
+    {
+      host: "github.com",
+      repository: "acme/web",
+      number: 7,
+      url: "https://github.com/acme/web/pull/7",
+    },
+  ],
 };
 
 const sprint = {
@@ -125,6 +151,19 @@ describe("RoadmapWorkItem", () => {
   it("decodes an item stored before notes with no notes", () => {
     const { progressNotes: _, ...withoutNotes } = fullItem;
     expect(decodeItem(withoutNotes).progressNotes).toEqual([]);
+  });
+
+  it("decodes an item stored before GitHub sync with no source and no pull requests", () => {
+    const { source: _, pullRequests: __, ...withoutGitHub } = fullItem;
+    const decoded = decodeItem(withoutGitHub);
+    expect(decoded.source).toBeNull();
+    expect(decoded.pullRequests).toEqual([]);
+  });
+
+  it("rejects a source with no issue number or a pull request link with no url", () => {
+    expect(() => decodeItem({ ...fullItem, source: { ...fullItem.source, number: 0 } })).toThrow();
+    const link = fullItem.pullRequests[0]!;
+    expect(() => decodeItem({ ...fullItem, pullRequests: [{ ...link, url: "" }] })).toThrow();
   });
 
   it("rejects a note of an unknown kind or with blank text", () => {
@@ -266,6 +305,32 @@ describe("RoadmapCommand", () => {
     },
     { type: "roadmap.note.remove", itemId: "item-1", noteId: "n1" },
     {
+      type: "roadmap.source.import",
+      itemId: "item-1",
+      itemType: "story",
+      title: "Imported",
+      parentId: null,
+      area: "work",
+      state: "backlog",
+      source: fullItem.source,
+    },
+    {
+      type: "roadmap.source.sync",
+      itemId: "item-1",
+      writable: false,
+      remoteUpdatedAt: "2026-10-18T10:00:00Z",
+      base: fullItem.source.base,
+    },
+    { type: "roadmap.source.unlink", itemId: "item-1" },
+    { type: "roadmap.pull-request.link", itemId: "item-1", pullRequest: fullItem.pullRequests[0] },
+    {
+      type: "roadmap.pull-request.unlink",
+      itemId: "item-1",
+      host: "github.com",
+      repository: "acme/web",
+      number: 7,
+    },
+    {
       type: "roadmap.sprint.create",
       sprintId: "sprint-1",
       name: "Sprint 42",
@@ -335,6 +400,27 @@ describe("RoadmapEvent", () => {
       { ...base, type: "roadmap.hours.removed", payload: { entryId: "h1" } },
       { ...base, type: "roadmap.note.added", payload: { note: fullItem.progressNotes[1] } },
       { ...base, type: "roadmap.note.removed", payload: { noteId: "n1" } },
+      {
+        ...base,
+        type: "roadmap.source.synced",
+        payload: {
+          writable: true,
+          remoteUpdatedAt: "2026-10-18T10:00:00Z",
+          syncedAt: at,
+          base: fullItem.source.base,
+        },
+      },
+      { ...base, type: "roadmap.source.unlinked", payload: {} },
+      {
+        ...base,
+        type: "roadmap.pull-request.linked",
+        payload: { pullRequest: fullItem.pullRequests[0] },
+      },
+      {
+        ...base,
+        type: "roadmap.pull-request.unlinked",
+        payload: { host: "github.com", repository: "acme/web", number: 7 },
+      },
     ]) {
       expect(decodeEvent(event as never).type).toBe(event.type);
     }
@@ -366,7 +452,7 @@ describe("RoadmapDispatchResult", () => {
 
 describe("RoadmapRejectionCode", () => {
   it("covers the pin limit, actor refusals and invalid requests", () => {
-    for (const code of ["pin_limit", "forbidden_actor", "invalid_request"]) {
+    for (const code of ["pin_limit", "forbidden_actor", "invalid_request", "read_only_source"]) {
       expect(RoadmapRejectionCode.literals).toContain(code);
     }
   });

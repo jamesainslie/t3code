@@ -60,7 +60,16 @@ describe("roadmap settings", () => {
     expect(decodeServerSettings({}).roadmap).toEqual({
       homeEnvironmentId: null,
       areas: { work: defaultArea, personal: defaultArea },
+      areaByLogin: {},
     });
+  });
+
+  it("reads the area each GitHub login's issues import into", () => {
+    expect(
+      decodeServerSettings({ roadmap: { areaByLogin: { "jane-work": "work" } } }).roadmap
+        .areaByLogin,
+    ).toEqual({ "jane-work": "work" });
+    expect(() => decodeServerSettings({ roadmap: { areaByLogin: { jane: "home" } } })).toThrow();
   });
 
   it("fills area defaults for a settings file written before areas existed", () => {
@@ -70,6 +79,7 @@ describe("roadmap settings", () => {
     expect(decoded.roadmap).toEqual({
       homeEnvironmentId: "env-home",
       areas: { work: { ...defaultArea, unit: "hours" }, personal: defaultArea },
+      areaByLogin: {},
     });
   });
 
