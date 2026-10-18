@@ -48,6 +48,17 @@ describe("resolveLatheMcpToolPresentation", () => {
     });
   });
 
+  it("pretty prints roadmap tool names", () => {
+    expect(resolveLatheMcpToolPresentation("mcp__lathe__lathe_roadmap_criterion_tick")).toEqual({
+      displayName: "Tick an acceptance criterion",
+      logo: "lathe",
+    });
+    expect(resolveLatheMcpToolPresentation("lathe.lathe_roadmap_create")).toEqual({
+      displayName: "Create a roadmap work item",
+      logo: "lathe",
+    });
+  });
+
   it("pretty prints bare Lathe MCP toolkit names", () => {
     expect(resolveLatheMcpToolPresentation("list_scheduled_tasks")).toEqual({
       displayName: "List scheduled tasks",

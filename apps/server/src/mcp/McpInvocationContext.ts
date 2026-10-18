@@ -21,6 +21,8 @@ const ALL_MCP_CAPABILITIES = [
   "document-comments",
   "thread-history",
   "thread-search",
+  // Fork: roadmap.
+  "roadmap",
 ] as const;
 export type McpCapability = (typeof ALL_MCP_CAPABILITIES)[number];
 

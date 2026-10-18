@@ -25,6 +25,8 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
+// Fork: roadmap.
+import * as RoadmapTurnContext from "../fork/roadmap/RoadmapTurnContext.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
@@ -111,6 +113,9 @@ export const layer: Layer.Layer<
     const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
+    // Fork: roadmap. Optional so the orchestration runtime keeps building
+    // without the server's environment identity; server.ts provides it.
+    const roadmapTurnContext = yield* Effect.serviceOption(RoadmapTurnContext.RoadmapTurnContext);
 
     // These callbacks outlive startup while a run drains background work. Build
     // them outside start's scope so they cannot retain its full thread history.
@@ -957,6 +962,12 @@ export const layer: Layer.Layer<
         restartCancelledWork.length === 0
           ? ""
           : restartCancelledBackgroundWorkNote(restartCancelledWork);
+      // Fork: roadmap. Read fresh for every run; a slash command must stay first
+      // in the text for its provider to parse it.
+      const roadmapBlock =
+        Option.isNone(roadmapTurnContext) || message.text.trimStart().startsWith("/")
+          ? ""
+          : yield* roadmapTurnContext.value.forThread(projection.thread.id);
       const tokenCap = yield* handoffTokenCapConfig.pipe(
         Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),
       );
@@ -1142,7 +1153,8 @@ export const layer: Layer.Layer<
           });
           if (!(yield* isCurrentAttemptInStatus("running"))) return;
           const start = compact ? session.compactThread! : session.startTurn;
-          const context = [delivery.context, restartNote]
+          // Fork: roadmap.
+          const context = [delivery.context, restartNote, roadmapBlock]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
@@ -1194,6 +1206,8 @@ export const layer: Layer.Layer<
         effectiveHandoffs.length === 0 &&
         missedItems.length === 0 &&
         restartNote === "" &&
+        // Fork: roadmap.
+        roadmapBlock === "" &&
         !noteContinuation
           ? session
           : makeDeliverySession(session, startWithHandoffs);

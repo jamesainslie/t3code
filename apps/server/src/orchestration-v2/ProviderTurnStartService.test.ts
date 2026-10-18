@@ -3,6 +3,9 @@ import { expect, it, vi } from "vite-plus/test";
 import { it as effectIt } from "@effect/vitest";
 import {
   CheckpointScopeId,
+  CommandId,
+  EnvironmentId,
+  RoadmapItemId,
   MessageId,
   NodeId,
   ProviderSessionId,
@@ -29,6 +32,11 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as RoadmapService from "../fork/roadmap/RoadmapService.ts";
+import * as RoadmapTurnContext from "../fork/roadmap/RoadmapTurnContext.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
@@ -177,7 +185,11 @@ function makeLocalCommandHarness(input: {
   readonly interruptRunBeforeOpenFailure?: boolean;
   readonly writeFailure?: unknown;
   readonly failReadsAfterRunning?: boolean;
+  /** Opens a session whose provider turns record the text the provider would receive. */
+  readonly captureProviderTurns?: boolean;
+  readonly roadmapTurnContext?: Layer.Layer<RoadmapTurnContext.RoadmapTurnContext>;
 }) {
+  const providerTexts: Array<string> = [];
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
   const threadId = ThreadId.make("thread-native-account-command");
   const runId = RunId.make("run-native-account-command");
@@ -421,9 +433,13 @@ function makeLocalCommandHarness(input: {
                   ),
                 ),
               )
-            : input.failReadsAfterRunning === true
+            : input.failReadsAfterRunning === true || input.captureProviderTurns === true
               ? Effect.succeed({
                   driver: providerThread.driver,
+                  startTurn: (turn: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+                    Effect.sync(() => {
+                      providerTexts.push(turn.message.text);
+                    }),
                   providerSession: {
                     id: providerSessionId,
                     driver: providerThread.driver,
@@ -442,10 +458,14 @@ function makeLocalCommandHarness(input: {
   );
   const startRootRun = vi.fn<
     (input: RunExecutionService.RunExecutionServiceV2StartRootRunInput) => Effect.Effect<void>
-  >(() =>
-    input.failReadsAfterRunning === true
-      ? Effect.void
-      : Effect.die("A local command must not start a native turn."),
+  >((run) =>
+    input.captureProviderTurns === true
+      ? run.session
+          .startTurn({ message: run.message } as ProviderAdapter.ProviderAdapterV2TurnInput)
+          .pipe(Effect.orDie)
+      : input.failReadsAfterRunning === true
+        ? Effect.void
+        : Effect.die("A local command must not start a native turn."),
   );
   const failReadIfRunning = Effect.suspend(() =>
     input.failReadsAfterRunning === true &&
@@ -456,15 +476,17 @@ function makeLocalCommandHarness(input: {
       : Effect.void,
   );
   const tryHandlePromptCommand = vi.fn(() =>
-    input.logoutFailure === undefined
-      ? Effect.succeed(true)
-      : Effect.fail(
-          new ProviderSetupError({
-            instanceId: oldInstanceId,
-            operation: "logout",
-            detail: input.logoutFailure,
-          }),
-        ),
+    input.captureProviderTurns === true
+      ? Effect.succeed(false)
+      : input.logoutFailure === undefined
+        ? Effect.succeed(true)
+        : Effect.fail(
+            new ProviderSetupError({
+              instanceId: oldInstanceId,
+              operation: "logout",
+              detail: input.logoutFailure,
+            }),
+          ),
   );
   const writeIfRunCurrent = vi.fn(({ events: incoming, activeAttemptId, expectedStatus }) =>
     "writeFailure" in input
@@ -554,10 +576,13 @@ function makeLocalCommandHarness(input: {
         Layer.mock(RuntimePolicy.RuntimePolicyV2)({
           resolve: resolveRuntimePolicy,
         }),
+        input.roadmapTurnContext ?? Layer.empty,
       ),
     ),
   );
   return {
+    threadId,
+    providerTexts,
     getThreadRecords,
     getTurnStartContext,
     setProjection: (next: OrchestrationV2ThreadProjection) => {
@@ -1042,3 +1067,102 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
       }),
   );
 }
+
+// Fork: roadmap.
+const ROADMAP_ENVIRONMENT_ID = EnvironmentId.make("environment-turn-start");
+
+const makeRoadmap = Effect.gen(function* () {
+  const services = yield* Layer.build(
+    RoadmapTurnContext.layer.pipe(
+      Layer.provideMerge(RoadmapService.layer),
+      Layer.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          ServerSettingsService.layerTest({}),
+          Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+            getEnvironmentId: Effect.succeed(ROADMAP_ENVIRONMENT_ID),
+          }),
+        ),
+      ),
+      Layer.provide(Layer.fresh(SqlitePersistence.layerMemory)),
+    ),
+  );
+  const roadmap = yield* RoadmapService.RoadmapService.pipe(Effect.provideContext(services));
+  const attach = (threadId: ThreadId) =>
+    roadmap.dispatch(
+      {
+        type: "roadmap.item.create",
+        commandId: CommandId.make("create-feature"),
+        itemId: RoadmapItemId.make("feature"),
+        itemType: "feature",
+        title: "Brand layer",
+        criteria: [{ id: "c1", text: "Tokens resolve at build time" }],
+        attachThread: { environmentId: ROADMAP_ENVIRONMENT_ID, threadId },
+      },
+      { _tag: "user" },
+    );
+  return { roadmap, attach, layer: Layer.succeedContext(services) };
+});
+
+effectIt.effect("prepends the attached work item to every turn's provider text, refreshed", () =>
+  Effect.gen(function* () {
+    const roadmap = yield* makeRoadmap;
+    const harness = makeLocalCommandHarness({
+      text: "Continue",
+      captureProviderTurns: true,
+      roadmapTurnContext: roadmap.layer,
+    });
+    yield* roadmap.attach(harness.threadId);
+    const initial = harness.projection();
+
+    yield* harness.start;
+    const [first] = harness.providerTexts;
+    expect(first).toMatch(/^Roadmap work item for this thread/);
+    expect(first).toContain("[ ] Tokens resolve at build time");
+    expect(first).toMatch(/\n\nUser message:\nContinue$/);
+    expect(harness.startRootRun.mock.calls[0]?.[0].message.text).toBe("Continue");
+    expect(harness.projection().messages.at(-1)?.text).toBe("Continue");
+
+    yield* roadmap.roadmap.dispatch(
+      {
+        type: "roadmap.criterion.tick",
+        commandId: CommandId.make("tick-c1"),
+        itemId: RoadmapItemId.make("feature"),
+        criterionId: "c1",
+        ticked: true,
+      },
+      { _tag: "user" },
+    );
+    harness.setProjection(initial);
+    yield* harness.start;
+    expect(harness.providerTexts).toHaveLength(2);
+    expect(harness.providerTexts[1]).toContain("[x] Tokens resolve at build time");
+  }).pipe(Effect.scoped),
+);
+
+effectIt.effect("sends an unattached thread's text unchanged", () =>
+  Effect.gen(function* () {
+    const roadmap = yield* makeRoadmap;
+    const harness = makeLocalCommandHarness({
+      text: "Continue",
+      captureProviderTurns: true,
+      roadmapTurnContext: roadmap.layer,
+    });
+    yield* harness.start;
+    expect(harness.providerTexts).toEqual(["Continue"]);
+  }).pipe(Effect.scoped),
+);
+
+effectIt.effect("keeps a slash command first so the provider still parses it", () =>
+  Effect.gen(function* () {
+    const roadmap = yield* makeRoadmap;
+    const harness = makeLocalCommandHarness({
+      text: "/review",
+      captureProviderTurns: true,
+      roadmapTurnContext: roadmap.layer,
+    });
+    yield* roadmap.attach(harness.threadId);
+    yield* harness.start;
+    expect(harness.providerTexts).toEqual(["/review"]);
+  }).pipe(Effect.scoped),
+);

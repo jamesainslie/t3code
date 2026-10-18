@@ -74,6 +74,8 @@ const declaredFailure = (result: McpSchema.CallToolResult) => {
 };
 import { PullRequestsToolkit } from "./pullRequests/tools.ts";
 import { HtmlToolkit } from "./html/tools.ts";
+// Fork: roadmap.
+import { RoadmapToolkit } from "./roadmap/tools.ts";
 import {
   resolveLatheMcpToolDefinition,
   resolveLatheMcpToolPresentation,
@@ -103,6 +105,8 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
     DeviceToolkit,
     PullRequestsToolkit,
     HtmlToolkit,
+    // Fork: roadmap.
+    RoadmapToolkit,
   ]) {
     for (const tool of Object.values(toolkit.tools)) {
       expect(names.has(tool.name)).toBe(false);

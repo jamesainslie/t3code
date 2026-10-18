@@ -56,6 +56,9 @@ import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import * as DocumentCommentsHandlers from "./toolkits/documentComments/handlers.ts";
 import { DocumentCommentsToolkit } from "./toolkits/documentComments/tools.ts";
+// Fork: roadmap.
+import * as RoadmapHandlers from "./toolkits/roadmap/handlers.ts";
+import { RoadmapToolkit } from "./toolkits/roadmap/tools.ts";
 import * as ThreadHistoryHandlers from "./toolkits/threadHistory/handlers.ts";
 import {
   ThreadHistoryReadFailedError,
@@ -960,6 +963,9 @@ export const layerThreadHistoryToolkit = imageToolRegistration(
   ThreadHistoryHandlers.layer,
 );
 
+// Fork: roadmap.
+export const layerRoadmapToolkit = toolkitRegistration(RoadmapToolkit, RoadmapHandlers.layer);
+
 export const layerMcpTransport = McpServer.layerHttp({
   name: "Lathe",
   version: packageJson.version,
@@ -982,4 +988,6 @@ export const layer = Layer.mergeAll(
   layerHtmlToolkit,
   layerDocumentCommentsToolkit,
   layerThreadHistoryToolkit,
+  // Fork: roadmap.
+  layerRoadmapToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));
