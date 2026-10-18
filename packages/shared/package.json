@@ -251,6 +251,10 @@
       "types": "./src/roadmap.ts",
       "import": "./src/roadmap.ts"
     },
+    "./roadmapCalc": {
+      "types": "./src/roadmapCalc.ts",
+      "import": "./src/roadmapCalc.ts"
+    },
     "./changeRequestUrl": {
       "types": "./src/changeRequestUrl.ts",
       "import": "./src/changeRequestUrl.ts"
