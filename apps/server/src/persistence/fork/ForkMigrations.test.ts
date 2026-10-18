@@ -15,6 +15,7 @@ import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsCo
 import Roadmap from "./migrations/007_Roadmap.ts";
 import RoadmapCalendar from "./migrations/008_RoadmapCalendar.ts";
 import RoadmapProgressNotes from "./migrations/010_RoadmapProgressNotes.ts";
+import RoadmapGitHubSync from "./migrations/011_RoadmapGitHubSync.ts";
 
 /** What the server's persistence setup runs, in order. */
 const migrateLikeTheServer = Effect.gen(function* () {
@@ -128,6 +129,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [8, "RoadmapCalendar"],
           [9, "RoadmapLinkOutbox"],
           [10, "RoadmapProgressNotes"],
+          [11, "RoadmapGitHubSync"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
@@ -388,6 +390,51 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [
             ["noted-1", [{ ...note, criterionId: null }]],
             ["plain-1", []],
+          ],
+        );
+      }),
+    );
+  },
+);
+
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "roadmap GitHub sync migration",
+  (it) => {
+    it.effect("gives existing items no issue and no pull requests and keeps those set since", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations();
+        yield* Roadmap;
+        yield* RoadmapCalendar;
+        const at = "2026-10-01T09:00:00.000Z";
+        const link = { host: "github.com", repository: "a/b", number: 1, url: "https://x" };
+        const linked = JSON.stringify({
+          ...JSON.parse(phaseOneItem("linked-1", "backlog", at, at)),
+          pullRequests: [link],
+        });
+        yield* sql`
+          INSERT INTO projection_roadmap_items (
+            item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+          ) VALUES
+            ('plain-1', NULL, 'n', NULL, ${phaseOneItem("plain-1", "backlog", at, at)}, 1),
+            ('linked-1', NULL, 'p', NULL, ${linked}, 2)
+        `;
+
+        yield* RoadmapGitHubSync;
+        yield* RoadmapGitHubSync;
+
+        const items = yield* sql<{ readonly id: string; readonly payload: string }>`
+          SELECT item_id AS id, payload_json AS payload FROM projection_roadmap_items
+          ORDER BY item_id
+        `;
+        assert.deepStrictEqual(
+          items.map((row) => {
+            const payload = JSON.parse(row.payload);
+            return [row.id, payload.source, payload.pullRequests];
+          }),
+          [
+            ["linked-1", null, [link]],
+            ["plain-1", null, []],
           ],
         );
       }),
