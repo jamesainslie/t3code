@@ -3,6 +3,7 @@ import {
   authScopeResponse,
   AuthAdministrativeScopes,
   AuthStandardClientScopes,
+  EnvironmentId,
 } from "@lathe/contracts";
 import { expect, it } from "@effect/vitest";
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
@@ -704,5 +705,71 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       } as never);
       expect(verified.sessionId).toBe(bearer.sessionId);
     }).pipe(Effect.provide(layerEnvironmentAuth({ mode: "web", host: "192.168.1.50" }))),
+  );
+
+  // Fork: roadmap.
+  it.effect(
+    "exchanges a roadmap link grant for a long-lived session only the roadmap API accepts",
+    () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const linked = EnvironmentId.make("env-laptop");
+        const grant = yield* serverAuth.issueRoadmapLinkGrant({
+          environmentId: linked,
+          label: "Roadmap link from laptop",
+        });
+        const exchanged = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+          grant.credential,
+          undefined,
+          { deviceType: "bot" },
+        );
+        expect(exchanged.scope.split(" ").toSorted()).toEqual(["roadmap:read", "roadmap:write"]);
+        // A year, not the thirty days ordinary sessions get, so a link outlives a holiday.
+        expect(exchanged.expires_in).toBeGreaterThan(300 * 24 * 60 * 60);
+
+        const request = makeBearerRequest(exchanged.access_token);
+        const link = yield* serverAuth.authenticateRoadmapLink(request);
+        expect(link.environmentId).toBe(linked);
+        expect([...link.scopes].toSorted()).toEqual(["roadmap:read", "roadmap:write"]);
+
+        for (const refused of [
+          serverAuth.authenticateHttpRequest(request),
+          serverAuth.authenticateWebSocketUpgrade({ ...request, url: "/ws" } as never),
+          serverAuth.authenticateMcpClient(request),
+        ]) {
+          const error = yield* Effect.flip(refused);
+          expect(error._tag).toBe("ServerAuthInvalidCredentialError");
+        }
+        const sessionState = yield* serverAuth.getSessionState(request);
+        expect(sessionState.authenticated).toBe(false);
+      }).pipe(Effect.provide(layerEnvironmentAuth())),
+  );
+
+  it.effect("refuses every session but a roadmap link on the roadmap API", () =>
+    Effect.gen(function* () {
+      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+      const administrative = yield* serverAuth.issueSession();
+      const linkByCookie = yield* serverAuth.issueRoadmapLinkGrant({
+        environmentId: EnvironmentId.make("env-laptop"),
+      });
+      // A link grant spent as a browser session carries the subject but not the bearer method.
+      const browser = yield* serverAuth.createBrowserSession(
+        linkByCookie.credential,
+        requestMetadata,
+      );
+
+      for (const request of [
+        makeBearerRequest(administrative.token),
+        makeBearerRequest(browser.sessionToken),
+        makeBearerRequest("not-a-token"),
+      ]) {
+        const error = yield* Effect.flip(serverAuth.authenticateRoadmapLink(request));
+        expect(error._tag).toBe("ServerAuthInvalidCredentialError");
+      }
+      const missing = yield* Effect.flip(
+        serverAuth.authenticateRoadmapLink(makeCookieRequest("unused", "")),
+      );
+      expect(missing._tag).toBe("ServerAuthMissingCredentialError");
+    }).pipe(Effect.provide(layerEnvironmentAuth())),
   );
 });
