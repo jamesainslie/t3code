@@ -65,6 +65,8 @@ import * as RoadmapTurnContext from "./fork/roadmap/RoadmapTurnContext.ts";
 import * as RoadmapHttp from "./fork/roadmap/http.ts";
 import * as RoadmapLink from "./fork/roadmap/RoadmapLink.ts";
 import * as RoadmapLinkOutbox from "./fork/roadmap/RoadmapLinkOutbox.ts";
+import * as RoadmapSteward from "./fork/roadmap/RoadmapSteward.ts";
+import * as Scheduler from "./scheduling/Scheduler.ts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
 import * as GitHubAccountSelector from "./sourceControl/GitHubAccountSelector.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
@@ -628,6 +630,9 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
   ProviderUsageLimitsIngestion.layer,
+  // Fork: roadmap. After turns end on attached threads, and daily, the steward
+  // relates them to their item's criteria.
+  RoadmapSteward.workerLive.pipe(Layer.provide(Scheduler.layer)),
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),

@@ -128,11 +128,14 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [8, "RoadmapCalendar"],
           [9, "RoadmapLinkOutbox"],
           [10, "RoadmapProgressNotes"],
+          // 11 belongs to GitHub sync, built on another branch.
+          [12, "RoadmapStewardThreads"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
         assert.deepStrictEqual(ledgers.fork, forkMigrationManifest);
         assert.isTrue(yield* hasTable("orchestration_v2_projection_threads"));
+        assert.isTrue(yield* hasTable("roadmap_steward_threads"));
 
         // Fork data written by the v1 build is still there for the cutover import.
         const thread = yield* sql<{

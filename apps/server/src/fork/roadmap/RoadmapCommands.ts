@@ -686,8 +686,11 @@ function stewardTickRefusal(
   }
   if (
     untickedAt !== undefined &&
-    (command.evidenceAfter === undefined ||
-      Date.parse(command.evidenceAfter) <= Date.parse(untickedAt))
+    // Written as "not newer" so an unparseable time counts as stale.
+    !(
+      command.evidenceAfter !== undefined &&
+      Date.parse(command.evidenceAfter) > Date.parse(untickedAt)
+    )
   ) {
     return new RoadmapError({
       code: "stale_evidence",

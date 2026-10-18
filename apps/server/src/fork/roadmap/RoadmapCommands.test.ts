@@ -541,7 +541,12 @@ describe("planRoadmapCommand", () => {
     it("re-ticks an unticked criterion only with evidence from after the untick", () => {
       const untickedAt = "2026-10-17T12:00:00.000Z";
       const options = { ...asSteward, criterionUntickedAt: untickedAt };
-      for (const evidenceAfter of [undefined, "2026-10-17T10:00:00.000Z", untickedAt]) {
+      for (const evidenceAfter of [
+        undefined,
+        "2026-10-17T10:00:00.000Z",
+        untickedAt,
+        "not a time",
+      ]) {
         const command =
           evidenceAfter === undefined
             ? cmd("roadmap.criterion.tick", {
