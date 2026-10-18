@@ -157,8 +157,9 @@ has not answered for two refresh intervals, and it reads again as soon as you co
 The pooled accounts are grouped by provider, with the accounts the gateway can use now listed above
 the spent or paused ones. Each account takes one line; click it to see every window and when it
 resets. Choose rings or meters for the one-line summary under **Settings → General → Gateway
-account summary**. Lathe reads the gateway every few minutes, so an account you just added may take a
-moment to appear: use the refresh button in the pill's header to read it now.
+account summary**. While the account list is showing it is live: it changes when the gateway does,
+so an account you just added appears within a couple of seconds. Otherwise Lathe reads the gateway every few
+minutes. A gateway too old to stream its status is read every five seconds while the list shows.
 
 ### Pick models the gateway routes
 

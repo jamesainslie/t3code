@@ -65,8 +65,8 @@ export const RPC_REQUIRED_SCOPES = {
   // Fork: usage-limit gateway sign-in is credential management like provider auth; a
   // refresh only re-reads, like serverRefreshProviders.
   [WS_METHODS.usageLimitSourceAuth]: AuthProvidersManageScope,
-  [WS_METHODS.usageLimitSourceRefresh]: AuthOrchestrationReadScope,
   [WS_METHODS.usageLimitSourceAccountLogin]: AuthProvidersManageScope,
+  [WS_METHODS.usageLimitSourceWatch]: AuthOrchestrationReadScope,
   // Fork: document comments.
   [WS_METHODS.threadDocumentCommentsMutate]: AuthOrchestrationOperateScope,
   [WS_METHODS.subscribeThreadDocumentComments]: AuthOrchestrationReadScope,

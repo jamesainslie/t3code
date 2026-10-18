@@ -18,6 +18,7 @@ import {
 } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest } from "effect/http";
 
 import {
@@ -76,6 +77,9 @@ export type ModelproxyStatus = typeof ModelproxyStatus.Type;
 type ModelproxyAccount = typeof Account.Type;
 
 const decodeStatus = Schema.decodeUnknownEffect(ModelproxyStatus);
+const decodeStatusJson = Schema.decodeUnknownEffect(Schema.fromJsonString(ModelproxyStatus));
+
+const STREAM_IDLE_TIMEOUT = "45 seconds";
 
 export class ModelproxyReadError extends Schema.TaggedError<ModelproxyReadError>()(
   "ModelproxyReadError",
@@ -89,6 +93,8 @@ export class ModelproxyReadError extends Schema.TaggedError<ModelproxyReadError>
      * own page). A wrong URL or a payload this build cannot read is not.
      */
     transient: Schema.optional(Schema.Boolean),
+    /** The gateway predates the status stream; only the polled read works there. */
+    unsupported: Schema.optional(Schema.Boolean),
   },
 ) {
   override get message(): string {
@@ -296,7 +302,103 @@ export const makeModelproxyApi = Effect.gen(function* () {
     );
   });
 
-  return { readStatus };
+  /**
+   * The gateway's status as it changes, from its server-sent-events stream.
+   * The stream ends when the gateway closes it or goes quiet past its
+   * keepalive, so the caller reconnects either way.
+   */
+  const streamStatus = (
+    baseUrl: string,
+    accessToken: string,
+  ): Stream.Stream<ModelproxyStatus, ModelproxyReadError> =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const url = yield* Effect.try({
+          try: () => new URL("/api/status/stream", baseUrl).toString(),
+          catch: () => new ModelproxyReadError({ detail: "The gateway URL is not valid." }),
+        });
+        const response = yield* client
+          .execute(
+            HttpClientRequest.get(url).pipe(
+              HttpClientRequest.setHeaders({
+                Authorization: `Bearer ${accessToken}`,
+                Accept: "text/event-stream",
+              }),
+            ),
+          )
+          .pipe(
+            Effect.timeout("15 seconds"),
+            Effect.mapError(
+              () =>
+                new ModelproxyReadError({ detail: "The gateway did not answer.", transient: true }),
+            ),
+          );
+        if (response.status === 401 || response.status === 403) {
+          return yield* new ModelproxyReadError({
+            detail: `The gateway rejected the session (HTTP ${response.status}).`,
+            unauthorized: true,
+          });
+        }
+        if (response.status === 404) {
+          return yield* new ModelproxyReadError({
+            detail: "The gateway does not stream its status.",
+            unsupported: true,
+          });
+        }
+        if (response.status < 200 || response.status >= 300) {
+          return yield* new ModelproxyReadError({
+            detail: `The gateway status stream failed (HTTP ${response.status}).`,
+            ...(response.status >= 500 ? { transient: true } : {}),
+          });
+        }
+        // Something in front of the gateway (a sign-in page, a catch-all)
+        // can answer 200 with a page instead; reading that as a stream would
+        // end cleanly and reconnect forever.
+        if (!(response.headers["content-type"] ?? "").startsWith("text/event-stream")) {
+          return yield* new ModelproxyReadError({
+            detail: "The gateway did not answer with a status stream.",
+            unsupported: true,
+          });
+        }
+        return response.stream.pipe(
+          Stream.mapError(
+            () => new ModelproxyReadError({ detail: "The gateway stream broke.", transient: true }),
+          ),
+          Stream.decodeText(),
+          Stream.splitLines,
+          // The gateway sends a keepalive line every 15 seconds; three missed
+          // means the connection is gone even if the socket has not noticed.
+          Stream.timeout(STREAM_IDLE_TIMEOUT),
+          Stream.mapAccum(
+            () => "",
+            (data: string, line: string) => {
+              if (line === "") return ["", data === "" ? [] : [data]] as const;
+              if (line.startsWith("data:")) {
+                const value = line.slice(5).replace(/^ /, "");
+                return [data === "" ? value : `${data}\n${value}`, []] as const;
+              }
+              return [data, []] as const;
+            },
+          ),
+          Stream.mapEffect((data) =>
+            decodeStatusJson(data).pipe(
+              Effect.map((status): ReadonlyArray<ModelproxyStatus> => [status]),
+              // One snapshot this build cannot read is skipped, not fatal:
+              // the next change brings another.
+              Effect.catch(() =>
+                Effect.as(
+                  Effect.logDebug("modelproxy status event was not understood"),
+                  [] as ReadonlyArray<ModelproxyStatus>,
+                ),
+              ),
+            ),
+          ),
+          Stream.flattenIterable,
+        );
+      }),
+    );
+
+  return { readStatus, streamStatus };
 });
 
 export type ModelproxyApi = Effect.Success<typeof makeModelproxyApi>;

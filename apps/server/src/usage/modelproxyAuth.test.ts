@@ -164,6 +164,28 @@ describe("modelproxyAuth", () => {
     }),
   );
 
+  it.effect("refreshes once when two readers find the token expiring together", () =>
+    Effect.gen(function* () {
+      // The issuer rotates refresh tokens: a second use of one is rejected.
+      const { auth, forms } = fixture([
+        granted("access-1", 30),
+        granted("access-2", 300),
+        { status: 400, body: { error: "invalid_grant" } },
+      ]);
+      const { service, scope } = yield* auth;
+      yield* service.start(sourceId, config);
+      yield* TestClock.adjust("5 seconds");
+      const tokens = yield* Effect.all(
+        [service.accessToken(sourceId, config), service.accessToken(sourceId, config)],
+        { concurrency: "unbounded" },
+      );
+      expect(tokens).toEqual(["access-2", "access-2"]);
+      expect(forms.filter((form) => form.get("grant_type") === "refresh_token")).toHaveLength(1);
+      expect((yield* service.authState(sourceId)).state).toBe("signedIn");
+      yield* Scope.close(scope, Exit.void);
+    }),
+  );
+
   it.effect("refreshes a session on demand even when its token has time left", () =>
     Effect.gen(function* () {
       const { auth, forms } = fixture([granted("access-1", 3600), granted("access-2", 3600)]);

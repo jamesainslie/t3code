@@ -211,8 +211,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.subscribeBackgroundPolicy]: "server",
   // Fork-only RPCs.
   [WS_METHODS.usageLimitSourceAuth]: "server",
-  [WS_METHODS.usageLimitSourceRefresh]: "server",
   [WS_METHODS.usageLimitSourceAccountLogin]: "server",
+  [WS_METHODS.usageLimitSourceWatch]: "server",
   [WS_METHODS.threadDocumentCommentsMutate]: "orchestration",
   [WS_METHODS.subscribeThreadDocumentComments]: "orchestration",
   [WS_METHODS.roadmapSubscribe]: "orchestration",

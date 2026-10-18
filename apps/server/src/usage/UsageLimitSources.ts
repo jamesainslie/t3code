@@ -5,7 +5,9 @@
  *
  * Each configured `settings.usageLimitSources` entry is polled on the
  * provider health-check interval and on every settings change, then
- * published as one snapshot per source over `subscribeServerConfig`. A source
+ * published as one snapshot per source over `subscribeServerConfig`. While a
+ * client watches, a modelproxy source follows the gateway's status stream
+ * instead, so its snapshot changes when the gateway does. A source
  * that fails keeps its row with `error` set so the user can see it is
  * configured but unreachable. Nothing is persisted: like provider status,
  * this is live state that re-derives on boot. The one exception is a
@@ -39,13 +41,15 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as Settings from "../serverSettings.ts";
 import { makeCliproxyApi } from "./cliproxyApi.ts";
 import { makeModelproxyAccountLogin } from "./modelproxyAccountLogin.ts";
-import { makeModelproxyApi, mapModelproxyStatus } from "./modelproxyApi.ts";
+import { makeModelproxyApi, mapModelproxyStatus, type ModelproxyStatus } from "./modelproxyApi.ts";
 import { makeModelproxyAuth } from "./modelproxyAuth.ts";
 
 export class UsageLimitSources extends Context.Service<
@@ -54,6 +58,11 @@ export class UsageLimitSources extends Context.Service<
     readonly current: Effect.Effect<ReadonlyArray<UsageLimitSourceSnapshot>>;
     readonly streamChanges: Stream.Stream<ReadonlyArray<UsageLimitSourceSnapshot>>;
     readonly refresh: Effect.Effect<void>;
+    /**
+     * Fork: holds the gateways' status streams open for as long as the scope
+     * lives, so their snapshots follow every change instead of the interval.
+     */
+    readonly watch: Effect.Effect<void, never, Scope.Scope>;
     readonly consumeResetCredit: (
       input: UsageLimitSourceConsumeResetCreditInput,
     ) => Effect.Effect<ProviderConsumeResetCreditResult, UsageLimitSourceError>;
@@ -104,6 +113,15 @@ interface SourceRead {
 /** How long a transient failure waits before its one retry. */
 const RETRY_AFTER = Duration.seconds(3);
 
+/** How soon a watched gateway's stream is reopened after the gateway closes it. */
+const FOLLOW_RECONNECT = Duration.seconds(1);
+/** The longest pause between attempts to reopen a failing stream. */
+const FOLLOW_BACKOFF_CAP = Duration.seconds(30);
+/** The most often one watched gateway's status is published to clients. */
+const LIVE_PUBLISH_INTERVAL = Duration.seconds(2);
+/** How often a watched gateway without the status stream is read instead. */
+const UNSUPPORTED_READ_INTERVAL = Duration.seconds(5);
+
 /**
  * A transient failure within two polling intervals of a good read keeps
  * that read: one missed poll, such as a laptop waking before its network
@@ -141,6 +159,24 @@ export const make = Effect.gen(function* () {
     PubSub.unbounded<ReadonlyArray<UsageLimitSourceSnapshot>>(),
     PubSub.shutdown,
   );
+
+  const modelproxySnapshot = Effect.fn("UsageLimitSources.modelproxySnapshot")(function* (
+    id: UsageLimitSourceId,
+    base: Pick<UsageLimitSourceSnapshot, "id" | "kind" | "label" | "checkedAt">,
+    auth: UsageLimitSourceAuthState,
+    status: ModelproxyStatus,
+  ) {
+    const mapped = mapModelproxyStatus(status, {
+      checkedAt: base.checkedAt,
+      nowMs: DateTime.toEpochMillis(yield* DateTime.now),
+    });
+    const logins = yield* accountLogins.sessions(id);
+    return {
+      ...base,
+      accounts: mapped.accounts,
+      proxy: { auth, ...mapped.proxy, ...(logins.length > 0 ? { accountLogins: logins } : {}) },
+    } satisfies UsageLimitSourceSnapshot;
+  });
 
   const readModelproxy = Effect.fn("UsageLimitSources.readModelproxy")(function* (
     id: UsageLimitSourceId,
@@ -191,18 +227,7 @@ export const make = Effect.gen(function* () {
         ...(failure.transient ? { transient: true as const } : {}),
       };
     }
-    const mapped = mapModelproxyStatus(status.success, {
-      checkedAt: base.checkedAt,
-      nowMs: DateTime.toEpochMillis(yield* DateTime.now),
-    });
-    const logins = yield* accountLogins.sessions(id);
-    return {
-      snapshot: {
-        ...base,
-        accounts: mapped.accounts,
-        proxy: { auth, ...mapped.proxy, ...(logins.length > 0 ? { accountLogins: logins } : {}) },
-      },
-    };
+    return { snapshot: yield* modelproxySnapshot(id, base, auth, status.success) };
   });
 
   const readSourceOnce = Effect.fn("UsageLimitSources.readSourceOnce")(function* (
@@ -364,6 +389,153 @@ export const make = Effect.gen(function* () {
       return result;
     }).pipe(refreshLock.withPermits(1));
 
+  // Fork: while a client watches a gateway, each signed-in modelproxy source
+  // follows the gateway's status stream rather than waiting for the interval.
+  // Nobody watching means no open stream, so an idle environment costs the
+  // gateway nothing more than the interval read.
+  const watchers = yield* SubscriptionRef.make(0);
+  const watch = Effect.acquireRelease(
+    SubscriptionRef.update(watchers, (n) => n + 1),
+    () => SubscriptionRef.update(watchers, (n) => n - 1),
+  );
+
+  // Shares the refresh lock so an interval read already in flight cannot
+  // publish an older status over a newer streamed one.
+  const publishSource = (snapshot: UsageLimitSourceSnapshot) =>
+    Effect.gen(function* () {
+      const previous = yield* Ref.get(stateRef);
+      // A source the list does not have yet arrives with the next refresh.
+      if (!previous.some((source) => source.id === snapshot.id)) return;
+      yield* publish(previous.map((source) => (source.id === snapshot.id ? snapshot : source)));
+    }).pipe(refreshLock.withPermits(1));
+
+  const followSource = Effect.fn("UsageLimitSources.followSource")(function* (
+    id: UsageLimitSourceId,
+    config: ModelproxyUsageLimitSourceConfig,
+  ) {
+    let forceRefresh = false;
+    let failures = 0;
+    while (true) {
+      const auth = yield* modelproxyAuth.authState(id);
+      // Signing in restarts every follower, so a signed-out one can stop.
+      if (auth.state !== "signedIn") return;
+      let received = 0;
+      const followed = yield* modelproxyAuth.accessToken(id, config, { forceRefresh }).pipe(
+        Effect.flatMap((token) =>
+          modelproxy.streamStatus(config.url, token).pipe(
+            // Every publish reaches every connected client, not only the one
+            // watching, and a busy gateway changes its in-flight count every
+            // second. Keep only the latest status and publish at most one per
+            // interval; the first goes out at once.
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
+            Stream.throttle({ cost: () => 1, units: 1, duration: LIVE_PUBLISH_INTERVAL }),
+            Stream.runForEach((status) =>
+              Effect.gen(function* () {
+                received += 1;
+                failures = 0;
+                forceRefresh = false;
+                const checkedAt = DateTime.formatIso(yield* DateTime.now);
+                const base = { id, kind: config.kind, label: sourceLabel(id, config), checkedAt };
+                yield* publishSource(yield* modelproxySnapshot(id, base, auth, status));
+              }),
+            ),
+          ),
+        ),
+        Effect.result,
+      );
+      if (followed._tag === "Success" && received > 0) {
+        // The gateway closed the stream (a deploy, an idle edge); pick it
+        // back up after a beat.
+        yield* Effect.sleep(FOLLOW_RECONNECT);
+        continue;
+      }
+      // A stream that ended without one status (a proxy that buffers the
+      // body until the idle timeout) is a failure too, or it would reopen
+      // every second and leave the snapshot stale without saying so.
+      const failure = followed._tag === "Failure" ? followed.failure : null;
+      // The gateway can reject a token its expiry still vouches for; one
+      // fresh token settles that before anything is reported.
+      if (failure?._tag === "ModelproxyReadError" && failure.unauthorized && !forceRefresh) {
+        forceRefresh = true;
+        continue;
+      }
+      forceRefresh = false;
+      yield* Effect.logDebug("usage limit source stream failed", {
+        id,
+        cause: failure ?? "closed before any status",
+      });
+      // A plain read reports the failure the way the interval would, and on
+      // a gateway without the stream it is the live status: read on a short
+      // cadence for as long as someone watches.
+      yield* refresh;
+      if (failure?._tag === "ModelproxyReadError" && failure.unsupported) {
+        yield* Effect.sleep(UNSUPPORTED_READ_INTERVAL);
+        continue;
+      }
+      failures += 1;
+      yield* Effect.sleep(
+        Duration.millis(
+          Math.min(2 ** (failures - 1) * 1_000, Duration.toMillis(FOLLOW_BACKOFF_CAP)),
+        ),
+      );
+    }
+  });
+
+  const followAll = Effect.gen(function* () {
+    const settings = yield* settingsService.getSettings.pipe(
+      Effect.orElseSucceed((): ServerSettings | null => null),
+    );
+    const sources = Object.entries(settings?.usageLimitSources ?? {}).flatMap(([id, config]) =>
+      config.enabled && config.kind === "modelproxy"
+        ? [[id as UsageLimitSourceId, config] as const]
+        : [],
+    );
+    yield* Effect.forEach(
+      sources,
+      ([id, config]) =>
+        // A defect in one follower stops that source following until the
+        // next restart trigger; it must not end the trigger stream itself.
+        followSource(id, config).pipe(
+          Effect.catchDefect((defect) =>
+            Effect.logError("usage limit source follower failed", { id, defect }),
+          ),
+        ),
+      {
+        concurrency: "unbounded",
+        discard: true,
+      },
+    );
+  });
+
+  // Any change to who watches, which sources exist, or a sign-in restarts
+  // the followers against current settings and credentials.
+  yield* Stream.mergeAll(
+    [
+      SubscriptionRef.changes(watchers).pipe(
+        Stream.map((count) => count > 0),
+        Stream.changes,
+        Stream.map(() => undefined),
+      ),
+      settingsService.streamChanges.pipe(
+        Stream.map((settings) => settings.usageLimitSources),
+        Stream.changes,
+        Stream.map(() => undefined),
+      ),
+      modelproxyAuth.changes.pipe(Stream.map(() => undefined)),
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(
+    Stream.switchMap(() =>
+      Stream.fromEffect(
+        SubscriptionRef.get(watchers).pipe(
+          Effect.flatMap((count) => (count > 0 ? followAll : Effect.void)),
+        ),
+      ),
+    ),
+    Stream.runDrain,
+    Effect.forkScoped,
+  );
+
   yield* settingsService.streamChanges.pipe(
     Stream.map((settings) => settings.usageLimitSources),
     Stream.changes,
@@ -408,6 +580,7 @@ export const make = Effect.gen(function* () {
     auth,
     accountLogin,
     refresh,
+    watch,
     get streamChanges() {
       return Stream.unwrap(
         Effect.gen(function* () {

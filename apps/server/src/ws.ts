@@ -2309,8 +2309,9 @@ const layerWsRpc = (
         [WS_METHODS.serverUpdateProvider]: (input) =>
           providerMaintenanceRunner.updateProvider(input),
         [WS_METHODS.usageLimitSourceAuth]: (input) => usageLimitSources.auth(input),
-        [WS_METHODS.usageLimitSourceRefresh]: () => usageLimitSources.refresh,
         [WS_METHODS.usageLimitSourceAccountLogin]: (input) => usageLimitSources.accountLogin(input),
+        [WS_METHODS.usageLimitSourceWatch]: () =>
+          Stream.unwrap(Effect.as(usageLimitSources.watch, Stream.never)),
         [WS_METHODS.providerConsumeResetCredit]: (input) =>
           Effect.gen(function* () {
             if ("sourceId" in input) return yield* usageLimitSources.consumeResetCredit(input);
