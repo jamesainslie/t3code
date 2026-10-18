@@ -54,6 +54,33 @@ export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | nu
   return null;
 }
 
+// Fork: roadmap. GitHub sync imports issues by URL.
+export interface GitHubIssueLink {
+  readonly host: string;
+  readonly owner: string;
+  readonly repo: string;
+  readonly number: number;
+}
+
+/**
+ * A GitHub issue page on any host, since Enterprise Server hosts carry no
+ * telltale name. Owner and repo keep their case: GitHub resolves either, and
+ * the item shows what the user pasted.
+ */
+export function parseGitHubIssueUrl(targetUrl: string): GitHubIssueLink | null {
+  let url: URL;
+  try {
+    url = new URL(targetUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const match = /^\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:\/|$)/u.exec(url.pathname);
+  const number = Number(match?.[3]);
+  if (match === null || !Number.isSafeInteger(number) || number <= 0) return null;
+  return { host: url.hostname.toLowerCase(), owner: match[1]!, repo: match[2]!, number };
+}
+
 function claim(host: string, match: RegExpExecArray | null): ChangeRequestLink | null {
   const repository = match?.[1];
   const number = Number(match?.[2]);
