@@ -5,6 +5,7 @@
  * does.
  */
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import type { RoadmapSprint } from "@lathe/contracts";
 import { scopedThreadKey, scopeThreadRef } from "@lathe/client-runtime/environment";
 import { MapIcon } from "lucide-react";
 import { Atom } from "effect/reactivity";
@@ -12,7 +13,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { openRoadmapAttachPicker } from "../../commandPaletteBus";
-import { useRoadmapLive } from "../../state/roadmap";
+import { useRoadmapAreaSettings, useRoadmapLive } from "../../state/roadmap";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -24,6 +25,8 @@ import {
 import { RoadmapCardBody } from "./RoadmapCardBody";
 import { roadmapCardOpen, roadmapCardView } from "./roadmapCard.logic";
 import { useRoadmapThreadActions, type RoadmapThreadTarget } from "./useRoadmapThreadActions";
+
+const EMPTY_SPRINTS: ReadonlyArray<RoadmapSprint> = [];
 
 /**
  * The user's open or closed choice for a thread's card; null until they make
@@ -88,6 +91,7 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const live = useRoadmapLive(availability.supported ? availability.home : null);
+  const areaSettings = useRoadmapAreaSettings(availability.home);
   const items = live.data?.items ?? null;
   const view = roadmapCardView({
     supported: availability.supported,
@@ -146,6 +150,8 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
           <RoadmapCardBody
             view={view}
             items={items ?? []}
+            sprints={live.data?.sprints ?? EMPTY_SPRINTS}
+            areaSettings={areaSettings}
             canChange={availability.canChange}
             onClose={closeCard}
             onOpenItem={actions.openInRoadmap}
@@ -155,6 +161,7 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
             onTick={(itemId, criterionId, ticked) =>
               void actions.tickCriterion(itemId, criterionId, ticked)
             }
+            onCommand={actions.runCommand}
           />
         </RoadmapCard>
       ) : null}

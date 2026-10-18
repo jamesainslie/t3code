@@ -9,10 +9,15 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   blocksOf,
+  cardForecastText,
+  formatUnitProgress,
+  formatVelocity,
   parentPath,
   roadmapActorLabel,
   roadmapCardOpen,
+  roadmapCardSlots,
   roadmapCardView,
+  snoozeChoices,
 } from "./roadmapCard.logic";
 
 const thread = { environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread") };
@@ -101,6 +106,113 @@ describe("roadmapCardOpen", () => {
     expect(roadmapCardOpen(null, false)).toBe(false);
     expect(roadmapCardOpen(false, true)).toBe(false);
     expect(roadmapCardOpen(true, false)).toBe(true);
+  });
+});
+
+describe("roadmapCardSlots", () => {
+  // 2026-10-19 is a Monday. Five done 3 point leaves in the window make 1 point a day.
+  const today = "2026-10-19";
+  const weekdays = [1, 2, 3, 4, 5];
+  const areaSettings = {
+    work: { unit: "points" as const, workingWeekdays: weekdays, goingColdDays: 5 },
+    personal: { unit: "hours" as const, workingWeekdays: [0, 1, 2, 3, 4], goingColdDays: 5 },
+  };
+  const history = ["a", "b", "c", "d", "e"].map((name) =>
+    item(`done-${name}`, {
+      type: "story",
+      area: "work",
+      state: "done",
+      estimate: 3,
+      completedAt: "2026-10-14T12:00:00.000Z",
+    }),
+  );
+  const hoursEntry = (entryId: string, hours: number) => ({
+    id: entryId,
+    at: "2026-10-16T12:00:00.000Z",
+    hours,
+    actor: { _tag: "user" } as const,
+    note: null,
+  });
+
+  it("fills every slot the item has data for", () => {
+    const epic = item("epic", { type: "epic", area: "work", dueDate: "2026-10-23" });
+    const children = [
+      item("s1", { type: "story", parentId: epic.id, estimate: 2, state: "done" }),
+      item("s2", { type: "story", parentId: epic.id, estimate: 2 }),
+    ];
+    const target = { ...epic, hours: [hoursEntry("h1", 1.5), hoursEntry("h2", 2)] };
+    const items = [...history, target, ...children];
+    expect(roadmapCardSlots({ item: target, items, sprints: [], areaSettings, today })).toEqual({
+      unit: "points",
+      daysLeft: 4,
+      forecast: { status: "on-track", projected: "2026-10-21", slackDays: 2 },
+      progress: { burned: 2, total: 4 },
+      velocity: 1,
+      hoursLogged: 3.5,
+    });
+  });
+
+  it("leaves out what the item has no data for", () => {
+    const bare = item("bare", { type: "story", area: "work" });
+    expect(
+      roadmapCardSlots({ item: bare, items: [bare], sprints: [], areaSettings, today }),
+    ).toEqual({
+      unit: "points",
+      daysLeft: null,
+      forecast: null,
+      progress: null,
+      velocity: null,
+      hoursLogged: null,
+    });
+  });
+
+  it("counts working days on the item's own area calendar", () => {
+    const personal = item("p", { area: "personal", dueDate: "2026-10-25" });
+    // Sunday to Thursday: from Monday to Sunday Oct 25 is Tue, Wed, Thu and Sun.
+    expect(
+      roadmapCardSlots({ item: personal, items: [personal], sprints: [], areaSettings, today })
+        .daysLeft,
+    ).toBe(4);
+  });
+});
+
+describe("card formatting", () => {
+  it("writes amounts in the area's unit", () => {
+    expect(formatUnitProgress({ burned: 6, total: 10 }, "points")).toBe("6 of 10 pts");
+    expect(formatUnitProgress({ burned: 1, total: 1 }, "items")).toBe("1 of 1 item");
+    expect(formatUnitProgress({ burned: 2.25, total: 8 }, "hours")).toBe("2.3 of 8 hrs");
+    expect(formatUnitProgress({ burned: 0, total: 3 }, "criteria")).toBe("0 of 3 criteria");
+  });
+
+  it("writes velocity per working day", () => {
+    expect(formatVelocity(1.4, "points")).toBe("1.4 pts / day");
+    expect(formatVelocity(1, "items")).toBe("1 item / day");
+    expect(formatVelocity(0.333, "criteria")).toBe("0.3 criteria / day");
+  });
+
+  it("names the forecast with its projected weekday and date", () => {
+    expect(
+      cardForecastText({ status: "at-risk", projected: "2026-10-23", slackDays: 0 }, "2026-10-19"),
+    ).toBe("At risk, Fri Oct 23");
+    expect(
+      cardForecastText({ status: "on-track", projected: "2027-01-04", slackDays: 4 }, "2026-10-19"),
+    ).toBe("On track, Mon Jan 4, 2027");
+  });
+});
+
+describe("snoozeChoices", () => {
+  it("offers tomorrow, the next Monday and a week out", () => {
+    // 2026-10-21 is a Wednesday.
+    expect(snoozeChoices("2026-10-21")).toEqual([
+      { label: "Tomorrow", until: "2026-10-22" },
+      { label: "Next Monday", until: "2026-10-26" },
+      { label: "In a week", until: "2026-10-28" },
+    ]);
+  });
+
+  it("takes next Monday to mean the coming one, a week on from a Monday", () => {
+    expect(snoozeChoices("2026-10-19")[1]).toEqual({ label: "Next Monday", until: "2026-10-26" });
+    expect(snoozeChoices("2026-10-25")[1]).toEqual({ label: "Next Monday", until: "2026-10-26" });
   });
 });
 
