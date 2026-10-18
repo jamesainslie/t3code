@@ -29,6 +29,7 @@ import ProjectSyncRecords from "./migrations/006_ProjectSyncRecords.ts";
 import Roadmap from "./migrations/007_Roadmap.ts";
 import RoadmapCalendar from "./migrations/008_RoadmapCalendar.ts";
 import RoadmapLinkOutbox from "./migrations/009_RoadmapLinkOutbox.ts";
+import RoadmapProgressNotes from "./migrations/010_RoadmapProgressNotes.ts";
 
 const FORK_MIGRATIONS_TABLE = "fork_sql_migrations";
 
@@ -47,6 +48,7 @@ const forkMigrationEntries = [
   [7, "Roadmap", Roadmap],
   [8, "RoadmapCalendar", RoadmapCalendar],
   [9, "RoadmapLinkOutbox", RoadmapLinkOutbox],
+  [10, "RoadmapProgressNotes", RoadmapProgressNotes],
 ] as const;
 
 export const forkMigrationManifest = forkMigrationEntries.map(([id, name]) => [id, name] as const);

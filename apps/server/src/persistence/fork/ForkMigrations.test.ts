@@ -14,6 +14,7 @@ import ProjectionThreadsSnoozeReminder from "./migrations/004_ProjectionThreadsS
 import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsContinuedFrom.ts";
 import Roadmap from "./migrations/007_Roadmap.ts";
 import RoadmapCalendar from "./migrations/008_RoadmapCalendar.ts";
+import RoadmapProgressNotes from "./migrations/010_RoadmapProgressNotes.ts";
 
 /** What the server's persistence setup runs, in order. */
 const migrateLikeTheServer = Effect.gen(function* () {
@@ -126,6 +127,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [7, "Roadmap"],
           [8, "RoadmapCalendar"],
           [9, "RoadmapLinkOutbox"],
+          [10, "RoadmapProgressNotes"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
@@ -346,6 +348,48 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           SELECT payload_json AS payload FROM projection_roadmap_items WHERE item_id = 'open-1'
         `;
         assert.strictEqual(calendarFields(rerun[0]!.payload).pinnedAt, touchedAt);
+      }),
+    );
+  },
+);
+
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "roadmap progress notes migration",
+  (it) => {
+    it.effect("gives existing items no notes and keeps notes written since", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations();
+        yield* Roadmap;
+        yield* RoadmapCalendar;
+        const at = "2026-10-01T09:00:00.000Z";
+        const note = { id: "n1", at, actor: { _tag: "user" }, kind: "progress", text: "Hi" };
+        const noted = JSON.stringify({
+          ...JSON.parse(phaseOneItem("noted-1", "backlog", at, at)),
+          progressNotes: [{ ...note, criterionId: null }],
+        });
+        yield* sql`
+          INSERT INTO projection_roadmap_items (
+            item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+          ) VALUES
+            ('plain-1', NULL, 'n', NULL, ${phaseOneItem("plain-1", "backlog", at, at)}, 1),
+            ('noted-1', NULL, 'p', NULL, ${noted}, 2)
+        `;
+
+        yield* RoadmapProgressNotes;
+        yield* RoadmapProgressNotes;
+
+        const items = yield* sql<{ readonly id: string; readonly payload: string }>`
+          SELECT item_id AS id, payload_json AS payload FROM projection_roadmap_items
+          ORDER BY item_id
+        `;
+        assert.deepStrictEqual(
+          items.map((row) => [row.id, JSON.parse(row.payload).progressNotes]),
+          [
+            ["noted-1", [{ ...note, criterionId: null }]],
+            ["plain-1", []],
+          ],
+        );
       }),
     );
   },
