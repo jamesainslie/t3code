@@ -12,6 +12,7 @@ import ProjectionThreadsHighlight from "./migrations/002_ProjectionThreadsHighli
 import ProjectionThreadDocumentComments from "./migrations/003_ProjectionThreadDocumentComments.ts";
 import ProjectionThreadsSnoozeReminder from "./migrations/004_ProjectionThreadsSnoozeReminder.ts";
 import ProjectionThreadsContinuedFrom from "./migrations/005_ProjectionThreadsContinuedFrom.ts";
+import Roadmap from "./migrations/007_Roadmap.ts";
 
 /** What the server's persistence setup runs, in order. */
 const migrateLikeTheServer = Effect.gen(function* () {
@@ -119,7 +120,10 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           migrationManifest.filter(([id]) => id > 54).map(([id]) => id),
         );
         // Only fork migrations newer than the v1 fork build run.
-        assert.deepStrictEqual(first.fork, [[6, "ProjectSyncRecords"]]);
+        assert.deepStrictEqual(first.fork, [
+          [6, "ProjectSyncRecords"],
+          [7, "Roadmap"],
+        ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
         assert.deepStrictEqual(ledgers.fork, forkMigrationManifest);
@@ -196,6 +200,28 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
         );
         assert.deepStrictEqual(result.fork, forkMigrationManifest);
         assert.isTrue(yield* hasTable("projection_thread_document_comments"));
+        for (const table of [
+          "roadmap_events",
+          "roadmap_command_receipts",
+          "projection_roadmap_items",
+          "projection_roadmap_attachments",
+        ]) {
+          assert.isTrue(yield* hasTable(table), table);
+        }
+      }),
+    );
+
+    it.effect("runs the roadmap migration again harmlessly", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          INSERT INTO roadmap_events (
+            event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
+          ) VALUES ('event-1', 'cmd-1', 'item-1', 'roadmap.item.created', '{}', '{}', 'now')
+        `;
+        yield* Roadmap;
+        const rows = yield* sql`SELECT event_id FROM roadmap_events`;
+        assert.strictEqual(rows.length, 1);
       }),
     );
   },
