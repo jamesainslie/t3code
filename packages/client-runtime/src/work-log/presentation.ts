@@ -622,6 +622,7 @@ function summaryActionPriority(action: ToolGroupAction | LatheMcpToolSummaryActi
     // Fork: roadmap.
     case "roadmap-create":
     case "roadmap-update":
+    case "roadmap-log-hours":
       return 0;
     case "other":
     case "update":
