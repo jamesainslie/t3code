@@ -117,8 +117,18 @@ describe("roadmapCardSlots", () => {
   const today = "2026-10-19";
   const weekdays = [1, 2, 3, 4, 5];
   const areaSettings = {
-    work: { unit: "points" as const, workingWeekdays: weekdays, goingColdDays: 5 },
-    personal: { unit: "hours" as const, workingWeekdays: [0, 1, 2, 3, 4], goingColdDays: 5 },
+    work: {
+      unit: "points" as const,
+      workingWeekdays: weekdays,
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
+    personal: {
+      unit: "hours" as const,
+      workingWeekdays: [0, 1, 2, 3, 4],
+      goingColdDays: 5,
+      stewardEnabled: false,
+    },
   };
   const history = ["a", "b", "c", "d", "e"].map((name) =>
     item(`done-${name}`, {

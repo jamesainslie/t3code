@@ -144,6 +144,8 @@ export const RoadmapAreaSettings = Schema.Struct({
     .check(Schema.isMinLength(1))
     .pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORKING_WEEKDAYS))),
   goingColdDays: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(5))),
+  /** Whether the steward reads attached threads' turns against this area's criteria. */
+  stewardEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type RoadmapAreaSettings = typeof RoadmapAreaSettings.Type;
 
@@ -165,6 +167,7 @@ export const RoadmapAreaSettingsPatch = Schema.Struct({
   unit: Schema.optionalKey(RoadmapUnit),
   workingWeekdays: Schema.optionalKey(Schema.Array(RoadmapWeekday).check(Schema.isMinLength(1))),
   goingColdDays: Schema.optionalKey(PositiveInt),
+  stewardEnabled: Schema.optionalKey(Schema.Boolean),
 });
 export type RoadmapAreaSettingsPatch = typeof RoadmapAreaSettingsPatch.Type;
 
@@ -287,6 +290,11 @@ export const RoadmapCriterionTickCommand = command("roadmap.criterion.tick", {
   criterionId: TrimmedNonEmptyString,
   ticked: Schema.Boolean,
   evidence: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  /**
+   * When the turn the evidence cites ended. The steward must send it: the
+   * planner refuses its tick unless this is newer than the criterion's last untick.
+   */
+  evidenceAfter: Schema.optionalKey(IsoDateTime),
 });
 export const RoadmapBlockerLinkCommand = command("roadmap.blocker.link", {
   itemId: RoadmapItemId,
@@ -540,11 +548,14 @@ export const RoadmapRejectionCode = Schema.Literals([
   "pin_limit",
   /**
    * Pins, snoozes, sprints and removing notes are the user's; a note kind
-   * other than `progress` belongs to one actor.
+   * other than `progress` belongs to one actor. The steward may only tick
+   * criteria and add notes.
    */
   "forbidden_actor",
   /** Well-formed but meaningless, such as a snooze into the past or a sprint ending first. */
   "invalid_request",
+  /** A steward tick whose evidence is no newer than the last untick of that criterion. */
+  "stale_evidence",
 ]);
 export type RoadmapRejectionCode = typeof RoadmapRejectionCode.Type;
 

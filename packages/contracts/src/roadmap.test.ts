@@ -144,11 +144,12 @@ describe("RoadmapSprint", () => {
 describe("RoadmapAreaSettings", () => {
   const decode = decodeAreaSettings;
 
-  it("defaults to points, Monday to Friday, and five days to go cold", () => {
+  it("defaults to points, Monday to Friday, five days to go cold, and no steward", () => {
     expect(decode({})).toEqual({
       unit: "points",
       workingWeekdays: [1, 2, 3, 4, 5],
       goingColdDays: 5,
+      stewardEnabled: false,
     });
   });
 

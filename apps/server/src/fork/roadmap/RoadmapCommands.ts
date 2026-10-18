@@ -48,6 +48,11 @@ export interface RoadmapCommandState {
   readonly sprints?: ReadonlyMap<RoadmapSprintId, RoadmapSprint>;
   /** For restore: the ids the latest delete covering the target removed. */
   readonly lastDeletion?: ReadonlyArray<RoadmapItemId>;
+  /**
+   * For a steward tick: when its criterion was last unticked. Unticks clear the
+   * criterion, so only the event history holds this time.
+   */
+  readonly criterionUntickedAt?: IsoDateTime;
 }
 
 export interface RoadmapSprintChange {
@@ -117,6 +122,15 @@ export function planRoadmapCommand(input: {
   readonly now: DateTime.Utc;
 }): Result.Result<RoadmapEvent, RoadmapError> {
   const { command, actor, state, eventId } = input;
+  // The steward reports what it saw. Every judgement about the plan stays with
+  // the user and the agents, so it reaches nothing else.
+  if (
+    actor._tag === "steward" &&
+    command.type !== "roadmap.criterion.tick" &&
+    command.type !== "roadmap.note.add"
+  ) {
+    return reject("forbidden_actor", "The steward can only tick criteria and add notes.");
+  }
   if (isRoadmapSprintCommand(command)) {
     return planSprintCommand({ ...input, command });
   }
@@ -350,11 +364,16 @@ export function planRoadmapCommand(input: {
     case "roadmap.criterion.tick": {
       const current = requireLive(command.itemId);
       if (Result.isFailure(current)) return Result.fail(current.failure);
-      if (!current.success.criteria.some((criterion) => criterion.id === command.criterionId)) {
+      const criterion = current.success.criteria.find((entry) => entry.id === command.criterionId);
+      if (criterion === undefined) {
         return reject(
           "criterion_not_found",
           `${label(current.success)} has no criterion ${command.criterionId}.`,
         );
+      }
+      if (actor._tag === "steward") {
+        const refused = stewardTickRefusal(command, criterion, state.criterionUntickedAt);
+        if (refused !== undefined) return Result.fail(refused);
       }
       return Result.succeed({
         ...base,
@@ -635,6 +654,50 @@ export function planRoadmapCommand(input: {
       });
     }
   }
+}
+
+/**
+ * The steward ticks open criteria with evidence and nothing more. Once someone
+ * unticks a criterion, its old evidence was judged wrong, so a new tick must
+ * cite a turn that ended after the untick.
+ */
+function stewardTickRefusal(
+  command: Extract<RoadmapCommand, { readonly type: "roadmap.criterion.tick" }>,
+  criterion: RoadmapCriterion,
+  untickedAt: IsoDateTime | undefined,
+): RoadmapError | undefined {
+  if (!command.ticked) {
+    return new RoadmapError({
+      code: "forbidden_actor",
+      message: "The steward cannot untick a criterion.",
+    });
+  }
+  if (criterion.tickedAt !== null) {
+    return new RoadmapError({
+      code: "forbidden_actor",
+      message: `Criterion ${criterion.id} is already ticked; the steward leaves it alone.`,
+    });
+  }
+  if ((command.evidence ?? "").trim().length === 0) {
+    return new RoadmapError({
+      code: "invalid_request",
+      message: "The steward must give evidence for a tick.",
+    });
+  }
+  if (
+    untickedAt !== undefined &&
+    // Written as "not newer" so an unparseable time counts as stale.
+    !(
+      command.evidenceAfter !== undefined &&
+      Date.parse(command.evidenceAfter) > Date.parse(untickedAt)
+    )
+  ) {
+    return new RoadmapError({
+      code: "stale_evidence",
+      message: `Criterion ${criterion.id} was unticked after the turn this evidence cites.`,
+    });
+  }
+  return undefined;
 }
 
 /**

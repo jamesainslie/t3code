@@ -18,6 +18,7 @@ import {
   resolveModelPreferences,
   isModelSelectionProviderEnabled,
   parsePersistedServerObservabilitySettings,
+  resolveRoadmapStewardModelSelection,
   resolveSourceControlWriterModelSelection,
   resolveProjectAgentBrowserAccess,
   resolveProjectAutoPull,
@@ -448,6 +449,79 @@ describe("serverSettings helpers", () => {
         sourceControlWriterModelSelection: null,
       }).sourceControlWriterModelSelection,
     ).toBeNull();
+  });
+
+  describe("roadmap steward model", () => {
+    const steward = createModelSelection(ProviderInstanceId.make("claude_cheap"), "haiku", [
+      { id: "effort", value: "low" },
+    ]);
+    const withSteward = () => ({
+      ...DEFAULT_SERVER_SETTINGS,
+      providerInstances: {
+        [steward.instanceId]: { driver: ProviderDriverKind.make("claudeAgent"), config: {} },
+      },
+      roadmap: { ...DEFAULT_SERVER_SETTINGS.roadmap, stewardModelSelection: steward },
+    });
+    const provider = (overrides: Partial<ServerProvider>): ServerProvider => ({
+      instanceId: ProviderInstanceId.make("claude_cheap"),
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-10-18T00:00:00.000Z",
+      models: [],
+      slashCommands: [],
+      skills: [],
+      ...overrides,
+    });
+
+    it("uses the steward model when its provider can run it", () => {
+      expect(resolveRoadmapStewardModelSelection(withSteward(), [provider({})])).toBe(steward);
+      expect(resolveRoadmapStewardModelSelection(withSteward(), undefined)).toBe(steward);
+    });
+
+    it("falls back to the text generation model without one, or when its provider cannot run it", () => {
+      const settings = withSteward();
+      expect(resolveRoadmapStewardModelSelection(DEFAULT_SERVER_SETTINGS, undefined)).toBe(
+        DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
+      );
+      for (const unusable of [
+        provider({ enabled: false }),
+        provider({ supportsTextGeneration: false }),
+        provider({ availability: "unavailable" }),
+      ]) {
+        expect(resolveRoadmapStewardModelSelection(settings, [unusable])).toBe(
+          settings.textGenerationModelSelection,
+        );
+      }
+      expect(resolveRoadmapStewardModelSelection(settings, [])).toBe(
+        settings.textGenerationModelSelection,
+      );
+    });
+
+    it("replaces the steward model whole and clears it with null", () => {
+      const next = applyServerSettingsPatch(withSteward(), {
+        roadmap: {
+          stewardModelSelection: createModelSelection(ProviderInstanceId.make("codex"), "mini"),
+        },
+      });
+      expect(next.roadmap.stewardModelSelection).toEqual({ instanceId: "codex", model: "mini" });
+      expect(next.roadmap.areas).toEqual(DEFAULT_SERVER_SETTINGS.roadmap.areas);
+      expect(
+        applyServerSettingsPatch(withSteward(), { roadmap: { stewardModelSelection: null } })
+          .roadmap.stewardModelSelection,
+      ).toBeNull();
+    });
+
+    it("keeps the steward model when a patch changes only an area", () => {
+      const next = applyServerSettingsPatch(withSteward(), {
+        roadmap: { areas: { work: { stewardEnabled: true } } },
+      });
+      expect(next.roadmap.stewardModelSelection).toBe(steward);
+      expect(next.roadmap.areas.work.stewardEnabled).toBe(true);
+    });
   });
 
   it("falls back from a disabled source control writer provider without clearing its selection", () => {

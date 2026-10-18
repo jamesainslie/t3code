@@ -182,6 +182,22 @@ const make = Effect.gen(function* () {
                 yield* store.lastDeletion(command.itemId).pipe(Effect.mapError(readFailed)),
               )
             : undefined;
+        // Fork: roadmap. Only the steward's re-tick rule needs the untick time.
+        const criterionUntickedAt =
+          command.type === "roadmap.criterion.tick" && actor._tag === "steward"
+            ? yield* store.history(command.itemId).pipe(
+                Effect.map(
+                  (events) =>
+                    events.findLast(
+                      ({ event }) =>
+                        event.type === "roadmap.criterion.ticked" &&
+                        event.payload.criterionId === command.criterionId &&
+                        !event.payload.ticked,
+                    )?.event.occurredAt,
+                ),
+                Effect.mapError(readFailed),
+              )
+            : undefined;
         const now = yield* DateTime.now;
         const eventId = yield* idAllocator.allocate
           .event({ commandId: command.commandId })
@@ -193,6 +209,7 @@ const make = Effect.gen(function* () {
             items: new Map(records.map((record) => [record.item.id, record])),
             sprints: new Map(sprints.map((sprint) => [sprint.id, sprint])),
             ...(lastDeletion === undefined ? {} : { lastDeletion }),
+            ...(criterionUntickedAt === undefined ? {} : { criterionUntickedAt }),
           },
           eventId,
           now,

@@ -10,6 +10,7 @@ import { useState } from "react";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { readEnvironmentScope, readPreparedConnection } from "~/state/session";
 import { RoadmapLinkSection } from "./RoadmapLinkSettings";
+import { RoadmapStewardModelRow } from "./RoadmapStewardModelRow";
 import { useLinkToRoadmapHome } from "./useRoadmapLink";
 import { useEnvironments } from "~/state/environments";
 import {
@@ -35,6 +36,7 @@ import {
   NumberFieldInput,
 } from "../ui/number-field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -157,6 +159,7 @@ export function RoadmapSettingsPanel() {
         {ownId !== null && !mixed && homeId !== null && homeId !== ownId ? (
           <RoadmapLinkSection environmentId={ownId} environmentLabel={ownLabel} home={homeId} />
         ) : null}
+        <RoadmapStewardModelRow />
       </SettingsSection>
       <RoadmapAreaSections />
     </SettingsPageContainer>
@@ -253,6 +256,18 @@ function RoadmapAreaSection({
             label={`${label} going cold`}
             value={settings.goingColdDays}
             onChange={(goingColdDays) => onChange({ goingColdDays })}
+          />
+        }
+      />
+      <SettingsRow
+        {...(searchAnchor ? searchableSetting("roadmap-steward") : {})}
+        title="Steward"
+        description="After each turn on an attached thread, ticks criteria the turn proves met, with evidence, and notes what it is unsure of. It never unticks, changes fields or marks work done. Every environment's steward follows this switch."
+        control={
+          <Switch
+            checked={settings.stewardEnabled}
+            onCheckedChange={(checked) => onChange({ stewardEnabled: Boolean(checked) })}
+            aria-label={`${label} steward`}
           />
         }
       />

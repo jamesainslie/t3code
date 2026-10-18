@@ -132,8 +132,16 @@ describe("roadmap HTTP API", () => {
         expect(refused.status).toBe(409);
         expect(refused.json).toMatchObject({ _tag: "RoadmapError", code: "forbidden_actor" });
       }
+      // A note, since the planner keeps the steward to ticks and notes.
       const steward = yield* home.request("/api/roadmap/dispatch", token, {
-        command: create("from-steward"),
+        command: {
+          type: "roadmap.note.add",
+          commandId: "cmd-steward-note",
+          itemId: "from-laptop",
+          noteId: "steward-note",
+          kind: "unsure",
+          text: "No test covers this yet.",
+        },
         actor: { _tag: "steward", environmentId: LAPTOP },
       });
       expect(steward.status).toBe(200);

@@ -210,6 +210,24 @@ it.layer(NodeServices.layer)("Muse text generation", (it) => {
     }),
   );
 
+  it.effect("refuses structured generation without starting a host", () =>
+    Effect.gen(function* () {
+      const test = fixture();
+      const service = yield* test.make;
+      const error = yield* service
+        .generateStructured({
+          cwd: "/project",
+          prompt: "Anything",
+          outputSchema: Schema.Struct({ answer: Schema.String }),
+          modelSelection,
+        })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "TextGenerationError", operation: "generateStructured" });
+      expect(error.detail).toContain("Muse Code");
+      expect(test.host.connection.command).not.toHaveBeenCalled();
+    }),
+  );
+
   it.effect("ignores output and terminal notifications for another turn", () =>
     Effect.gen(function* () {
       const test = fixture((emit) => {

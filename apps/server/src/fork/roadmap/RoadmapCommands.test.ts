@@ -98,6 +98,7 @@ const plan = (
     readonly actor?: RoadmapActor;
     readonly lastDeletion?: ReadonlyArray<string>;
     readonly sprints?: ReadonlyArray<RoadmapSprint>;
+    readonly criterionUntickedAt?: string;
   } = {},
 ) =>
   planRoadmapCommand({
@@ -109,6 +110,9 @@ const plan = (
       ...(options.lastDeletion === undefined
         ? {}
         : { lastDeletion: options.lastDeletion.map((value) => id(value)) }),
+      ...(options.criterionUntickedAt === undefined
+        ? {}
+        : { criterionUntickedAt: options.criterionUntickedAt }),
     },
     eventId: EventId.make("event-1"),
     now,
@@ -477,6 +481,135 @@ describe("planRoadmapCommand", () => {
         ),
       );
       assert.equal(failure.code, "criterion_not_found");
+    });
+  });
+
+  describe("the steward", () => {
+    const records = [
+      live(
+        item("f", {
+          type: "feature",
+          criteria: [
+            { id: "c1", text: "Open", tickedAt: null, tickedBy: null, evidence: null },
+            { id: "c2", text: "Done", tickedAt: earlier, tickedBy: user, evidence: "by hand" },
+          ],
+        }),
+      ),
+    ];
+    const tick = (body: Partial<CommandBody<"roadmap.criterion.tick">> = {}) =>
+      cmd("roadmap.criterion.tick", {
+        itemId: id("f"),
+        criterionId: "c1",
+        ticked: true,
+        evidence: "Turn 4 ran the tests and they passed",
+        evidenceAfter: "2026-10-17T10:00:00.000Z",
+        ...body,
+      });
+    const asSteward = { actor: steward } as const;
+
+    it("ticks an open criterion with its evidence", () => {
+      const after = run(tick(), records, asSteward).get(id("f"))!.item;
+      assert.deepEqual(after.criteria[0], {
+        id: "c1",
+        text: "Open",
+        tickedAt: nowIso,
+        tickedBy: steward,
+        evidence: "Turn 4 ran the tests and they passed",
+      });
+    });
+
+    it("never unticks, and never ticks without evidence", () => {
+      assert.equal(
+        failureOf(plan(tick({ ticked: false }), records, asSteward)).code,
+        "forbidden_actor",
+      );
+      for (const evidence of [null, "   "]) {
+        assert.equal(
+          failureOf(plan(tick({ evidence }), records, asSteward)).code,
+          "invalid_request",
+        );
+      }
+    });
+
+    it("leaves a criterion someone already ticked alone", () => {
+      assert.equal(
+        failureOf(plan(tick({ criterionId: "c2" }), records, asSteward)).code,
+        "forbidden_actor",
+      );
+    });
+
+    it("re-ticks an unticked criterion only with evidence from after the untick", () => {
+      const untickedAt = "2026-10-17T12:00:00.000Z";
+      const options = { ...asSteward, criterionUntickedAt: untickedAt };
+      for (const evidenceAfter of [
+        undefined,
+        "2026-10-17T10:00:00.000Z",
+        untickedAt,
+        "not a time",
+      ]) {
+        const command =
+          evidenceAfter === undefined
+            ? cmd("roadmap.criterion.tick", {
+                itemId: id("f"),
+                criterionId: "c1",
+                ticked: true,
+                evidence: "Turn 4",
+              })
+            : tick({ evidenceAfter });
+        assert.equal(failureOf(plan(command, records, options)).code, "stale_evidence");
+      }
+      eventOf(plan(tick({ evidenceAfter: "2026-10-17T12:00:01.000Z" }), records, options));
+    });
+
+    it("leaves the user free to re-tick after unticking", () => {
+      eventOf(
+        plan(
+          cmd("roadmap.criterion.tick", { itemId: id("f"), criterionId: "c1", ticked: true }),
+          records,
+          {
+            criterionUntickedAt: "2026-10-17T12:00:00.000Z",
+          },
+        ),
+      );
+    });
+
+    it("refuses every change but ticks and notes", () => {
+      const refused: ReadonlyArray<RoadmapCommand> = [
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { state: "done" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { priority: "p0" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { dueDate: "2026-11-01" } }),
+        cmd("roadmap.item.update", { itemId: id("f"), patch: { estimate: 3 } }),
+        cmd("roadmap.item.create", { itemId: id("new"), itemType: "story", title: "New" }),
+        cmd("roadmap.item.move", { itemId: id("f"), parentId: null }),
+        cmd("roadmap.item.delete", { itemId: id("f") }),
+        cmd("roadmap.criteria.set", { itemId: id("f"), criteria: [] }),
+        cmd("roadmap.thread.detach", { itemId: id("f"), thread: thread("t-agent") }),
+        cmd("roadmap.hours.log", { itemId: id("f"), entryId: "h1", hours: 1 }),
+        cmd("roadmap.item.mark-reviewed", { itemId: id("f") }),
+        cmd("roadmap.sprint.create", {
+          sprintId: sid("s1"),
+          name: "S1",
+          area: "work",
+          startDate: "2026-10-19",
+          endDate: "2026-10-30",
+        }),
+      ];
+      for (const command of refused) {
+        assert.equal(
+          failureOf(plan(command, records, asSteward)).code,
+          "forbidden_actor",
+          command.type,
+        );
+      }
+      for (const kind of ["progress", "drift", "unsure"] as const) {
+        eventOf(
+          plan(
+            cmd("roadmap.note.add", { itemId: id("f"), noteId: kind, kind, text: "Seen" }),
+            records,
+            asSteward,
+          ),
+        );
+      }
     });
   });
 
