@@ -7,7 +7,7 @@ import {
 } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { attachPickerGroups, roadmapHref, ROADMAP_ITEM_TYPE_LABELS } from "./roadmapThread.logic";
+import { attachPickerGroups, roadmapHref } from "./roadmapThread.logic";
 
 const item = (
   id: string,
@@ -48,13 +48,6 @@ describe("roadmapHref", () => {
     expect(roadmapHref({ new: true, parent: RoadmapItemId.make("p1") })).toBe(
       "/roadmap?new=1&parent=p1",
     );
-  });
-});
-
-describe("ROADMAP_ITEM_TYPE_LABELS", () => {
-  it("names every type", () => {
-    expect(Object.keys(ROADMAP_ITEM_TYPE_LABELS)).toHaveLength(8);
-    expect(ROADMAP_ITEM_TYPE_LABELS["support-ticket"]).toBe("Support ticket");
   });
 });
 

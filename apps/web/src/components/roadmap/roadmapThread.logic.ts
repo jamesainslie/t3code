@@ -2,28 +2,8 @@
  * Fork: roadmap. Pure helpers for the thread-side entry points: the thread
  * menu, the attach picker and the Roadmap card.
  */
-import {
-  RoadmapItemType,
-  type RoadmapItemId,
-  type RoadmapPriority,
-  type RoadmapThreadRef,
-  type RoadmapWorkItem,
-} from "@lathe/contracts";
+import type { RoadmapItemId, RoadmapThreadRef, RoadmapWorkItem } from "@lathe/contracts";
 import { buildTree, type RoadmapTreeNode } from "@lathe/client-runtime/roadmap/tree";
-
-export const ROADMAP_ITEM_TYPE_LABELS: Readonly<Record<RoadmapItemType, string>> = {
-  objective: "Objective",
-  "key-result": "Key Result",
-  initiative: "Initiative",
-  epic: "Epic",
-  feature: "Feature",
-  story: "Story",
-  bug: "Bug",
-  "support-ticket": "Support ticket",
-};
-
-/** Hierarchy order, which is also the order the create menus list them in. */
-export const ROADMAP_ITEM_TYPES: ReadonlyArray<RoadmapItemType> = RoadmapItemType.literals;
 
 /**
  * A link into the Roadmap page. The page owns these search params: `item`
@@ -96,10 +76,3 @@ export function attachPickerGroups(
   if (loose.length > 0) groups.push({ objectiveId: null, label: "No objective", entries: loose });
   return groups;
 }
-
-export const ROADMAP_PRIORITY_LABELS: Readonly<Record<RoadmapPriority, string>> = {
-  p0: "P0",
-  p1: "P1",
-  p2: "P2",
-  p3: "P3",
-};

@@ -13,7 +13,8 @@ import {
   NumberFieldInput,
 } from "../ui/number-field";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import { formatRoadmapDate, localIsoDate } from "./roadmapPage.logic";
+import { localIsoDate } from "./roadmap.logic";
+import { formatRoadmapDate } from "./roadmapPage.logic";
 
 const dateOf = (iso: IsoDate) => {
   const [year, month, day] = iso.split("-").map(Number);

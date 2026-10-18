@@ -1,7 +1,7 @@
 import type { ContextMenuItem, RoadmapItemType, ThreadHighlightPalette } from "@lathe/contracts";
 import type { SnoozePreset } from "@lathe/client-runtime/state/thread-settled";
 // Fork: roadmap.
-import { ROADMAP_ITEM_TYPE_LABELS, ROADMAP_ITEM_TYPES } from "./roadmap/roadmapThread.logic";
+import { ROADMAP_TYPE_LABELS, ROADMAP_TYPES } from "./roadmap/roadmap.logic";
 
 /**
  * Ids for the per-thread action menu. Snooze presets are dispatched as
@@ -162,9 +162,9 @@ function roadmapMenuItems(
       separatorBefore: true,
       disabled,
       children: [
-        ...ROADMAP_ITEM_TYPES.map((type) => ({
+        ...ROADMAP_TYPES.map((type) => ({
           id: `roadmap-create:${type}` as const,
-          label: ROADMAP_ITEM_TYPE_LABELS[type],
+          label: ROADMAP_TYPE_LABELS[type],
           disabled,
         })),
         {

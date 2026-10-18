@@ -32,12 +32,8 @@ import {
   RoadmapPriorityChip,
   RoadmapTypeTag,
 } from "./RoadmapChips";
-import {
-  ROADMAP_STATE_LABELS,
-  boardDueLabel,
-  criteriaProgress,
-  type BoardDueLabel,
-} from "./roadmapPage.logic";
+import { ROADMAP_STATE_LABELS, criteriaProgress } from "./roadmap.logic";
+import { boardDueLabel, type BoardDueLabel } from "./roadmapPage.logic";
 import { newRoadmapCommandId, useRoadmapDispatch } from "./useRoadmapDispatch";
 
 export interface RoadmapBoardProps {
@@ -83,7 +79,7 @@ export function RoadmapBoard({ home, items, underId, canEdit, today, onOpen }: R
             {columns[state].map((item) => {
               const priority = effectivePriority(item.id, byId);
               const parent = item.parentId === null ? undefined : byId.get(item.parentId);
-              const progress = criteriaProgress(item);
+              const progress = criteriaProgress(item.criteria);
               return (
                 <BoardCard
                   key={item.id}

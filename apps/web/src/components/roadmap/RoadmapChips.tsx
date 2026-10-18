@@ -12,7 +12,8 @@ import {
   ROADMAP_AREA_LABELS,
   ROADMAP_PRIORITY_LABELS,
   ROADMAP_STATE_LABELS,
-} from "./roadmapPage.logic";
+  ROADMAP_TYPE_LABELS,
+} from "./roadmap.logic";
 
 // Eight types need eight hues and the theme declares only a few, so each type
 // carries its own; the label badge mixes it into surfaces that suit both themes.
@@ -32,7 +33,12 @@ const TYPE_TAGS: Readonly<
 export function RoadmapTypeTag({ type }: { readonly type: RoadmapItemType }) {
   const tag = TYPE_TAGS[type];
   return (
-    <Badge size="sm" variant="label" style={{ "--label": tag.hue } as CSSProperties}>
+    <Badge
+      size="sm"
+      variant="label"
+      style={{ "--label": tag.hue } as CSSProperties}
+      aria-label={ROADMAP_TYPE_LABELS[type]}
+    >
       {tag.label}
     </Badge>
   );

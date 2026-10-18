@@ -14,8 +14,9 @@ import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
 } from "../CommandPalette.logic";
-import { RoadmapPriorityChip, RoadmapTypeTag } from "./RoadmapCardBody";
-import { attachPickerGroups, roadmapHref, ROADMAP_ITEM_TYPE_LABELS } from "./roadmapThread.logic";
+import { RoadmapPriorityChip, RoadmapTypeTag } from "./RoadmapChips";
+import { ROADMAP_TYPE_LABELS } from "./roadmap.logic";
+import { attachPickerGroups, roadmapHref } from "./roadmapThread.logic";
 import { useRoadmapThreadActions, type RoadmapThreadTarget } from "./useRoadmapThreadActions";
 
 /** The pushed view's group value; the palette swaps in the live groups for it. */
@@ -65,7 +66,7 @@ export function useRoadmapAttachPickerGroups(
         value: `roadmap-item:${entry.item.id}`,
         title: entry.item.title,
         ...(entry.depth > 0 ? { description: entry.path.join(" › ") } : {}),
-        searchTerms: [entry.item.title, ROADMAP_ITEM_TYPE_LABELS[entry.item.type]],
+        searchTerms: [entry.item.title, ROADMAP_TYPE_LABELS[entry.item.type]],
         icon: <MapIcon className={ITEM_ICON_CLASS} />,
         titleLeadingContent: <RoadmapTypeTag type={entry.item.type} />,
         titleTrailingContent: (

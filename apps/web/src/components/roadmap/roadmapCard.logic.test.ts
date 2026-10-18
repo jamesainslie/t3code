@@ -9,13 +9,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   blocksOf,
-  criteriaSummary,
-  localIsoDate,
   parentPath,
   roadmapActorLabel,
   roadmapCardOpen,
   roadmapCardView,
-  workingDaysLeft,
 } from "./roadmapCard.logic";
 
 const thread = { environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread") };
@@ -47,51 +44,6 @@ const item = (
   updatedAt: "2026-10-18T00:00:00.000Z",
   createdBy: { _tag: "user" },
   ...overrides,
-});
-
-describe("workingDaysLeft", () => {
-  it("counts the weekdays after today up to and including the due date", () => {
-    expect(workingDaysLeft("2026-10-19", "2026-10-23")).toBe(4);
-    expect(workingDaysLeft("2026-10-23", "2026-10-26")).toBe(1);
-  });
-
-  it("is zero on the due date and over a weekend before it", () => {
-    expect(workingDaysLeft("2026-10-23", "2026-10-23")).toBe(0);
-    expect(workingDaysLeft("2026-10-23", "2026-10-25")).toBe(0);
-  });
-
-  it("goes negative by the weekdays already past the due date", () => {
-    expect(workingDaysLeft("2026-10-26", "2026-10-23")).toBe(-1);
-    expect(workingDaysLeft("2026-11-02", "2026-10-23")).toBe(-6);
-  });
-
-  it("crosses month and year ends", () => {
-    expect(workingDaysLeft("2026-12-31", "2027-01-04")).toBe(2);
-  });
-});
-
-describe("localIsoDate", () => {
-  it("reads the calendar date in local time", () => {
-    expect(localIsoDate(new Date(2026, 0, 5, 23, 30))).toBe("2026-01-05");
-  });
-});
-
-describe("criteriaSummary", () => {
-  it("counts ticked criteria over the total", () => {
-    expect(
-      criteriaSummary([
-        {
-          id: "a",
-          text: "A",
-          tickedAt: "2026-10-18T00:00:00.000Z",
-          tickedBy: null,
-          evidence: null,
-        },
-        { id: "b", text: "B", tickedAt: null, tickedBy: null, evidence: null },
-      ]),
-    ).toEqual({ ticked: 1, total: 2 });
-    expect(criteriaSummary([])).toEqual({ ticked: 0, total: 0 });
-  });
 });
 
 describe("parentPath", () => {

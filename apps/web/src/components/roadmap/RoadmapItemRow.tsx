@@ -44,10 +44,9 @@ import {
   ROADMAP_STATES,
   ROADMAP_STATE_LABELS,
   ROADMAP_TYPE_LABELS,
-  canHaveChildren,
   criteriaProgress,
-  type OutlineDropZone,
-} from "./roadmapPage.logic";
+} from "./roadmap.logic";
+import { canHaveChildren, type OutlineDropZone } from "./roadmapPage.logic";
 
 export const OUTLINE_GRID_CLASS =
   "grid grid-cols-[minmax(0,1fr)_3.5rem_6.5rem_4.5rem_3.5rem_4.5rem_1.75rem] items-center gap-2";
@@ -109,7 +108,7 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
   const { setNodeRef: setDropNodeRef } = useDroppable({ id: item.id });
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
-  const progress = criteriaProgress(item);
+  const progress = criteriaProgress(item.criteria);
 
   useEffect(() => {
     if (selected) rowRef.current?.scrollIntoView({ block: "nearest" });

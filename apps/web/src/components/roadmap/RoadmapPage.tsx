@@ -40,8 +40,10 @@ import {
   ROADMAP_STATES,
   ROADMAP_TYPE_LABELS,
   ROADMAP_TYPES,
-  boardUnderOptions,
   localIsoDate,
+} from "./roadmap.logic";
+import {
+  boardUnderOptions,
   roadmapEditorRequest,
   withoutEditorRequest,
   type RoadmapSearch,

@@ -36,12 +36,12 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { randomUUID } from "../../lib/utils";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { useConnectedEnvironmentIds } from "../../state/environments";
-import { roadmapEnvironment, useRoadmapHome } from "../../state/roadmap";
-import { environmentServerConfigsAtom } from "../../state/server";
+import { roadmapEnvironment, useRoadmapHome, useRoadmapSupported } from "../../state/roadmap";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { ThreadActionMenuId, ThreadActionMenuRoadmapState } from "../threadActionMenu.logic";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ROADMAP_ITEM_TYPE_LABELS, ROADMAP_ITEM_TYPES, roadmapHref } from "./roadmapThread.logic";
+import { ROADMAP_TYPE_LABELS, ROADMAP_TYPES } from "./roadmap.logic";
+import { roadmapHref } from "./roadmapThread.logic";
 
 /**
  * The thread menu's "Start a new thread for it" toggle. It lives for the
@@ -63,12 +63,12 @@ export interface RoadmapAvailability {
 
 export function useRoadmapAvailability(): RoadmapAvailability {
   const home = useRoadmapHome();
-  const configs = useAtomValue(environmentServerConfigsAtom);
+  const supported = useRoadmapSupported(home);
   const connected = useConnectedEnvironmentIds();
   const canChange = useAtomValue(roadmapEnvironment.dispatchRoadmap.permissionAtom(home));
   return {
     home,
-    supported: home !== null && configs.get(home)?.environment.capabilities.roadmap === true,
+    supported,
     homeConnected: home !== null && connected.includes(home),
     canChange,
   };
@@ -232,7 +232,7 @@ export function useRoadmapThreadActions() {
     const attachHere = !options.newThread && current === null;
     const itemId = RoadmapItemId.make(randomUUID());
     const title = thread.title.trim() || "Untitled thread";
-    const label = ROADMAP_ITEM_TYPE_LABELS[itemType];
+    const label = ROADMAP_TYPE_LABELS[itemType];
     const created = await send({
       type: "roadmap.item.create",
       commandId: newCommandId(),
@@ -337,7 +337,7 @@ export function useRoadmapThreadActions() {
       void detach(threadRefOf(thread));
       return "handled";
     }
-    const itemType = ROADMAP_ITEM_TYPES.find((type) => action === `roadmap-create:${type}`);
+    const itemType = ROADMAP_TYPES.find((type) => action === `roadmap-create:${type}`);
     if (itemType !== undefined) {
       void createFromThread(thread, itemType, {
         newThread: appAtomRegistry.get(roadmapCreateInNewThreadAtom),

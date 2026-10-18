@@ -7,12 +7,14 @@ import {
   RoadmapItemId,
   type RoadmapItemPatch,
   type RoadmapItemState,
-  RoadmapItemType,
+  type RoadmapItemType,
   type RoadmapPriority,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
 import { buildTree, type RoadmapTreeNode } from "@lathe/client-runtime/roadmap/tree";
 import { canParent, wouldCreateParentCycle } from "@lathe/shared/roadmap";
+
+import { ROADMAP_AREAS, ROADMAP_STATES, ROADMAP_TYPES, workingDaysLeft } from "./roadmap.logic";
 
 export type RoadmapView = "outline" | "board";
 /** "open" is every state but done. */
@@ -30,43 +32,6 @@ export interface RoadmapSearch {
   readonly new?: 1;
   readonly parent?: RoadmapItemId;
 }
-
-export const ROADMAP_TYPES: ReadonlyArray<RoadmapItemType> = RoadmapItemType.literals;
-export const ROADMAP_STATES: ReadonlyArray<RoadmapItemState> = [
-  "backlog",
-  "in-progress",
-  "in-review",
-  "done",
-];
-export const ROADMAP_PRIORITIES: ReadonlyArray<RoadmapPriority> = ["p0", "p1", "p2", "p3"];
-export const ROADMAP_AREAS: ReadonlyArray<RoadmapArea> = ["work", "personal"];
-
-export const ROADMAP_TYPE_LABELS: Readonly<Record<RoadmapItemType, string>> = {
-  objective: "Objective",
-  "key-result": "Key result",
-  initiative: "Initiative",
-  epic: "Epic",
-  feature: "Feature",
-  story: "Story",
-  bug: "Bug",
-  "support-ticket": "Support ticket",
-};
-export const ROADMAP_STATE_LABELS: Readonly<Record<RoadmapItemState, string>> = {
-  backlog: "Backlog",
-  "in-progress": "In progress",
-  "in-review": "In review",
-  done: "Done",
-};
-export const ROADMAP_PRIORITY_LABELS: Readonly<Record<RoadmapPriority, string>> = {
-  p0: "P0",
-  p1: "P1",
-  p2: "P2",
-  p3: "P3",
-};
-export const ROADMAP_AREA_LABELS: Readonly<Record<RoadmapArea, string>> = {
-  work: "Work",
-  personal: "Personal",
-};
 
 const includes = <T extends string>(values: ReadonlyArray<T>, value: unknown): value is T =>
   typeof value === "string" && (values as ReadonlyArray<string>).includes(value);
@@ -281,51 +246,6 @@ export function resolveOutlineDrop(
   return zone === "before" ? { parentId, beforeId: over.id } : { parentId, afterId: over.id };
 }
 
-export function criteriaProgress(item: Pick<RoadmapWorkItem, "criteria">): {
-  readonly ticked: number;
-  readonly total: number;
-} {
-  return {
-    ticked: item.criteria.filter((criterion) => criterion.tickedAt !== null).length,
-    total: item.criteria.length,
-  };
-}
-
-const DAY_MS = 86_400_000;
-const dayNumber = (iso: IsoDate) => {
-  const [year, month, day] = iso.split("-").map(Number);
-  return Math.round(Date.UTC(year!, month! - 1, day!) / DAY_MS);
-};
-// Day 0 of the epoch was a Thursday.
-const isWeekday = (dayIndex: number) => {
-  const weekday = (((dayIndex + 4) % 7) + 7) % 7;
-  return weekday !== 0 && weekday !== 6;
-};
-const weekdaysIn = (fromDay: number, toDay: number) => {
-  const span = toDay - fromDay;
-  const fullWeeks = Math.floor(span / 7);
-  let count = fullWeeks * 5;
-  for (let day = fromDay + fullWeeks * 7; day < toDay; day += 1) {
-    if (isWeekday(day)) count += 1;
-  }
-  return count;
-};
-
-/**
- * Weekdays after `today` up to and including `due`; negative counts the
- * overdue weekdays. Phase 1 has no per-area calendar, so every weekday counts.
- */
-export function workingDaysUntil(due: IsoDate, today: IsoDate): number {
-  const dueDay = dayNumber(due);
-  const todayDay = dayNumber(today);
-  return dueDay >= todayDay ? weekdaysIn(todayDay + 1, dueDay + 1) : -weekdaysIn(dueDay, todayDay);
-}
-
-export function localIsoDate(date: Date): IsoDate {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function formatRoadmapDate(iso: IsoDate, today: IsoDate): string {
@@ -347,7 +267,7 @@ export function boardDueLabel(
   if (item.dueDate === null) return { date: null, left: null, tone: "default" };
   const date = formatRoadmapDate(item.dueDate, today);
   if (item.state === "done") return { date, left: "done", tone: "done" };
-  const days = workingDaysUntil(item.dueDate, today);
+  const days = workingDaysLeft(today, item.dueDate);
   if (days < 0) return { date, left: `${-days} wd late`, tone: "late" };
   if (days === 0) return { date, left: "due today", tone: "soon" };
   return { date, left: `${days} wd`, tone: days <= 1 ? "soon" : "default" };

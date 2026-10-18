@@ -10,7 +10,6 @@ import {
   buildCreateCommand,
   buildEditCommands,
   canHaveChildren,
-  criteriaProgress,
   defaultTypeFor,
   editorDraftFor,
   emptyEditorDraft,
@@ -23,7 +22,6 @@ import {
   typeOptionsFor,
   validateRoadmapSearch,
   withoutEditorRequest,
-  workingDaysUntil,
 } from "./roadmapPage.logic";
 
 const at = "2026-10-18T09:00:00.000Z";
@@ -299,35 +297,8 @@ describe("outline drag", () => {
   });
 });
 
-describe("criteriaProgress", () => {
-  it("counts ticked criteria", () => {
-    const criterion = (text: string, ticked: boolean) => ({
-      id: text,
-      text,
-      tickedAt: ticked ? at : null,
-      tickedBy: ticked ? ({ _tag: "user" } as const) : null,
-      evidence: null,
-    });
-    expect(
-      criteriaProgress(item("x", { criteria: [criterion("a", true), criterion("b", false)] })),
-    ).toEqual({ ticked: 1, total: 2 });
-  });
-});
-
 describe("dates", () => {
   // 2026-10-19 is a Monday.
-  it("counts weekdays after today up to the due date", () => {
-    expect(workingDaysUntil("2026-10-19", "2026-10-19")).toBe(0);
-    expect(workingDaysUntil("2026-10-23", "2026-10-19")).toBe(4);
-    expect(workingDaysUntil("2026-10-26", "2026-10-23")).toBe(1);
-    expect(workingDaysUntil("2026-10-30", "2026-10-19")).toBe(9);
-  });
-
-  it("counts overdue weekdays as negative", () => {
-    expect(workingDaysUntil("2026-10-16", "2026-10-19")).toBe(-1);
-    expect(workingDaysUntil("2026-10-15", "2026-10-19")).toBe(-2);
-  });
-
   it("labels a card's due date by working days left", () => {
     const today = "2026-10-19";
     expect(boardDueLabel(item("x", { dueDate: "2026-10-28" }), today)).toEqual({

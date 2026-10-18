@@ -3,23 +3,19 @@
  * inline edits, or the ways onto the roadmap when the thread is on none.
  */
 import type {
-  RoadmapArea,
   RoadmapCriterion,
   RoadmapItemId,
   RoadmapItemPatch,
-  RoadmapItemState,
   RoadmapItemType,
-  RoadmapPriority,
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { blockedState, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
 import { CalendarIcon, ChevronRightIcon, ClockIcon, MapIcon, XIcon } from "lucide-react";
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Calendar } from "../ui/calendar";
 import { Checkbox } from "../ui/checkbox";
@@ -34,116 +30,25 @@ import {
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger } from "../ui/select";
 import {
-  blocksOf,
-  criteriaSummary,
-  localIsoDate,
-  parentPath,
-  roadmapActorLabel,
-  workingDaysLeft,
-  type RoadmapCardView,
-} from "./roadmapCard.logic";
-import {
-  ROADMAP_ITEM_TYPE_LABELS,
-  ROADMAP_ITEM_TYPES,
+  ROADMAP_PRIORITIES,
   ROADMAP_PRIORITY_LABELS,
-} from "./roadmapThread.logic";
+  ROADMAP_STATE_LABELS,
+  ROADMAP_STATES,
+  ROADMAP_TYPE_LABELS,
+  ROADMAP_TYPES,
+  criteriaProgress,
+  localIsoDate,
+  workingDaysLeft,
+} from "./roadmap.logic";
+import { blocksOf, parentPath, roadmapActorLabel, type RoadmapCardView } from "./roadmapCard.logic";
+import {
+  RoadmapAreaBadge,
+  RoadmapNeedsReviewBadge,
+  RoadmapPriorityChip,
+  RoadmapStateChip,
+  RoadmapTypeTag,
+} from "./RoadmapChips";
 
-// Chips stay local to the card until the Roadmap page's chips land; they are
-// consolidated then.
-
-/** Per-type hues, mixed into the theme by the badge's `label` variant. */
-const TYPE_HUES: Readonly<Record<RoadmapItemType, string>> = {
-  objective: "#f472b6",
-  "key-result": "#22d3ee",
-  initiative: "#fb923c",
-  epic: "#a78bfa",
-  feature: "#3b82f6",
-  story: "#34d399",
-  bug: "#f87171",
-  "support-ticket": "#fbbf24",
-};
-
-const TYPE_TAGS: Readonly<Record<RoadmapItemType, string>> = {
-  objective: "obj",
-  "key-result": "kr",
-  initiative: "init",
-  epic: "epic",
-  feature: "feat",
-  story: "story",
-  bug: "bug",
-  "support-ticket": "support",
-};
-
-export function RoadmapTypeTag({ type }: { readonly type: RoadmapItemType }) {
-  return (
-    <Badge
-      size="sm"
-      variant="label"
-      style={{ "--label": TYPE_HUES[type] } as CSSProperties}
-      aria-label={ROADMAP_ITEM_TYPE_LABELS[type]}
-    >
-      {TYPE_TAGS[type]}
-    </Badge>
-  );
-}
-
-const PRIORITY_VARIANTS = {
-  p0: "error",
-  p1: "warning",
-  p2: "info",
-  p3: "secondary",
-} as const satisfies Record<RoadmapPriority, string>;
-
-/** An inherited priority reads as an outline so a set one stands out. */
-export function RoadmapPriorityChip({
-  priority,
-  inherited,
-}: {
-  readonly priority: RoadmapPriority;
-  readonly inherited: boolean;
-}) {
-  return (
-    <Badge
-      size="sm"
-      variant={inherited ? "outline" : PRIORITY_VARIANTS[priority]}
-      title={inherited ? "Inherited from a parent" : undefined}
-    >
-      {ROADMAP_PRIORITY_LABELS[priority]}
-    </Badge>
-  );
-}
-
-export const ROADMAP_STATE_LABELS: Readonly<Record<RoadmapItemState, string>> = {
-  backlog: "Backlog",
-  "in-progress": "In progress",
-  "in-review": "In review",
-  done: "Done",
-};
-
-const STATE_VARIANTS = {
-  backlog: "secondary",
-  "in-progress": "info",
-  "in-review": "warning",
-  done: "success",
-} as const satisfies Record<RoadmapItemState, string>;
-
-function RoadmapStateChip({ state }: { readonly state: RoadmapItemState }) {
-  return (
-    <Badge size="sm" variant={STATE_VARIANTS[state]}>
-      {ROADMAP_STATE_LABELS[state]}
-    </Badge>
-  );
-}
-
-const AREA_LABELS: Readonly<Record<RoadmapArea, string>> = { work: "Work", personal: "Personal" };
-
-const ROADMAP_STATES: ReadonlyArray<RoadmapItemState> = [
-  "backlog",
-  "in-progress",
-  "in-review",
-  "done",
-];
-const ROADMAP_PRIORITIES: ReadonlyArray<RoadmapPriority> = ["p0", "p1", "p2", "p3"];
 const INHERIT_PRIORITY = "inherit";
 
 export interface RoadmapCardBodyHandlers {
@@ -199,10 +104,10 @@ function EmptyState(props: RoadmapCardBodyHandlers & { readonly canChange: boole
             Create from this thread
           </MenuTrigger>
           <MenuPopup align="start">
-            {ROADMAP_ITEM_TYPES.map((type) => (
+            {ROADMAP_TYPES.map((type) => (
               <MenuItem key={type} onClick={() => props.onCreate(type)}>
                 <RoadmapTypeTag type={type} />
-                {ROADMAP_ITEM_TYPE_LABELS[type]}
+                {ROADMAP_TYPE_LABELS[type]}
               </MenuItem>
             ))}
           </MenuPopup>
@@ -368,7 +273,7 @@ function AttachedItem(
   const path = parentPath(item, byId);
   const blocked = blockedState(item, byId);
   const blocks = blocksOf(item, items);
-  const criteria = criteriaSummary(item.criteria);
+  const criteria = criteriaProgress(item.criteria);
   const daysLeft =
     item.dueDate === null ? null : workingDaysLeft(localIsoDate(new Date()), item.dueDate);
 
@@ -440,14 +345,8 @@ function AttachedItem(
             ))}
           </SelectPopup>
         </Select>
-        <Badge size="sm" variant="outline">
-          {AREA_LABELS[area.area]}
-        </Badge>
-        {item.needsReview ? (
-          <Badge size="sm" variant="info">
-            Needs review
-          </Badge>
-        ) : null}
+        <RoadmapAreaBadge area={area.area} />
+        {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         <Field label="Due">
