@@ -39,6 +39,7 @@ import {
   sprintDraftFor,
   sprintItemCount,
   type RoadmapSprintDraft,
+  withSprintDraftArea,
 } from "./roadmapSprints.logic";
 import { newRoadmapCommandId, useRoadmapDispatch } from "./useRoadmapDispatch";
 
@@ -221,9 +222,10 @@ function RoadmapSprintsDialog({
                       onValueChange={(value) => {
                         const area = ROADMAP_AREAS.find((option) => option === value);
                         if (area === undefined) return;
-                        // A new sprint's name counts the chosen area's sprints.
-                        if (editing === null) startNew(area);
-                        else update({ area });
+                        if (editing === null) {
+                          setDraft((current) => withSprintDraftArea(current, area, sprints));
+                          setError(null);
+                        } else update({ area });
                       }}
                     >
                       <SelectTrigger id={`${id}-area`} className="min-w-0">

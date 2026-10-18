@@ -74,6 +74,17 @@ export function emptySprintDraft(
   };
 }
 
+/** Moves a new sprint to another area, keeping a name the user typed and the chosen dates. */
+export function withSprintDraftArea(
+  draft: RoadmapSprintDraft,
+  area: RoadmapArea,
+  sprints: ReadonlyArray<Pick<RoadmapSprint, "area">>,
+): RoadmapSprintDraft {
+  const isDefaultName = draft.name === emptySprintDraft(sprints, draft.area, draft.startDate).name;
+  const name = isDefaultName ? emptySprintDraft(sprints, area, draft.startDate).name : draft.name;
+  return { ...draft, name, area };
+}
+
 export function sprintDraftFor(sprint: RoadmapSprint): RoadmapSprintDraft {
   return {
     name: sprint.name,
