@@ -109,7 +109,7 @@ function extractReleaseNoteItems(note: string | null | undefined): ExtractedRele
       .replace(/^\d+[.)]\s+/, "")
       .replace(/\s+/g, " ");
     const normalized = normalizeReleaseNoteLine(item);
-    if (normalized === "new contributors" || normalized === "full changelog") break;
+    if (normalized === "new contributors" || normalized.startsWith("full changelog")) break;
     if (/^#{1,6}\s+/.test(item)) continue;
     if (isIgnoredReleaseNoteLine(item)) continue;
     totalItems += 1;
