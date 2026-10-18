@@ -46,6 +46,8 @@ import {
   ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+// Fork: roadmap.
+import { RoadmapAreaSettingsPatch, RoadmapAreasSettings } from "./roadmap.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1284,6 +1286,10 @@ export const RoadmapSettings = Schema.Struct({
   homeEnvironmentId: Schema.NullOr(EnvironmentId).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** Only the home's copy is read; clients write it through the home. */
+  areas: RoadmapAreasSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(RoadmapAreasSettings)({}))),
+  ),
 });
 export type RoadmapSettings = typeof RoadmapSettings.Type;
 
@@ -1645,7 +1651,15 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   // Fork: roadmap.
   roadmap: Schema.optionalKey(
-    Schema.Struct({ homeEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)) }),
+    Schema.Struct({
+      homeEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)),
+      areas: Schema.optionalKey(
+        Schema.Struct({
+          work: Schema.optionalKey(RoadmapAreaSettingsPatch),
+          personal: Schema.optionalKey(RoadmapAreaSettingsPatch),
+        }),
+      ),
+    }),
   ),
   worktreesDirectory: Schema.optionalKey(TrimmedString),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),

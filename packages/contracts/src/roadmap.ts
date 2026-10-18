@@ -3,6 +3,7 @@
  * is its own event stream beside the orchestration log, owned by one
  * environment (the roadmap home).
  */
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import {
@@ -11,6 +12,7 @@ import {
   EventId,
   IsoDateTime,
   NonNegativeInt,
+  PositiveInt,
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
@@ -20,9 +22,13 @@ export const IsoDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$
 export type IsoDate = typeof IsoDate.Type;
 
 const NonNegativeNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
+const PositiveNumber = Schema.Finite.check(Schema.isGreaterThan(0));
 
 export const RoadmapItemId = TrimmedNonEmptyString.pipe(Schema.brand("RoadmapItemId"));
 export type RoadmapItemId = typeof RoadmapItemId.Type;
+
+export const RoadmapSprintId = TrimmedNonEmptyString.pipe(Schema.brand("RoadmapSprintId"));
+export type RoadmapSprintId = typeof RoadmapSprintId.Type;
 
 export const RoadmapItemType = Schema.Literals([
   "objective",
@@ -81,6 +87,67 @@ export const RoadmapAttachment = Schema.Struct({
 });
 export type RoadmapAttachment = typeof RoadmapAttachment.Type;
 
+/** Hours logged against an item by hand or by an agent; never derived from turn time. */
+export const RoadmapHoursEntry = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  at: IsoDateTime,
+  hours: PositiveNumber,
+  actor: RoadmapActor,
+  note: Schema.NullOr(Schema.String),
+});
+export type RoadmapHoursEntry = typeof RoadmapHoursEntry.Type;
+
+export const RoadmapSprint = Schema.Struct({
+  id: RoadmapSprintId,
+  name: TrimmedNonEmptyString,
+  area: RoadmapArea,
+  startDate: IsoDate,
+  endDate: IsoDate,
+});
+export type RoadmapSprint = typeof RoadmapSprint.Type;
+
+/** What an area's estimates, burn and velocity count. */
+export const RoadmapUnit = Schema.Literals(["items", "criteria", "points", "hours"]);
+export type RoadmapUnit = typeof RoadmapUnit.Type;
+
+/** 0 is Sunday, as `Date.prototype.getUTCDay` counts. */
+export const RoadmapWeekday = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 }));
+export type RoadmapWeekday = typeof RoadmapWeekday.Type;
+
+const DEFAULT_WORKING_WEEKDAYS: ReadonlyArray<RoadmapWeekday> = [1, 2, 3, 4, 5];
+
+/** Per-area calendar and unit. Every field defaults so older settings files still decode. */
+export const RoadmapAreaSettings = Schema.Struct({
+  unit: RoadmapUnit.pipe(Schema.withDecodingDefault(Effect.succeed("points" as const))),
+  // An empty week would leave working-day arithmetic with no day to land on.
+  workingWeekdays: Schema.Array(RoadmapWeekday)
+    .check(Schema.isMinLength(1))
+    .pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORKING_WEEKDAYS))),
+  goingColdDays: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(5))),
+});
+export type RoadmapAreaSettings = typeof RoadmapAreaSettings.Type;
+
+export const DEFAULT_ROADMAP_AREA_SETTINGS: RoadmapAreaSettings = Schema.decodeSync(
+  RoadmapAreaSettings,
+)({});
+
+export const RoadmapAreasSettings = Schema.Struct({
+  work: RoadmapAreaSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_ROADMAP_AREA_SETTINGS)),
+  ),
+  personal: RoadmapAreaSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_ROADMAP_AREA_SETTINGS)),
+  ),
+});
+export type RoadmapAreasSettings = typeof RoadmapAreasSettings.Type;
+
+export const RoadmapAreaSettingsPatch = Schema.Struct({
+  unit: Schema.optionalKey(RoadmapUnit),
+  workingWeekdays: Schema.optionalKey(Schema.Array(RoadmapWeekday).check(Schema.isMinLength(1))),
+  goingColdDays: Schema.optionalKey(PositiveInt),
+});
+export type RoadmapAreaSettingsPatch = typeof RoadmapAreaSettingsPatch.Type;
+
 export const RoadmapWorkItem = Schema.Struct({
   id: RoadmapItemId,
   type: RoadmapItemType,
@@ -106,6 +173,16 @@ export const RoadmapWorkItem = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   createdBy: RoadmapActor,
+  /** Moves only when `state` changes; activity and velocity read it. */
+  stateChangedAt: IsoDateTime,
+  /** Set on entering done, cleared on reopening. */
+  completedAt: Schema.NullOr(IsoDateTime),
+  /** Set while the item is one of Today's picks. */
+  pinnedAt: Schema.NullOr(IsoDateTime),
+  /** Hidden from Today while this date is after today. */
+  snoozedUntil: Schema.NullOr(IsoDate),
+  sprintId: Schema.NullOr(RoadmapSprintId),
+  hours: Schema.Array(RoadmapHoursEntry),
 });
 export type RoadmapWorkItem = typeof RoadmapWorkItem.Type;
 
@@ -132,8 +209,17 @@ export const RoadmapItemPatch = Schema.Struct({
   dueDate: Schema.optionalKey(Schema.NullOr(IsoDate)),
   startDate: Schema.optionalKey(Schema.NullOr(IsoDate)),
   estimate: Schema.optionalKey(Schema.NullOr(NonNegativeNumber)),
+  sprintId: Schema.optionalKey(Schema.NullOr(RoadmapSprintId)),
 });
 export type RoadmapItemPatch = typeof RoadmapItemPatch.Type;
+
+export const RoadmapSprintPatch = Schema.Struct({
+  name: Schema.optionalKey(TrimmedNonEmptyString),
+  area: Schema.optionalKey(RoadmapArea),
+  startDate: Schema.optionalKey(IsoDate),
+  endDate: Schema.optionalKey(IsoDate),
+});
+export type RoadmapSprintPatch = typeof RoadmapSprintPatch.Type;
 
 export const RoadmapItemCreateCommand = command("roadmap.item.create", {
   itemId: RoadmapItemId,
@@ -214,8 +300,44 @@ export const RoadmapThreadDetachCommand = command("roadmap.thread.detach", {
 export const RoadmapItemMarkReviewedCommand = command("roadmap.item.mark-reviewed", {
   itemId: RoadmapItemId,
 });
+export const RoadmapItemPinCommand = command("roadmap.item.pin", { itemId: RoadmapItemId });
+export const RoadmapItemUnpinCommand = command("roadmap.item.unpin", { itemId: RoadmapItemId });
+export const RoadmapItemSnoozeCommand = command("roadmap.item.snooze", {
+  itemId: RoadmapItemId,
+  until: IsoDate,
+});
+export const RoadmapItemUnsnoozeCommand = command("roadmap.item.unsnooze", {
+  itemId: RoadmapItemId,
+});
+/** `entryId` is the caller's, so a retried log never adds the hours twice. */
+export const RoadmapHoursLogCommand = command("roadmap.hours.log", {
+  itemId: RoadmapItemId,
+  entryId: TrimmedNonEmptyString,
+  hours: PositiveNumber,
+  note: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+export const RoadmapHoursRemoveCommand = command("roadmap.hours.remove", {
+  itemId: RoadmapItemId,
+  entryId: TrimmedNonEmptyString,
+});
+export const RoadmapSprintCreateCommand = command("roadmap.sprint.create", {
+  sprintId: RoadmapSprintId,
+  name: TrimmedNonEmptyString,
+  area: RoadmapArea,
+  startDate: IsoDate,
+  endDate: IsoDate,
+});
+export const RoadmapSprintUpdateCommand = command("roadmap.sprint.update", {
+  sprintId: RoadmapSprintId,
+  patch: RoadmapSprintPatch,
+});
+/** Also clears the sprint from every item in it, in the same commit. */
+export const RoadmapSprintDeleteCommand = command("roadmap.sprint.delete", {
+  sprintId: RoadmapSprintId,
+});
 
-export const RoadmapCommand = Schema.Union([
+/** Commands about one work item; each names it as `itemId`. */
+export const RoadmapItemCommand = Schema.Union([
   RoadmapItemCreateCommand,
   RoadmapItemUpdateCommand,
   RoadmapItemMoveCommand,
@@ -233,8 +355,31 @@ export const RoadmapCommand = Schema.Union([
   RoadmapThreadAttachCommand,
   RoadmapThreadDetachCommand,
   RoadmapItemMarkReviewedCommand,
+  RoadmapItemPinCommand,
+  RoadmapItemUnpinCommand,
+  RoadmapItemSnoozeCommand,
+  RoadmapItemUnsnoozeCommand,
+  RoadmapHoursLogCommand,
+  RoadmapHoursRemoveCommand,
+]);
+export type RoadmapItemCommand = typeof RoadmapItemCommand.Type;
+
+/** Commands about one sprint; each names it as `sprintId`. */
+export const RoadmapSprintCommand = Schema.Union([
+  RoadmapSprintCreateCommand,
+  RoadmapSprintUpdateCommand,
+  RoadmapSprintDeleteCommand,
+]);
+export type RoadmapSprintCommand = typeof RoadmapSprintCommand.Type;
+
+export const RoadmapCommand = Schema.Union([
+  ...RoadmapItemCommand.members,
+  ...RoadmapSprintCommand.members,
 ]);
 export type RoadmapCommand = typeof RoadmapCommand.Type;
+
+export const isRoadmapSprintCommand = (command: RoadmapCommand): command is RoadmapSprintCommand =>
+  command.type.startsWith("roadmap.sprint.");
 
 // Events
 
@@ -251,7 +396,20 @@ const event = <const Type extends string, const Payload extends Schema.Top>(
     payload,
   });
 
-export const RoadmapEvent = Schema.Union([
+const sprintEvent = <const Type extends string, const Payload extends Schema.Top>(
+  type: Type,
+  payload: Payload,
+) =>
+  Schema.Struct({
+    type: Schema.Literal(type),
+    eventId: EventId,
+    sprintId: RoadmapSprintId,
+    actor: RoadmapActor,
+    occurredAt: IsoDateTime,
+    payload,
+  });
+
+export const RoadmapItemEvent = Schema.Union([
   event("roadmap.item.created", Schema.Struct({ item: RoadmapWorkItem })),
   event("roadmap.item.updated", RoadmapItemPatch),
   event(
@@ -283,8 +441,34 @@ export const RoadmapEvent = Schema.Union([
   event("roadmap.thread.attached", Schema.Struct({ thread: RoadmapThreadRef })),
   event("roadmap.thread.detached", Schema.Struct({ thread: RoadmapThreadRef })),
   event("roadmap.item.reviewed", Schema.Struct({})),
+  event("roadmap.item.pinned", Schema.Struct({})),
+  event("roadmap.item.unpinned", Schema.Struct({})),
+  event("roadmap.item.snoozed", Schema.Struct({ until: IsoDate })),
+  event("roadmap.item.unsnoozed", Schema.Struct({})),
+  event("roadmap.hours.logged", Schema.Struct({ entry: RoadmapHoursEntry })),
+  event("roadmap.hours.removed", Schema.Struct({ entryId: TrimmedNonEmptyString })),
+]);
+export type RoadmapItemEvent = typeof RoadmapItemEvent.Type;
+
+export const RoadmapSprintEvent = Schema.Union([
+  sprintEvent("roadmap.sprint.created", Schema.Struct({ sprint: RoadmapSprint })),
+  sprintEvent("roadmap.sprint.updated", RoadmapSprintPatch),
+  /** Every item the delete took out of the sprint. */
+  sprintEvent(
+    "roadmap.sprint.deleted",
+    Schema.Struct({ clearedItemIds: Schema.Array(RoadmapItemId) }),
+  ),
+]);
+export type RoadmapSprintEvent = typeof RoadmapSprintEvent.Type;
+
+export const RoadmapEvent = Schema.Union([
+  ...RoadmapItemEvent.members,
+  ...RoadmapSprintEvent.members,
 ]);
 export type RoadmapEvent = typeof RoadmapEvent.Type;
+
+export const isRoadmapSprintEvent = (event: RoadmapEvent): event is RoadmapSprintEvent =>
+  event.type.startsWith("roadmap.sprint.");
 export type RoadmapEventType = RoadmapEvent["type"];
 
 export const RoadmapStoredEvent = Schema.Struct({
@@ -308,6 +492,12 @@ export const RoadmapRejectionCode = Schema.Literals([
   "not_attached",
   "criterion_not_found",
   "roadmap_home_elsewhere",
+  /** Today holds at most three picks. */
+  "pin_limit",
+  /** Pins, snoozes and sprints are the user's; agents and other actors cannot change them. */
+  "forbidden_actor",
+  /** Well-formed but meaningless, such as a snooze into the past or a sprint ending first. */
+  "invalid_request",
 ]);
 export type RoadmapRejectionCode = typeof RoadmapRejectionCode.Type;
 
@@ -335,6 +525,7 @@ export const RoadmapStreamItem = Schema.Union([
     type: Schema.Literal("snapshot"),
     sequence: NonNegativeInt,
     items: Schema.Array(RoadmapWorkItem),
+    sprints: Schema.Array(RoadmapSprint),
   }),
   Schema.Struct({
     type: Schema.Literal("item.upserted"),
@@ -346,6 +537,16 @@ export const RoadmapStreamItem = Schema.Union([
     sequence: NonNegativeInt,
     itemId: RoadmapItemId,
   }),
+  Schema.Struct({
+    type: Schema.Literal("sprint.upserted"),
+    sequence: NonNegativeInt,
+    sprint: RoadmapSprint,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("sprint.removed"),
+    sequence: NonNegativeInt,
+    sprintId: RoadmapSprintId,
+  }),
 ]);
 export type RoadmapStreamItem = typeof RoadmapStreamItem.Type;
 
@@ -354,6 +555,7 @@ export type RoadmapDispatchInput = typeof RoadmapDispatchInput.Type;
 
 export const RoadmapDispatchResult = Schema.Struct({
   sequence: NonNegativeInt,
-  itemId: RoadmapItemId,
+  /** Null for sprint commands, which name no item. */
+  itemId: Schema.NullOr(RoadmapItemId),
 });
 export type RoadmapDispatchResult = typeof RoadmapDispatchResult.Type;
