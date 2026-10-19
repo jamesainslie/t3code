@@ -200,19 +200,82 @@ export interface RoadmapOutlineRow {
 export function flattenOutline(
   tree: ReadonlyArray<RoadmapTreeNode>,
   collapsed: ReadonlySet<RoadmapItemId>,
-  expandAll: boolean,
 ): ReadonlyArray<RoadmapOutlineRow> {
   const rows: Array<RoadmapOutlineRow> = [];
   const walk = (nodes: ReadonlyArray<RoadmapTreeNode>, depth: number) => {
     for (const node of nodes) {
       const hasChildren = node.children.length > 0;
-      const expanded = hasChildren && (expandAll || !collapsed.has(node.item.id));
+      const expanded = hasChildren && !collapsed.has(node.item.id);
       rows.push({ node, depth, hasChildren, expanded });
       if (expanded) walk(node.children, depth + 1);
     }
   };
   walk(tree, 0);
   return rows;
+}
+
+/** Every item in the tree that has children, which is what Collapse all collapses. */
+export function expandableIds(tree: ReadonlyArray<RoadmapTreeNode>): ReadonlySet<RoadmapItemId> {
+  const ids = new Set<RoadmapItemId>();
+  const walk = (nodes: ReadonlyArray<RoadmapTreeNode>) => {
+    for (const node of nodes) {
+      if (node.children.length === 0) continue;
+      ids.add(node.item.id);
+      walk(node.children);
+    }
+  };
+  walk(tree);
+  return ids;
+}
+
+export function allCollapsed(
+  tree: ReadonlyArray<RoadmapTreeNode>,
+  collapsed: ReadonlySet<RoadmapItemId>,
+): boolean {
+  const ids = expandableIds(tree);
+  return ids.size > 0 && [...ids].every((itemId) => collapsed.has(itemId));
+}
+
+/**
+ * A filtered outline opens fully so every match shows, and keeps its own collapse state
+ * until the filter changes. The saved state belongs to the unfiltered outline only.
+ */
+export interface RoadmapOutlineCollapse {
+  readonly saved: ReadonlySet<RoadmapItemId>;
+  readonly filtered: {
+    readonly key: string;
+    readonly collapsed: ReadonlySet<RoadmapItemId>;
+  } | null;
+}
+
+const NOTHING_COLLAPSED: ReadonlySet<RoadmapItemId> = new Set();
+
+export const outlineFilterKey = (filter: RoadmapOutlineFilter): string | null =>
+  isOutlineFiltered(filter)
+    ? JSON.stringify([filter.area, filter.type, filter.state, filter.sprint])
+    : null;
+
+export const initialOutlineCollapse = (
+  saved: ReadonlySet<RoadmapItemId>,
+): RoadmapOutlineCollapse => ({ saved, filtered: null });
+
+export function activeCollapsed(
+  state: RoadmapOutlineCollapse,
+  filterKey: string | null,
+): ReadonlySet<RoadmapItemId> {
+  if (filterKey === null) return state.saved;
+  return state.filtered?.key === filterKey ? state.filtered.collapsed : NOTHING_COLLAPSED;
+}
+
+export function updateOutlineCollapse(
+  state: RoadmapOutlineCollapse,
+  filterKey: string | null,
+  update: (current: ReadonlySet<RoadmapItemId>) => ReadonlySet<RoadmapItemId>,
+): RoadmapOutlineCollapse {
+  const collapsed = update(activeCollapsed(state, filterKey));
+  return filterKey === null
+    ? { ...state, saved: collapsed }
+    : { ...state, filtered: { key: filterKey, collapsed } };
 }
 
 export function ancestorIds(

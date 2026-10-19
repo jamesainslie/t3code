@@ -114,7 +114,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
         if (ancestorIds(entry.id, byId).includes(editing.id)) excluded.add(entry.id);
       }
     }
-    return flattenOutline(buildTree(items), new Set(), true).filter(
+    return flattenOutline(buildTree(items), new Set()).filter(
       (row) =>
         !excluded.has(row.node.item.id) &&
         typeOptionsFor(row.node.item.type, childTypes).includes(draft.type),

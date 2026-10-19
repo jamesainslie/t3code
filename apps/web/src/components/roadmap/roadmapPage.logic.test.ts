@@ -9,7 +9,9 @@ import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree"
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  activeCollapsed,
   activeRoadmapFilters,
+  allCollapsed,
   ancestorIds,
   boardDueLabel,
   boardUnderOptions,
@@ -19,17 +21,21 @@ import {
   defaultTypeFor,
   editorDraftFor,
   emptyEditorDraft,
+  expandableIds,
   filterOutlineTree,
   flattenOutline,
   forecastLabel,
   formatRoadmapDate,
+  initialOutlineCollapse,
   knownSprintFilter,
   outlineDropZone,
+  outlineFilterKey,
   resolveOutlineDrop,
   roadmapEditorRequest,
   roadmapForecasts,
   roadmapViewOf,
   typeOptionsFor,
+  updateOutlineCollapse,
   validateRoadmapSearch,
   withoutEditorRequest,
 } from "./roadmapPage.logic";
@@ -284,8 +290,8 @@ describe("flattenOutline", () => {
     item("b", { type: "objective", sortKey: "b" }),
   ];
   const tree = buildTree(items);
-  const rows = (collapsed: ReadonlyArray<string>, expandAll = false) =>
-    flattenOutline(tree, new Set(collapsed.map((value) => id(value))), expandAll).map(
+  const rows = (collapsed: ReadonlyArray<string>) =>
+    flattenOutline(tree, new Set(collapsed.map((value) => id(value)))).map(
       (row) =>
         `${row.depth}:${row.node.item.id}${row.hasChildren ? (row.expanded ? "-" : "+") : ""}`,
     );
@@ -299,8 +305,62 @@ describe("flattenOutline", () => {
     expect(rows(["a"])).toEqual(["0:a+", "0:b"]);
   });
 
-  it("ignores collapse when told to expand everything", () => {
-    expect(rows(["a"], true)).toEqual(["0:a-", "1:a1-", "2:a1x", "0:b"]);
+  it("collapses every row that has children with expandableIds", () => {
+    expect([...expandableIds(tree)]).toEqual([id("a"), id("a1")]);
+    expect(rows([...expandableIds(tree)])).toEqual(["0:a+", "0:b"]);
+  });
+
+  it("knows when every row is collapsed", () => {
+    expect(allCollapsed(tree, new Set([id("a"), id("a1")]))).toBe(true);
+    expect(allCollapsed(tree, new Set([id("a")]))).toBe(false);
+    expect(allCollapsed(buildTree([item("solo")]), new Set())).toBe(false);
+  });
+});
+
+describe("outline collapse state", () => {
+  const saved = new Set([id("a")]);
+  const toggle = (itemId: string) => (current: ReadonlySet<RoadmapItemId>) => {
+    const next = new Set(current);
+    if (!next.delete(id(itemId))) next.add(id(itemId));
+    return next;
+  };
+  const typeFilter = outlineFilterKey({ type: "epic" });
+  const areaFilter = outlineFilterKey({ area: "work" });
+
+  it("has no filter key when nothing is filtered", () => {
+    expect(outlineFilterKey({})).toBeNull();
+    expect(typeFilter).not.toBeNull();
+    expect(typeFilter).not.toBe(areaFilter);
+  });
+
+  it("uses the saved collapse state without a filter", () => {
+    const state = initialOutlineCollapse(saved);
+    expect(activeCollapsed(state, null)).toBe(saved);
+    const next = updateOutlineCollapse(state, null, toggle("b"));
+    expect([...activeCollapsed(next, null)]).toEqual([id("a"), id("b")]);
+    expect(next.filtered).toBeNull();
+  });
+
+  it("opens a filtered outline fully, then lets rows collapse and expand", () => {
+    const state = initialOutlineCollapse(saved);
+    expect([...activeCollapsed(state, typeFilter)]).toEqual([]);
+    const collapsed = updateOutlineCollapse(state, typeFilter, toggle("b"));
+    expect([...activeCollapsed(collapsed, typeFilter)]).toEqual([id("b")]);
+    const expanded = updateOutlineCollapse(collapsed, typeFilter, toggle("b"));
+    expect([...activeCollapsed(expanded, typeFilter)]).toEqual([]);
+  });
+
+  it("leaves the saved state alone while filtered", () => {
+    const state = updateOutlineCollapse(initialOutlineCollapse(saved), typeFilter, toggle("b"));
+    expect(state.saved).toBe(saved);
+    expect(activeCollapsed(state, null)).toBe(saved);
+  });
+
+  it("starts a changed filter fully open", () => {
+    const state = updateOutlineCollapse(initialOutlineCollapse(saved), typeFilter, toggle("b"));
+    expect([...activeCollapsed(state, areaFilter)]).toEqual([]);
+    const next = updateOutlineCollapse(state, areaFilter, toggle("c"));
+    expect([...activeCollapsed(next, areaFilter)]).toEqual([id("c")]);
   });
 });
 

@@ -18,22 +18,30 @@ import type {
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { blockedState, buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRoadmapAreaSettings } from "~/state/roadmap";
+import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { OUTLINE_GRID_CLASS, RoadmapItemRow, type RoadmapRowActions } from "./RoadmapItemRow";
 import {
+  activeCollapsed,
+  allCollapsed,
   ancestorIds,
   canNestInside,
+  expandableIds,
   filterOutlineTree,
   flattenOutline,
   forecastLabel,
-  isOutlineFiltered,
+  initialOutlineCollapse,
   outlineDropZone,
+  outlineFilterKey,
   resolveOutlineDrop,
   roadmapForecasts,
   typeOptionsFor,
+  updateOutlineCollapse,
   type OutlineDropZone,
   type RoadmapForecastLabel,
   type RoadmapOutlineFilter,
@@ -93,12 +101,29 @@ export function RoadmapOutline({
 }: RoadmapOutlineProps) {
   const dispatch = useRoadmapDispatch(home);
   const areaSettings = useRoadmapAreaSettings(home);
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapseState, setCollapseState] = useState(() => initialOutlineCollapse(readCollapsed()));
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
   const tree = useMemo(() => buildTree(items), [items]);
   const filtered = useMemo(() => filterOutlineTree(tree, filter), [filter, tree]);
-  const filtering = isOutlineFiltered(filter);
+  const filterKey = outlineFilterKey(filter);
+  const collapsed = activeCollapsed(collapseState, filterKey);
+  const updateCollapsed = useCallback(
+    (update: (current: ReadonlySet<RoadmapItemId>) => ReadonlySet<RoadmapItemId>) =>
+      setCollapseState((current) => {
+        const next = updateOutlineCollapse(current, filterKey, update);
+        if (next.saved !== current.saved) writeCollapsed(next.saved);
+        return next;
+      }),
+    [filterKey],
+  );
+  const everythingCollapsed = useMemo(
+    () => allCollapsed(filtered, collapsed),
+    [collapsed, filtered],
+  );
+  const hasExpandable = useMemo(() => expandableIds(filtered).size > 0, [filtered]);
+  const toggleAll = () =>
+    updateCollapsed(() => (everythingCollapsed ? new Set() : expandableIds(filtered)));
   const forecasts = useMemo(() => {
     const labels = new Map<RoadmapItemId, RoadmapForecastLabel>();
     for (const [itemId, value] of roadmapForecasts({ items, sprints, areaSettings, today })) {
@@ -115,8 +140,8 @@ export function RoadmapOutline({
     return revealed;
   }, [byId, collapsed, selectedId]);
   const rows = useMemo(
-    () => flattenOutline(filtered, effectiveCollapsed, filtering),
-    [effectiveCollapsed, filtered, filtering],
+    () => flattenOutline(filtered, effectiveCollapsed),
+    [effectiveCollapsed, filtered],
   );
   const rowFacts = useMemo(() => {
     const childTypes = new Map<RoadmapItemId, Array<RoadmapItemType>>();
@@ -147,10 +172,9 @@ export function RoadmapOutline({
   const actions = useMemo<RoadmapRowActions>(
     () => ({
       toggle: (itemId) =>
-        setCollapsed((current) => {
+        updateCollapsed((current) => {
           const next = new Set(current);
           if (!next.delete(itemId)) next.add(itemId);
-          writeCollapsed(next);
           return next;
         }),
       update: (itemId: RoadmapItemId, patch: RoadmapItemPatch) =>
@@ -204,7 +228,7 @@ export function RoadmapOutline({
         });
       },
     }),
-    [dispatch, onAddChild, onEdit],
+    [dispatch, onAddChild, onEdit, updateCollapsed],
   );
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -257,7 +281,30 @@ export function RoadmapOutline({
       <div
         className={`${OUTLINE_GRID_CLASS} px-2 pb-1 text-xs font-medium text-muted-foreground/70 uppercase`}
       >
-        <span>Item</span>
+        {/* Lines the toggle up with the row chevrons, after the drag handle's slot. */}
+        <span className="flex items-center gap-1.5">
+          {canEdit ? <span className="size-5 shrink-0" /> : null}
+          {hasExpandable ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon-micro"
+                    variant="ghost-muted"
+                    aria-label={everythingCollapsed ? "Expand all" : "Collapse all"}
+                    onClick={toggleAll}
+                  />
+                }
+              >
+                {everythingCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {everythingCollapsed ? "Expand all" : "Collapse all"}
+              </TooltipPopup>
+            </Tooltip>
+          ) : null}
+          Item
+        </span>
         <span>Pri</span>
         <span>State</span>
         <span>Due</span>
