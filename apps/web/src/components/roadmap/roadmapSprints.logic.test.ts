@@ -56,6 +56,7 @@ const item = (id: string, sprint: string | null): RoadmapWorkItem => ({
   stateChangedAt: "2026-10-18T00:00:00.000Z",
   completedAt: null,
   pinnedAt: null,
+  focusedAt: null,
   snoozedUntil: null,
   sprintId: sprint === null ? null : sprintId(sprint),
   hours: [],

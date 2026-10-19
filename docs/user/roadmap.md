@@ -8,6 +8,11 @@ Open **Roadmap** from the sidebar or the command palette, or press `mod+alt+r` o
 when the terminal is not focused. Customize `roadmap.open` in **Settings → Keybindings**. The
 Roadmap opens on **Today**. **Outline**, **Timeline** and **Board** are the other views.
 
+Press `ctrl+tab` to switch between the Roadmap and where you were before it, usually your last
+thread. The Roadmap comes back with the view and filters you left it on. Web browsers keep
+`ctrl+tab` for switching browser tabs, so in a browser bind `roadmap.toggle` to another key in
+**Settings → Keybindings**.
+
 ## Create work items
 
 Choose **New** on the Roadmap to add a top-level item, and add children from an item's menu. An
@@ -72,6 +77,20 @@ You can pin at most three items. Unpin one before pinning a fourth. Marking an i
 Snooze takes an item off Today until a date: **Tomorrow**, **Next Monday**, **In a week**, or **Pick
 a date…**. Snooze from a Today row or the item's card. The item returns on that date. Until then it
 waits under **Snoozed** at the bottom of Today, where **Unsnooze** brings it back early.
+
+## Narrow the Outline
+
+The buttons above the Outline change how it is laid out:
+
+- **Epics**, **Features** or **Stories** lists every item of that type at the top level, with what
+  sits under it, and hides the items above. Choose **Tree** for the full tree again.
+- **Focus** shows only your focus set and what sits under each item in it. Choose **Select**, tick
+  the items you want, then **Focus on** to replace the set. **Add to focus** and **Remove from
+  focus** in a row's menu change one item. **Clear focus** empties the set.
+
+The focus set is saved in the Roadmap, so it is the same on every device and agents can see it.
+Layouts and filters combine, so Focus with **Stories** and **State: Open** lists the open stories
+under your focus set.
 
 ## Timeline
 

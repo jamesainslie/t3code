@@ -264,6 +264,7 @@ export function planRoadmapCommand(input: {
         stateChangedAt: occurredAt,
         completedAt: initialState === "done" ? occurredAt : null,
         pinnedAt: null,
+        focusedAt: null,
         snoozedUntil: null,
         sprintId: command.sprintId ?? null,
         hours: [],
@@ -318,6 +319,7 @@ export function planRoadmapCommand(input: {
         stateChangedAt: occurredAt,
         completedAt: command.state === "done" ? occurredAt : null,
         pinnedAt: null,
+        focusedAt: null,
         snoozedUntil: null,
         sprintId: null,
         hours: [],
@@ -734,6 +736,20 @@ export function planRoadmapCommand(input: {
       return Result.succeed({ ...base, type: "roadmap.item.unpinned", payload: {} });
     }
 
+    case "roadmap.item.focus":
+    case "roadmap.item.unfocus": {
+      const forbidden = userOnly(actor, "the focus set");
+      if (forbidden !== undefined) return Result.fail(forbidden);
+      const current = requireLive(command.itemId);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
+      return Result.succeed({
+        ...base,
+        type:
+          command.type === "roadmap.item.focus" ? "roadmap.item.focused" : "roadmap.item.unfocused",
+        payload: {},
+      });
+    }
+
     case "roadmap.item.snooze": {
       const forbidden = userOnly(actor, "snoozes");
       if (forbidden !== undefined) return Result.fail(forbidden);
@@ -1141,6 +1157,10 @@ export function projectRoadmapEvent(
         return item.pinnedAt === null ? { ...item, pinnedAt: at } : item;
       case "roadmap.item.unpinned":
         return { ...item, pinnedAt: null };
+      case "roadmap.item.focused":
+        return item.focusedAt === null ? { ...item, focusedAt: at } : item;
+      case "roadmap.item.unfocused":
+        return { ...item, focusedAt: null };
       case "roadmap.item.snoozed":
         return { ...item, snoozedUntil: event.payload.until };
       case "roadmap.item.unsnoozed":

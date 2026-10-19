@@ -18,11 +18,14 @@ import {
   buildCreateCommand,
   buildEditCommands,
   canHaveChildren,
+  collapseAllIn,
   defaultTypeFor,
   editorDraftFor,
   emptyEditorDraft,
+  expandAllIn,
   expandableIds,
   filterOutlineTree,
+  focusChanges,
   flattenOutline,
   forecastLabel,
   formatRoadmapDate,
@@ -30,6 +33,7 @@ import {
   knownSprintFilter,
   outlineDropZone,
   outlineFilterKey,
+  outlineRoots,
   resolveOutlineDrop,
   roadmapEditorRequest,
   roadmapForecasts,
@@ -69,6 +73,7 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   stateChangedAt: "2026-10-18T00:00:00.000Z",
   completedAt: null,
   pinnedAt: null,
+  focusedAt: null,
   snoozedUntil: null,
   sprintId: null,
   hours: [],
@@ -117,6 +122,16 @@ describe("validateRoadmapSearch", () => {
     expect(
       validateRoadmapSearch({ view: "gantt", area: "home", type: "task", itemState: "blocked" }),
     ).toEqual({});
+  });
+
+  it("reads the outline level and the focus flag", () => {
+    for (const level of ["epic", "feature", "story"] as const) {
+      expect(validateRoadmapSearch({ level })).toEqual({ level });
+    }
+    expect(validateRoadmapSearch({ level: "objective" })).toEqual({});
+    expect(validateRoadmapSearch({ focus: 1 })).toEqual({ focus: 1 });
+    expect(validateRoadmapSearch({ focus: "true" })).toEqual({ focus: 1 });
+    expect(validateRoadmapSearch({ focus: 0 })).toEqual({});
   });
 
   it("keeps each of the four views", () => {
@@ -314,6 +329,60 @@ describe("flattenOutline", () => {
     expect(allCollapsed(tree, new Set([id("a"), id("a1")]))).toBe(true);
     expect(allCollapsed(tree, new Set([id("a")]))).toBe(false);
     expect(allCollapsed(buildTree([item("solo")]), new Set())).toBe(false);
+  });
+
+  it("collapses and expands only the rows in view, keeping the rest", () => {
+    const inView = buildTree([item("a1"), item("a1x", { type: "story", parentId: id("a1") })]);
+    const elsewhere = id("other");
+    expect([...collapseAllIn(new Set([elsewhere]), inView)]).toEqual([elsewhere, id("a1")]);
+    expect([...expandAllIn(new Set([elsewhere, id("a1")]), inView)]).toEqual([elsewhere]);
+  });
+});
+
+describe("outlineRoots", () => {
+  const items = [
+    item("obj", { type: "objective", sortKey: "a" }),
+    item("e1", { parentId: id("obj"), sortKey: "a" }),
+    item("f1", { type: "feature", parentId: id("e1"), sortKey: "a" }),
+    item("s1", { type: "story", parentId: id("f1") }),
+    item("e2", { parentId: id("obj"), sortKey: "b" }),
+    item("loose", { type: "story", sortKey: "b" }),
+  ];
+  const tree = buildTree(items);
+  const roots = (layout: Parameters<typeof outlineRoots>[1], source = tree) =>
+    outlineRoots(source, layout).map((node) => node.item.id);
+
+  it("keeps the whole tree without a level or focus", () => {
+    expect(outlineRoots(tree, {})).toBe(tree);
+  });
+
+  it("makes the topmost items of a level the roots, with their subtrees", () => {
+    expect(roots({ level: "epic" })).toEqual([id("e1"), id("e2")]);
+    expect(roots({ level: "feature" })).toEqual([id("f1")]);
+    expect(roots({ level: "story" })).toEqual([id("s1"), id("loose")]);
+    const [e1] = outlineRoots(tree, { level: "epic" });
+    expect(e1!.children.map((node) => node.item.id)).toEqual([id("f1")]);
+  });
+
+  it("narrows to the topmost focused items", () => {
+    const focusedTree = buildTree(
+      items.map((entry) =>
+        ["e1", "s1", "loose"].includes(entry.id) ? { ...entry, focusedAt: at } : entry,
+      ),
+    );
+    expect(roots({ focus: true }, focusedTree)).toEqual([id("e1"), id("loose")]);
+    expect(roots({ focus: true, level: "story" }, focusedTree)).toEqual([id("s1"), id("loose")]);
+    expect(roots({ focus: true, level: "epic" }, focusedTree)).toEqual([id("e1")]);
+  });
+});
+
+describe("focusChanges", () => {
+  it("focuses the new picks and unfocuses the dropped ones", () => {
+    const items = [item("a", { focusedAt: at }), item("b", { focusedAt: at }), item("c")];
+    expect(focusChanges(items, new Set([id("b"), id("c")]))).toEqual({
+      focus: [id("c")],
+      unfocus: [id("a")],
+    });
   });
 });
 

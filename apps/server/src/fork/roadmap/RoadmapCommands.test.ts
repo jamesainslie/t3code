@@ -69,6 +69,7 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   stateChangedAt: earlier,
   completedAt: null,
   pinnedAt: null,
+  focusedAt: null,
   snoozedUntil: null,
   sprintId: null,
   hours: [],
@@ -748,6 +749,7 @@ describe("planRoadmapCommand", () => {
         stateChangedAt: nowIso,
         completedAt: null,
         pinnedAt: null,
+        focusedAt: null,
         snoozedUntil: null,
         sprintId: null,
         hours: [],
@@ -854,6 +856,46 @@ describe("planRoadmapCommand", () => {
 
     it("refuses a missing item", () => {
       assert.equal(failureOf(plan(pin("nope"))).code, "not_found");
+    });
+  });
+
+  describe("focus", () => {
+    const focus = (itemId: string) => cmd("roadmap.item.focus", { itemId: id(itemId) });
+    const unfocus = (itemId: string) => cmd("roadmap.item.unfocus", { itemId: id(itemId) });
+    const focused = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}) =>
+      live(item(itemId, { focusedAt: earlier, ...overrides }));
+
+    it("focuses an item at the event time and unfocuses it", () => {
+      const after = run(focus("a"), [live(item("a"))]).get(id("a"))!.item;
+      assert.equal(after.focusedAt, nowIso);
+      const cleared = run(unfocus("a"), [focused("a")]).get(id("a"))!.item;
+      assert.isNull(cleared.focusedAt);
+    });
+
+    it("has no limit and keeps finished items in focus", () => {
+      const records = [focused("f1"), focused("f2"), focused("f3"), focused("f4"), live(item("a"))];
+      assert.equal(run(focus("a"), records).get(id("a"))!.item.focusedAt, nowIso);
+      const done = run(cmd("roadmap.item.update", { itemId: id("f1"), patch: { state: "done" } }), [
+        focused("f1"),
+      ]).get(id("f1"))!.item;
+      assert.equal(done.focusedAt, earlier);
+    });
+
+    it("keeps the first focus time when focusing again", () => {
+      assert.equal(run(focus("a"), [focused("a")]).get(id("a"))!.item.focusedAt, earlier);
+    });
+
+    it("refuses focus from anyone but the user", () => {
+      for (const actor of [agent, steward]) {
+        for (const command of [focus("a"), unfocus("a")]) {
+          const failure = failureOf(plan(command, [live(item("a"))], { actor }));
+          assert.equal(failure.code, "forbidden_actor");
+        }
+      }
+    });
+
+    it("refuses a missing item", () => {
+      assert.equal(failureOf(plan(focus("nope"))).code, "not_found");
     });
   });
 

@@ -14,18 +14,38 @@ export function isSidebarUtilityPage(pathname: string) {
 }
 
 let mainAppHref: string | null = null;
+// Fork: roadmap. The roadmap as last left, view and filters included.
+let roadmapHref: string | null = null;
 
 export function MainAppLocationTracker() {
-  const href = useLocation({
-    select: (location) => (isSidebarUtilityPage(location.pathname) ? null : location.href),
+  const location = useLocation({
+    select: (current) => ({ pathname: current.pathname, href: current.href }),
   });
+  const href = isSidebarUtilityPage(location.pathname) ? null : location.href;
+  const roadmap = location.pathname === "/roadmap" ? location.href : null;
   useEffect(() => {
     if (href !== null) mainAppHref = href;
   }, [href]);
+  useEffect(() => {
+    if (roadmap !== null) roadmapHref = roadmap;
+  }, [roadmap]);
   return null;
 }
 
 export function useNavigateToMainApp() {
   const navigate = useNavigate();
   return useCallback(() => navigate({ href: mainAppHref ?? "/" }), [navigate]);
+}
+
+/** Fork: roadmap. Back to where you were from the roadmap, or to the roadmap as you left it. */
+export function useToggleRoadmap(fallbackRoadmapHref: string) {
+  const navigate = useNavigate();
+  const onRoadmap = useLocation({ select: (location) => location.pathname === "/roadmap" });
+  return useCallback(
+    () =>
+      navigate({
+        href: onRoadmap ? (mainAppHref ?? "/") : (roadmapHref ?? fallbackRoadmapHref),
+      }),
+    [fallbackRoadmapHref, navigate, onRoadmap],
+  );
 }

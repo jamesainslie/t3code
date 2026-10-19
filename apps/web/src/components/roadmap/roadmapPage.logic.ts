@@ -38,6 +38,9 @@ export const roadmapViewOf = (search: RoadmapSearch): RoadmapView =>
   search.view ?? DEFAULT_ROADMAP_VIEW;
 /** "open" is every state but done. */
 export type RoadmapStateFilter = RoadmapItemState | "open";
+
+export const OUTLINE_LEVELS = ["epic", "feature", "story"] as const;
+export type RoadmapOutlineLevel = (typeof OUTLINE_LEVELS)[number];
 /** "none" is items in no sprint. */
 export type RoadmapSprintFilter = RoadmapSprintId | "none";
 
@@ -50,6 +53,10 @@ export interface RoadmapSearch {
   readonly itemState?: RoadmapStateFilter;
   readonly under?: RoadmapItemId;
   readonly sprint?: RoadmapSprintFilter;
+  /** Outline layout: the items of this type become the roots. */
+  readonly level?: RoadmapOutlineLevel;
+  /** Outline layout: only the focused items and what sits under them. */
+  readonly focus?: 1;
   /** Opens the item editor; set by "Create work item" in the command palette. */
   readonly new?: 1;
   readonly parent?: RoadmapItemId;
@@ -96,6 +103,8 @@ export function validateRoadmapSearch(raw: Record<string, unknown>): RoadmapSear
       : {}),
     ...(under === null ? {} : { under }),
     ...(sprint === null ? {} : { sprint }),
+    ...(includes(OUTLINE_LEVELS, raw.level) ? { level: raw.level } : {}),
+    ...(isOn(raw.focus) ? { focus: 1 as const } : {}),
     ...(isNew ? { new: 1 as const } : {}),
     ...(parent === null ? {} : { parent }),
     ...(isOn(raw.import) ? { import: 1 as const } : {}),
@@ -214,6 +223,48 @@ export function flattenOutline(
   return rows;
 }
 
+export interface RoadmapOutlineLayout {
+  readonly level?: RoadmapOutlineLevel | undefined;
+  readonly focus?: boolean | undefined;
+}
+
+/**
+ * The Outline's roots under a layout. Focus narrows to the topmost focused items,
+ * then a level re-roots at the topmost items of that type within them. Each root
+ * keeps its whole subtree; anything above or outside a root is left out.
+ */
+export function outlineRoots(
+  tree: ReadonlyArray<RoadmapTreeNode>,
+  layout: RoadmapOutlineLayout,
+): ReadonlyArray<RoadmapTreeNode> {
+  const topmost = (
+    nodes: ReadonlyArray<RoadmapTreeNode>,
+    isRoot: (node: RoadmapTreeNode) => boolean,
+  ): ReadonlyArray<RoadmapTreeNode> =>
+    nodes.flatMap((node) => (isRoot(node) ? [node] : topmost(node.children, isRoot)));
+  const { level, focus } = layout;
+  const focused = focus ? topmost(tree, (node) => node.item.focusedAt !== null) : tree;
+  return level === undefined ? focused : topmost(focused, (node) => node.item.type === level);
+}
+
+/** Changes that make the focus set exactly `selected`. */
+export function focusChanges(
+  items: ReadonlyArray<RoadmapWorkItem>,
+  selected: ReadonlySet<RoadmapItemId>,
+): {
+  readonly focus: ReadonlyArray<RoadmapItemId>;
+  readonly unfocus: ReadonlyArray<RoadmapItemId>;
+} {
+  return {
+    focus: items
+      .filter((item) => item.focusedAt === null && selected.has(item.id))
+      .map((item) => item.id),
+    unfocus: items
+      .filter((item) => item.focusedAt !== null && !selected.has(item.id))
+      .map((item) => item.id),
+  };
+}
+
 /** Every item in the tree that has children, which is what Collapse all collapses. */
 export function expandableIds(tree: ReadonlyArray<RoadmapTreeNode>): ReadonlySet<RoadmapItemId> {
   const ids = new Set<RoadmapItemId>();
@@ -234,6 +285,22 @@ export function allCollapsed(
 ): boolean {
   const ids = expandableIds(tree);
   return ids.size > 0 && [...ids].every((itemId) => collapsed.has(itemId));
+}
+
+/** Collapse all and Expand all touch only the rows in view, so other layouts keep theirs. */
+export function collapseAllIn(
+  collapsed: ReadonlySet<RoadmapItemId>,
+  tree: ReadonlyArray<RoadmapTreeNode>,
+): ReadonlySet<RoadmapItemId> {
+  return new Set([...collapsed, ...expandableIds(tree)]);
+}
+
+export function expandAllIn(
+  collapsed: ReadonlySet<RoadmapItemId>,
+  tree: ReadonlyArray<RoadmapTreeNode>,
+): ReadonlySet<RoadmapItemId> {
+  const inView = expandableIds(tree);
+  return new Set([...collapsed].filter((itemId) => !inView.has(itemId)));
 }
 
 /**

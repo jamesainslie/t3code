@@ -234,6 +234,7 @@ const make = Effect.gen(function* () {
             criteriaTotal: item.criteria.length,
             attachedThreads: item.attachments.length,
             needsReview: item.needsReview,
+            focused: item.focusedAt !== null,
             forecast: progressOf(item).forecast.status,
           });
         }

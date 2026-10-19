@@ -16,6 +16,7 @@ import Roadmap from "./migrations/007_Roadmap.ts";
 import RoadmapCalendar from "./migrations/008_RoadmapCalendar.ts";
 import RoadmapProgressNotes from "./migrations/010_RoadmapProgressNotes.ts";
 import RoadmapGitHubSync from "./migrations/011_RoadmapGitHubSync.ts";
+import RoadmapFocus from "./migrations/013_RoadmapFocus.ts";
 
 /** What the server's persistence setup runs, in order. */
 const migrateLikeTheServer = Effect.gen(function* () {
@@ -131,6 +132,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [10, "RoadmapProgressNotes"],
           [11, "RoadmapGitHubSync"],
           [12, "RoadmapStewardThreads"],
+          [13, "RoadmapFocus"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);
@@ -437,6 +439,47 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [
             ["linked-1", null, [link]],
             ["plain-1", null, []],
+          ],
+        );
+      }),
+    );
+  },
+);
+
+it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
+  "roadmap focus migration",
+  (it) => {
+    it.effect("leaves existing items out of focus and keeps a focus set since", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations();
+        yield* Roadmap;
+        yield* RoadmapCalendar;
+        const at = "2026-10-01T09:00:00.000Z";
+        const focused = JSON.stringify({
+          ...JSON.parse(phaseOneItem("focused-1", "backlog", at, at)),
+          focusedAt: at,
+        });
+        yield* sql`
+          INSERT INTO projection_roadmap_items (
+            item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+          ) VALUES
+            ('plain-1', NULL, 'n', NULL, ${phaseOneItem("plain-1", "backlog", at, at)}, 1),
+            ('focused-1', NULL, 'p', NULL, ${focused}, 2)
+        `;
+
+        yield* RoadmapFocus;
+        yield* RoadmapFocus;
+
+        const items = yield* sql<{ readonly id: string; readonly payload: string }>`
+          SELECT item_id AS id, payload_json AS payload FROM projection_roadmap_items
+          ORDER BY item_id
+        `;
+        assert.deepStrictEqual(
+          items.map((row) => [row.id, JSON.parse(row.payload).focusedAt]),
+          [
+            ["focused-1", at],
+            ["plain-1", null],
           ],
         );
       }),

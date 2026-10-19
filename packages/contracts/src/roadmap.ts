@@ -263,6 +263,11 @@ export const RoadmapWorkItem = Schema.Struct({
   completedAt: Schema.NullOr(IsoDateTime),
   /** Set while the item is one of Today's picks. */
   pinnedAt: Schema.NullOr(IsoDateTime),
+  /**
+   * Set while the item is in the user's focus set, which the Outline can narrow to.
+   * The default lets items and created events stored before focus decode.
+   */
+  focusedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** Hidden from Today while this date is after today. */
   snoozedUntil: Schema.NullOr(IsoDate),
   sprintId: Schema.NullOr(RoadmapSprintId),
@@ -404,6 +409,8 @@ export const RoadmapItemMarkReviewedCommand = command("roadmap.item.mark-reviewe
 });
 export const RoadmapItemPinCommand = command("roadmap.item.pin", { itemId: RoadmapItemId });
 export const RoadmapItemUnpinCommand = command("roadmap.item.unpin", { itemId: RoadmapItemId });
+export const RoadmapItemFocusCommand = command("roadmap.item.focus", { itemId: RoadmapItemId });
+export const RoadmapItemUnfocusCommand = command("roadmap.item.unfocus", { itemId: RoadmapItemId });
 export const RoadmapItemSnoozeCommand = command("roadmap.item.snooze", {
   itemId: RoadmapItemId,
   until: IsoDate,
@@ -502,6 +509,8 @@ export const RoadmapItemCommand = Schema.Union([
   RoadmapItemMarkReviewedCommand,
   RoadmapItemPinCommand,
   RoadmapItemUnpinCommand,
+  RoadmapItemFocusCommand,
+  RoadmapItemUnfocusCommand,
   RoadmapItemSnoozeCommand,
   RoadmapItemUnsnoozeCommand,
   RoadmapHoursLogCommand,
@@ -595,6 +604,8 @@ export const RoadmapItemEvent = Schema.Union([
   event("roadmap.item.reviewed", Schema.Struct({})),
   event("roadmap.item.pinned", Schema.Struct({})),
   event("roadmap.item.unpinned", Schema.Struct({})),
+  event("roadmap.item.focused", Schema.Struct({})),
+  event("roadmap.item.unfocused", Schema.Struct({})),
   event("roadmap.item.snoozed", Schema.Struct({ until: IsoDate })),
   event("roadmap.item.unsnoozed", Schema.Struct({})),
   event("roadmap.hours.logged", Schema.Struct({ entry: RoadmapHoursEntry })),

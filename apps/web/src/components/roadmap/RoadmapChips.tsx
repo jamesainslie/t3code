@@ -128,6 +128,14 @@ export function RoadmapNeedsReviewBadge() {
   );
 }
 
+export function RoadmapFocusBadge() {
+  return (
+    <Badge size="sm" variant="secondary">
+      Focus
+    </Badge>
+  );
+}
+
 export const ROADMAP_FORECAST_TONE: Readonly<Record<RoadmapForecastShownStatus, string>> = {
   "on-track": "text-success-foreground",
   "at-risk": "text-warning-foreground",

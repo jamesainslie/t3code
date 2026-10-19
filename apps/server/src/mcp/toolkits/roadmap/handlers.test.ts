@@ -467,6 +467,7 @@ describe("roadmap toolkit handlers", () => {
         criteriaTotal: 2,
         attachedThreads: 0,
         needsReview: false,
+        focused: false,
         forecast: "no-forecast",
       });
       const features = yield* harness.call("lathe_roadmap_list", { type: "feature" });
