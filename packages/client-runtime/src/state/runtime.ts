@@ -80,7 +80,7 @@ interface EnvironmentQueryAtomOptions<Input, A, E, R> extends Omit<
 interface EnvironmentSubscriptionAtomOptions<Input, A, E, R> {
   readonly sensitiveInput?: boolean;
   readonly label: string;
-  readonly subscribe: (input: Input) => Stream.Stream<A, E, R>;
+  readonly subscribe: (input: Input, environmentId: EnvironmentIdType) => Stream.Stream<A, E, R>;
   readonly completeWhen?: (value: A) => boolean;
   readonly idleTtlMs?: number;
 }
@@ -663,9 +663,10 @@ export function createEnvironmentSubscriptionAtomFamily<R, ER, Input, A, E>(
     const target = parseEnvironmentRpcKey<Input>(key);
     return runtime
       .atom(
-        followStreamInEnvironment(target.environmentId, options.subscribe(target.input)).pipe(
-          options.completeWhen ? Stream.takeUntil(options.completeWhen) : (stream) => stream,
-        ),
+        followStreamInEnvironment(
+          target.environmentId,
+          options.subscribe(target.input, target.environmentId),
+        ).pipe(options.completeWhen ? Stream.takeUntil(options.completeWhen) : (stream) => stream),
       )
       .pipe(
         Atom.setIdleTTL(options.idleTtlMs ?? 5 * 60_000),
@@ -764,6 +765,7 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
         EnvironmentRpcStreamFailure<TTag>,
         EnvironmentSupervisor.EnvironmentSupervisor | R
       >,
+      environmentId: EnvironmentIdType,
     ) => Stream.Stream<
       B,
       EnvironmentRpcStreamFailure<TTag>,
@@ -775,7 +777,7 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
     label: options.label,
     ...(options.completeWhen === undefined ? {} : { completeWhen: options.completeWhen }),
     ...(options.idleTtlMs === undefined ? {} : { idleTtlMs: options.idleTtlMs }),
-    subscribe: (input: EnvironmentRpcInput<TTag>) => {
+    subscribe: (input: EnvironmentRpcInput<TTag>, environmentId: EnvironmentIdType) => {
       const stream = subscribe(options.tag, input);
       return options.transform === undefined
         ? (stream as Stream.Stream<
@@ -783,7 +785,7 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
             EnvironmentRpcStreamFailure<TTag>,
             EnvironmentSupervisor.EnvironmentSupervisor | R
           >)
-        : options.transform(stream);
+        : options.transform(stream, environmentId);
     },
   });
 }

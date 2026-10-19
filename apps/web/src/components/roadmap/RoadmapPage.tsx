@@ -2,17 +2,19 @@ import { useAtomValue } from "@effect/atom-react";
 import type { RoadmapItemId, RoadmapSprint, RoadmapWorkItem } from "@lathe/contracts";
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { CircleDotIcon, MapIcon, PlusIcon } from "lucide-react";
+import { CircleAlertIcon, CircleDotIcon, MapIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { isElectron } from "~/env";
 import { useEscapeToGoBack } from "~/hooks/useNavigateBack";
+import { useEnvironmentPresentation } from "~/state/presentation";
 import {
   roadmapEnvironment,
   useRoadmapHome,
   useRoadmapLive,
   useRoadmapSupported,
 } from "~/state/roadmap";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
   Empty,
@@ -53,9 +55,11 @@ import {
   knownSprintFilter,
   ROADMAP_VIEWS,
   roadmapEditorRequest,
+  roadmapLiveNotice,
   roadmapViewOf,
   withoutEditorRequest,
   type RoadmapOutlineLayout,
+  type RoadmapLiveNotice,
   type RoadmapSearch,
   type RoadmapSprintFilter,
   type RoadmapView,
@@ -77,7 +81,16 @@ export function RoadmapPage() {
   const home = useRoadmapHome();
   const supported = useRoadmapSupported(home);
   const live = useRoadmapLive(supported ? home : null);
-  const canEdit = useAtomValue(roadmapEnvironment.dispatchRoadmap.permissionAtom(home));
+  const { presentation: homePresentation } = useEnvironmentPresentation(home);
+  const notice = roadmapLiveNotice({
+    connection: homePresentation?.connection ?? null,
+    homeLabel: homePresentation?.entry.target.label ?? "the roadmap home",
+    source: live.data?.source ?? null,
+    loadError: live.error,
+  });
+  // A cached or disconnected roadmap is read only: a write could not reach the home.
+  const isLive = notice.kind === "live";
+  const canEdit = useAtomValue(roadmapEnvironment.dispatchRoadmap.permissionAtom(home)) && isLive;
   const items = useMemo(() => live.data?.items ?? [], [live.data]);
   const sprints = useMemo(() => live.data?.sprints ?? [], [live.data]);
   const byId = useMemo(() => roadmapItemsById(items), [items]);
@@ -109,11 +122,11 @@ export function RoadmapPage() {
     readonly mode: RoadmapItemEditorMode;
   } | null>(null);
   // The URL can ask for the editor ("Create work item" in the command palette).
-  // It waits for the snapshot so a parent in the URL can be checked first. Closing
+  // It waits for the live roadmap so a parent in the URL can be checked first. Closing
   // it remembers the search it came from, so it stays shut until the URL catches up.
   const [dismissedSearch, setDismissedSearch] = useState<RoadmapSearch | null>(null);
   const urlRequest =
-    live.data === null || search === dismissedSearch ? null : roadmapEditorRequest(search, byId);
+    !isLive || search === dismissedSearch ? null : roadmapEditorRequest(search, byId);
   const editor =
     localEditor ??
     (urlRequest === null
@@ -121,10 +134,11 @@ export function RoadmapPage() {
       : { key: -1, mode: { kind: "create", parentId: urlRequest.parentId } as const });
   // Fork: roadmap. The import dialog opens from the header or, like the editor,
   // from the URL ("Import GitHub issue" in the command palette).
-  const canImport = useAtomValue(roadmapEnvironment.importRoadmapIssue.permissionAtom(home));
+  const canImport =
+    useAtomValue(roadmapEnvironment.importRoadmapIssue.permissionAtom(home)) && isLive;
   const [importRequested, setImportRequested] = useState(false);
   const importOpen =
-    live.data !== null && (importRequested || (search.import === 1 && search !== dismissedSearch));
+    isLive && (importRequested || (search.import === 1 && search !== dismissedSearch));
   const closeImport = (itemId?: RoadmapItemId) => {
     setImportRequested(false);
     if (search.import === undefined && itemId === undefined) return;
@@ -257,7 +271,7 @@ export function RoadmapPage() {
         <Button
           size="xs"
           variant="outline"
-          disabled={!canImport || live.data === null}
+          disabled={!canImport}
           onClick={() => setImportRequested(true)}
         >
           <CircleDotIcon />
@@ -266,7 +280,7 @@ export function RoadmapPage() {
         <Button
           size="xs"
           variant="outline"
-          disabled={!canEdit || live.data === null}
+          disabled={!canEdit}
           onClick={() => openEditor({ kind: "create", parentId: null })}
         >
           <PlusIcon />
@@ -283,6 +297,9 @@ export function RoadmapPage() {
         <div className="relative flex min-h-0 flex-1">
           <ScrollArea className="min-h-0 min-w-0 flex-1">
             <WorkspacePageContainer width="full">
+              {home !== null && supported ? (
+                <RoadmapNoticeBar notice={notice} showingSaved={live.data !== null} />
+              ) : null}
               {home === null || !supported ? (
                 <p className="py-12 text-center text-sm text-muted-foreground">
                   The roadmap home is not connected, or its server does not have the roadmap yet.{" "}
@@ -290,16 +307,15 @@ export function RoadmapPage() {
                     Choose a roadmap home
                   </Link>
                 </p>
-              ) : live.error !== null && live.data === null ? (
-                <p className="py-12 text-center text-sm text-muted-foreground">
-                  Could not load the roadmap. It retries when the home reconnects.
-                </p>
               ) : live.data === null ? (
-                <div className="flex flex-col gap-2" aria-busy>
-                  {SKELETON_ROWS.map((row) => (
-                    <Skeleton key={row} className="h-7 w-full" />
-                  ))}
-                </div>
+                // A failed load has only its error to show; a skeleton would claim progress.
+                notice.kind === "failed" ? null : (
+                  <div className="flex flex-col gap-2" aria-busy>
+                    {SKELETON_ROWS.map((row) => (
+                      <Skeleton key={row} className="h-7 w-full" />
+                    ))}
+                  </div>
+                )
               ) : items.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
@@ -399,6 +415,46 @@ export function RoadmapPage() {
         <RoadmapImportIssueDialog home={home} items={items} onClose={closeImport} />
       ) : null}
     </SidebarInset>
+  );
+}
+
+function RoadmapNoticeBar({
+  notice,
+  showingSaved,
+}: {
+  readonly notice: RoadmapLiveNotice;
+  readonly showingSaved: boolean;
+}) {
+  if (notice.kind === "live") return null;
+  const saved = showingSaved ? "Showing the roadmap as it last loaded, read only." : null;
+  if (notice.kind === "syncing") {
+    return (
+      <p role="status" className="flex items-center gap-1.5 pb-3 text-xs text-muted-foreground">
+        <RefreshCwIcon className="size-3.5 shrink-0" />
+        {saved === null ? notice.message : `${notice.message} ${saved}`}
+      </p>
+    );
+  }
+  return (
+    <div className="pb-4">
+      <Alert variant="error" role="alert">
+        <CircleAlertIcon />
+        <AlertTitle>{notice.title}</AlertTitle>
+        <AlertDescription>
+          {notice.reason === null ? null : <p>{notice.reason}</p>}
+          <p>
+            {saved === null ? null : `${saved} `}
+            {notice.retrying ? (
+              "Retrying automatically."
+            ) : (
+              <Link to="/settings/connections" className="underline underline-offset-4">
+                Check the connection in Settings
+              </Link>
+            )}
+          </p>
+        </AlertDescription>
+      </Alert>
+    </div>
   );
 }
 

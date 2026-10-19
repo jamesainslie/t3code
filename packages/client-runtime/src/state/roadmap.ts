@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { applyRoadmapStreamItem, type RoadmapLiveState } from "../roadmap/roadmapTree.ts";
+import { withRoadmapCache } from "./roadmapCache.ts";
 import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
@@ -28,16 +29,22 @@ export function createRoadmapEnvironmentAtoms<R, E>(
     refreshIntervalMs: 5_000,
   });
   return {
-    /** The home's work items, from a snapshot kept current by the deltas that follow it. */
+    /**
+     * The home's work items, from a snapshot kept current by the deltas that
+     * follow it. The last roadmap this client saw comes first, marked "cache".
+     */
     roadmapLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:roadmap",
       tag: WS_METHODS.roadmapSubscribe,
-      transform: (stream) =>
-        stream.pipe(
-          Stream.scan((): RoadmapLiveState | null => null, applyRoadmapStreamItem),
-          Stream.filter((state): state is RoadmapLiveState => state !== null),
-          // A dropped stale delta returns the same state; reference equality skips it cheaply.
-          Stream.changesWith(Object.is),
+      transform: (stream, environmentId) =>
+        withRoadmapCache(
+          environmentId,
+          stream.pipe(
+            Stream.scan((): RoadmapLiveState | null => null, applyRoadmapStreamItem),
+            Stream.filter((state): state is RoadmapLiveState => state !== null),
+            // A dropped stale delta returns the same state; reference equality skips it cheaply.
+            Stream.changesWith(Object.is),
+          ),
         ),
     }),
     dispatchRoadmap: createEnvironmentRpcCommand(runtime, {
