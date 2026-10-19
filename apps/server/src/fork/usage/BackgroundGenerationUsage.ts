@@ -80,7 +80,7 @@ const encodeStoredUsage = Schema.encodeSync(StoredUsageJson);
 const decodeStoredUsage = Schema.decodeUnknownOption(StoredUsageJson);
 const isProvider = Schema.is(UsageProviderKind);
 
-export interface BackgroundUsageRow {
+interface BackgroundUsageRow {
   readonly rowId: number;
   readonly recordedAtMs: number;
   readonly purpose: BackgroundGenerationPurpose;
@@ -90,7 +90,7 @@ export interface BackgroundUsageRow {
   readonly usageJson: string | null;
 }
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const config = yield* ServerConfig.ServerConfig;
   const path = config.dbPath;
@@ -146,7 +146,7 @@ export const make = Effect.gen(function* () {
   return { record, read };
 });
 
-export function windowFromRows(
+function windowFromRows(
   rows: readonly BackgroundUsageRow[],
   source: { readonly path: string; readonly volumeId: string },
 ): BackgroundUsageWindow {
