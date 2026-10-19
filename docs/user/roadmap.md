@@ -26,6 +26,16 @@ item from thread**, then a type. The item takes the thread's title and the threa
 Turn on **Start a new thread for it** in the same submenu to attach a fresh thread in that project
 instead.
 
+## Review and edit an item
+
+Select an item in any view to open its details in a drawer on the right. The drawer shows
+everything about the item, and you can change its state, priority, due date, estimate, sprint and
+hours, tick criteria, and pin or snooze it there. Choose **Edit** in the drawer for the title,
+type, parent, area, criteria and description. Select another item to switch the drawer to it, and
+press `Escape` to close it.
+
+In **Outline**, double-click a title or press `F2` on it to rename the item in place.
+
 ## Attach a thread
 
 Choose **Attach to work item…** from the thread's right-click menu, or **Attach this thread to a

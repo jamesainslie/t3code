@@ -32,6 +32,7 @@ import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { RoadmapBoard } from "./RoadmapBoard";
 import { RoadmapImportIssueDialog } from "./RoadmapImportIssueDialog";
+import { RoadmapItemDrawer } from "./RoadmapItemDrawer";
 import { RoadmapItemEditor, type RoadmapItemEditorMode } from "./RoadmapItemEditor";
 import { RoadmapOutline } from "./RoadmapOutline";
 import { RoadmapSprintsButton } from "./RoadmapSprints";
@@ -124,7 +125,6 @@ export function RoadmapPage() {
   const [importRequested, setImportRequested] = useState(false);
   const importOpen =
     live.data !== null && (importRequested || (search.import === 1 && search !== dismissedSearch));
-  useEscapeToGoBack(editor === null && !importOpen ? undefined : IGNORE_ESCAPE);
   const closeImport = (itemId?: RoadmapItemId) => {
     setImportRequested(false);
     if (search.import === undefined && itemId === undefined) return;
@@ -139,6 +139,18 @@ export function RoadmapPage() {
     (next: (current: RoadmapSearch) => RoadmapSearch) =>
       void navigate({ search: next, replace: true }),
     [navigate],
+  );
+
+  // The selected item, which the drawer shows; one deleted or never there shows nothing.
+  const selectedItem = search.item === undefined ? undefined : byId.get(search.item);
+  const closeDrawer = useCallback(() => setSearch(({ item: _item, ...rest }) => rest), [setSearch]);
+  // Escape closes the innermost thing first: a dialog, then the drawer, then the page.
+  useEscapeToGoBack(
+    editor !== null || importOpen
+      ? IGNORE_ESCAPE
+      : selectedItem !== undefined
+        ? closeDrawer
+        : undefined,
   );
 
   const outlineLayout = useMemo(
@@ -172,6 +184,7 @@ export function RoadmapPage() {
     (itemId: RoadmapItemId) => setSearch((current) => ({ ...current, item: itemId })),
     [setSearch],
   );
+  const onOpen = useCallback((item: RoadmapWorkItem) => onSelect(item.id), [onSelect]);
   const closeEditor = (createdId?: RoadmapItemId) => {
     setLocalEditor(null);
     if (search.new === undefined && createdId === undefined) return;
@@ -267,93 +280,110 @@ export function RoadmapPage() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>{header}</WorkspacePageHeader>
-        <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="full">
-            {home === null || !supported ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                The roadmap home is not connected, or its server does not have the roadmap yet.{" "}
-                <Link to="/settings/roadmap" className="underline underline-offset-4">
-                  Choose a roadmap home
-                </Link>
-              </p>
-            ) : live.error !== null && live.data === null ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                Could not load the roadmap. It retries when the home reconnects.
-              </p>
-            ) : live.data === null ? (
-              <div className="flex flex-col gap-2" aria-busy>
-                {SKELETON_ROWS.map((row) => (
-                  <Skeleton key={row} className="h-7 w-full" />
-                ))}
-              </div>
-            ) : items.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MapIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>Nothing on the roadmap yet</EmptyTitle>
-                  <EmptyDescription>
-                    Build a tree of work, from objectives down to stories and bugs. Threads attach
-                    to the items they work on, so you can see what each one is for.
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button
-                    disabled={!canEdit}
-                    onClick={() => openEditor({ kind: "create", parentId: null })}
-                  >
-                    <PlusIcon />
-                    New objective
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            ) : view === "today" ? (
-              <RoadmapToday
-                home={home}
-                items={items}
-                sprints={sprints}
-                canEdit={canEdit}
-                today={today}
-                onOpen={onEdit}
-              />
-            ) : view === "timeline" ? (
-              <RoadmapTimeline
-                home={home}
-                items={items}
-                sprints={sprints}
-                area={search.area ?? null}
-                today={today}
-                selectedId={search.item ?? null}
-                onSelect={onSelect}
-              />
-            ) : view === "board" ? (
-              <RoadmapBoard
-                home={home}
-                items={items}
-                sprints={sprints}
-                underId={underId}
-                canEdit={canEdit}
-                today={today}
-                onOpen={onEdit}
-              />
-            ) : (
-              <RoadmapOutline
-                home={home}
-                items={items}
-                sprints={sprints}
-                filter={outlineFilter}
-                layout={outlineLayout}
-                onLayoutChange={onOutlineLayoutChange}
-                selectedId={search.item ?? null}
-                canEdit={canEdit}
-                today={today}
-                onAddChild={onAddChild}
-                onEdit={onEdit}
-              />
-            )}
-          </WorkspacePageContainer>
-        </ScrollArea>
+        <div className="relative flex min-h-0 flex-1">
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
+            <WorkspacePageContainer width="full">
+              {home === null || !supported ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  The roadmap home is not connected, or its server does not have the roadmap yet.{" "}
+                  <Link to="/settings/roadmap" className="underline underline-offset-4">
+                    Choose a roadmap home
+                  </Link>
+                </p>
+              ) : live.error !== null && live.data === null ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  Could not load the roadmap. It retries when the home reconnects.
+                </p>
+              ) : live.data === null ? (
+                <div className="flex flex-col gap-2" aria-busy>
+                  {SKELETON_ROWS.map((row) => (
+                    <Skeleton key={row} className="h-7 w-full" />
+                  ))}
+                </div>
+              ) : items.length === 0 ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <MapIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>Nothing on the roadmap yet</EmptyTitle>
+                    <EmptyDescription>
+                      Build a tree of work, from objectives down to stories and bugs. Threads attach
+                      to the items they work on, so you can see what each one is for.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button
+                      disabled={!canEdit}
+                      onClick={() => openEditor({ kind: "create", parentId: null })}
+                    >
+                      <PlusIcon />
+                      New objective
+                    </Button>
+                  </EmptyContent>
+                </Empty>
+              ) : view === "today" ? (
+                <RoadmapToday
+                  home={home}
+                  items={items}
+                  sprints={sprints}
+                  canEdit={canEdit}
+                  today={today}
+                  selectedId={search.item ?? null}
+                  onOpen={onOpen}
+                />
+              ) : view === "timeline" ? (
+                <RoadmapTimeline
+                  home={home}
+                  items={items}
+                  sprints={sprints}
+                  area={search.area ?? null}
+                  today={today}
+                  selectedId={search.item ?? null}
+                  onSelect={onSelect}
+                />
+              ) : view === "board" ? (
+                <RoadmapBoard
+                  home={home}
+                  items={items}
+                  sprints={sprints}
+                  underId={underId}
+                  canEdit={canEdit}
+                  today={today}
+                  selectedId={search.item ?? null}
+                  onOpen={onOpen}
+                />
+              ) : (
+                <RoadmapOutline
+                  home={home}
+                  items={items}
+                  sprints={sprints}
+                  filter={outlineFilter}
+                  layout={outlineLayout}
+                  onLayoutChange={onOutlineLayoutChange}
+                  selectedId={search.item ?? null}
+                  canEdit={canEdit}
+                  today={today}
+                  onAddChild={onAddChild}
+                  onEdit={onEdit}
+                  onSelect={onSelect}
+                />
+              )}
+            </WorkspacePageContainer>
+          </ScrollArea>
+          {selectedItem !== undefined && home !== null ? (
+            <RoadmapItemDrawer
+              home={home}
+              item={selectedItem}
+              items={items}
+              sprints={sprints}
+              canEdit={canEdit}
+              onSelect={onSelect}
+              onEdit={onEdit}
+              onClose={closeDrawer}
+            />
+          ) : null}
+        </div>
       </div>
       {editor !== null && home !== null ? (
         <RoadmapItemEditor
@@ -417,7 +447,9 @@ function OutlineFilters({
             ...rest,
             ...(value === ALL
               ? {}
-              : { itemState: value as NonNullable<RoadmapSearch["itemState"]> }),
+              : {
+                  itemState: value as NonNullable<RoadmapSearch["itemState"]>,
+                }),
           }))
         }
       />

@@ -53,6 +53,7 @@ export interface RoadmapTodayRowProps {
   readonly signal: RoadmapThreadSignal | undefined;
   readonly today: IsoDate;
   readonly canEdit: boolean;
+  readonly selected: boolean;
   readonly onOpen: (item: RoadmapWorkItem) => void;
   readonly actions: RoadmapTodayActions;
 }
@@ -66,6 +67,7 @@ export const RoadmapTodayRow = memo(function RoadmapTodayRow({
   signal,
   today,
   canEdit,
+  selected,
   onOpen,
   actions,
 }: RoadmapTodayRowProps) {
@@ -78,7 +80,10 @@ export const RoadmapTodayRow = memo(function RoadmapTodayRow({
   return (
     <div
       data-active={menuOpen || undefined}
-      className="group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent/40 data-active:bg-accent/40"
+      className={cn(
+        "group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent/40 data-active:bg-accent/40",
+        selected && "bg-accent/60",
+      )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <RoadmapTypeTag type={item.type} />

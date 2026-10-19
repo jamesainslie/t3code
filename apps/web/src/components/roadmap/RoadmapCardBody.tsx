@@ -36,6 +36,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
 import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
+import ChatMarkdown from "../ChatMarkdown";
 import { cn, randomUUID } from "~/lib/utils";
 import { PullRequestLinkPreview } from "../pullRequest/PullRequestLinkPreview";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
@@ -136,7 +137,7 @@ export function RoadmapCardBody(
       ) : props.view.kind === "empty" ? (
         <EmptyState {...props} />
       ) : (
-        <AttachedItem {...props} item={props.view.item} />
+        <RoadmapItemDetails {...props} item={props.view.item} />
       )}
     </div>
   );
@@ -726,8 +727,9 @@ function NotesSection(props: {
   );
 }
 
-function AttachedItem(
-  props: RoadmapCardBodyHandlers & {
+/** Every detail of one item with its inline edits, shared by the thread card and the Roadmap drawer. */
+export function RoadmapItemDetails(
+  props: Pick<RoadmapCardBodyHandlers, "onOpenItem" | "onUpdate" | "onTick" | "onCommand"> & {
     readonly item: RoadmapWorkItem;
     readonly items: ReadonlyArray<RoadmapWorkItem>;
     readonly sprints: ReadonlyArray<RoadmapSprint>;
@@ -853,6 +855,14 @@ function AttachedItem(
         ) : null}
       </div>
       {readOnlyHint !== null ? <p className="text-muted-foreground">{readOnlyHint}</p> : null}
+      {item.description.trim() !== "" ? (
+        <ChatMarkdown
+          text={item.description}
+          cwd={undefined}
+          environmentId={props.pullRequestEnvironmentId ?? undefined}
+          className="text-xs text-foreground/85"
+        />
+      ) : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         <Field label="Due">
           <DueDateField

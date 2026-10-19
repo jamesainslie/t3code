@@ -4,7 +4,13 @@
  */
 import { buildToday, type RoadmapTodaySection } from "@lathe/client-runtime/roadmap/today";
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
-import type { EnvironmentId, IsoDate, RoadmapSprint, RoadmapWorkItem } from "@lathe/contracts";
+import type {
+  EnvironmentId,
+  IsoDate,
+  RoadmapItemId,
+  RoadmapSprint,
+  RoadmapWorkItem,
+} from "@lathe/contracts";
 import { effectivePriority } from "@lathe/shared/roadmap";
 import { localDateOf } from "@lathe/shared/roadmapCalc";
 import { ChevronRightIcon, SunIcon } from "lucide-react";
@@ -37,10 +43,19 @@ export interface RoadmapTodayProps {
   readonly sprints: ReadonlyArray<RoadmapSprint>;
   readonly canEdit: boolean;
   readonly today: IsoDate;
+  readonly selectedId: RoadmapItemId | null;
   readonly onOpen: (item: RoadmapWorkItem) => void;
 }
 
-export function RoadmapToday({ home, items, sprints, canEdit, today, onOpen }: RoadmapTodayProps) {
+export function RoadmapToday({
+  home,
+  items,
+  sprints,
+  canEdit,
+  today,
+  selectedId,
+  onOpen,
+}: RoadmapTodayProps) {
   // Fixed for the visit: it is both "now" for the rules and the visit Today records.
   const [now] = useState(() => new Date().toISOString());
   const lastOpenedAt = useRoadmapTodayLastOpenedAt(home, now);
@@ -92,6 +107,7 @@ export function RoadmapToday({ home, items, sprints, canEdit, today, onOpen }: R
               signal={threadSignals.get(row.itemId)}
               today={today}
               canEdit={canEdit}
+              selected={item.id === selectedId}
               onOpen={onOpen}
               actions={actions}
             />
@@ -139,6 +155,7 @@ export function RoadmapToday({ home, items, sprints, canEdit, today, onOpen }: R
           snoozed={model.snoozed}
           byId={byId}
           canEdit={canEdit}
+          selectedId={selectedId}
           onOpen={onOpen}
           actions={actions}
         />
@@ -151,12 +168,14 @@ function SnoozedList({
   snoozed,
   byId,
   canEdit,
+  selectedId,
   onOpen,
   actions,
 }: {
   readonly snoozed: ReturnType<typeof buildToday>["snoozed"];
   readonly byId: ReturnType<typeof roadmapItemsById>;
   readonly canEdit: boolean;
+  readonly selectedId: RoadmapItemId | null;
   readonly onOpen: (item: RoadmapWorkItem) => void;
   readonly actions: RoadmapTodayActions;
 }) {
@@ -175,7 +194,10 @@ function SnoozedList({
             return (
               <div
                 key={itemId}
-                className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-accent/40"
+                className={cn(
+                  "flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-accent/40",
+                  item.id === selectedId && "bg-accent/60",
+                )}
               >
                 <RoadmapTypeTag type={item.type} />
                 <button

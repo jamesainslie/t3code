@@ -54,6 +54,7 @@ export interface RoadmapBoardProps {
   readonly underId: RoadmapItemId | null;
   readonly canEdit: boolean;
   readonly today: IsoDate;
+  readonly selectedId: RoadmapItemId | null;
   readonly onOpen: (item: RoadmapWorkItem) => void;
 }
 
@@ -68,6 +69,7 @@ export function RoadmapBoard({
   underId,
   canEdit,
   today,
+  selectedId,
   onOpen,
 }: RoadmapBoardProps) {
   const dispatch = useRoadmapDispatch(home);
@@ -126,6 +128,7 @@ export function RoadmapBoard({
                   ticked={progress.ticked}
                   total={progress.total}
                   canEdit={canEdit}
+                  selected={item.id === selectedId}
                   onOpen={onOpen}
                 />
               );
@@ -187,6 +190,7 @@ const BoardCard = memo(function BoardCard({
   ticked,
   total,
   canEdit,
+  selected,
   onOpen,
 }: {
   readonly item: RoadmapWorkItem;
@@ -199,6 +203,7 @@ const BoardCard = memo(function BoardCard({
   readonly ticked: number;
   readonly total: number;
   readonly canEdit: boolean;
+  readonly selected: boolean;
   readonly onOpen: (item: RoadmapWorkItem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -218,6 +223,7 @@ const BoardCard = memo(function BoardCard({
         "flex flex-col gap-1.5 rounded-lg border bg-card p-2.5 text-sm outline-none",
         canEdit && "cursor-grab touch-none active:cursor-grabbing",
         isDragging && "relative z-10 opacity-80 shadow-lg",
+        selected && "border-ring",
       )}
     >
       <div className="flex items-center gap-1.5">

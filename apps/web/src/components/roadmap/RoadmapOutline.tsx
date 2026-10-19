@@ -102,6 +102,7 @@ export interface RoadmapOutlineProps {
   readonly today: IsoDate;
   readonly onAddChild: (parent: RoadmapWorkItem) => void;
   readonly onEdit: (item: RoadmapWorkItem) => void;
+  readonly onSelect: (itemId: RoadmapItemId) => void;
 }
 
 export function RoadmapOutline({
@@ -116,6 +117,7 @@ export function RoadmapOutline({
   today,
   onAddChild,
   onEdit,
+  onSelect,
 }: RoadmapOutlineProps) {
   const dispatch = useRoadmapDispatch(home);
   const areaSettings = useRoadmapAreaSettings(home);
@@ -241,6 +243,7 @@ export function RoadmapOutline({
         }),
       addChild: onAddChild,
       edit: onEdit,
+      open: onSelect,
       markReviewed: (itemId) =>
         void dispatch({
           type: "roadmap.item.mark-reviewed",
@@ -283,7 +286,7 @@ export function RoadmapOutline({
         });
       },
     }),
-    [dispatch, onAddChild, onEdit, setFocused, updateCollapsed],
+    [dispatch, onAddChild, onEdit, onSelect, setFocused, updateCollapsed],
   );
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
