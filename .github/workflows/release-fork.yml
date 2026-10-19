@@ -206,11 +206,14 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
-      # CI (fork) runs every check below, and more, on each push to main. A
-      # green CI run on this exact commit stands in for them; otherwise the
-      # steps below run as before. Keep ci-fork.yml a superset of this job.
+      # CI (fork) runs every check below, and more, on each push to main. For a
+      # nightly, a green CI run on this exact commit stands in for them;
+      # otherwise the steps below run as before. Stable releases always run
+      # their own suite, as a second independent pass before a release users
+      # update to by default. Keep ci-fork.yml a superset of this job.
       - id: main_ci
         name: Reuse CI result for this commit
+        if: needs.preflight.outputs.release_channel == 'nightly'
         uses: actions/github-script@v8
         with:
           script: |
