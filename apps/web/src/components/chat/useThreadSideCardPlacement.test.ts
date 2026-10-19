@@ -55,3 +55,21 @@ it("ignores the cards below it", () => {
 it("takes the top slot when the cards above it are closed", () => {
   expect(measureThreadSideCard("roadmap")).toMatchObject({ mode: "inline", top: 308 });
 });
+
+it("matches the details card's width and how far it can be dragged", () => {
+  document.body.replaceChildren();
+  const view = box({}, { top: 0, right: 1600, bottom: 1000 });
+  box({ "data-chat-header": "" }, { top: 0, right: 1580, bottom: 48 }, view);
+  box(
+    { "data-chat-canvas": "", "data-details-column": "" },
+    { top: 48, right: 1600, bottom: 1000 },
+    view,
+  );
+  const aside = box({ "data-max-width": "300" }, { top: 60, right: 1588, bottom: 300 });
+  box({ "data-thread-details-card": "" }, { top: 60, right: 1588, bottom: 300 }, aside);
+  expect(measureThreadSideCard("roadmap")).toMatchObject({
+    left: 1588 - 280,
+    width: 280,
+    maxWidth: 300,
+  });
+});

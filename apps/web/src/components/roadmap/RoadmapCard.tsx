@@ -9,15 +9,18 @@ import type { RoadmapSprint } from "@lathe/contracts";
 import { scopedThreadKey, scopeThreadRef } from "@lathe/client-runtime/environment";
 import { MapIcon } from "lucide-react";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { openRoadmapAttachPicker } from "../../commandPaletteBus";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useRoadmapAreaSettings, useRoadmapLive } from "../../state/roadmap";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { THREAD_SIDE_CARD_WIDTH, type SideCardPlacement } from "../chat/threadSideCardLayout";
+import { ThreadDetailsColumnResizeHandle } from "../chat/threadDetailsColumnWidth";
+import type { SideCardPlacement } from "../chat/threadSideCardLayout";
 import {
   measureThreadSideCard,
   useThreadSideCardPlacement,
@@ -27,6 +30,8 @@ import { roadmapCardOpen, roadmapCardView } from "./roadmapCard.logic";
 import { useRoadmapThreadActions, type RoadmapThreadTarget } from "./useRoadmapThreadActions";
 
 const EMPTY_SPRINTS: ReadonlyArray<RoadmapSprint> = [];
+/** One choice for every thread's card, kept across reloads. */
+const ROADMAP_CARD_MINIMIZED_STORAGE_KEY = "lathe:roadmap-card-minimized";
 
 /**
  * The user's open or closed choice for a thread's card; null until they make
@@ -68,7 +73,7 @@ function RoadmapCard({
       style={{
         top: placement.top,
         left: placement.left,
-        width: THREAD_SIDE_CARD_WIDTH,
+        width: placement.width,
         maxHeight: placement.maxHeight,
       }}
       data-roadmap-card={placement.mode}
@@ -77,6 +82,7 @@ function RoadmapCard({
       <ScrollArea scrollFade className="min-h-0">
         {children}
       </ScrollArea>
+      <ThreadDetailsColumnResizeHandle width={placement.width} maxWidth={placement.maxWidth} />
     </section>,
     document.body,
   );
@@ -100,6 +106,11 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
     items,
     thread: threadRef,
   });
+  const [minimized, setMinimized] = useLocalStorage(
+    ROADMAP_CARD_MINIMIZED_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
   const override = useAtomValue(roadmapCardOpenOverrideAtom(threadKey));
   const setOverride = useAtomSet(roadmapCardOpenOverrideAtom(threadKey));
   const requested = roadmapCardOpen(override, view.kind === "attached");
@@ -154,6 +165,8 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
             areaSettings={areaSettings}
             canChange={availability.canChange}
             pullRequestEnvironmentId={thread.environmentId}
+            minimized={minimized}
+            onMinimizedChange={setMinimized}
             onClose={closeCard}
             onOpenItem={actions.openInRoadmap}
             onAttach={() => openRoadmapAttachPicker(threadRef)}

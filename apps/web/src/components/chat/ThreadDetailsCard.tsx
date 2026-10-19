@@ -1,5 +1,9 @@
 import { useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
 import type { ScopedThreadRef } from "@lathe/contracts";
+import * as Schema from "effect/Schema";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "../../lib/utils";
 import { Popover, PopoverPopup, PopoverCreateHandle } from "../ui/popover";
@@ -11,7 +15,13 @@ import {
   resolveThreadDetailsCardDensity,
   resolveThreadDetailsCardLayout,
 } from "./threadDetailsCardLayout";
+import {
+  ThreadDetailsColumnResizeHandle,
+  useThreadDetailsColumnWidth,
+} from "./threadDetailsColumnWidth";
 import { observeResize } from "../../lib/observeResize";
+
+const THREAD_DETAILS_MINIMIZED_STORAGE_KEY = "lathe:thread-details-card-minimized";
 
 export function ThreadDetailsCard({
   threadRef,
@@ -27,12 +37,14 @@ export function ThreadDetailsCard({
   children: (density: "full" | "compact" | "essential") => ReactNode;
 }) {
   const canvas = useChatCanvas();
+  const columnWidth = useThreadDetailsColumnWidth();
   const preferredPlacement = canvas
     ? resolveThreadDetailsCardLayout({
         container: canvas.container,
         lane: canvas.lane,
         frame: null,
         topInset: canvas.detailsCardTopInset,
+        width: columnWidth,
       })
     : null;
   const placement = canvas
@@ -42,6 +54,7 @@ export function ThreadDetailsCard({
         frame: canvas.layout.frame,
         overlapsDetailsCard: canvas.layout.overlapsDetailsCard,
         topInset: canvas.detailsCardTopInset,
+        width: columnWidth,
       })
     : null;
   const mode = placement ? "inline" : "popover";
@@ -52,8 +65,13 @@ export function ThreadDetailsCard({
   const popoverOpen = useRightPanelStore((state) =>
     selectThreadPanelOpen(state.threadPanelVisibilityByThreadKey, threadRef, "popover"),
   );
+  const [minimized, setMinimized] = useLocalStorage(
+    THREAD_DETAILS_MINIMIZED_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
-  const measurementKey = `${threadRef.environmentId}:${threadRef.threadId}:${preferredPlacement?.width ?? "popup"}`;
+  const measurementKey = `${threadRef.environmentId}:${threadRef.threadId}:${preferredPlacement?.width ?? "popup"}:${minimized}`;
   const [measurements, setMeasurements] = useState({
     key: measurementKey,
     heights: { full: 0, compact: 0 },
@@ -62,7 +80,7 @@ export function ThreadDetailsCard({
   const contentHeights =
     measurements.key === measurementKey ? measurements.heights : { full: 0, compact: 0 };
   const height = placement?.height ?? Math.max(0, (canvas?.container.height ?? 0) - 52);
-  const density = resolveThreadDetailsCardDensity(height, contentHeights);
+  const density = resolveThreadDetailsCardDensity(height, contentHeights, minimized);
   const reportDetailsCard = canvas?.reportDetailsCard;
   const cardLeft = preferredPlacement?.x;
   const cardRight = preferredPlacement
@@ -87,34 +105,37 @@ export function ThreadDetailsCard({
   }, [mode, onPresentationChange, threadRef, popoverOpen]);
   useLayoutEffect(() => {
     const element = contentElement;
-    if (!element || density === "essential") return;
+    if (!element) return;
+    // Minimized, the essentials are all the card ever shows: only the height
+    // it takes is measured, so the chat and the side cards make room for that.
+    if (density === "essential" && !minimized) return;
     const measure = () => {
       const frame = element.closest<HTMLElement>("[data-thread-details-card]");
       const next = element.offsetHeight + (frame ? frame.offsetHeight - frame.clientHeight : 0);
       const lineage = element.querySelector<HTMLElement>("[data-thread-relationships-panel]");
       const fittingHeight = next - (lineage?.offsetHeight ?? 0);
       setMeasurements((current) => {
-        const heights = current.key === measurementKey ? current.heights : { full: 0, compact: 0 };
+        const sameKey = current.key === measurementKey;
+        const heights = sameKey ? current.heights : { full: 0, compact: 0 };
         const fullContentHeight =
-          density === "full"
+          density === "essential" || density === "full"
             ? next
-            : current.key === measurementKey
+            : sameKey
               ? current.fullContentHeight
               : 0;
-        return current.key === measurementKey &&
-          heights[density] === fittingHeight &&
-          current.fullContentHeight === fullContentHeight
+        const fits = density === "essential" || heights[density] === fittingHeight;
+        return sameKey && fits && current.fullContentHeight === fullContentHeight
           ? current
           : {
               key: measurementKey,
-              heights: { ...heights, [density]: fittingHeight },
+              heights: density === "essential" ? heights : { ...heights, [density]: fittingHeight },
               fullContentHeight,
             };
       });
     };
     measure();
     return observeResize(element, measure);
-  }, [contentElement, density, measurementKey]);
+  }, [contentElement, density, measurementKey, minimized]);
   const card = (
     <div
       className={cn(
@@ -126,7 +147,21 @@ export function ThreadDetailsCard({
       data-thread-details-card
     >
       <ScrollArea scrollFade className="min-h-0">
-        <div ref={setContentElement}>{children(density)}</div>
+        <div ref={setContentElement}>
+          {children(density)}
+          <div className="border-t border-border/65 px-2 py-1">
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              className="w-full justify-start"
+              aria-pressed={minimized}
+              onClick={() => setMinimized(!minimized)}
+            >
+              {minimized ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+              {minimized ? "Show all details" : "Show essentials only"}
+            </Button>
+          </div>
+        </div>
       </ScrollArea>
     </div>
   );
@@ -160,16 +195,23 @@ export function ThreadDetailsCard({
               topInset > 0 &&
                 "transition-[top] duration-150 ease-out motion-reduce:transition-none",
             )}
+            // The width follows the CSS property so a drag resizes the card
+            // without rendering; at rest the two agree.
             style={{
               right: placement.right,
               top: placement.y,
-              width: placement.width,
+              width: `min(var(--thread-details-panel-width), ${placement.maxWidth}px)`,
               maxHeight: height,
             }}
             data-density={density}
             data-thread-details-panel="inline"
+            data-max-width={placement.maxWidth}
           >
             {card}
+            <ThreadDetailsColumnResizeHandle
+              width={placement.width}
+              maxWidth={placement.maxWidth}
+            />
           </aside>
         ) : null
       ) : (
