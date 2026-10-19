@@ -162,6 +162,8 @@ resets. Choose rings or meters for the one-line summary under **Settings → Gen
 account summary**. While the account list is showing it is live: it changes when the gateway does,
 so an account you just added appears within a couple of seconds. Otherwise Lathe reads the gateway every few
 minutes. A gateway too old to stream its status is read every five seconds while the list shows.
+The dot beside the gateway's name is green while Lathe is following the stream and flashes with
+each update. A grey dot means the stream is not connected, so the list may lag the gateway.
 
 ### Pick models the gateway routes
 

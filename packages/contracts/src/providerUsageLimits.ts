@@ -181,6 +181,11 @@ export const UsageLimitSourceProxyStatus = Schema.Struct({
   routes: Schema.optional(ForwardCompatibleArray(UsageLimitSourceProxyRoute)),
   /** Fork: account logins open on the gateway (forkUsageAccountLogin.ts). */
   accountLogins: Schema.optional(ForwardCompatibleArray(UsageLimitSourceAccountLogin)),
+  /**
+   * Fork: the server holds the gateway's status stream open, so this
+   * snapshot moves when the gateway does. Absent while it only polls.
+   */
+  following: Schema.optional(Schema.Literal(true)),
 });
 export type UsageLimitSourceProxyStatus = typeof UsageLimitSourceProxyStatus.Type;
 
