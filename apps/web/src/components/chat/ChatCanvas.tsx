@@ -10,6 +10,7 @@ import {
 import { ChatCanvasContext } from "./ChatCanvasContext";
 import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
 import { resolveThreadDetailsCardLayout } from "./threadDetailsCardLayout";
+import { useThreadDetailsColumnWidth } from "./threadDetailsColumnWidth";
 import type { PreviewMiniPlayerObstacles } from "../preview/previewMiniPlayerLayout";
 import { observeResize } from "../../lib/observeResize";
 
@@ -24,6 +25,7 @@ export function ChatCanvas({
 }) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const widthProbeRef = useRef<HTMLDivElement | null>(null);
+  const detailsColumnWidth = useThreadDetailsColumnWidth();
   const [timelineElement, registerTimeline] = useState<HTMLElement | null>(null);
   const [preview, setPreview] = useState<ChatCanvasPreview | null>(null);
   const [detailsCard, setDetailsCard] = useState<PreviewMiniPlayerObstacles["detailsCard"]>(null);
@@ -150,6 +152,7 @@ export function ChatCanvas({
       frame: layout.frame,
       overlapsDetailsCard: layout.overlapsDetailsCard,
       topInset: context.detailsCardTopInset,
+      width: detailsColumnWidth,
     }) !== null;
   return (
     <ChatCanvasContext value={context}>

@@ -1,26 +1,36 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { THREAD_SIDE_CARD_WIDTH, resolveSideCardStack } from "./threadSideCardLayout";
+import { resolveSideCardStack } from "./threadSideCardLayout";
 
 const viewport = { width: 1600, height: 1000 };
 const header = { top: 0, right: 1580, bottom: 48 };
+const width = 280;
+const card = (top: number, right: number, bottom: number) => ({
+  top,
+  right,
+  bottom,
+  width,
+  maxWidth: 640,
+});
 const iris = { id: "iris", desiredHeight: 300 } as const;
 const roadmap = { id: "roadmap", desiredHeight: 300 } as const;
 
 describe("resolveSideCardStack with one card", () => {
   it("stacks under the thread details card, right edges aligned", () => {
-    const details = { top: 60, right: 1588, bottom: 460 };
     const stack = resolveSideCardStack({
       viewport,
       header,
-      details,
+      details: card(60, 1588, 460),
       detailsColumn: true,
+      width,
       cards: [iris],
     });
     expect(stack.get("iris")).toEqual({
       mode: "inline",
       top: 468,
-      left: 1588 - THREAD_SIDE_CARD_WIDTH,
+      left: 1588 - width,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 468 - 8,
     });
   });
@@ -31,23 +41,50 @@ describe("resolveSideCardStack with one card", () => {
       header,
       details: null,
       detailsColumn: true,
+      width,
       cards: [iris],
     });
     expect(stack.get("iris")).toEqual({
       mode: "inline",
       top: 60,
-      left: 1580 - 12 - THREAD_SIDE_CARD_WIDTH,
+      left: 1580 - 12 - width,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 60 - 8,
     });
   });
 
-  it("keeps the column while the details card leaves enough room below it", () => {
-    const details = { top: 60, right: 1588, bottom: 820 };
+  it("matches the details card's width, even where it narrowed to fit", () => {
     const placement = resolveSideCardStack({
       viewport,
       header,
-      details,
+      details: { top: 60, right: 1588, bottom: 460, width: 300, maxWidth: 300 },
       detailsColumn: true,
+      width: 480,
+      cards: [iris],
+    }).get("iris");
+    expect(placement).toMatchObject({ left: 1288, width: 300, maxWidth: 300 });
+  });
+
+  it("takes the column width without a details card", () => {
+    const placement = resolveSideCardStack({
+      viewport,
+      header,
+      details: null,
+      detailsColumn: true,
+      width: 420,
+      cards: [iris],
+    }).get("iris");
+    expect(placement).toMatchObject({ left: 1568 - 420, width: 420 });
+  });
+
+  it("keeps the column while the details card leaves enough room below it", () => {
+    const placement = resolveSideCardStack({
+      viewport,
+      header,
+      details: card(60, 1588, 820),
+      detailsColumn: true,
+      width,
       cards: [iris],
     }).get("iris");
     expect(placement?.mode).toBe("inline");
@@ -55,18 +92,20 @@ describe("resolveSideCardStack with one card", () => {
   });
 
   it("gives up the column when the details card leaves too little room", () => {
-    const details = { top: 60, right: 1588, bottom: 840 };
     const stack = resolveSideCardStack({
       viewport,
       header,
-      details,
+      details: card(60, 1588, 840),
       detailsColumn: true,
+      width,
       cards: [iris],
     });
     expect(stack.get("iris")).toEqual({
       mode: "popover",
       top: 60,
-      left: 1588 - THREAD_SIDE_CARD_WIDTH,
+      left: 1588 - width,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 60 - 8,
     });
   });
@@ -77,21 +116,23 @@ describe("resolveSideCardStack with one card", () => {
       header: { top: 0, right: 890, bottom: 48 },
       details: null,
       detailsColumn: false,
+      width,
       cards: [iris],
     }).get("iris");
     expect(placement?.mode).toBe("popover");
     expect(placement?.top).toBe(60);
   });
 
-  it("stays on screen at the left edge of a narrow window", () => {
+  it("stays on screen in a narrow window", () => {
     const placement = resolveSideCardStack({
       viewport: { width: 300, height: 800 },
       header: { top: 0, right: 290, bottom: 48 },
       details: null,
       detailsColumn: false,
+      width,
       cards: [iris],
     }).get("iris");
-    expect(placement?.left).toBe(8);
+    expect(placement).toMatchObject({ left: 8, width: 270, maxWidth: 270 });
   });
 
   it("never reports a negative height", () => {
@@ -100,6 +141,7 @@ describe("resolveSideCardStack with one card", () => {
       header,
       details: null,
       detailsColumn: true,
+      width,
       cards: [iris],
     }).get("iris");
     expect(placement?.maxHeight).toBe(0);
@@ -107,7 +149,7 @@ describe("resolveSideCardStack with one card", () => {
 });
 
 describe("resolveSideCardStack with several cards", () => {
-  const details = { top: 60, right: 1588, bottom: 300 };
+  const details = card(60, 1588, 300);
 
   it("stacks each card under the one before it when both fit", () => {
     const stack = resolveSideCardStack({
@@ -115,22 +157,27 @@ describe("resolveSideCardStack with several cards", () => {
       header,
       details,
       detailsColumn: true,
+      width,
       cards: [
         { id: "iris", desiredHeight: 200 },
         { id: "roadmap", desiredHeight: 300 },
       ],
     });
-    const left = 1588 - THREAD_SIDE_CARD_WIDTH;
+    const left = 1588 - width;
     expect(stack.get("iris")).toEqual({
       mode: "inline",
       top: 308,
       left,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 308 - 8,
     });
     expect(stack.get("roadmap")).toEqual({
       mode: "inline",
       top: 308 + 200 + 8,
       left,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 516 - 8,
     });
   });
@@ -141,13 +188,16 @@ describe("resolveSideCardStack with several cards", () => {
       header,
       details,
       detailsColumn: true,
+      width,
       cards: [{ id: "iris", desiredHeight: 600 }, roadmap],
     });
     expect(stack.get("iris")?.mode).toBe("inline");
     expect(stack.get("roadmap")).toEqual({
       mode: "popover",
       top: 60,
-      left: 1588 - THREAD_SIDE_CARD_WIDTH,
+      left: 1588 - width,
+      width,
+      maxWidth: 640,
       maxHeight: 1000 - 60 - 8,
     });
   });
@@ -158,6 +208,7 @@ describe("resolveSideCardStack with several cards", () => {
       header,
       details,
       detailsColumn: true,
+      width,
       cards: [{ id: "iris", desiredHeight: 5000 }, roadmap],
     });
     expect(stack.get("iris")).toMatchObject({ mode: "inline", maxHeight: 1000 - 308 - 8 });
@@ -170,6 +221,7 @@ describe("resolveSideCardStack with several cards", () => {
       header,
       details: null,
       detailsColumn: true,
+      width,
       cards: [iris, roadmap],
     });
     expect(stack.get("iris")?.top).toBe(60);
@@ -182,6 +234,7 @@ describe("resolveSideCardStack with several cards", () => {
       header: { top: 0, right: 890, bottom: 48 },
       details: null,
       detailsColumn: false,
+      width,
       cards: [iris, roadmap],
     });
     expect(stack.get("iris")?.mode).toBe("popover");
@@ -194,6 +247,7 @@ describe("resolveSideCardStack with several cards", () => {
       header,
       details,
       detailsColumn: true,
+      width,
       cards: [roadmap, iris],
     });
     expect(stack.get("roadmap")?.top).toBe(308);

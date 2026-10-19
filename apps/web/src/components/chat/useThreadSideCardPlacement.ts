@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { currentThreadDetailsColumnWidth } from "./threadDetailsColumnWidth";
 import { resolveSideCardStack, type SideCardPlacement } from "./threadSideCardLayout";
 
 /** Marks a side card's root element with its id so the cards below it can make room. */
@@ -59,11 +60,24 @@ export function measureThreadSideCard(id: ThreadSideCardId): SideCardPlacement |
     resolveSideCardStack({
       viewport: { width: window.innerWidth, height: window.innerHeight },
       header: edges(header),
-      details: details ? edges(details) : null,
+      details: details ? detailsEdges(details) : null,
       detailsColumn: hasDetailsColumn(header),
+      width: currentThreadDetailsColumnWidth(),
       cards,
     }).get(id) ?? null
   );
+}
+
+function detailsEdges(element: Element) {
+  const rect = element.getBoundingClientRect();
+  const maxWidth = Number(element.closest("[data-max-width]")?.getAttribute("data-max-width"));
+  return {
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    ...(maxWidth > 0 ? { maxWidth } : {}),
+  };
 }
 
 /**
@@ -84,7 +98,9 @@ export function useThreadSideCardPlacement(
     let last = "";
     const tick = () => {
       const next = measureThreadSideCard(id);
-      const key = next ? `${next.mode}:${next.top}:${next.left}:${next.maxHeight}` : "";
+      const key = next
+        ? `${next.mode}:${next.top}:${next.left}:${next.width}:${next.maxWidth}:${next.maxHeight}`
+        : "";
       if (key !== last) {
         last = key;
         setPlacement(next);

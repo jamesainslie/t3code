@@ -2,7 +2,8 @@ import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { ScrollArea } from "../ui/scroll-area";
-import { THREAD_SIDE_CARD_WIDTH, type SideCardPlacement } from "./threadSideCardLayout";
+import { ThreadDetailsColumnResizeHandle } from "./threadDetailsColumnWidth";
+import type { SideCardPlacement } from "./threadSideCardLayout";
 
 /**
  * Fork-only: the Iris gateway card, stacked under the thread details card or,
@@ -34,7 +35,7 @@ export function ProxyStatusCard({
       style={{
         top: placement.top,
         left: placement.left,
-        width: THREAD_SIDE_CARD_WIDTH,
+        width: placement.width,
         maxHeight: placement.maxHeight,
       }}
       data-proxy-status-card={placement.mode}
@@ -43,6 +44,7 @@ export function ProxyStatusCard({
       <ScrollArea scrollFade className="min-h-0">
         {children}
       </ScrollArea>
+      <ThreadDetailsColumnResizeHandle width={placement.width} maxWidth={placement.maxWidth} />
     </section>,
     document.body,
   );

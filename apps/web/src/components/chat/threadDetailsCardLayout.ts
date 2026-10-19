@@ -2,13 +2,19 @@ import type { PreviewMiniPlayerFrame } from "../preview/previewMiniPlayerLayout"
 import { DETAILS_CARD_CLEARANCE } from "./chatCanvasLayout";
 
 export const THREAD_DETAILS_CARD_GAP = 12;
-// Keep in sync with --thread-details-panel-width, which sizes the popover and the find bar.
-const THREAD_DETAILS_CARD_WIDTH = 280;
+/**
+ * The column the details card and the side cards share. The user drags it
+ * between min and max; --thread-details-panel-width carries the chosen width
+ * to the popover and the find bar.
+ */
+export const THREAD_DETAILS_CARD_WIDTH = { min: 240, default: 280, max: 640 } as const;
 
 export function resolveThreadDetailsCardDensity(
   height: number,
   content: { full: number; compact: number },
+  minimized = false,
 ) {
+  if (minimized) return "essential";
   if (content.full === 0 || content.full <= height) return "full";
   if (content.compact === 0 || content.compact <= height) return "compact";
   return "essential";
@@ -20,17 +26,26 @@ export function resolveThreadDetailsCardLayout({
   frame,
   overlapsDetailsCard = false,
   topInset = 0,
+  width: preferredWidth = THREAD_DETAILS_CARD_WIDTH.default,
 }: {
   container: { width: number; height: number };
   lane: { padding: number; minChatWidth: number };
   frame: PreviewMiniPlayerFrame | null;
   overlapsDetailsCard?: boolean;
   topInset?: number;
+  /** The column width the user chose. */
+  width?: number;
 }) {
   const gap = THREAD_DETAILS_CARD_GAP;
-  const width = THREAD_DETAILS_CARD_WIDTH;
+  // A readable chat lane outranks the chosen width: the card narrows to keep
+  // one, and only leaves for a popover when even its minimum would not fit.
+  const maxWidth = Math.min(
+    THREAD_DETAILS_CARD_WIDTH.max,
+    container.width - gap - DETAILS_CARD_CLEARANCE - lane.padding - lane.minChatWidth,
+  );
+  if (maxWidth < THREAD_DETAILS_CARD_WIDTH.min) return null;
+  const width = Math.max(THREAD_DETAILS_CARD_WIDTH.min, Math.min(preferredWidth, maxWidth));
   const x = container.width - width - gap;
-  if (x - DETAILS_CARD_CLEARANCE - lane.padding < lane.minChatWidth) return null;
   const y = gap + topInset;
   const height =
     overlapsDetailsCard && frame && frame.x + frame.width > x - gap && frame.x < x + width + gap
@@ -41,6 +56,7 @@ export function resolveThreadDetailsCardLayout({
     x,
     right: gap,
     width,
+    maxWidth,
     y,
     height,
   } as const;

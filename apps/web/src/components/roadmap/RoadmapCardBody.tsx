@@ -24,6 +24,8 @@ import {
   AlarmClockIcon,
   CalendarIcon,
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   CircleDotIcon,
   ClockIcon,
   MapIcon,
@@ -117,6 +119,8 @@ export function RoadmapCardBody(
     readonly canChange: boolean;
     /** Where a linked pull request's preview is read: the thread's own environment. */
     readonly pullRequestEnvironmentId: EnvironmentId | null;
+    readonly minimized: boolean;
+    readonly onMinimizedChange: (minimized: boolean) => void;
   },
 ) {
   return (
@@ -126,9 +130,25 @@ export function RoadmapCardBody(
           <MapIcon className="size-3.5" aria-hidden />
           Roadmap
         </span>
-        <Button size="icon-micro" variant="ghost-muted" aria-label="Close" onClick={props.onClose}>
-          <XIcon />
-        </Button>
+        <span className="flex items-center gap-0.5">
+          <Button
+            size="icon-micro"
+            variant="ghost-muted"
+            aria-label={props.minimized ? "Show all details" : "Show essentials only"}
+            aria-pressed={props.minimized}
+            onClick={() => props.onMinimizedChange(!props.minimized)}
+          >
+            {props.minimized ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+          </Button>
+          <Button
+            size="icon-micro"
+            variant="ghost-muted"
+            aria-label="Close"
+            onClick={props.onClose}
+          >
+            <XIcon />
+          </Button>
+        </span>
       </div>
       {props.view.kind === "offline" ? (
         <p className="text-muted-foreground">Roadmap home is offline</p>
@@ -137,7 +157,7 @@ export function RoadmapCardBody(
       ) : props.view.kind === "empty" ? (
         <EmptyState {...props} />
       ) : (
-        <RoadmapItemDetails {...props} item={props.view.item} />
+        <RoadmapItemDetails {...props} item={props.view.item} essentialsOnly={props.minimized} />
       )}
     </div>
   );
@@ -736,9 +756,15 @@ export function RoadmapItemDetails(
     readonly areaSettings: RoadmapAreasSettings;
     readonly canChange: boolean;
     readonly pullRequestEnvironmentId: EnvironmentId | null;
+    /**
+     * Keeps what says where the item stands: its title, state, dates and
+     * progress, and its blockers while it has any.
+     */
+    readonly essentialsOnly?: boolean;
   },
 ) {
   const { item, items, sprints, areaSettings, canChange, onOpenItem, onUpdate } = props;
+  const full = !props.essentialsOnly;
   const readOnlyHint = roadmapReadOnlyHint(item);
   const today = localIsoDate(new Date());
   const byId = useMemo(() => roadmapItemsById(items), [items]);
@@ -761,7 +787,12 @@ export function RoadmapItemDetails(
       <div className="flex flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2">
           <RoadmapTypeTag type={item.type} />
-          <Button size="xs" variant="link" className="min-w-0" onClick={() => onOpenItem(item.id)}>
+          <Button
+            size="xs"
+            variant="link"
+            className="min-w-0 shrink"
+            onClick={() => onOpenItem(item.id)}
+          >
             <span className="truncate text-sm font-medium">{item.title}</span>
           </Button>
           <span className="ms-auto flex shrink-0 items-center">
@@ -774,17 +805,17 @@ export function RoadmapItemDetails(
             />
           </span>
         </div>
-        {path.length > 0 ? (
+        {full && path.length > 0 ? (
           <nav aria-label="Parent items" className="flex min-w-0 flex-wrap items-center">
             {path.map((ancestor, index) => (
               <span key={ancestor.id} className="flex min-w-0 items-center">
                 {index > 0 ? (
-                  <ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden />
+                  <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
                 ) : null}
                 <Button
                   size="xs"
                   variant="link"
-                  className="min-w-0"
+                  className="min-w-0 shrink"
                   onClick={() => onOpenItem(ancestor.id)}
                 >
                   <span className="truncate">{ancestor.title}</span>
@@ -854,8 +885,10 @@ export function RoadmapItemDetails(
           />
         ) : null}
       </div>
-      {readOnlyHint !== null ? <p className="text-muted-foreground">{readOnlyHint}</p> : null}
-      {item.description.trim() !== "" ? (
+      {full && readOnlyHint !== null ? (
+        <p className="text-muted-foreground">{readOnlyHint}</p>
+      ) : null}
+      {full && item.description.trim() !== "" ? (
         <ChatMarkdown
           text={item.description}
           cwd={undefined}
@@ -904,27 +937,31 @@ export function RoadmapItemDetails(
             </span>
           </Field>
         ) : null}
-        {slots.velocity !== null ? (
+        {full && slots.velocity !== null ? (
           <Field label="Velocity">
             <span className="tabular-nums">{formatVelocity(slots.velocity, slots.unit)}</span>
           </Field>
         ) : null}
-        <Field label="Estimate">
-          <EstimateField
-            estimate={item.estimate}
-            canChange={canChange}
-            onChange={(estimate) => onUpdate(item.id, { estimate })}
-          />
-        </Field>
-        <Field label="Hours">
-          <HoursField
-            item={item}
-            total={slots.hoursLogged}
-            canChange={canChange}
-            onCommand={props.onCommand}
-          />
-        </Field>
-        {sprints.length > 0 ? (
+        {full ? (
+          <Field label="Estimate">
+            <EstimateField
+              estimate={item.estimate}
+              canChange={canChange}
+              onChange={(estimate) => onUpdate(item.id, { estimate })}
+            />
+          </Field>
+        ) : null}
+        {full ? (
+          <Field label="Hours">
+            <HoursField
+              item={item}
+              total={slots.hoursLogged}
+              canChange={canChange}
+              onCommand={props.onCommand}
+            />
+          </Field>
+        ) : null}
+        {full && sprints.length > 0 ? (
           <Field label="Sprint">
             <SprintField
               item={item}
@@ -934,63 +971,71 @@ export function RoadmapItemDetails(
             />
           </Field>
         ) : null}
-        {blocks.length > 0 ? (
+        {full && blocks.length > 0 ? (
           <Field label="Blocks">
             <ItemLinks items={blocks} onOpenItem={onOpenItem} />
           </Field>
         ) : null}
       </div>
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between text-muted-foreground">
-          <span className="font-medium">Acceptance criteria</span>
-          {criteria.total > 0 ? (
-            <span className="tabular-nums">
-              {criteria.ticked} of {criteria.total}
-            </span>
-          ) : null}
-        </div>
-        {item.criteria.length === 0 ? (
-          <span className="text-muted-foreground">None yet</span>
-        ) : (
-          item.criteria.map((criterion) => (
-            <CriterionRow
-              key={criterion.id}
-              criterion={criterion}
-              canChange={canChange}
-              onTick={(ticked) => props.onTick(item.id, criterion.id, ticked)}
-            />
-          ))
-        )}
-      </section>
-      <PullRequestsSection
-        item={item}
-        environmentId={props.pullRequestEnvironmentId}
-        canChange={canChange}
-        onCommand={props.onCommand}
-      />
-      <NotesSection item={item} canChange={canChange} onCommand={props.onCommand} />
-      <section className="flex flex-col gap-1">
-        <span className="font-medium text-muted-foreground">Blocked by</span>
-        {blocked.blocked ? (
-          <>
-            <ItemLinks items={blocked.blockers} onOpenItem={onOpenItem} />
-            {blocked.externalBlockers.map((blocker) => (
-              <span key={blocker.id} className="text-foreground">
-                {blocker.text}
+      {full ? (
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="font-medium">Acceptance criteria</span>
+            {criteria.total > 0 ? (
+              <span className="tabular-nums">
+                {criteria.ticked} of {criteria.total}
               </span>
-            ))}
-          </>
-        ) : (
-          <span className="text-muted-foreground">Nothing</span>
-        )}
-      </section>
-      <div className="flex items-center gap-1.5 border-t border-border/60 pt-2 text-2xs text-muted-foreground">
-        <ClockIcon className="size-3" aria-hidden />
-        <span className="truncate">
-          Updated {formatRelativeTimeLabel(item.updatedAt)}, created by{" "}
-          {roadmapActorLabel(item.createdBy)}
-        </span>
-      </div>
+            ) : null}
+          </div>
+          {item.criteria.length === 0 ? (
+            <span className="text-muted-foreground">None yet</span>
+          ) : (
+            item.criteria.map((criterion) => (
+              <CriterionRow
+                key={criterion.id}
+                criterion={criterion}
+                canChange={canChange}
+                onTick={(ticked) => props.onTick(item.id, criterion.id, ticked)}
+              />
+            ))
+          )}
+        </section>
+      ) : null}
+      {full ? (
+        <PullRequestsSection
+          item={item}
+          environmentId={props.pullRequestEnvironmentId}
+          canChange={canChange}
+          onCommand={props.onCommand}
+        />
+      ) : null}
+      {full ? <NotesSection item={item} canChange={canChange} onCommand={props.onCommand} /> : null}
+      {full || blocked.blocked ? (
+        <section className="flex flex-col gap-1">
+          <span className="font-medium text-muted-foreground">Blocked by</span>
+          {blocked.blocked ? (
+            <>
+              <ItemLinks items={blocked.blockers} onOpenItem={onOpenItem} />
+              {blocked.externalBlockers.map((blocker) => (
+                <span key={blocker.id} className="text-foreground">
+                  {blocker.text}
+                </span>
+              ))}
+            </>
+          ) : (
+            <span className="text-muted-foreground">Nothing</span>
+          )}
+        </section>
+      ) : null}
+      {full ? (
+        <div className="flex items-center gap-1.5 border-t border-border/60 pt-2 text-2xs text-muted-foreground">
+          <ClockIcon className="size-3" aria-hidden />
+          <span className="truncate">
+            Updated {formatRelativeTimeLabel(item.updatedAt)}, created by{" "}
+            {roadmapActorLabel(item.createdBy)}
+          </span>
+        </div>
+      ) : null}
     </>
   );
 }

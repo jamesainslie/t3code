@@ -13,12 +13,13 @@ const resolve = (width: number, height: number, previewY: number | null = null) 
   });
 
 describe("workspace card", () => {
-  it("pins to the top right at a fixed width", () => {
+  it("pins to the top right at the default column width", () => {
     expect(resolve(1600, 900)).toEqual({
       x: 1308,
       right: 12,
       y: 12,
       width: 280,
+      maxWidth: 640,
       height: 876,
     });
     expect(resolve(1344, 900)).toMatchObject({ x: 1052, width: 280 });
@@ -31,15 +32,39 @@ describe("workspace card", () => {
         frame: null,
         topInset: 48,
       }),
-    ).toEqual({ x: 1308, right: 12, y: 60, width: 280, height: 828 });
+    ).toEqual({ x: 1308, right: 12, y: 60, width: 280, maxWidth: 640, height: 828 });
+  });
+  it("takes the width the user dragged it to", () => {
+    expect(
+      resolveThreadDetailsCardLayout({
+        container: { width: 1600, height: 900 },
+        lane,
+        width: 420,
+        frame: null,
+      }),
+    ).toMatchObject({ x: 1168, width: 420 });
+  });
+  it("narrows to keep a readable chat lane before it hides", () => {
+    const place = (containerWidth: number) =>
+      resolveThreadDetailsCardLayout({
+        container: { width: containerWidth, height: 900 },
+        lane,
+        width: 480,
+        frame: null,
+      });
+    expect(place(1212)).toMatchObject({ x: 720, width: 480, maxWidth: 480 });
+    expect(place(1100)).toMatchObject({ x: 720, width: 368, maxWidth: 368 });
+    expect(place(972)).toMatchObject({ x: 720, width: 240 });
+    expect(place(971)).toBeNull();
   });
   it("hides when a readable chat lane cannot fit beside it", () => {
     expect(resolve(1012, 900)).toMatchObject({ x: 720 });
-    expect(resolve(1011, 900)).toBeNull();
+    expect(resolve(972, 900)).toMatchObject({ x: 720, width: 240 });
+    expect(resolve(971, 900)).toBeNull();
   });
   it("keeps the card at the top right while the preview is freely dragged vertically", () => {
     for (const y of [12, 170, 250, 400, 648]) {
-      expect(resolve(1600, 900, y)).toEqual({ x: 1308, right: 12, y: 12, width: 280, height: 876 });
+      expect(resolve(1600, 900, y)).toMatchObject({ x: 1308, y: 12, width: 280, height: 876 });
     }
   });
   it("keeps full height while a preview stays clear of the card", () => {
@@ -93,6 +118,12 @@ describe("card content fitting", () => {
     expect(resolveThreadDetailsCardDensity(400, content)).toBe("compact");
     expect(resolveThreadDetailsCardDensity(170, content)).toBe("essential");
     expect(resolveThreadDetailsCardDensity(570, content)).toBe("full");
+  });
+  it("shows only essentials while the user keeps it minimized, whatever the room", () => {
+    const content = { full: 570, compact: 180 };
+    expect(resolveThreadDetailsCardDensity(900, content, true)).toBe("essential");
+    expect(resolveThreadDetailsCardDensity(900, { full: 0, compact: 0 }, true)).toBe("essential");
+    expect(resolveThreadDetailsCardDensity(900, content, false)).toBe("full");
   });
   it("measures unseen content before deciding to fold it", () => {
     expect(resolveThreadDetailsCardDensity(300, { full: 0, compact: 0 })).toBe("full");
