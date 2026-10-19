@@ -39,6 +39,7 @@ import {
   TIMELINE_ROW_HEIGHT,
   timelineBarGeometry,
   timelineBarTitle,
+  timelineCurrentSprint,
   timelineDisplayRows,
   timelineEdgePaths,
   timelineMetrics,
@@ -63,9 +64,9 @@ const LABEL_PADDING = 8;
 const TODAY_SCROLL_LEAD = 7 * TIMELINE_DAY_WIDTH;
 
 const FORECAST_TONE: Readonly<Record<RoadmapForecastStatus, string>> = {
-  late: "border-destructive/60 text-destructive-foreground",
-  "at-risk": "border-warning/60 text-warning-foreground",
-  "on-track": "border-success/60 text-success-foreground",
+  late: "border-destructive bg-destructive/8 text-destructive-foreground",
+  "at-risk": "border-warning bg-warning/8 text-warning-foreground",
+  "on-track": "border-success bg-success/8 text-success-foreground",
   "no-forecast": "border-border text-muted-foreground",
 };
 
@@ -120,6 +121,7 @@ export function RoadmapTimeline({
   const scrolledToToday = useRef(false);
   const todayX = layout.todayOffset === null ? null : timelineTodayX(layout.todayOffset);
   const hasRows = layout.rows.length > 0;
+  const currentSprint = timelineCurrentSprint(layout.sprintBands, layout.todayOffset);
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     // The scroller mounts with the first dated row, which may arrive after the first render.
@@ -197,7 +199,10 @@ export function RoadmapTimeline({
                   return span === null ? null : (
                     <span
                       key={band.sprintId}
-                      className="absolute top-0 truncate px-1.5"
+                      className={cn(
+                        "absolute top-0 truncate px-1.5",
+                        band.sprintId === currentSprint && "font-semibold text-foreground",
+                      )}
                       style={{ left: span.left, width: span.width }}
                     >
                       {band.name}
@@ -212,7 +217,10 @@ export function RoadmapTimeline({
                 return span === null ? null : (
                   <div
                     key={band.sprintId}
-                    className="pointer-events-none absolute inset-y-0 border-x border-border/50 bg-foreground/[0.03]"
+                    className={cn(
+                      "pointer-events-none absolute inset-y-0 border-x border-border/50",
+                      band.sprintId === currentSprint && "bg-foreground/5",
+                    )}
                     style={{ left: span.left, width: span.width }}
                   />
                 );
@@ -254,7 +262,7 @@ export function RoadmapTimeline({
               </svg>
               {todayX === null ? null : (
                 <div
-                  className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-destructive/70"
+                  className="pointer-events-none absolute inset-y-0 border-l-2 border-destructive"
                   style={{ left: todayX }}
                 />
               )}
@@ -267,6 +275,16 @@ export function RoadmapTimeline({
 }
 
 const LANE_CLASS = "relative h-9 border-b border-border/40";
+
+// A faint tint and outline mark the span and only the done part is painted in
+// full, so work in flight stands out and unstarted work stays quiet. The theme
+// sets color-scheme, which picks each light-dark() side.
+const barColors = (hue: string) => ({
+  borderColor: `light-dark(color-mix(in oklch, ${hue} 83%, black), color-mix(in srgb, ${hue} 80%, transparent))`,
+  backgroundColor: `light-dark(color-mix(in srgb, ${hue} 10%, transparent), color-mix(in srgb, ${hue} 13%, transparent))`,
+});
+const fillColor = (hue: string) =>
+  `light-dark(color-mix(in oklch, ${hue} 75%, white), color-mix(in oklch, ${hue} 83%, black))`;
 
 interface TimelineLabelProps {
   readonly item: RoadmapWorkItem;
@@ -350,7 +368,7 @@ const TimelineLane = memo(function TimelineLane({
               <button
                 type="button"
                 className={cn(
-                  "absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-md px-2 text-2xs font-medium whitespace-nowrap tabular-nums outline-none hover:brightness-125",
+                  "absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-md border px-2 text-2xs font-medium whitespace-nowrap text-foreground tabular-nums outline-none hover:brightness-125",
                   "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   row.done && "opacity-50",
                   selected && "ring-2 ring-ring ring-inset",
@@ -359,15 +377,20 @@ const TimelineLane = memo(function TimelineLane({
                 style={{
                   left: geometry.bar.left,
                   width: geometry.bar.width,
-                  backgroundColor: `color-mix(in srgb, ${hue} 25%, transparent)`,
-                  color: `color-mix(in srgb, ${hue} 40%, var(--color-foreground))`,
+                  ...barColors(hue),
                 }}
                 aria-label={title}
                 onClick={() => onSelect(item.id)}
               />
             }
           >
-            {geometry.label}
+            {geometry.fill === null ? null : (
+              <span
+                className="absolute inset-y-0 left-0"
+                style={{ width: geometry.fill, backgroundColor: fillColor(hue) }}
+              />
+            )}
+            <span className="relative">{geometry.label}</span>
           </TooltipTrigger>
           <TooltipPopup side="top">{title}</TooltipPopup>
         </Tooltip>
