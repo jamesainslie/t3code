@@ -238,6 +238,11 @@ environment** keeps a separate roadmap of its own, and agents there use that one
 Changing the home does not move any work items. The new home shows its own roadmap, and the old
 items stay on the previous home.
 
+While this client is still connecting to the home, Roadmap shows the roadmap as it last loaded here.
+It is read only until the home answers. If the connection fails, a red notice says why. It also
+says whether the client is retrying on its own or whether you need to check the connection under
+**Settings → Connections**.
+
 ## Link a second environment
 
 An environment that is not the roadmap home needs a link to the home before its agents can use the

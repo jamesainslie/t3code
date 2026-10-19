@@ -18,6 +18,7 @@ import {
   makeStoredShellSnapshotEncoder,
 } from "@lathe/client-runtime/platform";
 import { TokenStore } from "@lathe/client-runtime/authorization";
+import { RoadmapCacheStore } from "@lathe/client-runtime/state/roadmap-cache";
 import {
   ConnectionTransientError,
   ConnectionBlockedError,
@@ -41,12 +42,13 @@ import * as Stream from "effect/Stream";
 import { projectFaviconCache } from "../assets/projectFaviconCache";
 
 const DATABASE_NAME = "t3code:connection-runtime";
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 const CATALOG_STORE_NAME = "catalog";
 const SHELL_STORE_NAME = "shell";
 const THREAD_STORE_NAME = "thread";
 const SERVER_CONFIG_STORE_NAME = "server-config";
 const VCS_REFS_STORE_NAME = "vcs-refs";
+const ROADMAP_STORE_NAME = "roadmap";
 const CATALOG_KEY = "document";
 const StoredShellSnapshot = StoredOrchestrationShellSnapshot;
 const StoredShellSnapshotJson = Schema.fromJsonString(StoredShellSnapshot);
@@ -136,6 +138,9 @@ const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* (
         }
         if (!request.result.objectStoreNames.contains(VCS_REFS_STORE_NAME)) {
           request.result.createObjectStore(VCS_REFS_STORE_NAME);
+        }
+        if (!request.result.objectStoreNames.contains(ROADMAP_STORE_NAME)) {
+          request.result.createObjectStore(ROADMAP_STORE_NAME);
         }
       });
       request.addEventListener("error", () => {
@@ -924,10 +929,25 @@ export const layer = Layer.effectContext(
               VCS_REFS_STORE_NAME,
               IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
             ),
+            removeDatabaseValue(database, ROADMAP_STORE_NAME, environmentId),
           ],
           { concurrency: "unbounded", discard: true },
         ).pipe(Effect.mapError((cause) => persistenceError("clear-environment", cause))),
     });
+    // The client runtime validates the payload, so this only moves strings.
+    const roadmapCacheStore: NonNullable<typeof RoadmapCacheStore.Service> = {
+      load: (environmentId) =>
+        readDatabaseValue(database, ROADMAP_STORE_NAME, environmentId).pipe(
+          Effect.map((raw) => (typeof raw === "string" ? Option.some(raw) : Option.none())),
+          Effect.catch(() =>
+            Effect.logWarning("Could not load the cached roadmap.").pipe(Effect.as(Option.none())),
+          ),
+        ),
+      save: (environmentId, payload) =>
+        writeDatabaseValue(database, ROADMAP_STORE_NAME, environmentId, payload).pipe(
+          Effect.catch(() => Effect.logWarning("Could not cache the roadmap.")),
+        ),
+    };
 
     return Context.make(Persistence.ConnectionTargetStore, targetStore).pipe(
       Context.add(GitHubRoutingPermissions, githubRoutingPermissions),
@@ -936,6 +956,7 @@ export const layer = Layer.effectContext(
       Context.add(CredentialStore.ConnectionCredentialStore, credentialStore),
       Context.add(TokenStore.RemoteDpopAccessTokenStore, remoteTokenStore),
       Context.add(Persistence.EnvironmentCacheStore, cacheStore),
+      Context.add(RoadmapCacheStore, roadmapCacheStore),
     );
   }),
 );

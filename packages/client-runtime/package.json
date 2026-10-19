@@ -291,6 +291,10 @@
       "types": "./src/state/roadmap.ts",
       "default": "./src/state/roadmap.ts"
     },
+    "./state/roadmap-cache": {
+      "types": "./src/state/roadmapCache.ts",
+      "default": "./src/state/roadmapCache.ts"
+    },
     "./roadmap/tree": {
       "types": "./src/roadmap/roadmapTree.ts",
       "default": "./src/roadmap/roadmapTree.ts"

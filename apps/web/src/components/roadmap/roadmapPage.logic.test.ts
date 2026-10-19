@@ -5,6 +5,7 @@ import {
   type RoadmapSprint,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
+import type { EnvironmentConnectionPresentation } from "@lathe/client-runtime/connection";
 import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -37,6 +38,7 @@ import {
   resolveOutlineDrop,
   roadmapEditorRequest,
   roadmapForecasts,
+  roadmapLiveNotice,
   roadmapViewOf,
   typeOptionsFor,
   updateOutlineCollapse,
@@ -769,6 +771,74 @@ describe("editor commands", () => {
       buildEditCommands(existing, editorDraftFor(existing), () => CommandId.make("c")),
     ).toEqual({
       commands: [],
+    });
+  });
+});
+
+describe("roadmapLiveNotice", () => {
+  const notice = (
+    connection: EnvironmentConnectionPresentation | null,
+    source: "cache" | "live" | null = "live",
+    loadError: string | null = null,
+  ) => roadmapLiveNotice({ connection, homeLabel: "incus", source, loadError });
+  const phase = (
+    value: EnvironmentConnectionPresentation["phase"],
+    error: string | null = null,
+  ): EnvironmentConnectionPresentation => ({ phase: value, error, traceId: null });
+
+  it("is live only once the home is connected and its own roadmap has arrived", () => {
+    expect(notice(phase("connected"))).toEqual({ kind: "live" });
+    expect(notice(phase("connected"), "cache").kind).toBe("syncing");
+    expect(notice(phase("connected"), null).kind).toBe("syncing");
+  });
+
+  it("stays quiet while connecting or retrying without a failure", () => {
+    expect(notice(null).kind).toBe("syncing");
+    expect(notice(phase("connecting"), "cache")).toEqual({
+      kind: "syncing",
+      message: "Connecting to incus...",
+    });
+    expect(notice(phase("reconnecting"), "cache")).toEqual({
+      kind: "syncing",
+      message: "Reconnecting to incus...",
+    });
+  });
+
+  it("fails loudly as soon as a reconnect attempt fails, with the reason", () => {
+    expect(notice(phase("reconnecting", "Connection refused"), "cache")).toEqual({
+      kind: "failed",
+      title: "Could not reconnect to incus",
+      reason: "Connection refused",
+      retrying: true,
+    });
+  });
+
+  it("fails loudly when the connection gives up or is off", () => {
+    expect(notice(phase("error", "Token rejected"), "cache")).toEqual({
+      kind: "failed",
+      title: "Could not connect to incus",
+      reason: "Token rejected",
+      retrying: false,
+    });
+    expect(notice(phase("unsupported", "Update the server"), null)).toMatchObject({
+      kind: "failed",
+      reason: "Update the server",
+      retrying: false,
+    });
+    expect(notice(phase("offline"), "cache")).toMatchObject({ kind: "failed", retrying: true });
+    expect(notice(phase("available"), "cache")).toMatchObject({
+      kind: "failed",
+      title: "Not connected to incus",
+      retrying: false,
+    });
+  });
+
+  it("fails loudly when the roadmap itself cannot load, even while connected", () => {
+    expect(notice(phase("connected"), null, "Not allowed")).toEqual({
+      kind: "failed",
+      title: "Could not load the roadmap",
+      reason: "Not allowed",
+      retrying: false,
     });
   });
 });

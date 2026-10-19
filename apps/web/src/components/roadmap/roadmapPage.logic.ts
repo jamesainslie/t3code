@@ -14,6 +14,7 @@ import {
   RoadmapSprintId,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
+import type { EnvironmentConnectionPresentation } from "@lathe/client-runtime/connection";
 import { buildTree, type RoadmapTreeNode } from "@lathe/client-runtime/roadmap/tree";
 import { canParent, effectiveArea, wouldCreateParentCycle } from "@lathe/shared/roadmap";
 import {
@@ -36,6 +37,79 @@ export const DEFAULT_ROADMAP_VIEW: RoadmapView = "today";
 
 export const roadmapViewOf = (search: RoadmapSearch): RoadmapView =>
   search.view ?? DEFAULT_ROADMAP_VIEW;
+
+/**
+ * Whether the roadmap on screen is the home's live one. Anything else is read
+ * only: "syncing" is quiet, "failed" is loud from the first failed attempt.
+ */
+export type RoadmapLiveNotice =
+  | { readonly kind: "live" }
+  | { readonly kind: "syncing"; readonly message: string }
+  | {
+      readonly kind: "failed";
+      readonly title: string;
+      readonly reason: string | null;
+      /** The connection keeps trying on its own, so the notice clears by itself. */
+      readonly retrying: boolean;
+    };
+
+export function roadmapLiveNotice(input: {
+  readonly connection: EnvironmentConnectionPresentation | null;
+  readonly homeLabel: string;
+  /** Null until any roadmap, cached or live, is on screen. */
+  readonly source: "cache" | "live" | null;
+  readonly loadError: string | null;
+}): RoadmapLiveNotice {
+  const { connection, homeLabel, source, loadError } = input;
+  if (loadError !== null) {
+    return {
+      kind: "failed",
+      title: "Could not load the roadmap",
+      reason: loadError,
+      retrying: false,
+    };
+  }
+  if (connection === null) return { kind: "syncing", message: `Connecting to ${homeLabel}...` };
+  switch (connection.phase) {
+    case "connected":
+      return source === "live"
+        ? { kind: "live" }
+        : { kind: "syncing", message: "Loading the latest roadmap..." };
+    case "connecting":
+      return { kind: "syncing", message: `Connecting to ${homeLabel}...` };
+    case "reconnecting":
+      return connection.error === null
+        ? { kind: "syncing", message: `Reconnecting to ${homeLabel}...` }
+        : {
+            kind: "failed",
+            title: `Could not reconnect to ${homeLabel}`,
+            reason: connection.error,
+            retrying: true,
+          };
+    case "offline":
+      return {
+        kind: "failed",
+        title: `Offline, so ${homeLabel} is out of reach`,
+        reason: null,
+        retrying: true,
+      };
+    case "available":
+      return {
+        kind: "failed",
+        title: `Not connected to ${homeLabel}`,
+        reason: null,
+        retrying: false,
+      };
+    case "error":
+    case "unsupported":
+      return {
+        kind: "failed",
+        title: `Could not connect to ${homeLabel}`,
+        reason: connection.error,
+        retrying: false,
+      };
+  }
+}
 /** "open" is every state but done. */
 export type RoadmapStateFilter = RoadmapItemState | "open";
 
