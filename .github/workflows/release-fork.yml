@@ -194,7 +194,8 @@ jobs:
     needs: [preflight]
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Up to 15 minutes waiting on CI, then the full suite if CI did not pass.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -205,7 +206,19 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      # CI (fork) runs every check below, and more, on each push to main. A
+      # green CI run on this exact commit stands in for them; otherwise the
+      # steps below run as before. Keep ci-fork.yml a superset of this job.
+      - id: main_ci
+        name: Reuse CI result for this commit
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { mainCiPassed } = require('./.github/scripts/main-ci-verdict.cjs');
+            return await mainCiPassed({ github, context, core, sha: '${{ needs.preflight.outputs.ref }}' });
+
       - name: Setup Vite+
+        if: steps.main_ci.outputs.result != 'true'
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
@@ -213,29 +226,37 @@ jobs:
           run-install: true
 
       - name: Ensure Electron runtime is installed
+        if: steps.main_ci.outputs.result != 'true'
         run: vp run --filter @lathe/desktop ensure:electron
 
       - name: Check
+        if: steps.main_ci.outputs.result != 'true'
         run: vp check
 
       - name: Typecheck
+        if: steps.main_ci.outputs.result != 'true'
         run: vp run typecheck
 
       - name: Install browser secret helper build libraries
+        if: steps.main_ci.outputs.result != 'true'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
       # Same split as ci-fork.yml, run one after another on this runner: with
       # every suite at once, the web suite's imports starved on 4 vCPU.
       - name: Test
+        if: steps.main_ci.outputs.result != 'true'
         run: vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test
 
       - name: Test web
+        if: steps.main_ci.outputs.result != 'true'
         run: vp run --filter @lathe/web test
 
       - name: Install Chromium for server browser integration tests
+        if: steps.main_ci.outputs.result != 'true'
         run: node apps/server/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
 
       - name: Test server
+        if: steps.main_ci.outputs.result != 'true'
         run: vp run --filter lathe test
 
   # One JS bundle, consumed by every desktop and CLI archive build so all

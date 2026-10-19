@@ -96,8 +96,8 @@ jobs:
       - name: Install browser secret helper build libraries
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
-      - name: Test nightly release checks
-        run: node --test .github/scripts/check-nightly-release.test.cjs
+      - name: Test release workflow scripts
+        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/main-ci-verdict.test.cjs
 
       - name: Test
         run: vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test
