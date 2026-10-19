@@ -537,14 +537,34 @@ function SprintField(props: {
   );
 }
 
+/** Text people and agents write on an item, rendered as markdown so its links open. */
+function RoadmapText(props: {
+  readonly text: string;
+  readonly environmentId: EnvironmentId | null;
+  readonly className?: string;
+}) {
+  return (
+    <ChatMarkdown
+      text={props.text}
+      cwd={undefined}
+      environmentId={props.environmentId ?? undefined}
+      className={cn("text-xs leading-normal text-foreground", props.className)}
+    />
+  );
+}
+
 function CriterionRow(props: {
   readonly criterion: RoadmapCriterion;
+  readonly environmentId: EnvironmentId | null;
   readonly canChange: boolean;
   readonly onTick: (ticked: boolean) => void;
 }) {
   const { criterion } = props;
   const ticked = criterion.tickedAt !== null;
+  const evidence = criterion.evidence?.trim() ?? "";
   return (
+    // A click on a link inside the label opens it without toggling the checkbox,
+    // because labels skip activation for interactive descendants.
     <label className="flex items-start gap-2">
       <Checkbox
         className="mt-0.5"
@@ -552,22 +572,30 @@ function CriterionRow(props: {
         disabled={!props.canChange}
         onCheckedChange={(checked) => props.onTick(checked)}
       />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn("text-foreground", ticked && "text-muted-foreground")}>
-          {criterion.text}
-        </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <RoadmapText
+          text={criterion.text}
+          environmentId={props.environmentId}
+          className={cn(ticked && "text-muted-foreground")}
+        />
         {ticked ? (
           <span className="text-2xs text-muted-foreground">
             {[
               criterion.tickedBy === null ? null : roadmapActorLabel(criterion.tickedBy),
               criterion.tickedAt === null ? null : formatRelativeTimeLabel(criterion.tickedAt),
-              criterion.evidence,
             ]
               .filter((part) => part !== null && part.length > 0)
               .join(" · ")}
           </span>
         ) : null}
-      </span>
+        {ticked && evidence !== "" ? (
+          <RoadmapText
+            text={evidence}
+            environmentId={props.environmentId}
+            className="text-2xs text-muted-foreground"
+          />
+        ) : null}
+      </div>
     </label>
   );
 }
@@ -694,6 +722,7 @@ function PullRequestLink(props: {
 
 function NotesSection(props: {
   readonly item: RoadmapWorkItem;
+  readonly environmentId: EnvironmentId | null;
   readonly canChange: boolean;
   readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
 }) {
@@ -706,8 +735,8 @@ function NotesSection(props: {
       <ul className="flex flex-col gap-1.5">
         {notes.map((note) => (
           <li key={note.id} className="flex items-start gap-2">
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-foreground">{note.text}</span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <RoadmapText text={note.text} environmentId={props.environmentId} />
               <span className="flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
                 {note.kind !== null ? (
                   <Badge size="sm" variant="outline">
@@ -720,7 +749,7 @@ function NotesSection(props: {
                     .join(" · ")}
                 </span>
               </span>
-            </span>
+            </div>
             <Button
               size="icon-micro"
               variant="ghost-muted"
@@ -994,6 +1023,7 @@ export function RoadmapItemDetails(
               <CriterionRow
                 key={criterion.id}
                 criterion={criterion}
+                environmentId={props.pullRequestEnvironmentId}
                 canChange={canChange}
                 onTick={(ticked) => props.onTick(item.id, criterion.id, ticked)}
               />
@@ -1009,7 +1039,14 @@ export function RoadmapItemDetails(
           onCommand={props.onCommand}
         />
       ) : null}
-      {full ? <NotesSection item={item} canChange={canChange} onCommand={props.onCommand} /> : null}
+      {full ? (
+        <NotesSection
+          item={item}
+          environmentId={props.pullRequestEnvironmentId}
+          canChange={canChange}
+          onCommand={props.onCommand}
+        />
+      ) : null}
       {full || blocked.blocked ? (
         <section className="flex flex-col gap-1">
           <span className="font-medium text-muted-foreground">Blocked by</span>
@@ -1017,9 +1054,11 @@ export function RoadmapItemDetails(
             <>
               <ItemLinks items={blocked.blockers} onOpenItem={onOpenItem} />
               {blocked.externalBlockers.map((blocker) => (
-                <span key={blocker.id} className="text-foreground">
-                  {blocker.text}
-                </span>
+                <RoadmapText
+                  key={blocker.id}
+                  text={blocker.text}
+                  environmentId={props.pullRequestEnvironmentId}
+                />
               ))}
             </>
           ) : (
