@@ -343,14 +343,13 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = () =>
     Effect.fail(investigationUnsupported("generateReviewGuide", "Muse Code"));
   // Fork: roadmap.
-  const generateStructured: ProviderTextGeneration["generateStructured"] = () =>
-    Effect.fail(
-      new TextGenerationError({
-        operation: "generateStructured",
-        detail:
-          "Muse Code does not answer free-form structured prompts. Choose another model for the roadmap steward.",
-      }),
-    );
+  const generateStructured: ProviderTextGeneration["generateStructured"] = (input) =>
+    runMuseJson({
+      operation: "generateStructured",
+      prompt: input.prompt,
+      outputSchema: input.outputSchema,
+      modelSelection: input.modelSelection,
+    }).pipe(Effect.withSpan("MuseTextGeneration.generateStructured"));
   return {
     generateCommitMessage,
     generatePrContent,

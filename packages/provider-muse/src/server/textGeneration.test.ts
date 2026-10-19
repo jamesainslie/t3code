@@ -210,22 +210,28 @@ it.layer(NodeServices.layer)("Muse text generation", (it) => {
     }),
   );
 
-  it.effect("refuses structured generation without starting a host", () =>
+  it.effect("answers a caller's prompt in the caller's schema", () =>
     Effect.gen(function* () {
-      const test = fixture();
+      const test = fixture(finish('{"answer":"yes"}'));
       const service = yield* test.make;
-      const error = yield* service
-        .generateStructured({
-          purpose: "roadmapSteward",
-          cwd: "/project",
-          prompt: "Anything",
-          outputSchema: Schema.Struct({ answer: Schema.String }),
-          modelSelection,
-        })
-        .pipe(Effect.flip);
-      expect(error).toMatchObject({ _tag: "TextGenerationError", operation: "generateStructured" });
-      expect(error.detail).toContain("Muse Code");
-      expect(test.host.connection.command).not.toHaveBeenCalled();
+      const input = {
+        purpose: "roadmapSteward",
+        cwd: "/project/should-not-be-used",
+        prompt: "Is the export tested?",
+        outputSchema: Schema.Struct({ answer: Schema.String }),
+        modelSelection,
+      } as const;
+      expect(yield* service.generateStructured(input)).toEqual({ answer: "yes" });
+      expect(test.host.connection.command).toHaveBeenCalledWith(
+        "turn/start",
+        expect.objectContaining({
+          input: [
+            expect.objectContaining({ text: expect.stringMatching(/^Is the export tested\?/) }),
+          ],
+        }),
+        expect.anything(),
+      );
+      expect(test.createHost).not.toHaveBeenCalledWith(expect.objectContaining({ cwd: input.cwd }));
     }),
   );
 

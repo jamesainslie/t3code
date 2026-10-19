@@ -278,10 +278,19 @@ down are never announced. The daily sweep covers them. Its "last sweep day" live
 purpose: the first tick after a start sweeps, and the per-thread cursor makes a repeated sweep cheap.
 Notices for one thread coalesce while a run for it is queued.
 
+A turn end reads nothing: the steward keeps in memory the set of threads it reads (owned here,
+attached to an open item in an area with the steward on) and ignores turns on any other thread. Off
+the home, a roadmap read is a request to the home, and most turns end on threads attached to
+nothing. On the home, every roadmap commit and settings change rebuilds the set. The home's changes
+are not streamed to a linked environment, so that environment polls the home every five minutes.
+A thread that enters the set is queued at once, which is how turning an area's steward on, or
+attaching a thread, takes effect without waiting for a turn. A stale set only delays a run, since
+the cursor keeps the turns until it happens.
+
 The model comes from `roadmap.stewardModelSelection`, which each environment holds because provider
 logins differ per machine, and falls back to the text generation model. It runs through
 `TextGeneration.generateStructured`, which every runner-based provider implements once in
-`fromRunner`. Muse and ACP registry instances refuse it.
+`fromRunner`. Muse answers it through its JSON runner. ACP registry instances refuse it.
 
 ## Dates without a time zone
 
