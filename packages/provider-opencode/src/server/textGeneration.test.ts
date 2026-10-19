@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as NetService from "@lathe/shared/Net";
@@ -15,6 +16,10 @@ import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
 import * as OpenCodeTextGeneration from "./textGeneration.ts";
 import type { ProviderTextGeneration } from "@lathe/provider-core/server/textGeneration";
+import {
+  TextGenerationUsageReporter,
+  type TextGenerationUsageReport,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 
 const runtimeMock = {
   state: {
@@ -228,6 +233,32 @@ const advanceIdleClock = Effect.gen(function* () {
 });
 
 it.layer(layerOpenCodeTextGenerationTest)("OpenCodeTextGeneration", (it) => {
+  it.effect("names the kept session so its usage is filed under the generation", () =>
+    Effect.gen(function* () {
+      const reports = yield* Ref.make<ReadonlyArray<TextGenerationUsageReport>>([]);
+      runtimeMock.state.sessionResult = { data: { id: "ses_title" } };
+      runtimeMock.state.promptResult = {
+        data: { parts: [{ type: "text", text: '{"title":"Fix login"}' }] },
+      };
+
+      yield* withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (textGeneration) =>
+        textGeneration.generateThreadTitle({
+          cwd: process.cwd(),
+          message: "fix the login",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+        }),
+      ).pipe(
+        Effect.provideService(TextGenerationUsageReporter, {
+          report: (report) => Ref.update(reports, (all) => [...all, report]),
+        }),
+      );
+
+      expect(yield* Ref.get(reports)).toEqual([
+        { provider: "opencode", sessionId: "ses_title", model: "gpt-5" },
+      ]);
+    }),
+  );
+
   it.effect("excludes generic files from thread title generation", () =>
     withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (textGeneration) =>
       Effect.gen(function* () {

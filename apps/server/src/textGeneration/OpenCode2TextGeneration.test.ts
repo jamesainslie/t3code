@@ -3,7 +3,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderInstanceId } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 
+import {
+  TextGenerationUsageReporter,
+  type TextGenerationUsageReport,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 import * as TestProviderHost from "@lathe/provider-testing/TestProviderHost";
 import * as OpenCode2AdapterV2Testkit from "../orchestration-v2/Adapters/OpenCode2AdapterV2.testkit.ts";
 import * as OpenCode2Server from "@lathe/provider-opencode/server/v2/OpenCode2Server";
@@ -34,6 +39,54 @@ it.layer(layer)("OpenCode2TextGeneration", (it) => {
         },
       });
       assert.equal(title.title, "Fix OAuth Login Redirect Loop");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("records the removed session's step usage as the only copy", () =>
+    Effect.gen(function* () {
+      const reports = yield* Ref.make<ReadonlyArray<TextGenerationUsageReport>>([]);
+      const server = yield* OpenCode2AdapterV2Testkit.replayServer({
+        provider: "opencode",
+        protocol: OpenCode2AdapterV2Testkit.OPENCODE2_HTTP_PROTOCOL,
+        version: "2.0.18",
+        scenario: "opencode2_title_generation_usage",
+        entries: [...OPENCODE2_TITLE_GENERATION, { type: "runtime_exit", status: "success" }],
+      });
+      const textGeneration = yield* OpenCode2TextGeneration.make().pipe(
+        Effect.provideService(OpenCode2Server.OpenCode2Server, server),
+      );
+      yield* textGeneration
+        .generateThreadTitle({
+          cwd: process.cwd(),
+          message: "fix the login redirect loop after oauth",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("opencode"),
+            model: "opencode/big-pickle",
+          },
+        })
+        .pipe(
+          Effect.provideService(TextGenerationUsageReporter, {
+            report: (report) => Ref.update(reports, (all) => [...all, report]),
+          }),
+        );
+      assert.deepEqual(yield* Ref.get(reports), [
+        {
+          provider: "opencode",
+          sessionId: "ses_f0ec85cf6ffebfalpvV2E9nocu",
+          model: "big-pickle",
+          usage: {
+            totals: {
+              uncachedInputTokens: 8927,
+              cachedInputTokens: 487,
+              cacheCreationTokens: 0,
+              outputTokens: 11,
+              reasoningTokens: 0,
+            },
+            reportedCostUsd: null,
+            speed: "standard",
+          },
+        },
+      ]);
     }).pipe(Effect.scoped),
   );
 

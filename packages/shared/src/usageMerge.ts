@@ -28,6 +28,8 @@ export interface ProviderTotals {
 export interface ModelTotals {
   readonly model: string;
   readonly provider: UsageProviderKind;
+  // Fork: background generation usage. Set for a background purpose's share of the model.
+  readonly purpose?: string;
   readonly costUsd: number;
   readonly totalTokens: number;
   readonly tokens: UsageTokenTotals;
@@ -137,7 +139,13 @@ function bucketsForSource(summary: UsageSummary, source: UsageSource): readonly 
 }
 
 function bucketKey(bucket: UsageBucket): string {
-  return JSON.stringify([bucket.day, bucket.hourStart ?? null, bucket.provider, bucket.model]);
+  return JSON.stringify([
+    bucket.day,
+    bucket.hourStart ?? null,
+    bucket.provider,
+    bucket.model,
+    bucket.purpose ?? null,
+  ]);
 }
 
 function claimSources(environments: readonly EnvironmentUsage[]): {
@@ -358,7 +366,9 @@ export function mergeUsage(
   const modelAccumulator = new Map<
     string,
     {
+      model: string;
       provider: UsageProviderKind;
+      purpose: string | undefined;
       costUsd: number;
       totalTokens: number;
       tokens: UsageTokenTotals;
@@ -443,9 +453,11 @@ export function mergeUsage(
       provider.records += bucket.records;
       providerAccumulator.set(bucket.provider, provider);
 
-      const modelKey = `${bucket.provider} ${bucket.model}`;
+      const modelKey = `${bucket.provider}\u0000${bucket.model}\u0000${bucket.purpose ?? ""}`;
       const model = modelAccumulator.get(modelKey) ?? {
+        model: bucket.model,
         provider: bucket.provider,
+        purpose: bucket.purpose,
         costUsd: 0,
         totalTokens: 0,
         tokens: {
@@ -524,10 +536,11 @@ export function mergeUsage(
     }))
     .sort((a, b) => b.costUsd - a.costUsd);
 
-  const models: ModelTotals[] = [...modelAccumulator.entries()]
-    .map(([key, totals]) => ({
-      model: key.slice(key.indexOf(" ") + 1),
+  const models: ModelTotals[] = [...modelAccumulator.values()]
+    .map((totals) => ({
+      model: totals.model,
       provider: totals.provider,
+      ...(totals.purpose === undefined ? {} : { purpose: totals.purpose }),
       costUsd: totals.costUsd,
       totalTokens: totals.totalTokens,
       tokens: totals.tokens,

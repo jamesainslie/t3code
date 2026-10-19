@@ -147,6 +147,7 @@ const make = Effect.gen(function* () {
         yield* providerRegistry.getProviders,
       );
       const findings = yield* textGeneration.generateStructured({
+        purpose: "roadmapSteward",
         cwd,
         prompt: buildStewardPrompt({
           item,

@@ -8,10 +8,15 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 import * as Schema from "effect/Schema";
 import { createModelSelection } from "@lathe/shared/model";
 import { beforeEach, vi } from "vite-plus/test";
+import {
+  TextGenerationUsageReporter,
+  type TextGenerationUsageReport,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 
 import { makeCursorAuth } from "./auth.ts";
 import { makeCursorTextGeneration } from "./textGeneration.ts";
@@ -59,6 +64,7 @@ beforeEach(() => {
       wait: () => cursorSdkMock.prompt(prompt, options),
     }));
     return {
+      agentId: "agent-cursor-text-generation-test",
       close: cursorSdkMock.close,
       [Symbol.asyncDispose]: async () => {
         cursorSdkMock.close();
@@ -81,6 +87,35 @@ beforeEach(() => {
 });
 
 describe("CursorTextGeneration", () => {
+  it.effect("names the agent whose billed conversation holds the generation's usage", () =>
+    Effect.gen(function* () {
+      const reports = yield* Ref.make<ReadonlyArray<TextGenerationUsageReport>>([]);
+      const textGeneration = yield* makeCursorTextGeneration(cursorSettings, {
+        CURSOR_API_KEY: "test-cursor-key",
+      });
+      yield* textGeneration
+        .generateCommitMessage({
+          cwd: process.cwd(),
+          branch: "feature/cursor-usage",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md b/README.md",
+          modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2"),
+        })
+        .pipe(
+          Effect.provideService(TextGenerationUsageReporter, {
+            report: (report) => Ref.update(reports, (all) => [...all, report]),
+          }),
+        );
+      expect(yield* Ref.get(reports)).toEqual([
+        {
+          provider: "cursor",
+          sessionId: "agent-cursor-text-generation-test",
+          model: "composer-2",
+        },
+      ]);
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect("resolves the browser credential for every request after an account change", () =>
     Effect.gen(function* () {
       let apiKey = "first-browser-key";

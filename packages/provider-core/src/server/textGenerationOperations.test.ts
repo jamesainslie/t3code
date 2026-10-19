@@ -31,6 +31,7 @@ describe("fromRunner generateStructured", () => {
       const generation = fromRunner("Fake", runner.run);
 
       const verdict = yield* generation.generateStructured({
+        purpose: "roadmapSteward",
         cwd: "/work",
         prompt: "Relate the turns to the criteria.",
         outputSchema: Verdict,
@@ -54,6 +55,7 @@ describe("fromRunner generateStructured", () => {
       const generation = fromRunner("Fake", fakeRunner('{"ticks":"c1"}').run);
       const error = yield* Effect.flip(
         generation.generateStructured({
+          purpose: "roadmapSteward",
           cwd: "/work",
           prompt: "Relate the turns to the criteria.",
           outputSchema: Verdict,
@@ -70,6 +72,7 @@ describe("fromRunner generateStructured", () => {
       const runner = fakeRunner('{"ticks":[],"note":""}');
       const generation = fromRunner("Fake", withoutInvestigation("Fake", runner.run));
       const verdict = yield* generation.generateStructured({
+        purpose: "roadmapSteward",
         cwd: "/work",
         prompt: "Anything new?",
         outputSchema: Verdict,

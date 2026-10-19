@@ -87,6 +87,7 @@ import {
   speedCostSegments,
   tokenTypeSegments,
 } from "./usageBreakdown";
+import { modelRowKey, modelRowTitle } from "./usageBackgroundFork";
 import {
   METRIC_OPTIONS,
   WINDOW_OPTIONS,
@@ -245,7 +246,7 @@ export function UsagePage() {
   const selectedModel =
     selectedModelKey === null
       ? undefined
-      : merged.models.find((model) => `${model.provider}:${model.model}` === selectedModelKey);
+      : merged.models.find((model) => modelRowKey(model) === selectedModelKey);
   const breakdownPeak = breakdownModels.reduce(
     (peak, model) => Math.max(peak, metric === "tokens" ? model.totalTokens : model.costUsd),
     0,
@@ -825,7 +826,7 @@ export function UsagePage() {
                           </tr>
                         ) : (
                           breakdownModels.map((model, index) => {
-                            const key = `${model.provider}:${model.model}`;
+                            const key = modelRowKey(model);
                             const value = metric === "tokens" ? model.totalTokens : model.costUsd;
                             const share = modelShare(
                               model,
@@ -845,7 +846,12 @@ export function UsagePage() {
                                     className="flex items-center gap-2 text-left text-foreground outline-none after:absolute after:inset-0"
                                   >
                                     <ProviderMark provider={model.provider} className="size-3.5" />
-                                    {model.model}
+                                    {modelRowTitle(model)}
+                                    {model.purpose === undefined ? null : (
+                                      <span className="text-xs text-muted-foreground">
+                                        {model.model}
+                                      </span>
+                                    )}
                                   </button>
                                   <div
                                     aria-hidden

@@ -117,6 +117,7 @@ export class UsageAggregator {
     readonly provider: string;
     readonly model: string;
     readonly source: string;
+    readonly purpose: string;
     readonly bucket: MutableBucket;
   } | null = null;
   #duplicatesDropped = 0;
@@ -138,7 +139,7 @@ export class UsageAggregator {
     }
   }
 
-  add(input: UsageRecord, sourcePath?: string): boolean {
+  add(input: UsageRecord, sourcePath?: string, purpose?: string): boolean {
     const record = this.#mapModel(input);
     if (record.dedupeKey !== null) {
       if (this.#seen.has(record.dedupeKey)) {
@@ -170,7 +171,14 @@ export class UsageAggregator {
       this.#hourlyWindow === null
         ? -1
         : Math.floor((record.timestampMs - this.#hourlyWindow.sinceTimeMs) / HOUR_MS);
-    const bucket = this.#bucketFor(day, hourIndex, record.provider, record.model, sourcePath ?? "");
+    const bucket = this.#bucketFor(
+      day,
+      hourIndex,
+      record.provider,
+      record.model,
+      sourcePath ?? "",
+      purpose ?? "",
+    );
 
     const priced = priceUsage(this.#options.rates, record, this.#options.priceOverrides);
 
@@ -228,6 +236,7 @@ export class UsageAggregator {
     provider: string,
     model: string,
     source: string,
+    purpose: string,
   ): MutableBucket {
     const last = this.#lastBucket;
     if (
@@ -236,14 +245,15 @@ export class UsageAggregator {
       last.hourIndex === hourIndex &&
       last.provider === provider &&
       last.model === model &&
-      last.source === source
+      last.source === source &&
+      last.purpose === purpose
     ) {
       return last.bucket;
     }
     const window = this.#hourlyWindow;
     const hourStart =
       window === null ? "" : new Date(window.sinceTimeMs + hourIndex * HOUR_MS).toISOString();
-    const key = `${day}\u0000${hourStart}\u0000${provider}\u0000${model}\u0000${source}`;
+    const key = `${day}\u0000${hourStart}\u0000${provider}\u0000${model}\u0000${source}\u0000${purpose}`;
     let bucket = this.#buckets.get(key);
     if (bucket === undefined) {
       bucket = {
@@ -261,14 +271,14 @@ export class UsageAggregator {
       };
       this.#buckets.set(key, bucket);
     }
-    this.#lastBucket = { day, hourIndex, provider, model, source, bucket };
+    this.#lastBucket = { day, hourIndex, provider, model, source, purpose, bucket };
     return bucket;
   }
 
   finish(): AggregateResult {
     const buckets: UsageBucket[] = [];
     for (const [key, bucket] of this.#buckets) {
-      const [day = "", hourStart = "", provider = "", model = "", sourcePath = ""] =
+      const [day = "", hourStart = "", provider = "", model = "", sourcePath = "", purpose = ""] =
         key.split("\u0000");
       const category = bucket.categoryCostUsd;
       const fastCostUsd = roundUsd(bucket.fastCostUsd);
@@ -280,6 +290,7 @@ export class UsageAggregator {
         provider: provider as UsageBucket["provider"],
         model,
         ...(sourcePath === "" ? {} : { sourcePath }),
+        ...(purpose === "" ? {} : { purpose }),
         totals: { ...bucket.totals },
         costUsd: bucket.costUsd,
         cacheSavingsUsd: bucket.cacheSavingsUsd,
@@ -307,7 +318,8 @@ export class UsageAggregator {
         a.day.localeCompare(b.day) ||
         (a.hourStart ?? "").localeCompare(b.hourStart ?? "") ||
         a.provider.localeCompare(b.provider) ||
-        a.model.localeCompare(b.model),
+        a.model.localeCompare(b.model) ||
+        (a.purpose ?? "").localeCompare(b.purpose ?? ""),
     );
 
     return {

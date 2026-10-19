@@ -46,6 +46,7 @@ export * from "./threadTitle.ts";
 export * from "./threadDependencies.ts";
 export * from "./forkOrchestration.ts";
 export * from "./forkUsageAccountLogin.ts";
+export * from "./forkBackgroundUsage.ts";
 // Fork: roadmap.
 export * from "./roadmap.ts";
 export * from "./latheProjectFile.ts";

@@ -66,6 +66,7 @@ import * as RoadmapHttp from "./fork/roadmap/http.ts";
 import * as RoadmapLink from "./fork/roadmap/RoadmapLink.ts";
 import * as RoadmapLinkOutbox from "./fork/roadmap/RoadmapLinkOutbox.ts";
 import * as RoadmapSteward from "./fork/roadmap/RoadmapSteward.ts";
+import * as BackgroundGenerationUsage from "./fork/usage/BackgroundGenerationUsage.ts";
 import * as Scheduler from "./scheduling/Scheduler.ts";
 import * as RoadmapGitHubSync from "./fork/roadmap/RoadmapGitHubSync.ts";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
@@ -720,6 +721,10 @@ const layerRuntimeDependencies = layerRuntimeCoreDependencies.pipe(
   Layer.provideMerge(RemoteOpenTargets.layer),
   Layer.provideMerge(DirectEndpoints.layer),
   Layer.provideMerge(ServerLifecycleEvents.layer),
+  // Fork: background generation usage, read by text generation and the usage scan.
+  Layer.provideMerge(
+    BackgroundGenerationUsage.layer.pipe(Layer.provide(SqlitePersistence.layerConfig)),
+  ),
   Layer.provide(NetService.layer),
 );
 

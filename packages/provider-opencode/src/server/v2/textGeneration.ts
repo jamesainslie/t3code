@@ -15,6 +15,7 @@ import * as ProviderHost from "@lathe/provider-core/server/ProviderHost";
 import * as OpenCode2Server from "./OpenCode2Server.ts";
 import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { makeGenerationUsage } from "./textGenerationUsageFork.ts";
 
 const isTextGenerationError = Schema.is(TextGenerationError);
 
@@ -50,6 +51,8 @@ const runOnServer = (
     const outcome = yield* Deferred.make<Outcome>();
     let sessionId: string | undefined;
     const texts = new Map<string, string>();
+    // Fork: background generation usage.
+    const usage = makeGenerationUsage();
     // Subscribed first: the stream is volatile, and the reply arrives on it.
     const events = yield* connection.events;
     yield* events.pipe(
@@ -80,6 +83,11 @@ const runOnServer = (
         switch (event.type) {
           case "session.text.ended":
             texts.set(`${event.data.assistantMessageID}:${event.data.ordinal}`, event.data.text);
+            return Effect.void;
+          // Fork: background generation usage.
+          case "session.step.ended":
+          case "session.step.failed":
+            usage.addStep(event.data);
             return Effect.void;
           case "permission.asked":
             return client.permission
@@ -160,6 +168,8 @@ const runOnServer = (
           ),
       }),
     );
+    // Fork: background generation usage. The finalizer deletes the session's own record.
+    yield* usage.report({ sessionId: session.id, model: parsed.modelID });
     if (result._tag === "failed") {
       return yield* new TextGenerationError({
         operation: input.operation,

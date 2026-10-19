@@ -5,6 +5,10 @@ import type { ProviderInstanceId } from "@lathe/contracts";
 import type { ProviderTextGeneration } from "@lathe/provider-core/server/textGeneration";
 import { TextGenerationError } from "@lathe/contracts";
 
+import {
+  attributeUsage,
+  BackgroundGenerationUsage,
+} from "../fork/usage/BackgroundGenerationUsage.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import type { ProviderInstance } from "@lathe/provider-core/server/driver";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
@@ -58,27 +62,34 @@ const resolveInstance = (
 export const make = Effect.gen(function* () {
   const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const sourceControl = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
+  // Fork: background generation usage.
+  const usage = yield* BackgroundGenerationUsage;
   return TextGeneration.of({
     generateCommitMessage: (input) =>
       resolveInstance(registry, "generateCommitMessage", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateCommitMessage(input)),
+        attributeUsage(usage, "commitMessage"),
       ),
     generatePrContent: (input) =>
       resolveInstance(registry, "generatePrContent", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generatePrContent(input)),
+        attributeUsage(usage, "prContent"),
       ),
     generateBranchName: (input) =>
       resolveInstance(registry, "generateBranchName", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateBranchName(input)),
+        attributeUsage(usage, "branchName"),
       ),
     generateReviewGuide: (input) =>
       resolveInstance(registry, "generateReviewGuide", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateReviewGuide(input)),
+        attributeUsage(usage, "reviewGuide"),
       ),
     // Fork: roadmap.
     generateStructured: (input) =>
       resolveInstance(registry, "generateStructured", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateStructured(input)),
+        attributeUsage(usage, input.purpose),
       ),
     generateThreadTitle: (input) =>
       resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
@@ -95,6 +106,7 @@ export const make = Effect.gen(function* () {
             return yield* textGeneration.generateThreadTitle({ ...input, linkedContext });
           }),
         ),
+        attributeUsage(usage, "threadTitle"),
       ),
   });
 });

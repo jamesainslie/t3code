@@ -1,7 +1,12 @@
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { ChatGptUsageSummary } from "./ChatGptUsageSummary";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { EnvironmentId, USAGE_CONTRACT_VERSION, type UsageProviderKind } from "@lathe/contracts";
+import {
+  backgroundGenerationPurposeLabel,
+  EnvironmentId,
+  USAGE_CONTRACT_VERSION,
+  type UsageProviderKind,
+} from "@lathe/contracts";
 import { type RouteProp, useIsFocused, useNavigation, useRoute } from "@react-navigation/native";
 import { cursorKeychainAccessEnvironments } from "@lathe/client-runtime/state/usage";
 import {
@@ -845,7 +850,7 @@ function ModelsSection(props: { readonly merged: MergedUsage; readonly metric: U
     <SettingsSection title="By model">
       {ordered.map((model, index) => (
         <View
-          key={`${model.provider}:${model.model}`}
+          key={`${model.provider}:${model.model}:${model.purpose ?? ""}`}
           className={
             index === 0
               ? "flex-row items-center gap-3 p-4"
@@ -858,7 +863,10 @@ function ModelsSection(props: { readonly merged: MergedUsage; readonly metric: U
           />
           <View className="min-w-0 flex-1 gap-0.5">
             <Text className="text-base text-foreground" numberOfLines={1}>
-              {model.model}
+              {/* Fork: background generation usage gets its own row, named for its purpose. */}
+              {model.purpose === undefined
+                ? model.model
+                : `${backgroundGenerationPurposeLabel(model.purpose)} · ${model.model}`}
             </Text>
             <Text className="text-sm text-foreground-muted">
               {metric === "tokens"

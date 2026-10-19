@@ -64,6 +64,8 @@ export const UsageBucket = Schema.Struct({
   provider: UsageProviderKind,
   model: TrimmedNonEmptyString,
   sourcePath: Schema.optional(TrimmedNonEmptyString),
+  // Fork: background generation usage. See forkBackgroundUsage.ts.
+  purpose: Schema.optional(TrimmedNonEmptyString),
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
   cacheSavingsUsd: Schema.Number,

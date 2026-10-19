@@ -216,6 +216,7 @@ it.layer(NodeServices.layer)("Muse text generation", (it) => {
       const service = yield* test.make;
       const error = yield* service
         .generateStructured({
+          purpose: "roadmapSteward",
           cwd: "/project",
           prompt: "Anything",
           outputSchema: Schema.Struct({ answer: Schema.String }),

@@ -159,6 +159,10 @@
       "types": "./src/server/textGenerationOperations.ts",
       "import": "./src/server/textGenerationOperations.ts"
     },
+    "./server/textGenerationUsageFork": {
+      "types": "./src/server/textGenerationUsageFork.ts",
+      "import": "./src/server/textGenerationUsageFork.ts"
+    },
     "./server/textGenerationPolicy": {
       "types": "./src/server/textGenerationPolicy.ts",
       "import": "./src/server/textGenerationPolicy.ts"
