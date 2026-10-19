@@ -58,7 +58,7 @@ export function RoadmapImportIssueDialog({
   // Bugs and support tickets hold nothing, so an issue cannot go under one.
   const parentOptions = useMemo(
     () =>
-      flattenOutline(buildTree(items), new Set(), true).filter(
+      flattenOutline(buildTree(items), new Set()).filter(
         (row) => row.node.item.type !== "bug" && row.node.item.type !== "support-ticket",
       ),
     [items],
