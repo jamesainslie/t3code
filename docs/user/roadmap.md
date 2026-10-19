@@ -213,7 +213,10 @@ can:
 - Add an **Unsure** note when a turn suggests a criterion is met but the evidence is partial. These
   notes put the item under **Waiting on you** on Today.
 - Add a **Drift** note when the thread works on something the item does not describe, and a short
-  progress note.
+  progress note. On an item without acceptance criteria, notes are all it writes.
+
+Turning an area's steward on, or attaching a thread in an area where it is on, starts a run at once.
+On a linked environment it can take up to five minutes.
 
 It never unticks a criterion, changes an item's fields, priority, due date or state, or marks
 anything done. If you untick a criterion, the steward ticks it again only for a turn that ended after

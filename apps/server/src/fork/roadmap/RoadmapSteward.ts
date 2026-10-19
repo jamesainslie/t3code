@@ -23,11 +23,13 @@ import { resolveRoadmapStewardModelSelection } from "@lathe/shared/serverSetting
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 
@@ -49,6 +51,10 @@ import {
   stewardNewTurns,
 } from "./RoadmapStewardPrompt.ts";
 
+/** How often a linked environment asks the home which threads the steward reads. */
+const REFRESH_EVERY = Duration.minutes(5);
+const REFRESH_DEBOUNCE = Duration.seconds(1);
+
 /** Turn ends that may hold new evidence; a run that never started holds none. */
 export const isStewardTrigger = (event: OrchestrationV2DomainEvent): boolean =>
   event.type === "run.updated" &&
@@ -62,7 +68,16 @@ export class RoadmapSteward extends Context.Service<
   {
     /** Queues a run for the thread. Calls while one is queued add nothing. */
     readonly notify: (threadId: ThreadId) => Effect.Effect<void>;
-    /** Queues every thread this environment owns that is attached in an area with the steward on. */
+    /** Queues a run if the thread is one the steward reads, without reading the roadmap. */
+    readonly turnEnded: (threadId: ThreadId) => Effect.Effect<void>;
+    /**
+     * Rereads which threads the steward reads: the ones this environment owns,
+     * attached to an open item in an area with the steward on. Queues those it
+     * did not read before, so turning an area on or attaching a thread takes
+     * effect without waiting for a turn.
+     */
+    readonly refresh: Effect.Effect<void>;
+    /** Refreshes, then queues every thread the steward reads. */
     readonly sweep: Effect.Effect<void>;
     /** Sweeps unless a sweep already ran this UTC day. */
     readonly sweepIfDue: Effect.Effect<void>;
@@ -113,10 +128,27 @@ const make = Effect.gen(function* () {
   });
 
   // A done item has nothing left to tick, so it costs no model call.
-  const stewardOn = (item: RoadmapWorkItem, snapshot: RoadmapLinkSnapshot): boolean => {
-    if (item.state === "done") return false;
-    const byId = new Map(snapshot.items.map((entry) => [entry.id, entry]));
-    return snapshot.areas[effectiveArea(item.id, byId).area].stewardEnabled;
+  const itemsById = (snapshot: RoadmapLinkSnapshot) =>
+    new Map(snapshot.items.map((entry) => [entry.id, entry]));
+  const stewardOn = (
+    item: RoadmapWorkItem,
+    snapshot: RoadmapLinkSnapshot,
+    byId = itemsById(snapshot),
+  ): boolean =>
+    item.state !== "done" && snapshot.areas[effectiveArea(item.id, byId).area].stewardEnabled;
+
+  const stewardedThreads = (snapshot: RoadmapLinkSnapshot, environmentId: string) => {
+    const byId = itemsById(snapshot);
+    const threads = new Set<ThreadId>();
+    for (const item of snapshot.items) {
+      if (!stewardOn(item, snapshot, byId)) continue;
+      for (const attachment of item.attachments) {
+        if (attachment.thread.environmentId === environmentId) {
+          threads.add(attachment.thread.threadId);
+        }
+      }
+    }
+    return threads;
   };
 
   const runThread = (threadId: ThreadId) =>
@@ -209,24 +241,55 @@ const make = Effect.gen(function* () {
       current.has(threadId) ? [false, current] : [true, new Set(current).add(threadId)],
     ).pipe(Effect.flatMap((queued) => (queued ? worker.enqueue(threadId) : Effect.void)));
 
-  const sweep: RoadmapSteward["Service"]["sweep"] = Effect.gen(function* () {
+  // Most turns end on threads attached to nothing. Keeping the threads the
+  // steward reads in memory spares those a roadmap read, which off the home is
+  // a request to the home. A stale set only delays a run: the cursor keeps the
+  // turns until the thread is read.
+  const watched = yield* Ref.make<ReadonlySet<ThreadId>>(new Set());
+  const refreshedAt = yield* Ref.make<number | null>(null);
+  const refreshPermit = yield* Semaphore.make(1);
+
+  const turnEnded: RoadmapSteward["Service"]["turnEnded"] = (threadId) =>
+    Ref.get(watched).pipe(
+      Effect.flatMap((threads) => (threads.has(threadId) ? notify(threadId) : Effect.void)),
+    );
+
+  const refreshWatched = Effect.gen(function* () {
+    yield* Ref.set(refreshedAt, (yield* DateTime.now).epochMilliseconds);
     const snapshot = yield* readRoadmap;
-    if (Option.isNone(snapshot)) return;
     const environmentId = yield* identity.getEnvironmentId;
-    for (const item of snapshot.value.items) {
-      if (!stewardOn(item, snapshot.value)) continue;
-      for (const attachment of item.attachments) {
-        if (attachment.thread.environmentId === environmentId) {
-          yield* notify(attachment.thread.threadId);
-        }
-      }
+    const next = Option.isNone(snapshot)
+      ? new Set<ThreadId>()
+      : stewardedThreads(snapshot.value, environmentId);
+    const previous = yield* Ref.getAndSet(watched, next);
+    for (const threadId of next) {
+      if (!previous.has(threadId)) yield* notify(threadId);
     }
+    return next;
   }).pipe(
+    refreshPermit.withPermits(1),
     Effect.catchTags({
       RoadmapError: (error) =>
-        Effect.logInfo("roadmap steward sweep skipped", { code: error.code }),
+        Effect.logInfo("roadmap steward refresh skipped", { code: error.code }).pipe(
+          Effect.andThen(Ref.get(watched)),
+        ),
     }),
   );
+
+  const refresh: RoadmapSteward["Service"]["refresh"] = Effect.asVoid(refreshWatched);
+
+  // On the home every roadmap or settings change refreshes at once. Off it,
+  // the home's changes are not streamed here, so this catches them.
+  const refreshIfDue = Effect.gen(function* () {
+    const last = yield* Ref.get(refreshedAt);
+    const now = (yield* DateTime.now).epochMilliseconds;
+    if (last !== null && now - last < Duration.toMillis(REFRESH_EVERY)) return;
+    yield* refresh;
+  });
+
+  const sweep: RoadmapSteward["Service"]["sweep"] = Effect.gen(function* () {
+    for (const threadId of yield* refreshWatched) yield* notify(threadId);
+  });
 
   // In memory on purpose: the first sweep after a start catches turns that
   // ended while the server was down, and the per-thread cursor keeps a repeat
@@ -241,9 +304,20 @@ const make = Effect.gen(function* () {
   const start: RoadmapSteward["Service"]["start"] = Effect.fn("RoadmapSteward.start")(function* () {
     const scheduler = yield* Scheduler;
     yield* scheduler.register("roadmap-steward-sweep", sweepIfDue);
+    yield* scheduler.register("roadmap-steward-refresh", refreshIfDue);
+    yield* forkParked(
+      Stream.merge(roadmap.stream(), serverSettings.streamChanges).pipe(
+        // A burst of commits, such as one run's ticks and notes, refreshes once.
+        Stream.debounce(REFRESH_DEBOUNCE),
+        Stream.runForEach(() => refresh),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("roadmap steward change stream failed", { cause }),
+        ),
+      ),
+    );
     yield* forkParked(
       Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
-        isStewardTrigger(event) ? notify(event.threadId) : Effect.void,
+        isStewardTrigger(event) ? turnEnded(event.threadId) : Effect.void,
       ).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning("roadmap steward event stream failed", { cause }),
@@ -252,7 +326,15 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return RoadmapSteward.of({ notify, sweep, sweepIfDue, drain: worker.drain, start });
+  return RoadmapSteward.of({
+    notify,
+    turnEnded,
+    refresh,
+    sweep,
+    sweepIfDue,
+    drain: worker.drain,
+    start,
+  });
 });
 
 export const layer = Layer.effect(RoadmapSteward, make);

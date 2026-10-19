@@ -105,6 +105,7 @@ interface Harness {
   readonly prompts: Array<string>;
   readonly models: Array<ModelSelection>;
   projectionReads: number;
+  snapshotReads: number;
   findings: StewardFindings;
   failNext: boolean;
   gate: {
@@ -118,6 +119,7 @@ const makeHarness = (): Harness => ({
   prompts: [],
   models: [],
   projectionReads: 0,
+  snapshotReads: 0,
   findings: tickC1,
   failNext: false,
   gate: null,
@@ -130,9 +132,31 @@ const testLayer = (harness: Harness, settings: DeepPartial<ServerSettings> = ste
   const identity = Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
     getEnvironmentId: Effect.succeed(HOME),
   });
-  const roadmap = RoadmapService.layer.pipe(
+  const roadmap = Layer.effect(
+    RoadmapService.RoadmapService,
+    Effect.gen(function* () {
+      const service = yield* RoadmapService.RoadmapService;
+      return RoadmapService.RoadmapService.of({
+        ...service,
+        snapshot: () =>
+          Effect.suspend(() => {
+            harness.snapshotReads += 1;
+            return service.snapshot();
+          }),
+      });
+    }),
+  ).pipe(
     Layer.provide(
-      Layer.mergeAll(RoadmapLinkTestkit.layerNotLinked, IdAllocator.layer, settingsLayer, identity),
+      RoadmapService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            RoadmapLinkTestkit.layerNotLinked,
+            IdAllocator.layer,
+            settingsLayer,
+            identity,
+          ),
+        ),
+      ),
     ),
   );
   const fakes = Layer.mergeAll(
@@ -170,7 +194,7 @@ const testLayer = (harness: Harness, settings: DeepPartial<ServerSettings> = ste
   );
   return RoadmapSteward.layer.pipe(
     Layer.provideMerge(roadmap),
-    Layer.provide(fakes),
+    Layer.provideMerge(fakes),
     Layer.provideMerge(Layer.fresh(SqlitePersistence.layerMemory)),
   );
 };
@@ -374,6 +398,70 @@ describe("RoadmapSteward", () => {
       assert.lengthOf(harness.prompts, 2);
     }).pipe(Effect.provide(testLayer(harness)));
   });
+
+  it.effect("reads nothing when a turn ends on a thread it does not steward", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      yield* seed();
+      const service = yield* RoadmapSteward.RoadmapSteward;
+      yield* service.refresh;
+      yield* service.drain;
+      // The refresh queued the thread it had not read before.
+      assert.lengthOf(harness.prompts, 1);
+
+      harness.snapshotReads = 0;
+      yield* service.turnEnded(OTHER_THREAD);
+      yield* service.drain;
+      assert.equal(harness.snapshotReads, 0);
+
+      harness.threads.set(THREAD_ID, projection(withThirdTurn));
+      harness.findings = { ticks: [], notes: [] };
+      yield* service.turnEnded(THREAD_ID);
+      yield* service.drain;
+      assert.lengthOf(harness.prompts, 2);
+    }).pipe(Effect.provide(testLayer(harness)));
+  });
+
+  it.effect(
+    "picks up an area as soon as its steward is turned on, and a newly attached thread",
+    () => {
+      const harness = makeHarness();
+      const second = ThreadId.make("thread-second");
+      harness.threads.set(second, projection(twoTurns));
+      return Effect.gen(function* () {
+        const itemId = yield* seed();
+        const service = yield* RoadmapSteward.RoadmapSteward;
+        yield* service.refresh;
+        yield* service.drain;
+        assert.lengthOf(harness.prompts, 0);
+
+        const settings = yield* ServerSettingsService;
+        yield* settings.updateSettings({ roadmap: { areas: { work: { stewardEnabled: true } } } });
+        yield* service.refresh;
+        yield* service.drain;
+        assert.lengthOf(harness.prompts, 1);
+
+        // A refresh with nothing new queues nothing.
+        yield* service.refresh;
+        yield* service.drain;
+        assert.equal(harness.projectionReads, 1);
+
+        const roadmap = yield* RoadmapService.RoadmapService;
+        yield* roadmap.dispatch(
+          {
+            type: "roadmap.thread.attach",
+            commandId: CommandId.make("attach-second"),
+            itemId,
+            thread: { environmentId: HOME, threadId: second },
+          },
+          user,
+        );
+        yield* service.refresh;
+        yield* service.drain;
+        assert.lengthOf(harness.prompts, 2);
+      }).pipe(Effect.provide(testLayer(harness, {})));
+    },
+  );
 });
 
 describe("isStewardTrigger", () => {

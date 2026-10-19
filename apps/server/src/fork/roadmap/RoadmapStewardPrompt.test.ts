@@ -168,6 +168,17 @@ describe("buildStewardPrompt", () => {
     assert.include(prompt, "- [c3] (ticked, leave it alone) Docs updated");
   });
 
+  it("asks for progress notes on an item with nothing to tick", () => {
+    const bare = buildStewardPrompt({
+      item: item({ criteria: [] }),
+      untickedAt: new Map(),
+      newTurns: [{ n: 2, endedAt: atIso(250) }],
+      digest: "",
+    });
+    assert.include(bare, "(none: nothing to tick, so say what the new turns did in notes)");
+    assert.include(bare, "When the new turns moved nothing on the item, return empty");
+  });
+
   it("carries the item, its recent notes and the thread digest", () => {
     assert.include(prompt, "Work item: Export reports as CSV");
     assert.include(prompt, "Users download any report as CSV.");

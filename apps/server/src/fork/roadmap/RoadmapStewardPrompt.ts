@@ -131,7 +131,7 @@ export function buildStewardPrompt(input: {
   const { item } = input;
   const notes = item.progressNotes.slice(-NOTES_SHOWN);
   return [
-    "You are the roadmap steward. You read a coding agent's thread and relate its work to the acceptance criteria of the work item the thread is attached to. You report what the thread shows. You never decide what the work should be.",
+    "You are the roadmap steward. You read a coding agent's thread and relate its work to the work item the thread is attached to and its acceptance criteria. You report what the thread shows. You never decide what the work should be.",
     "",
     `Work item: ${item.title}`,
     ...(item.description.trim().length > 0
@@ -143,7 +143,7 @@ export function buildStewardPrompt(input: {
       ? item.criteria.map((criterion) =>
           criterionLine(criterion, input.untickedAt.get(criterion.id)),
         )
-      : ["(none)"]),
+      : ["(none: nothing to tick, so say what the new turns did in notes)"]),
     "",
     ...(notes.length > 0
       ? [
@@ -164,7 +164,7 @@ export function buildStewardPrompt(input: {
     "5. Add at most one `progress` note, a sentence on what the new turns moved forward, and only when they moved something.",
     "6. Never tick a criterion marked ticked. Never tick an unticked one without a new turn that ended after the untick.",
     "7. Keep each note to one or two plain sentences. Use null for `criterionId` when a note is about the whole item.",
-    "8. When the new turns show nothing about the criteria, return empty `ticks` and `notes`.",
+    "8. When the new turns moved nothing on the item, return empty `ticks` and `notes`.",
     "",
     "Reply with JSON only, matching the schema you were given.",
     "",
