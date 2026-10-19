@@ -131,6 +131,42 @@ function useLiveGateway(environmentId: EnvironmentId) {
   );
 }
 
+/**
+ * Whether the server is following the gateway's status stream. The dot is
+ * lit while it is and flashes once with each update the stream brings, so a
+ * quiet gateway and a dead connection never look the same.
+ */
+function LiveDot({ snapshot }: { readonly snapshot: UsageLimitSourceSnapshot }) {
+  const following = snapshot.proxy?.following === true;
+  const label = following
+    ? "Live: following the gateway's status stream"
+    : "Not live: waiting for the gateway's status stream";
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="relative flex size-1.5 shrink-0" aria-label={label} tabIndex={0} />
+        }
+      >
+        <span
+          className={cn(
+            "size-full rounded-full",
+            following ? "bg-success" : "bg-muted-foreground/40",
+          )}
+        />
+        {following ? (
+          <span
+            key={snapshot.checkedAt}
+            aria-hidden
+            className="absolute inset-0 rounded-full bg-success opacity-0 motion-safe:animate-status-ping-once"
+          />
+        ) : null}
+      </TooltipTrigger>
+      <TooltipPopup side="top">{label}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 /** A 3px bar with a hairline at the rotation threshold. */
 function Meter({
   usedPercent,
@@ -483,9 +519,12 @@ function Ledger({
       className={cn("flex flex-col gap-2 text-xs", narrow ? "p-3" : "p-(--floating-content-inset)")}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="truncate font-medium text-muted-foreground">
-          {pill.label} · {pill.accounts.length}{" "}
-          {pill.accounts.length === 1 ? "account" : "accounts"}
+        <span className="flex min-w-0 items-center gap-1.5">
+          {pill.status === "live" ? <LiveDot snapshot={snapshot} /> : null}
+          <span className="truncate font-medium text-muted-foreground">
+            {pill.label} · {pill.accounts.length}{" "}
+            {pill.accounts.length === 1 ? "account" : "accounts"}
+          </span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="font-mono text-2xs whitespace-nowrap text-secondary-label">

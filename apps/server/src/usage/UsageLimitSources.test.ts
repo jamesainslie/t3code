@@ -360,6 +360,32 @@ describe("UsageLimitSources", () => {
     }).pipe(Effect.provide(layer));
   });
 
+  it.effect("marks a gateway live only while its status stream is open", () => {
+    const live = liveGateway();
+    const { layer } = harness({ gateway: live.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      expect((yield* sources.current)[0]?.proxy?.following).toBeUndefined();
+
+      const watching = yield* Scope.make();
+      const opened = live.nextOpen();
+      yield* sources.watch.pipe(Scope.provide(watching));
+      yield* opened;
+      live.send({ ...status, inflightTotal: 4 });
+      yield* firstWhere(sources, (s) => s.proxy?.following === true);
+
+      // An interval read while the stream is open does not take the mark away.
+      yield* refreshThroughRetry(sources);
+      expect((yield* sources.current)[0]?.proxy?.following).toBe(true);
+
+      const closed = live.nextCancel();
+      yield* Scope.close(watching, Exit.void);
+      yield* closed;
+      yield* firstWhere(sources, (s) => s.proxy?.following === undefined);
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect("publishes a busy gateway's latest status at most every two seconds", () => {
     const live = liveGateway();
     const { layer } = harness({ gateway: live.reply });

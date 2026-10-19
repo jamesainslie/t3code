@@ -271,13 +271,33 @@ export const make = Effect.gen(function* () {
     Effect.map((ms) => (ms <= 0 ? 60_000 : ms)),
   );
 
-  const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) =>
+  // Fork: gateways whose status stream is open right now. Every publish
+  // stamps the mark from this set, so an interval read during the stream
+  // keeps it and nothing else has to remember it. A plain set rather than a
+  // Ref because it is read inside `Ref.modify`, where a change made just
+  // before the write is always seen.
+  const following = new Set<UsageLimitSourceId>();
+  const stampFollowing = (source: UsageLimitSourceSnapshot): UsageLimitSourceSnapshot => {
+    if (!source.proxy) return source;
+    const live = following.has(source.id) && source.error === undefined;
+    if (live === (source.proxy.following === true)) return source;
+    const { following: _, ...proxy } = source.proxy;
+    return { ...source, proxy: live ? { ...proxy, following: true } : proxy };
+  };
+
+  const publishWith = (
+    derive: (
+      previous: ReadonlyArray<UsageLimitSourceSnapshot>,
+    ) => ReadonlyArray<UsageLimitSourceSnapshot>,
+  ) =>
     Effect.gen(function* () {
-      const changed = yield* Ref.modify(stateRef, (previous) =>
-        Equal.equals(previous, next) ? [false, previous] : [true, next],
-      );
-      if (changed) yield* PubSub.publish(changes, next);
+      const published = yield* Ref.modify(stateRef, (previous) => {
+        const stamped = derive(previous).map(stampFollowing);
+        return Equal.equals(previous, stamped) ? [null, previous] : [stamped, stamped];
+      });
+      if (published) yield* PubSub.publish(changes, published);
     });
+  const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) => publishWith(() => next);
 
   // One refresh at a time: a slow hub read started before a settings change
   // must not publish after the change's own refresh and resurrect a removed
@@ -434,11 +454,19 @@ export const make = Effect.gen(function* () {
                 received += 1;
                 failures = 0;
                 forceRefresh = false;
+                following.add(id);
                 const checkedAt = DateTime.formatIso(yield* DateTime.now);
                 const base = { id, kind: config.kind, label: sourceLabel(id, config), checkedAt };
                 yield* publishSource(yield* modelproxySnapshot(id, base, auth, status));
               }),
             ),
+          ),
+        ),
+        // However the stream ends, including the last watcher leaving, the
+        // snapshot stops claiming to be live.
+        Effect.ensuring(
+          Effect.suspend(() =>
+            following.delete(id) ? publishWith((previous) => previous) : Effect.void,
           ),
         ),
         Effect.result,
