@@ -15,6 +15,7 @@ import type {
   RoadmapTimelineLayout,
   RoadmapTimelineRange,
   RoadmapTimelineRow,
+  RoadmapTimelineSprintBand,
 } from "@lathe/client-runtime/roadmap/timeline";
 import { effectiveArea } from "@lathe/shared/roadmap";
 import {
@@ -93,6 +94,17 @@ export function timelineTodayX(todayOffset: number): number {
   return todayOffset * TIMELINE_DAY_WIDTH + TIMELINE_DAY_WIDTH / 2;
 }
 
+/** The sprint running today, which the lanes shade to set it apart from the others. */
+export function timelineCurrentSprint(
+  bands: ReadonlyArray<RoadmapTimelineSprintBand>,
+  todayOffset: number | null,
+): RoadmapTimelineSprintBand["sprintId"] | null {
+  if (todayOffset === null) return null;
+  return (
+    bands.find((band) => band.start <= todayOffset && todayOffset <= band.end)?.sprintId ?? null
+  );
+}
+
 const FORECAST_LABELS: Readonly<Record<RoadmapForecastStatus, string>> = {
   "on-track": "on track",
   "at-risk": "at risk",
@@ -114,6 +126,8 @@ export interface TimelineBarGeometry {
     | null;
   /** The progress percentage, when there is progress and the bar has room for it. */
   readonly label: string | null;
+  /** Width of the done part from the bar's left edge, null without progress. */
+  readonly fill: number | null;
 }
 
 export function timelineBarGeometry(row: RoadmapTimelineRow, days: number): TimelineBarGeometry {
@@ -140,7 +154,17 @@ export function timelineBarGeometry(row: RoadmapTimelineRow, days: number): Time
       row.progress === null || bar === null || bar.width < MIN_LABEL_WIDTH
         ? null
         : percent(row.progress),
+    fill: row.progress === null || bar === null ? null : progressFill(row, row.progress, bar),
   };
+}
+
+// Progress runs along the item's whole span, so a bar the range cuts shows only
+// the done part that falls inside it.
+function progressFill(row: RoadmapTimelineRow, progress: number, bar: TimelineSpan): number {
+  const spanStart = row.start * TIMELINE_DAY_WIDTH;
+  const spanWidth = (row.end - row.start + 1) * TIMELINE_DAY_WIDTH;
+  const doneEnd = spanStart + Math.min(1, Math.max(0, progress)) * spanWidth;
+  return Math.min(bar.width, Math.max(0, doneEnd - bar.left));
 }
 
 /** The hover text and accessible name of a bar, since narrow bars have no room for labels. */

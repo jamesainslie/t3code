@@ -109,7 +109,8 @@ lines between them and sprints along the top. An item needs a due date or a star
 The note above the chart counts the items left off for lack of dates. Use **Area** to show one area,
 and select a bar to open its item.
 
-A bar runs from the item's start date, or the day it was created, to its due date. A dashed
+A bar runs from the item's start date, or the day it was created, to its due date. The solid part
+of a bar is the share of the work already done. A dashed
 extension past the due date means the forecast lands later. Forecasts divide the work left, in the
 area's unit, by your pace in the area. An item is **At risk** when its spare time is under a fifth of the working
 days left, and **Late** when the forecast passes the due date.

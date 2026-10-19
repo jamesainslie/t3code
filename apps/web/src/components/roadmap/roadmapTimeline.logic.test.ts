@@ -2,6 +2,7 @@ import {
   DEFAULT_ROADMAP_AREA_SETTINGS,
   type IsoDate,
   RoadmapItemId,
+  RoadmapSprintId,
   type RoadmapWorkItem,
 } from "@lathe/contracts";
 import type {
@@ -16,6 +17,7 @@ import {
   hiddenWithoutDatesNote,
   timelineBarGeometry,
   timelineBarTitle,
+  timelineCurrentSprint,
   timelineDateLabel,
   timelineDisplayRows,
   timelineEdgePaths,
@@ -169,6 +171,41 @@ describe("timelineBarGeometry", () => {
 
   it("drops a due tick that falls outside the range", () => {
     expect(timelineBarGeometry(row({ start: 20, end: 30, due: 30 }), 28).dueX).toBeNull();
+  });
+
+  it("fills the share of the bar that is done", () => {
+    expect(timelineBarGeometry(row({ start: 2, end: 11, progress: 0.3 }), 28).fill).toBe(3 * DAY);
+    expect(timelineBarGeometry(row({ start: 2, end: 11, progress: 1 }), 28).fill).toBe(10 * DAY);
+    expect(timelineBarGeometry(row({ start: 2, end: 11, progress: null }), 28).fill).toBeNull();
+  });
+
+  it("measures the fill along the whole span when the range cuts the bar", () => {
+    // Twenty days, half done, ten of them before the range: the fill ends at the range start.
+    expect(timelineBarGeometry(row({ start: -10, end: 9, progress: 0.5 }), 28).fill).toBe(0);
+    expect(timelineBarGeometry(row({ start: -10, end: 9, progress: 0.75 }), 28).fill).toBe(5 * DAY);
+    // Half of a span that runs past the range end still fills only what shows.
+    expect(timelineBarGeometry(row({ start: 20, end: 39, progress: 0.9 }), 28).fill).toBe(8 * DAY);
+  });
+});
+
+describe("timelineCurrentSprint", () => {
+  const band = (sprintId: string, start: number, end: number) => ({
+    sprintId: RoadmapSprintId.make(sprintId),
+    name: sprintId,
+    area: "work" as const,
+    start,
+    end,
+  });
+
+  it("finds the sprint running today", () => {
+    const bands = [band("a", 0, 13), band("b", 14, 27)];
+    expect(timelineCurrentSprint(bands, 14)).toBe("b");
+    expect(timelineCurrentSprint(bands, 13)).toBe("a");
+  });
+
+  it("has none between sprints or when today is off the range", () => {
+    expect(timelineCurrentSprint([band("a", 0, 5), band("b", 9, 14)], 7)).toBeNull();
+    expect(timelineCurrentSprint([band("a", 0, 5)], null)).toBeNull();
   });
 });
 

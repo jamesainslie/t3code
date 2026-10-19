@@ -19,17 +19,19 @@ import type { RoadmapForecastLabel, RoadmapForecastShownStatus } from "./roadmap
 
 // Eight types need eight hues and the theme declares only a few, so each type
 // carries its own; the label badge mixes it into surfaces that suit both themes.
+// They share one lightness and chroma so that no type outshouts the others.
+const typeHue = (angle: number) => `oklch(0.72 0.15 ${angle})`;
 const TYPE_TAGS: Readonly<
   Record<RoadmapItemType, { readonly label: string; readonly hue: string }>
 > = {
-  objective: { label: "OBJ", hue: "#f472b6" },
-  "key-result": { label: "KR", hue: "#22d3ee" },
-  initiative: { label: "INIT", hue: "#fb923c" },
-  epic: { label: "EPIC", hue: "#a78bfa" },
-  feature: { label: "FEAT", hue: "#3b82f6" },
-  story: { label: "STORY", hue: "#34d399" },
-  bug: { label: "BUG", hue: "#f87171" },
-  "support-ticket": { label: "SUPPORT", hue: "#fbbf24" },
+  objective: { label: "OBJ", hue: typeHue(350) },
+  "key-result": { label: "KR", hue: typeHue(205) },
+  initiative: { label: "INIT", hue: typeHue(50) },
+  epic: { label: "EPIC", hue: typeHue(295) },
+  feature: { label: "FEAT", hue: typeHue(255) },
+  story: { label: "STORY", hue: typeHue(160) },
+  bug: { label: "BUG", hue: typeHue(25) },
+  "support-ticket": { label: "SUPPORT", hue: typeHue(85) },
 };
 
 /** For surfaces coloured by type beyond the tag itself, such as Timeline bars. */
