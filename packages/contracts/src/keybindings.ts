@@ -86,6 +86,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "usage.open",
   // Fork: roadmap.
   "roadmap.open",
+  "roadmap.toggle",
   "theme.select",
   "appearance.cycle",
   "themeEditor.toggle",

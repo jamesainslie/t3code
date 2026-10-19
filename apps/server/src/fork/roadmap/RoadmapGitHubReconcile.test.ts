@@ -56,6 +56,7 @@ const item = (itemId: string, overrides: Partial<RoadmapWorkItem> = {}): Roadmap
   stateChangedAt: at,
   completedAt: null,
   pinnedAt: null,
+  focusedAt: null,
   snoozedUntil: null,
   sprintId: null,
   hours: [],

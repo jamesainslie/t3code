@@ -342,6 +342,31 @@ describe("open roadmap shortcut", () => {
   });
 });
 
+describe("toggle roadmap shortcut", () => {
+  it("resolves Control+Tab on every platform, including macOS", () => {
+    for (const platform of ["MacIntel", "Win32", "Linux"]) {
+      assert.equal(
+        resolveShortcutCommand(event({ key: "Tab", ctrlKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+          platform,
+          context: { terminalFocus: false },
+        }),
+        "roadmap.toggle",
+      );
+    }
+  });
+
+  it("leaves Command+Tab and plain Tab alone", () => {
+    for (const overrides of [{ key: "Tab", metaKey: true }, { key: "Tab" }]) {
+      assert.isNull(
+        resolveShortcutCommand(event(overrides), DEFAULT_RESOLVED_KEYBINDINGS, {
+          platform: "MacIntel",
+          context: { terminalFocus: false },
+        }),
+      );
+    }
+  });
+});
+
 describe("copy thread reference shortcut", () => {
   it("resolves Cmd+Shift+C on macOS and Ctrl+Shift+C elsewhere", () => {
     assert.equal(

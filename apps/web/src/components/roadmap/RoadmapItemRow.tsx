@@ -15,6 +15,7 @@ import { Link } from "@tanstack/react-router";
 import {
   CheckIcon,
   ChevronRightIcon,
+  CrosshairIcon,
   GripVerticalIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -26,12 +27,14 @@ import { memo, useEffect, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 import { useThreadShell } from "~/state/entities";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger } from "../ui/select";
 import {
   RoadmapAreaBadge,
   RoadmapBlockedBadge,
+  RoadmapFocusBadge,
   RoadmapIssueChip,
   RoadmapNeedsReviewBadge,
   RoadmapPriorityChip,
@@ -65,6 +68,8 @@ export interface RoadmapRowActions {
   readonly edit: (item: RoadmapWorkItem) => void;
   readonly remove: (item: RoadmapWorkItem) => void;
   readonly markReviewed: (itemId: RoadmapItemId) => void;
+  readonly select: (itemId: RoadmapItemId) => void;
+  readonly setFocused: (itemId: RoadmapItemId, focused: boolean) => void;
 }
 
 export interface RoadmapItemRowProps {
@@ -85,6 +90,9 @@ export interface RoadmapItemRowProps {
   /** Text and status rather than the label object, so an unchanged forecast keeps the row memoized. */
   readonly forecastText: string | null;
   readonly forecastStatus: RoadmapForecastShownStatus | null;
+  /** In Select mode the row shows a checkbox where the drag handle sits. */
+  readonly selecting: boolean;
+  readonly checked: boolean;
   readonly actions: RoadmapRowActions;
 }
 
@@ -106,6 +114,8 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
   today,
   forecastText,
   forecastStatus,
+  selecting,
+  checked,
   actions,
 }: RoadmapItemRowProps) {
   const {
@@ -115,7 +125,7 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
     setActivatorNodeRef,
     transform,
     isDragging,
-  } = useDraggable({ id: item.id, disabled: !canEdit });
+  } = useDraggable({ id: item.id, disabled: !canEdit || selecting });
   const { setNodeRef: setDropNodeRef } = useDroppable({ id: item.id });
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -155,7 +165,15 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
         className="flex min-w-0 items-center gap-1.5"
         style={{ paddingInlineStart: `${depth * 20}px` }}
       >
-        {canEdit ? (
+        {selecting ? (
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={() => actions.select(item.id)}
+              aria-label={`Select ${item.title}`}
+            />
+          </span>
+        ) : canEdit ? (
           <button
             type="button"
             ref={setActivatorNodeRef}
@@ -232,6 +250,7 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
           {item.source !== null ? <RoadmapIssueChip source={item.source} /> : null}
           {shownArea !== null ? <RoadmapAreaBadge area={shownArea} /> : null}
           {item.needsReview ? <RoadmapNeedsReviewBadge /> : null}
+          {item.focusedAt !== null ? <RoadmapFocusBadge /> : null}
           {blocked ? <RoadmapBlockedBadge /> : null}
           <RoadmapThreadsLink attachments={item.attachments} />
         </div>
@@ -341,6 +360,10 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
           <MenuItem onClick={() => actions.edit(item)}>
             <PencilIcon />
             Edit
+          </MenuItem>
+          <MenuItem onClick={() => actions.setFocused(item.id, item.focusedAt === null)}>
+            <CrosshairIcon />
+            {item.focusedAt === null ? "Add to focus" : "Remove from focus"}
           </MenuItem>
           {item.needsReview ? (
             <MenuItem onClick={() => actions.markReviewed(item.id)}>

@@ -248,6 +248,9 @@ export const RoadmapListEntry = Schema.Struct({
   criteriaTotal: NonNegativeInt,
   attachedThreads: NonNegativeInt,
   needsReview: Schema.Boolean,
+  focused: Schema.Boolean.annotate({
+    description: "In the user's focus set, the working set the Outline can narrow to.",
+  }),
   forecast: RoadmapForecastStatus.annotate({
     description:
       "no-forecast when the item is done, has no estimate to count, or its area has under five finished samples.",

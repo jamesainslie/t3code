@@ -54,6 +54,7 @@ import {
   roadmapEditorRequest,
   roadmapViewOf,
   withoutEditorRequest,
+  type RoadmapOutlineLayout,
   type RoadmapSearch,
   type RoadmapSprintFilter,
   type RoadmapView,
@@ -138,6 +139,20 @@ export function RoadmapPage() {
     (next: (current: RoadmapSearch) => RoadmapSearch) =>
       void navigate({ search: next, replace: true }),
     [navigate],
+  );
+
+  const outlineLayout = useMemo(
+    () => ({ level: search.level, focus: search.focus === 1 }),
+    [search.focus, search.level],
+  );
+  const onOutlineLayoutChange = useCallback(
+    ({ level, focus }: RoadmapOutlineLayout) =>
+      setSearch(({ level: _level, focus: _focus, ...rest }) => ({
+        ...rest,
+        ...(level === undefined ? {} : { level }),
+        ...(focus ? { focus: 1 as const } : {}),
+      })),
+    [setSearch],
   );
 
   const openEditor = useCallback(
@@ -328,6 +343,8 @@ export function RoadmapPage() {
                 items={items}
                 sprints={sprints}
                 filter={outlineFilter}
+                layout={outlineLayout}
+                onLayoutChange={onOutlineLayoutChange}
                 selectedId={search.item ?? null}
                 canEdit={canEdit}
                 today={today}

@@ -61,6 +61,7 @@ const fullItem = {
   stateChangedAt: at,
   completedAt: null,
   pinnedAt: at,
+  focusedAt: at,
   snoozedUntil: "2026-10-20",
   sprintId: "sprint-1",
   hours: [
@@ -151,6 +152,11 @@ describe("RoadmapWorkItem", () => {
   it("decodes an item stored before notes with no notes", () => {
     const { progressNotes: _, ...withoutNotes } = fullItem;
     expect(decodeItem(withoutNotes).progressNotes).toEqual([]);
+  });
+
+  it("decodes an item stored before focus as not focused", () => {
+    const { focusedAt: _, ...withoutFocus } = fullItem;
+    expect(decodeItem(withoutFocus).focusedAt).toBeNull();
   });
 
   it("decodes an item stored before GitHub sync with no source and no pull requests", () => {
@@ -290,6 +296,8 @@ describe("RoadmapCommand", () => {
   it.each([
     { type: "roadmap.item.pin", itemId: "item-1" },
     { type: "roadmap.item.unpin", itemId: "item-1" },
+    { type: "roadmap.item.focus", itemId: "item-1" },
+    { type: "roadmap.item.unfocus", itemId: "item-1" },
     { type: "roadmap.item.snooze", itemId: "item-1", until: "2026-10-20" },
     { type: "roadmap.item.unsnooze", itemId: "item-1" },
     { type: "roadmap.hours.log", itemId: "item-1", entryId: "h1", hours: 2 },
@@ -395,6 +403,8 @@ describe("RoadmapEvent", () => {
     for (const event of [
       { ...base, type: "roadmap.item.pinned", payload: {} },
       { ...base, type: "roadmap.item.unpinned", payload: {} },
+      { ...base, type: "roadmap.item.focused", payload: {} },
+      { ...base, type: "roadmap.item.unfocused", payload: {} },
       { ...base, type: "roadmap.item.snoozed", payload: { until: "2026-10-20" } },
       { ...base, type: "roadmap.item.unsnoozed", payload: {} },
       { ...base, type: "roadmap.hours.logged", payload: { entry: fullItem.hours[0] } },

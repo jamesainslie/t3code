@@ -267,6 +267,7 @@ import {
   useRoadmapPaletteActionItems,
 } from "./roadmap/RoadmapPaletteItems";
 import { roadmapHref } from "./roadmap/roadmapThread.logic";
+import { useToggleRoadmap } from "./sidebar/mainAppLocation";
 import { useRoadmapAvailability } from "./roadmap/useRoadmapThreadActions";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
@@ -424,6 +425,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     [],
   );
   const roadmapSupported = useRoadmapAvailability().supported;
+  const toggleRoadmap = useToggleRoadmap(roadmapHref({ view: "today" }));
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { theme, themeHalves, resolvedTheme, appearanceMode, setAppearanceMode } = useTheme();
@@ -517,6 +519,14 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         void navigate({ href: roadmapHref({ view: "today" }) });
         return;
       }
+      if (command === "roadmap.toggle" && roadmapSupported) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        setOpen(false);
+        void toggleRoadmap();
+        return;
+      }
       const mode = overlayModeForCommand(command);
       if (mode === null) {
         return;
@@ -540,6 +550,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     theme,
     themeHalves,
     toggleMode,
+    toggleRoadmap,
   ]);
 
   useEffect(

@@ -59,6 +59,7 @@ const item = (
   stateChangedAt: "2026-10-18T00:00:00.000Z",
   completedAt: null,
   pinnedAt: null,
+  focusedAt: null,
   snoozedUntil: null,
   sprintId: null,
   hours: [],
