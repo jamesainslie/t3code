@@ -66,6 +66,8 @@ export interface RoadmapRowActions {
   readonly update: (itemId: RoadmapItemId, patch: RoadmapItemPatch) => void;
   readonly addChild: (item: RoadmapWorkItem) => void;
   readonly edit: (item: RoadmapWorkItem) => void;
+  /** Shows the item in the drawer. */
+  readonly open: (itemId: RoadmapItemId) => void;
   readonly remove: (item: RoadmapWorkItem) => void;
   readonly markReviewed: (itemId: RoadmapItemId) => void;
   readonly select: (itemId: RoadmapItemId) => void;
@@ -129,6 +131,8 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
   const { setNodeRef: setDropNodeRef } = useDroppable({ id: item.id });
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  // The title of an issue this environment cannot write follows GitHub.
+  const canRename = canEdit && item.source?.writable !== false;
   const progress = criteriaProgress(item.criteria);
 
   useEffect(() => {
@@ -238,11 +242,16 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
           ) : (
             <button
               type="button"
-              // The title of an issue this environment cannot write follows GitHub.
-              disabled={!canEdit || item.source?.writable === false}
-              onClick={() => setEditingTitle(true)}
-              aria-label={`Rename ${item.title}`}
-              className="min-w-0 rounded-sm text-start wrap-break-word text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+              aria-pressed={selected}
+              onClick={() => actions.open(item.id)}
+              onDoubleClick={canRename ? () => setEditingTitle(true) : undefined}
+              onKeyDown={(event) => {
+                if (event.key === "F2" && canRename) {
+                  event.preventDefault();
+                  setEditingTitle(true);
+                }
+              }}
+              className="min-w-0 rounded-sm text-start wrap-break-word text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               {item.title}
             </button>
