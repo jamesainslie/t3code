@@ -171,6 +171,7 @@ describe("TextGeneration.make", () => {
       );
 
       const result = yield* tg.generateStructured({
+        purpose: "roadmapSteward",
         cwd: process.cwd(),
         prompt: "Is it done?",
         outputSchema: Answer,
@@ -181,6 +182,7 @@ describe("TextGeneration.make", () => {
 
       const missing = yield* tg
         .generateStructured({
+          purpose: "roadmapSteward",
           cwd: process.cwd(),
           prompt: "Is it done?",
           outputSchema: Answer,

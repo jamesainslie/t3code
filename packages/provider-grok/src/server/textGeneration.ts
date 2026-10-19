@@ -11,6 +11,7 @@ import type { GrokSettings } from "../settings.ts";
 import { getModelSelectionStringOptionValue } from "@lathe/shared/model";
 
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
 import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,
@@ -78,9 +79,16 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
               cause,
             }),
         });
-        return yield* runtime.prompt({
+        const result = yield* runtime.prompt({
           prompt: [{ type: "text", text: prompt }],
         });
+        // Fork: background generation usage. Grok's session log already holds the usage.
+        yield* reportTextGenerationUsage({
+          provider: "grok",
+          sessionId: started.sessionId,
+          model: resolvedModel,
+        });
+        return result;
       }).pipe(
         Effect.timeoutOption(GROK_TIMEOUT_MS),
         Effect.flatMap(

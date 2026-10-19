@@ -21,6 +21,10 @@ import type * as AcpSchema from "effect-acp/compat";
 import { expect } from "vite-plus/test";
 
 import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
+import {
+  type TextGenerationUsageReport,
+  TextGenerationUsageReporter,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 import { removeAntigravitySessionFiles } from "../provider/acp/AntigravitySessionFiles.ts";
 
 import {
@@ -61,6 +65,7 @@ const makeFixture = Effect.fn("makeAntigravityTextGenerationFixture")(function* 
     readonly startError?: AcpError;
     readonly rejectAdmission?: boolean;
     readonly sessionId?: string;
+    readonly modelName?: string;
   } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -163,7 +168,7 @@ const makeFixture = Effect.fn("makeAntigravityTextGenerationFixture")(function* 
             category: "model",
             type: "select",
             currentValue: modelSelection.model,
-            options: [{ value: modelSelection.model, name: "Gemini test" }],
+            options: [{ value: modelSelection.model, name: options.modelName ?? "Gemini test" }],
           },
         ]),
         getEvents: () => Stream.fromQueue(events),
@@ -611,6 +616,68 @@ it.layer(NodeServices.layer)("AntigravityTextGeneration", (it) => {
         expect(fixture.state.cancellations).toBe(1);
         yield* fixture.assertCleaned;
       }).pipe(Effect.scoped),
+  );
+
+  it.effect("records the prompt's usage under the model name the usage scan uses", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture({
+        modelName: "Gemini 3.1 Pro (High)",
+        prompt: ({ emit }) =>
+          emit({
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: '{"title":"Repair login"}' },
+          }).pipe(
+            Effect.as({
+              stopReason: "end_turn" as const,
+              usage: {
+                totalTokens: 1_500,
+                inputTokens: 1_000,
+                outputTokens: 300,
+                thoughtTokens: 200,
+                cachedReadTokens: 400,
+              },
+            }),
+          ),
+      });
+      const reports: TextGenerationUsageReport[] = [];
+      yield* fixture.textGeneration.generateThreadTitle(fixture.titleInput).pipe(
+        Effect.provideService(TextGenerationUsageReporter, {
+          report: (report) => Effect.sync(() => reports.push(report)),
+        }),
+      );
+      // The helper's session files are deleted, so these tokens are the only record.
+      expect(reports).toEqual([
+        {
+          provider: "antigravity",
+          sessionId: SESSION_ID,
+          model: "gemini-3.1-pro",
+          usage: {
+            totals: {
+              uncachedInputTokens: 600,
+              cachedInputTokens: 400,
+              cacheCreationTokens: 0,
+              outputTokens: 500,
+              reasoningTokens: 200,
+            },
+            reportedCostUsd: null,
+          },
+        },
+      ]);
+      yield* fixture.assertCleaned;
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reports nothing when the prompt response carries no usage", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture();
+      const reports: TextGenerationUsageReport[] = [];
+      yield* fixture.textGeneration.generateThreadTitle(fixture.titleInput).pipe(
+        Effect.provideService(TextGenerationUsageReporter, {
+          report: (report) => Effect.sync(() => reports.push(report)),
+        }),
+      );
+      expect(reports).toEqual([]);
+    }).pipe(Effect.scoped),
   );
 
   it.effect("refuses unsafe native session IDs without deleting other files", () =>

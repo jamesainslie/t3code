@@ -133,6 +133,7 @@ it.layer(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" })))(
           [11, "RoadmapGitHubSync"],
           [12, "RoadmapStewardThreads"],
           [13, "RoadmapFocus"],
+          [14, "BackgroundGenerationUsage"],
         ]);
         const ledgers = yield* readLedgers;
         assert.deepStrictEqual(ledgers.upstream, migrationManifest);

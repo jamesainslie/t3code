@@ -1,4 +1,5 @@
 import type {
+  BackgroundGenerationPurpose,
   BranchNamingOptions,
   ChatAttachment,
   ModelSelection,
@@ -100,6 +101,8 @@ export type ReviewGuideGenerationResult = Omit<
  * every provider wrapper can pass the effect through unchanged.
  */
 export interface StructuredGenerationInput<S extends StructuredOutputSchema> {
+  /** What the answer is for, so its usage is shown under that purpose. */
+  purpose: BackgroundGenerationPurpose;
   cwd: string;
   prompt: string;
   outputSchema: S;

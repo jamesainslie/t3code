@@ -10,6 +10,8 @@ import type { PiSettings } from "../settings.ts";
 import { makePiRpcConnection, parsePiModelSlug } from "./rpc.ts";
 import { buildPiRpcLaunch, resolvePiLaunchArgs } from "./mcpInjection.ts";
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
+import { piGenerationUsage } from "./textGenerationUsageFork.ts";
 
 const PI_TIMEOUT_MS = 180_000;
 
@@ -67,12 +69,19 @@ export const makePiTextGeneration = Effect.fn("makePiTextGeneration")(function* 
       }
 
       yield* connection.request({ type: "prompt", message: prompt });
+      // Fork: background generation usage. `--no-session` leaves no transcript to scan.
+      const endedMessages: Array<unknown> = [];
       yield* Effect.gen(function* () {
         while (true) {
           const event = yield* Queue.take(connection.events);
           if (event["type"] === "agent_settled") return;
+          if (event["type"] === "message_end") endedMessages.push(event["message"]);
         }
       });
+      const generationUsage = piGenerationUsage(endedMessages);
+      if (generationUsage !== null) {
+        yield* reportTextGenerationUsage({ provider: "pi", sessionId: "", ...generationUsage });
+      }
       const data = yield* connection.request({ type: "get_last_assistant_text" });
       const text =
         typeof data === "object" &&

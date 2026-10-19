@@ -17,6 +17,10 @@ import { GrokSettings } from "@lathe/provider-grok/settings";
 import * as ServerConfig from "../config.ts";
 import * as TextGeneration from "./TextGeneration.ts";
 import { makeGrokTextGeneration } from "@lathe/provider-grok/testing";
+import {
+  type TextGenerationUsageReport,
+  TextGenerationUsageReporter,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 import { execScriptSource, writeFakeCli } from "@lathe/provider-testing/fakeCli";
 const decodeGrokSettings = Schema.decodeSync(GrokSettings);
 
@@ -129,6 +133,34 @@ it.layer(layerGrokTextGenerationTest)("GrokTextGeneration", (it) => {
             modelSelection: createModelSelection(ProviderInstanceId.make("grok"), "grok-mock-alt"),
           });
           expect(generated.title).toBe("Investigate failing CI");
+        }),
+    ),
+  );
+
+  it.effect("tags the call with the ACP session id Grok files its usage under", () =>
+    withFakeAcpGrok(
+      { LATHE_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({ title: "Investigate failing CI" }) },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const reports: TextGenerationUsageReport[] = [];
+          yield* textGeneration
+            .generateThreadTitle({
+              cwd: process.cwd(),
+              message: "the lint job is red",
+              modelSelection: createModelSelection(
+                ProviderInstanceId.make("grok"),
+                "grok-mock-alt",
+              ),
+            })
+            .pipe(
+              Effect.provideService(TextGenerationUsageReporter, {
+                report: (report) => Effect.sync(() => reports.push(report)),
+              }),
+            );
+          // Grok's `updates.jsonl` holds the usage, so the call is only tagged.
+          expect(reports).toEqual([
+            { provider: "grok", sessionId: "grok-text-session", model: "grok-mock-alt" },
+          ]);
         }),
     ),
   );

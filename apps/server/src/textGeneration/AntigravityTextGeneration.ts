@@ -15,6 +15,8 @@ import { applyAntigravityAcpModelSelection } from "../provider/acp/AntigravityAc
 import { removeAntigravitySessionFiles } from "../provider/acp/AntigravitySessionFiles.ts";
 import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
+import { antigravityPromptTotals, antigravityReportedModel } from "./antigravityUsageFork.ts";
 
 const ANTIGRAVITY_TIMEOUT_MS = 180_000;
 const MAX_OUTPUT_CHARS = 128_000;
@@ -209,7 +211,7 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
               });
             }
             yield* runtime.setMode("default");
-            yield* applyAntigravityAcpModelSelection({
+            const selectedModel = yield* applyAntigravityAcpModelSelection({
               runtime,
               model: input.modelSelection.model,
               defaultModel: yield* options.defaultModel ?? Effect.undefined,
@@ -234,6 +236,19 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
                 },
               ],
             });
+            // Fork: background generation usage. The session files are deleted, so no scan sees this call.
+            const totals = antigravityPromptTotals(result.usage);
+            if (totals !== null) {
+              yield* reportTextGenerationUsage({
+                provider: "antigravity",
+                sessionId: started.sessionId,
+                model: antigravityReportedModel(
+                  yield* runtime.getConfigOptions,
+                  selectedModel ?? input.modelSelection.model,
+                ),
+                usage: { totals, reportedCostUsd: null },
+              });
+            }
             if (yield* Deferred.isDone(rejected)) {
               return yield* Deferred.await(rejected);
             }

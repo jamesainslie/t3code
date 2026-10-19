@@ -6,6 +6,7 @@ import type { OpenCodeSettings } from "../settings.ts";
 import { getModelSelectionStringOptionValue } from "@lathe/shared/model";
 
 import * as ProviderHost from "@lathe/provider-core/server/ProviderHost";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
@@ -230,6 +231,12 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
               ...promptContext,
               cause,
             }),
+        });
+        // Fork: background generation usage. The kept session's messages already hold the usage.
+        yield* reportTextGenerationUsage({
+          provider: "opencode",
+          sessionId: session.data.id,
+          model: parsedModel.modelID,
         });
         const promptFailure = getOpenCodePromptFailure(result.data?.info?.error);
         if (promptFailure) {

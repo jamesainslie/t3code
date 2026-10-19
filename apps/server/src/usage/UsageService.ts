@@ -31,6 +31,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { writeFileStringAtomically } from "@lathe/shared/atomicWrite";
 import * as ServerConfig from "../config.ts";
+import { BackgroundGenerationUsage } from "../fork/usage/BackgroundGenerationUsage.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { BUILT_IN_USAGE_DRIVERS, type BuiltInUsageReadersEnv } from "../provider/builtInDrivers.ts";
 import type { ProviderDriver } from "@lathe/provider-core/server/driver";
@@ -187,6 +188,8 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig.ServerConfig;
+  // Fork: background generation usage.
+  const backgroundUsage = yield* BackgroundGenerationUsage;
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const httpClient = yield* HttpClient.HttpClient;
   const hostEnvironment = yield* HostProcess.Environment;
@@ -664,13 +667,23 @@ export const make = Effect.gen(function* () {
 
     const retentionCutoffMs = startedAtMs - CACHE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-    const [, scannedDirs] = yield* Effect.all(
+    const [, collectedDirs, background] = yield* Effect.all(
       [
         ensureRates(false),
         collectDirs(windowStartMs, settings, retentionCutoffMs, input.awaitRefresh === true),
+        // Fork: background generation usage.
+        backgroundUsage.read({ sinceMs: windowStartMs, retentionCutoffMs }),
       ],
-      { concurrency: 2 },
+      { concurrency: 3 },
     );
+    const scannedDirs: readonly ScannedDir[] = [
+      ...collectedDirs,
+      ...background.sources.map(({ path: dir, records, ...source }) => ({
+        ...source,
+        dir,
+        files: [{ path: dir, records }],
+      })),
+    ];
 
     const aggregator = new UsageAggregator({
       timeZone: input.timeZone,
@@ -714,6 +727,7 @@ export const make = Effect.gen(function* () {
       // Distinct per directory. Buckets carry per-cell session counts, but a
       // session spans days and models, so clients total this figure instead.
       const sessionIds = new Set<string>();
+      const purposes = background.purposes.get(provider);
 
       for (const file of filesByDir[index] ?? []) {
         if (file.records.length === 0) {
@@ -741,7 +755,10 @@ export const make = Effect.gen(function* () {
             eventOccurrences.set(key, occurrence);
             usageRecord = { ...record, dedupeKey: key + ":" + occurrence };
           }
-          if (aggregator.add(usageRecord, dir) && record.sessionId.length > 0) {
+          if (
+            aggregator.add(usageRecord, dir, purposes?.get(record.sessionId)) &&
+            record.sessionId.length > 0
+          ) {
             sessionIds.add(record.sessionId);
           }
         }

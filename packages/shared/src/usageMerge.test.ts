@@ -294,6 +294,33 @@ describe("mergeUsage", () => {
     }
   });
 
+  // Fork: background generation usage.
+  it("keeps every purpose of a new cell from a later partial scan", () => {
+    const source = { provider: "claude" as const, hostId: "mac", homePath: "/home/theo/.claude" };
+    const complete = environment("old", summary([bucket()], [source]));
+    const newDay = { day: "2026-08-08" as UsageDay, sourcePath: source.homePath };
+    const partialSummary = summary(
+      [
+        bucket({ ...newDay, costUsd: 3 }),
+        bucket({ ...newDay, costUsd: 2, purpose: "roadmapSteward" }),
+      ],
+      [source],
+    );
+    const partial = environment("new", {
+      ...partialSummary,
+      readAt: "2026-08-08T01:00:00.000Z",
+      sources: partialSummary.sources.map((entry) => ({ ...entry, status: "partial" as const })),
+    });
+
+    const merged = mergeUsage([complete, partial], USAGE_CONTRACT_VERSION);
+
+    expect(merged.costUsd).toBe(15);
+    expect(merged.models.map((model) => [model.purpose, model.costUsd])).toEqual([
+      [undefined, 13],
+      ["roadmapSteward", 2],
+    ]);
+  });
+
   it("retains a complete cell when a larger partial cell may have skipped old records", () => {
     const source = { provider: "claude" as const, hostId: "mac", homePath: "/home/theo/.claude" };
     const complete = environment("old", summary([bucket()], [source]));

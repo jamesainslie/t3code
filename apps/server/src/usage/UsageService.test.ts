@@ -11,10 +11,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@lathe/shared/HostProcess";
 import { mergeUsage } from "@lathe/shared/usageMerge";
 import {
+  type BackgroundGenerationPurpose,
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   UsageDay,
+  type UsageProviderKind,
   type UsageSource,
   type UsageSummaryInput,
 } from "@lathe/contracts";
@@ -32,6 +34,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
+import { BackgroundGenerationUsage } from "../fork/usage/BackgroundGenerationUsage.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CursorAccountReader from "@lathe/provider-cursor/server/CursorAccountReader";
 import * as CursorKeychain from "@lathe/provider-cursor/server/CursorKeychain";
@@ -1024,6 +1027,92 @@ describe("UsageService", () => {
         yield* Effect.promise(() => NodeFSP.realpath(conversations)),
       );
     }).pipe(Effect.scoped),
+  );
+
+  // Fork: background generation usage.
+  it.live("files background sessions under their purpose and adds calls no history holds", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(transcript, claudeLine(1, 5));
+        await NodeFSP.writeFile(
+          NodePath.join(NodePath.dirname(transcript), "own.jsonl"),
+          claudeLine(2, 7).replace('"session-1"', '"own-session"'),
+        );
+      });
+      const ledgerPath = NodePath.join(home, "statev2.sqlite");
+      const service = yield* UsageService.make.pipe(
+        Effect.provideService(BackgroundGenerationUsage, {
+          record: () => Effect.void,
+          read: () =>
+            Effect.succeed({
+              purposes: new Map<UsageProviderKind, Map<string, BackgroundGenerationPurpose>>([
+                ["claude", new Map([["session-1", "roadmapSteward"]])],
+                ["codex", new Map([["codex-thread", "threadTitle"]])],
+              ]),
+              sources: [
+                {
+                  provider: "codex",
+                  path: ledgerPath,
+                  volumeId: "1:2",
+                  records: [
+                    {
+                      provider: "codex",
+                      timestampMs: Date.parse("2026-08-01T11:00:00Z"),
+                      model: "gpt-5.5",
+                      sessionId: "codex-thread",
+                      totals: {
+                        uncachedInputTokens: 10,
+                        cachedInputTokens: 0,
+                        cacheCreationTokens: 0,
+                        outputTokens: 3,
+                        reasoningTokens: 0,
+                      },
+                      reportedCostUsd: null,
+                      speed: "standard",
+                      dedupeKey: "background:1",
+                    },
+                  ],
+                },
+              ],
+            }),
+        }),
+        Effect.provide(layerService({ prefix: "usage-service-background-test", home, settings })),
+      );
+
+      const summary = yield* service.readSummary(WINDOW);
+
+      assert.deepStrictEqual(
+        summary.buckets.map((bucket) => [
+          bucket.provider,
+          bucket.purpose,
+          bucket.totals.outputTokens,
+        ]),
+        [
+          ["claude", undefined, 7],
+          ["claude", "roadmapSteward", 5],
+          ["codex", "threadTitle", 3],
+        ],
+      );
+      const ledger = summary.sources.find(
+        (source) => source.fingerprint.resolvedHomePath === ledgerPath,
+      );
+      assert.deepStrictEqual(ledger?.fingerprint.provider, "codex");
+      assert.strictEqual(ledger?.distinctSessions, 1);
+      const merged = mergeUsage(
+        [{ environmentId: EnvironmentId.make("local"), label: "Local", summary }],
+        summary.contractVersion,
+      );
+      assert.strictEqual(merged.outputTokens, 15);
+      assert.deepStrictEqual(
+        merged.models.map((model) => [model.provider, model.purpose, model.totalTokens]),
+        [
+          ["claude", undefined, 17],
+          ["claude", "roadmapSteward", 15],
+          ["codex", "threadTitle", 13],
+        ],
+      );
+    }),
   );
 
   it.live("reads configured and disabled accounts once across shared and aliased homes", () =>

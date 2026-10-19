@@ -24,6 +24,7 @@ import {
   tokenTypeSegments,
 } from "./usageBreakdown";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
+import { isModelRowBucket, modelRowTitle } from "./usageBackgroundFork";
 
 export interface UsageChartWindow {
   readonly days: readonly string[];
@@ -49,12 +50,8 @@ export function UsageModelDialog({
   readonly onClose: () => void;
 }) {
   const usage = useMemo(
-    () =>
-      mergeAnsweredUsage(
-        environments,
-        (bucket) => bucket.provider === model.provider && bucket.model === model.model,
-      ),
-    [environments, model.provider, model.model],
+    () => mergeAnsweredUsage(environments, (bucket) => isModelRowBucket(bucket, model)),
+    [environments, model],
   );
   const providers = useMemo(() => [model.provider], [model.provider]);
   const presentation = PROVIDER_PRESENTATION[model.provider];
@@ -83,10 +80,11 @@ export function UsageModelDialog({
               displayName={presentation.label}
               iconClassName="size-5"
             />
-            <DialogTitle>{model.model}</DialogTitle>
+            <DialogTitle>{modelRowTitle(model)}</DialogTitle>
           </div>
           <DialogDescription>
             {presentation.label}
+            {model.purpose === undefined ? "" : ` · ${model.model}`}
             {costUnknown ? "" : ` · ${formatPercent(model.costShare)} of cost`}
           </DialogDescription>
         </DialogHeader>

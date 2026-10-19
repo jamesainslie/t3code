@@ -9,6 +9,7 @@ import { type ClaudeSettings, TextGenerationError } from "@lathe/contracts";
 import { resolveSpawnCommand } from "@lathe/shared/shell";
 
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
 import {
   normalizeCliError,
   toJsonSchemaObject,
@@ -53,10 +54,12 @@ const CLAUDE_INVESTIGATION_DENIED = ["Bash(git * --output*)", "Bash(git * -o *)"
 
 const ClaudeOutputEnvelope = Schema.Struct({
   structured_output: Schema.Unknown,
+  session_id: Schema.optionalKey(Schema.String),
 });
 const ClaudeOutputMessage = Schema.Struct({
   type: Schema.String,
   structured_output: Schema.optionalKey(Schema.Unknown),
+  session_id: Schema.optionalKey(Schema.String),
 });
 const isClaudeOutputEnvelope = Schema.is(ClaudeOutputEnvelope);
 
@@ -304,6 +307,14 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     const envelope = isClaudeOutputEnvelope(output)
       ? output
       : output.findLast((message) => message.type === "result");
+    // Fork: background generation usage. The session's transcript already holds the usage.
+    if (envelope?.session_id !== undefined) {
+      yield* reportTextGenerationUsage({
+        provider: "claude",
+        sessionId: envelope.session_id,
+        model: resolvedModelSelection.model,
+      });
+    }
 
     const decodeOutput = Schema.decodeEffect(outputSchemaJson);
     return yield* decodeOutput(envelope?.structured_output).pipe(

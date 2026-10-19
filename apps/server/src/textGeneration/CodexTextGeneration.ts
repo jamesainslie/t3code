@@ -20,6 +20,8 @@ import * as ServerConfig from "../config.ts";
 import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 import { codexExecLaunchArgs, resolveCodexLaunchArgs } from "../provider/codexLaunchArgs.ts";
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
+import { codexExecUsage } from "./codexExecUsageFork.ts";
 import {
   normalizeCliError,
   toJsonSchemaObject,
@@ -295,6 +297,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
           ...CODEX_NO_PLUGIN_ARGS,
           ...(mcpServersOff ? ["--config", mcpServersOff] : []),
           "--ephemeral",
+          "--json",
           "--skip-git-repo-check",
           "-s",
           "read-only",
@@ -341,6 +344,21 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
         ],
         { concurrency: "unbounded" },
       );
+
+      // Fork: background generation usage. An ephemeral run leaves no rollout to scan.
+      const usage = codexExecUsage(stdout);
+      if (usage.totals !== null) {
+        yield* reportTextGenerationUsage({
+          provider: "codex",
+          sessionId: usage.threadId ?? "",
+          model,
+          usage: {
+            totals: usage.totals,
+            reportedCostUsd: null,
+            speed: serviceTier === "priority" || serviceTier === "fast" ? "fast" : "standard",
+          },
+        });
+      }
 
       if (exitCode !== 0) {
         const stderrDetail = stderr.trim();

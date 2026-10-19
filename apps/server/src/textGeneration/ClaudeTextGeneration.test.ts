@@ -20,6 +20,10 @@ import {
 } from "../provider/ClaudeModelCatalog.testFixtures.ts";
 import * as TextGeneration from "./TextGeneration.ts";
 import { sanitizeThreadTitle } from "@lathe/provider-core/server/textGenerationUtils";
+import {
+  type TextGenerationUsageReport,
+  TextGenerationUsageReporter,
+} from "@lathe/provider-core/server/textGenerationUsageFork";
 import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
 import { writeFakeCli } from "@lathe/provider-testing/fakeCli";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
@@ -233,25 +237,44 @@ it.layer(layerClaudeTextGenerationTest)("ClaudeTextGeneration", (it) => {
       {
         output: JSON.stringify({
           structured_output: { ticks: [{ criterionId: "c1", turn: 3 }] },
+          session_id: "claude-session-1",
         }),
         argsMustContain: '"criterionId"',
         stdinMustContain: "Relate these turns to the criteria.",
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateStructured({
-            cwd: process.cwd(),
-            prompt: "Relate these turns to the criteria.",
-            outputSchema: Schema.Struct({
-              ticks: Schema.Array(Schema.Struct({ criterionId: Schema.String, turn: Schema.Int })),
-            }),
-            modelSelection: createModelSelection(
-              ProviderInstanceId.make("claudeAgent"),
-              SYNTHETIC_CLAUDE_STANDARD_MODEL,
-            ),
-          });
+          const reports: TextGenerationUsageReport[] = [];
+          const generated = yield* textGeneration
+            .generateStructured({
+              purpose: "roadmapSteward",
+              cwd: process.cwd(),
+              prompt: "Relate these turns to the criteria.",
+              outputSchema: Schema.Struct({
+                ticks: Schema.Array(
+                  Schema.Struct({ criterionId: Schema.String, turn: Schema.Int }),
+                ),
+              }),
+              modelSelection: createModelSelection(
+                ProviderInstanceId.make("claudeAgent"),
+                SYNTHETIC_CLAUDE_STANDARD_MODEL,
+              ),
+            })
+            .pipe(
+              Effect.provideService(TextGenerationUsageReporter, {
+                report: (report) => Effect.sync(() => reports.push(report)),
+              }),
+            );
 
           expect(generated).toEqual({ ticks: [{ criterionId: "c1", turn: 3 }] });
+          // The session's transcript holds the usage, so the call is only tagged.
+          expect(reports).toEqual([
+            {
+              provider: "claude",
+              sessionId: "claude-session-1",
+              model: SYNTHETIC_CLAUDE_STANDARD_MODEL,
+            },
+          ]);
         }),
     ),
   );

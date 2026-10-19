@@ -9,6 +9,7 @@ import { type ProviderSetupError, TextGenerationError } from "@lathe/contracts";
 import type { CursorSettings } from "../settings.ts";
 
 import * as TextGenerationOperations from "@lathe/provider-core/server/textGenerationOperations";
+import { reportTextGenerationUsage } from "@lathe/provider-core/server/textGenerationUsageFork";
 import { cursorSdkModelSelection } from "./sdkModel.ts";
 import type { CursorAuth } from "./auth.ts";
 import * as CursorSdk from "./CursorSdk.ts";
@@ -160,6 +161,13 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
               )
             : Effect.void,
         );
+        // Fork: background generation usage. The account billing feed already holds
+        // the usage, filed under a conversation id that is the local agent id.
+        yield* reportTextGenerationUsage({
+          provider: "cursor",
+          sessionId: agent.agentId,
+          model: modelSelection.model,
+        });
         return yield* Effect.tryPromise(() => run.wait());
       }).pipe(Effect.scoped);
       const promptResult = yield* request.pipe(

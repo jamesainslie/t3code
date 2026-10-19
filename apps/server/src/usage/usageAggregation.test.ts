@@ -98,6 +98,26 @@ describe("UsageAggregator", () => {
     expect(bucket).not.toHaveProperty("ultrafastCostUsd");
   });
 
+  it("keeps a background purpose's records in a bucket of their own", () => {
+    const aggregator = new UsageAggregator({
+      timeZone: "UTC",
+      sinceDay: "2026-08-01",
+      untilDay: "2026-08-31",
+      rates,
+    });
+    aggregator.add(record(), "/home/.claude/projects");
+    aggregator.add(record({ sessionId: "steward" }), "/home/.claude/projects", "roadmapSteward");
+    aggregator.add(record(), "/home/.claude/projects");
+
+    const buckets = aggregator.finish().buckets;
+
+    expect(buckets.map((bucket) => [bucket.purpose, bucket.records])).toEqual([
+      [undefined, 2],
+      ["roadmapSteward", 1],
+    ]);
+    expect(buckets[0]).not.toHaveProperty("purpose");
+  });
+
   it("keeps only the first record for a repeated dedupe key", () => {
     const result = aggregate([
       record({ dedupeKey: "msg_1:" }),

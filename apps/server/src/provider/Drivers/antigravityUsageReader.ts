@@ -485,3 +485,6 @@ export const readAntigravityUsage = Effect.fn("readAntigravityUsage")(function* 
   }
   return { files, errors };
 });
+
+// Fork: background generation usage.
+export { modelName as antigravityUsageModelName };
