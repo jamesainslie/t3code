@@ -143,7 +143,7 @@ export interface RoadmapOutlineFilter {
   readonly sprint?: RoadmapSprintFilter | undefined;
 }
 
-export const isOutlineFiltered = (filter: RoadmapOutlineFilter): boolean =>
+const isOutlineFiltered = (filter: RoadmapOutlineFilter): boolean =>
   filter.area !== undefined ||
   filter.type !== undefined ||
   filter.state !== undefined ||
