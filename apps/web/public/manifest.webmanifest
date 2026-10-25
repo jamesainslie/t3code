@@ -1,5 +1,7 @@
 {
   "id": "/",
+  "name": "Lathe",
+  "short_name": "Lathe",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

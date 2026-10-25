@@ -16,7 +16,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as NetService from "@lathe/shared/Net";
 import * as HostProcess from "@lathe/shared/HostProcess";
-import { windowsSystemTar } from "./build-cli-archive.ts";
+import { windowsSystemTar } from "./lib/windows-tar.ts";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 export class CliArchiveSmokeError extends Schema.TaggedError<CliArchiveSmokeError>()(
@@ -134,6 +134,9 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
           TMPDIR: scratch,
           TEMP: scratch,
           LATHE_HOME: home,
+          // The archive has a release channel built in, so its events would
+          // look like a real new install.
+          LATHE_TELEMETRY_ENABLED: "false",
         },
         extendEnv: false,
       },

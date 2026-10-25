@@ -1,11 +1,9 @@
 import type { NativeReviewDiffRow, NativeReviewDiffTheme } from "../diffs/nativeReviewDiffSurface";
-import type {
-  NativeReviewDiffFile,
-  NativeReviewDiffLanguage,
-} from "../diffs/nativeReviewDiffTypes";
+import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
 import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
+import { resolveHighlightLanguage } from "../../lib/highlightLanguage";
 import { type MobileThemeId, type MobileThemeVariables } from "../../lib/mobileTheme";
 import { getMobileTerminalTheme, type TerminalAppearanceScheme } from "../terminal/terminalTheme";
 import { computeWordAltDiffRanges } from "./reviewWordDiffs";
@@ -19,6 +17,9 @@ import type { ReviewInlineComment } from "./reviewCommentSelection";
 
 const NATIVE_REVIEW_MAX_WORD_DIFF_RANGE_COUNT = 4;
 const NATIVE_REVIEW_MAX_WORD_DIFF_COVERAGE = 0.45;
+// Bound the rows serialized to the native heap before mapping and word matching.
+const NATIVE_REVIEW_MAX_FILE_ROWS = 2_000;
+const TRUNCATED_FILE_NOTICE = "This diff is too large to show in full.";
 const NATIVE_HEX_COLOR = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})([\da-f]{2})?$/i;
 const NATIVE_RGBA_COLOR =
   /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/;
@@ -131,6 +132,7 @@ interface PreparedNativeReviewFileRows {
   readonly fileId: string;
   readonly filePath: string;
   readonly lineCount: number;
+  readonly truncated: boolean;
   readonly rows: ReadonlyArray<NativeReviewDiffRow>;
   readonly commentTargetsByRowId: ReadonlyMap<string, NativeReviewDiffCommentTarget>;
   readonly rowIdByCommentLineId: ReadonlyMap<string, string>;
@@ -230,35 +232,6 @@ function mapChangeType(file: ReviewRenderableFile): NativeReviewDiffRow["changeT
     default:
       return "modified";
   }
-}
-
-function getLanguageForPath(
-  filePath: string,
-  languageHint: string | null,
-): NativeReviewDiffLanguage {
-  const hinted = languageHint?.toLowerCase();
-  if (hinted === "typescript" || hinted === "tsx" || hinted === "javascript" || hinted === "jsx") {
-    return hinted;
-  }
-  if (hinted === "json" || hinted === "yaml" || hinted === "bash" || hinted === "diff") {
-    return hinted;
-  }
-
-  const normalizedPath = filePath.toLowerCase();
-  if (normalizedPath.endsWith(".tsx")) return "tsx";
-  if (normalizedPath.endsWith(".ts")) return "typescript";
-  if (normalizedPath.endsWith(".jsx")) return "jsx";
-  if (normalizedPath.endsWith(".js") || normalizedPath.endsWith(".cjs")) return "javascript";
-  if (normalizedPath.endsWith(".json") || normalizedPath.endsWith(".jsonc")) return "json";
-  if (normalizedPath.endsWith(".yml") || normalizedPath.endsWith(".yaml")) return "yaml";
-  if (
-    normalizedPath.endsWith(".sh") ||
-    normalizedPath.includes("/bin/") ||
-    normalizedPath.includes("shell")
-  ) {
-    return "bash";
-  }
-  return "diff";
 }
 
 function createNoticeRow(fileId: string, suffix: string, text: string): NativeReviewDiffRow {
@@ -435,9 +408,13 @@ function prepareFileRows(file: ReviewRenderableFile): PreparedNativeReviewFileRo
     },
   ];
 
-  const lineRows = file.rows.filter((row): row is ReviewRenderableLineRow => row.kind === "line");
+  const sourceRows =
+    file.rows.length > NATIVE_REVIEW_MAX_FILE_ROWS
+      ? file.rows.slice(0, NATIVE_REVIEW_MAX_FILE_ROWS)
+      : file.rows;
+  const lineRows = sourceRows.filter((row): row is ReviewRenderableLineRow => row.kind === "line");
   let lineIndex = 0;
-  file.rows.forEach((row, rowIndex) => {
+  sourceRows.forEach((row, rowIndex) => {
     if (row.kind === "hunk") {
       rows.push({
         kind: "hunk",
@@ -459,11 +436,15 @@ function prepareFileRows(file: ReviewRenderableFile): PreparedNativeReviewFileRo
     lineIndex += 1;
   });
 
+  if (sourceRows !== file.rows) {
+    rows.push(createNoticeRow(file.id, "truncated", TRUNCATED_FILE_NOTICE));
+  }
   rows.push(...noticeRowsForFile(file));
   const prepared: PreparedNativeReviewFileRows = {
     fileId: file.id,
     filePath: file.path,
     lineCount: lineRows.length,
+    truncated: sourceRows !== file.rows,
     // Comments must not split the source deletion/addition runs used for word matching.
     rows: addNativeWordDiffRanges(rows),
     commentTargetsByRowId,
@@ -489,6 +470,7 @@ function insertFileComments(
 
   const commentsByEndIndex = new Map<number, ReviewInlineComment[]>();
   for (const comment of comments) {
+    if (file.truncated && comment.startIndex >= file.lineCount) continue;
     const endIndex = Math.min(comment.endIndex, file.lineCount - 1);
     if (endIndex < 0) continue;
     const existing = commentsByEndIndex.get(endIndex);
@@ -535,7 +517,7 @@ function prepareNativeReviewDiffData(parsedDiff: ReviewParsedDiff): PreparedNati
   const files = parsedDiff.files.map<NativeReviewDiffFile>((file) => ({
     id: file.id,
     path: file.path,
-    language: getLanguageForPath(file.path, file.languageHint),
+    language: resolveHighlightLanguage({ language: file.languageHint, path: file.path }),
     additions: file.additions,
     deletions: file.deletions,
   }));

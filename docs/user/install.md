@@ -11,13 +11,13 @@ launch Lathe and configure providers afterwards.
 ## Command line
 
 ```bash
-curl -fsSL https://lathe.codes/install.sh | sh
+curl -fsSL https://t3.codes/install.sh | sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://lathe.codes/install.ps1 | iex
+irm https://t3.codes/install.ps1 | iex
 ```
 
 This installs the `lathe` binary to `~/.local/bin`. If your shell reports `command not found`
@@ -48,7 +48,7 @@ Node.js for `npx`).
 ### Intel Macs
 
 There is no `lathe` executable for Intel Macs (the desktop app is available). To
-run a server there, build it from source with Node.js 24 and `vp`
+run a server there, build it from source with `vp`, which provides the Node version it needs
 ([Install vp](https://github.com/pingdotgg/t3code#install-vp)):
 
 ```bash
@@ -114,7 +114,8 @@ Install Lathe from the
 The phone connects to a server on another machine. Follow
 [remote access](./remote-access.md) to link it through T3 Connect or a pairing URL.
 
-The store apps work with both stable and Nightly servers. Test builds are optional:
+Store links and QR codes are also available in **Settings → General → Mobile app**
+on web and desktop. The store apps work with both stable and Nightly servers. Test builds are optional:
 
 - **iPhone and iPad:** TestFlight is invite-only.
 - **Android:** download an APK from the

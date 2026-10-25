@@ -30,6 +30,8 @@ import {
   STAGE_INSTALL_ARGS,
 } from "./build-desktop-artifact.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
+import { signWithJsign } from "./lib/windows-jsign.ts";
+import { windowsSystemTar } from "./lib/windows-tar.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -93,11 +95,6 @@ export function cliArchiveFileName(version: string, platform: BuildPlatform, arc
   // gzip rather than xz: GNU tar needs an external xz binary for -J, which
   // minimal hosts lack, while every tar (and Node's zlib) handles gzip alone.
   return `${cliArchiveStem(version, platform, arch)}.${platform === "win" ? "zip" : "tar.gz"}`;
-}
-
-export function windowsSystemTar(): string {
-  const systemRoot = process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows";
-  return `${systemRoot}\\System32\\tar.exe`;
 }
 
 const runCommand = Effect.fn("runCommand")(function* (
@@ -230,12 +227,12 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
   yield* removeNestedBinDirectories(fs, path, path.join(input.stageDir, "node_modules"));
 });
 
-const removeNestedBinDirectories = (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  root: string,
-): Effect.Effect<void, PlatformError.PlatformError> =>
-  Effect.gen(function* () {
+const removeNestedBinDirectories = Effect.fn("build-cli-archive.removeNestedBinDirectories")(
+  function* (
+    fs: FileSystem.FileSystem,
+    path: Path.Path,
+    root: string,
+  ): Effect.fn.Return<void, PlatformError.PlatformError> {
     const entries = yield* fs.readDirectory(root).pipe(Effect.orElseSucceed(() => []));
     for (const entry of entries) {
       const child = path.join(root, entry);
@@ -248,7 +245,8 @@ const removeNestedBinDirectories = (
         yield* removeNestedBinDirectories(fs, path, child);
       }
     }
-  });
+  },
+);
 
 const stageWebClient = Effect.fn("stageWebClient")(function* (source: string, target: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -346,7 +344,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
     ]),
     "notarytool submit",
   ).pipe(Effect.ensuring(fs.remove(notarizeZip, { force: true }).pipe(Effect.ignore)));
-  yield* Effect.log("[cli-archive] Notarized t3.");
+  yield* Effect.log("[cli-archive] Notarized lathe.");
 });
 
 const WindowsSigningConfig = Config.all({
@@ -410,6 +408,11 @@ const signWindowsExecutable = Effect.fn("signWindowsExecutable")(function* (
     return;
   }
   yield* stripStaleAuthenticodeEntry(executablePath);
+  if ((yield* HostProcess.Platform) !== "win32") {
+    yield* signWithJsign(executablePath);
+    yield* Effect.log("[cli-archive] Signed lathe.exe (Azure Trusted Signing via jsign).");
+    return;
+  }
   const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
   const script = [
     "$ErrorActionPreference = 'Stop';",
@@ -424,9 +427,9 @@ const signWindowsExecutable = Effect.fn("signWindowsExecutable")(function* (
   ].join(" ");
   yield* runCommand(
     ChildProcess.make("pwsh", ["-NoProfile", "-NonInteractive", "-Command", script]),
-    "Invoke-TrustedSigning t3.exe",
+    "Invoke-TrustedSigning lathe.exe",
   );
-  yield* Effect.log("[cli-archive] Signed t3.exe (Azure Trusted Signing).");
+  yield* Effect.log("[cli-archive] Signed lathe.exe (Azure Trusted Signing).");
 });
 
 const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
@@ -440,14 +443,14 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   const path = yield* Path.Path;
   const repoRoot = yield* RepoRoot;
   const serverDir = path.join(repoRoot, "apps/server");
-  const executableName = input.platform === "win" ? "t3.exe" : "t3";
+  const executableName = input.platform === "win" ? "lathe.exe" : "lathe";
   // tsdown suffixes cross-built executables with their target (lathe-darwin-x64);
-  // a host build is plain t3. Prefer the exact target when both exist.
+  // a host build is plain lathe. Prefer the exact target when both exist.
   const targetKey = `${input.platform === "mac" ? "darwin" : input.platform}-${input.arch}`;
   const targetExecutable = path.join(
     serverDir,
     "dist-exe",
-    `t3-${targetKey}${input.platform === "win" ? ".exe" : ""}`,
+    `lathe-${targetKey}${input.platform === "win" ? ".exe" : ""}`,
   );
   // The unsuffixed host build is only a valid stand-in when it was built for
   // this platform and architecture; otherwise a missing target must fail.
@@ -467,7 +470,10 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
     builtExecutable,
     `Run \`node apps/server/scripts/cli.ts build-exe --target ${targetKey}\` first.`,
   );
-  yield* requireInput(path.join(webClient, "index.html"), "Run `vp run --filter t3 build` first.");
+  yield* requireInput(
+    path.join(webClient, "index.html"),
+    "Run `vp run --filter lathe build` first.",
+  );
   yield* requireInput(
     resourceMonitorDir,
     "Build the resource monitor or pass --resource-monitor-dir.",
@@ -506,7 +512,14 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
     cliArchiveFileName(input.version, input.platform, input.arch),
   );
   yield* fs.remove(archivePath, { force: true });
-  if (input.platform === "win") {
+  if (input.platform === "win" && hostPlatform !== "win32") {
+    yield* runCommand(
+      ChildProcess.make("zip", ["-q", "-r", "-X", path.resolve(archivePath), stem], {
+        cwd: stageRoot,
+      }),
+      "zip",
+    );
+  } else if (input.platform === "win") {
     // Windows ships bsdtar, which writes zip natively. Name it by path: under
     // the Git Bash shell CI uses, a bare `tar` is GNU tar, which neither
     // writes zip nor accepts a drive-letter path.
@@ -554,7 +567,7 @@ const command = Command.make(
     ),
   },
   (input) => buildCliArchive(input).pipe(Effect.scoped),
-).pipe(Command.withDescription("Package the t3 single-executable into a per-platform archive."));
+).pipe(Command.withDescription("Package the lathe single-executable into a per-platform archive."));
 
 if (import.meta.main) {
   Command.run(command, { version: "0.0.0" }).pipe(

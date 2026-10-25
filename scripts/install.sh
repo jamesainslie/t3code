@@ -2,7 +2,7 @@
 # Installs the Lathe CLI from a GitHub Release archive. Needs only sh, tar,
 # sha256sum or shasum, and curl or wget; no Node, npm, or compiler.
 #
-#   curl -fsSL https://lathe.codes/install.sh | sh
+#   curl -fsSL https://t3.codes/install.sh | sh
 #
 # Environment:
 #   LATHE_CHANNEL           release train to follow: stable, nightly, or preview
@@ -219,6 +219,10 @@ fi
 step "Setting up the t3 command..."
 mkdir -p "$bin_dir"
 ln -sfn "${target_dir}/t3" "${bin_dir}/t3"
+# Pruning keeps what this launcher points at; a background service cannot see bin_dir otherwise.
+launcher="$(CDPATH='' cd -P -- "$bin_dir" && pwd)/t3"
+launchers="${lathe_home}/runtime/launchers"
+grep -qxF "$launcher" "$launchers" 2>/dev/null || printf '%s\n' "$launcher" >> "$launchers"
 if "$interactive"; then printf '\r\033[2K' >&2; fi
 printf '  %sInstalled Lathe %s%s\n\n' "$green" "$version" "$reset" >&2
 case ":${PATH}:" in

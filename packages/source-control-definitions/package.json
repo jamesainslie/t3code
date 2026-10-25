@@ -1,0 +1,23 @@
+{
+  "name": "@lathe/source-control-definitions",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./registry": {
+      "types": "./src/registry.ts",
+      "import": "./src/registry.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lathe/source-control-azure-devops": "workspace:*",
+    "@lathe/source-control-bitbucket": "workspace:*",
+    "@lathe/source-control-core": "workspace:*",
+    "@lathe/source-control-forgejo": "workspace:*",
+    "@lathe/source-control-gitcafe": "workspace:*",
+    "@lathe/source-control-github": "workspace:*",
+    "@lathe/source-control-gitlab": "workspace:*"
+  }
+}

@@ -6,6 +6,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
+import type { OtlpEndpointSource } from "@lathe/contracts";
+
 import { OtlpHeadersFromString, OtlpProtocol, type SignalExport } from "./observability.ts";
 
 type OtlpSignalName = "TRACES" | "METRICS" | "LOGS";
@@ -15,6 +17,7 @@ export type OtelSignal = Data.TaggedEnum<{
   Off: {};
   Export: {
     readonly url: string;
+    readonly variable: string;
     readonly protocol: OtlpProtocol;
     readonly headers: Readonly<Record<string, string>> | undefined;
   };
@@ -239,6 +242,7 @@ const endpointSignal = (name: OtlpSignalName, own: Settings, generic: Settings):
   return {
     signal: OtelSignal.Export({
       url: url.toString(),
+      variable: ownEndpoint ? `OTEL_EXPORTER_OTLP_${name}_ENDPOINT` : "OTEL_EXPORTER_OTLP_ENDPOINT",
       protocol: protocol.value ?? "http/protobuf",
       headers: headers.value,
     }),
@@ -246,7 +250,7 @@ const endpointSignal = (name: OtlpSignalName, own: Settings, generic: Settings):
   };
 };
 
-export const load: Effect.Effect<OtelEnvironment> = Config.all({
+const sdkFlags = {
   lathe: flag(
     "LATHE_OTEL_SDK_DISABLED",
     LATHE_TRUE,
@@ -263,6 +267,10 @@ export const load: Effect.Effect<OtelEnvironment> = Config.all({
     (value) =>
       `OTEL_SDK_DISABLED=${value} was read as false; the OpenTelemetry specification recognizes only the string true, so use OTEL_SDK_DISABLED=true or LATHE_OTEL_SDK_DISABLED to say it any other way`,
   ),
+};
+
+export const load: Effect.Effect<OtelEnvironment> = Config.all({
+  ...sdkFlags,
   resource: resourceAttributes,
   generic: settings("OTEL_EXPORTER_OTLP_"),
   traces: settings("OTEL_EXPORTER_OTLP_TRACES_"),
@@ -311,35 +319,63 @@ export const load: Effect.Effect<OtelEnvironment> = Config.all({
   Effect.orDie,
 );
 
+export const isRelayTracingEnabled = (env: Readonly<Record<string, string | undefined>>) =>
+  Config.all({
+    ...sdkFlags,
+    telemetry: flag("LATHE_TELEMETRY_ENABLED", LATHE_TRUE, LATHE_FALSE, String),
+  }).pipe(
+    Effect.map(
+      ({ telemetry, lathe, spec }) =>
+        telemetry.value !== false && !(lathe.value ?? spec.value ?? false),
+    ),
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(env))),
+    Effect.orDie,
+    Effect.runSync,
+  );
+
 export type SignalName = "traces" | "metrics" | "logs";
 
 export interface SignalEndpoint {
   readonly url: string;
   readonly export: SignalExport;
+  readonly source: OtlpEndpointSource;
+  /** The environment variable that set the endpoint, when `source` is `environment`. */
+  readonly variable?: string;
 }
 
 export const resolveSignalEndpoint = (
   otel: OtelEnvironment,
   signal: SignalName,
   lathe: { readonly url: string | undefined; readonly export: SignalExport },
-  ...fallbackUrls: ReadonlyArray<string | undefined>
+  fallback: { readonly bootstrapUrl: string | undefined; readonly settingsUrl: string | undefined },
 ): SignalEndpoint | undefined => {
   if (otel.disabled) {
     return undefined;
   }
   const latheUrl = blankAsUnset(lathe.url);
   if (latheUrl !== undefined) {
-    return { url: latheUrl, export: lathe.export };
+    return {
+      url: latheUrl,
+      export: lathe.export,
+      source: "environment",
+      variable: `LATHE_OTLP_${signal.toUpperCase()}_URL`,
+    };
   }
   return OtelSignal.$match(otel[signal], {
-    Export: ({ url, protocol, headers }): SignalEndpoint => ({
+    Export: ({ url, variable, protocol, headers }): SignalEndpoint => ({
       url,
       export: { protocol, headers, exportIntervalMs: lathe.export.exportIntervalMs },
+      source: "environment",
+      variable,
     }),
     Off: () => undefined,
-    Unset: () => {
-      const url = fallbackUrls.map(blankAsUnset).find((candidate) => candidate !== undefined);
-      return url === undefined ? undefined : { url, export: lathe.export };
+    Unset: (): SignalEndpoint | undefined => {
+      const settingsUrl = blankAsUnset(fallback.settingsUrl);
+      // The desktop forwards the saved setting as its bootstrap URL, so only a differing one is
+      // the desktop's own.
+      const url = blankAsUnset(fallback.bootstrapUrl) ?? settingsUrl;
+      if (url === undefined) return undefined;
+      return { url, export: lathe.export, source: url === settingsUrl ? "settings" : "bootstrap" };
     },
   });
 };

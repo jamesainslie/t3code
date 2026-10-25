@@ -37,8 +37,32 @@ installing one.
 
 `lathe uninstall` removes the background service, the `lathe` launcher, and the
 downloaded versions after showing you the list and asking once. Your projects,
-threads, and settings under `~/.lathe/userdata` are kept. Pass `--yes` from a
-script.
+threads, and settings under `~/.lathe/userdata` are kept, along with `service.env`
+under Lathe home. Pass `--yes` from a script.
+
+## Configure the service environment
+
+Put custom environment variables in `service.env` under the service's Lathe home
+directory, normally `~/.lathe/service.env`. This file survives service installation
+and updates. For example:
+
+```dotenv
+LATHE_PORT=3773
+LATHE_HOST=127.0.0.1
+```
+
+Use `KEY=VALUE` entries, quoting values that contain spaces or `#`. Values are
+literal: shell commands and variable expansion are not evaluated. Entries
+override the inherited service environment, except for `PATH`, `LATHE_HOME`,
+`T3_BOOT_SERVICE_UNIT`, and `T3_SERVICE_LAUNCHER_CONTEXT` (including case variants).
+
+Run `lathe service restart` after changing the file. Changes apply when the service
+starts again; switching the server version alone keeps the current values.
+For a service installed before env-file support, run `lathe service install` once
+with an up-to-date CLI.
+A missing file is ignored; other read failures stop service startup.
+If the file contains credentials, restrict access to that file with `chmod 600`
+(for the default Lathe home, `chmod 600 ~/.lathe/service.env`).
 
 ## Platform support
 
@@ -94,7 +118,7 @@ Downloads, it may need Full Disk Access for the `lathe` executable listed in
 `~/Library/LaunchAgents/com.t3tools.t3code.service.plist`.
 
 For failures after signing in to T3 Connect, see
-[connection troubleshooting](./remote-access.md#lathe-connect-troubleshooting).
+[connection troubleshooting](./lathe-connect-troubleshooting.md).
 
 ## Reclaim database space
 
@@ -119,3 +143,8 @@ database through a temporary copy, so it needs free space of about the
 database's size twice over: once in the system temporary directory (`TMPDIR`
 or `/tmp` on Linux and macOS) and once next to the database for its
 write-ahead log.
+
+If you upgraded from a version before 0.1.0, its database (`state.sqlite`) is
+still kept next to the current one so you can roll back. `lathe doctor` offers to
+delete it, but never selects that repair for you and `--fix` skips it: once it
+is gone, a version before 0.1.0 starts with no threads or settings.

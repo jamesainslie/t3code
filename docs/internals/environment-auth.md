@@ -7,9 +7,13 @@ identity and relay credentials belong to a separate trust boundary, described in
 ## Authority survives transport changes
 
 Pairing delegates a set of scopes. Exchanging a bootstrap credential can narrow
-that grant but cannot widen it. Ordinary pairing does not grant access-management
-or relay-management authority. Creating another pairing link requires both
-`access:write` and every scope being delegated. The
+that grant but cannot widen it. The default grant includes access and relay
+management: `terminal:operate` is a shell as the server's user and
+`orchestration:operate` can start a full-access agent, and either can mint a
+session with every scope through `lathe auth session issue`, so withholding
+management from the default would not be a boundary. A narrower client gets
+explicit scopes. Creating another pairing link requires both `access:write` and
+every scope being delegated. The
 [auth handlers](../../apps/server/src/auth/http.ts) enforce this at issuance;
 client labels and device metadata have no authorization role.
 
@@ -55,8 +59,16 @@ T3 Connect tunnel. A proxy that rewrites Host or drops the protocol header
 breaks sign-in.
 
 Bearer and DPoP clients obtain short-lived WebSocket tickets through authenticated
-HTTP so long-lived tokens stay out of socket URLs. Browser sessions can
-authenticate the upgrade with their cookie. A successful handshake grants no
+HTTP so long-lived tokens stay out of socket URLs. A ticket names the route it
+opens: the RPC socket, or the media routes (device hub, preview stream), which
+share one ticket across `<img>`, `EventSource` and several sockets. A DPoP
+client's RPC ticket is bound to its proof key and the upgrade carries a fresh
+proof in the `dpop` query parameter, since a WebSocket cannot set headers; a
+ticket captured on a plain HTTP LAN route is useless without the key, and the
+proof's `jti` is consumed like any other. Media tickets stay bearer because each
+media request would need its own proof. Clients that predate this mint unbound
+tickets that open either route. Browser sessions can authenticate the upgrade
+with their cookie. A successful handshake grants no
 extra authority: [every RPC declares a required
 scope](../../apps/server/src/auth/RpcAuthorization.ts), and the WebSocket RPC
 group's `RpcScopeAuthorization` middleware checks it before any handler runs.

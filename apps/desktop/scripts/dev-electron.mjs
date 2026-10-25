@@ -94,9 +94,14 @@ function cleanupStaleDevApps() {
     return;
   }
 
-  NodeChildProcess.spawnSync("pkill", ["-f", "--", `--lathe-dev-root=${desktopDir}`], {
-    stdio: "ignore",
-  });
+  const escapedDesktopDir = desktopDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  NodeChildProcess.spawnSync(
+    "pkill",
+    ["-f", "--", `(^| )--lathe-dev-root=${escapedDesktopDir}( |$)`],
+    {
+      stdio: "ignore",
+    },
+  );
 }
 
 function startApp() {

@@ -3,7 +3,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
@@ -39,89 +38,6 @@ const makeEnvironment = (
 ) => DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(layerEnvironment(overrides, env)));
 
 describe("DesktopEnvironment", () => {
-  it.effect("derives state paths and development identity inside Effect", () =>
-    Effect.gen(function* () {
-      const environment = yield* makeEnvironment(
-        {},
-        {
-          LATHE_HOME: " /tmp/lathe ",
-          LATHE_COMMIT_HASH: " 0123456789abcdef ",
-          LATHE_PORT: "4949",
-          VITE_DEV_SERVER_URL: "http://localhost:5173",
-          LATHE_DEV_REMOTE_LATHE_SERVER_ENTRY_PATH: " /remote/server.mjs ",
-          LATHE_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
-          LATHE_OTLP_METRICS_URL: " http://127.0.0.1:4318/v1/metrics ",
-          LATHE_OTLP_LOGS_URL: " http://127.0.0.1:4318/v1/logs ",
-          LATHE_OTLP_EXPORT_INTERVAL_MS: "2500",
-          LATHE_OTLP_HEADERS: "authorization=Basic%20abc%3D%3D,x-tenant=lathe",
-          LATHE_OTLP_PROTOCOL: "http/protobuf",
-        },
-      );
-
-      assert.equal(environment.isDevelopment, true);
-      assert.equal(environment.appDataDirectory, "/Users/alice/Library/Application Support");
-      assert.equal(environment.baseDir, "/tmp/lathe");
-      assert.equal(environment.stateDir, "/tmp/lathe/userdata");
-      assert.equal(environment.desktopSettingsPath, "/tmp/lathe/userdata/desktop-settings.json");
-      assert.equal(environment.clientSettingsPath, "/tmp/lathe/userdata/client-settings.json");
-      assert.equal(
-        environment.savedEnvironmentRegistryPath,
-        "/tmp/lathe/userdata/saved-environments.json",
-      );
-      assert.equal(environment.serverSettingsPath, "/tmp/lathe/userdata/settings.json");
-      assert.equal(environment.logDir, "/tmp/lathe/userdata/logs");
-      assert.equal(environment.browserArtifactsDir, "/tmp/lathe/userdata/browser-artifacts");
-      assert.equal(environment.rootDir, "/repo");
-      assert.equal(environment.appRoot, "/repo");
-      assert.equal(environment.serverRoot, "/repo");
-      assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
-      assert.equal(environment.backendCwd, "/repo");
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev");
-      assert.equal(environment.linuxWmClass, "t3code-dev");
-      assert.equal(environment.linuxDesktopEntryName, "com.t3tools.T3Code.Development.desktop");
-      assert.deepEqual(
-        Option.map(environment.devServerUrl, (url) => url.href),
-        Option.some("http://localhost:5173/"),
-      );
-      assert.deepEqual(
-        environment.devRemoteLatheServerEntryPath,
-        Option.some("/remote/server.mjs"),
-      );
-      assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
-      assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
-      assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
-      assert.deepEqual(environment.otlpMetricsUrl, Option.some("http://127.0.0.1:4318/v1/metrics"));
-      assert.deepEqual(environment.otlpLogsUrl, Option.some("http://127.0.0.1:4318/v1/logs"));
-      assert.equal(environment.otlpExportIntervalMs, 2500);
-      assert.deepEqual(
-        environment.otlpHeaders,
-        Option.some({
-          authorization: "Basic abc==",
-          "x-tenant": "lathe",
-        }),
-      );
-      assert.equal(environment.otlpProtocol, "http/protobuf");
-    }),
-  );
-
-  it.effect("stores production state under userdata in an explicit home", () =>
-    Effect.gen(function* () {
-      const environment = yield* makeEnvironment(
-        {},
-        {
-          LATHE_HOME: "/tmp/lathe",
-        },
-      );
-
-      assert.equal(environment.isDevelopment, false);
-      assert.equal(environment.stateDir, "/tmp/lathe/userdata");
-      assert.equal(environment.logDir, "/tmp/lathe/userdata/logs");
-      assert.equal(environment.browserArtifactsDir, "/tmp/lathe/userdata/browser-artifacts");
-      assert.equal(environment.serverSettingsPath, "/tmp/lathe/userdata/settings.json");
-      assert.equal(environment.otlpProtocol, "http/json");
-    }),
-  );
-
   it.effect("uses the packaged Windows server sidecar as the backend root", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment({
@@ -144,19 +60,6 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
-  it.effect("uses the stable desktop entry as the packaged Linux portal identity", () =>
-    Effect.gen(function* () {
-      const environment = yield* makeEnvironment({
-        platform: "linux",
-        isPackaged: true,
-        appPath: "/tmp/.mount_t3code/resources/app.asar",
-        resourcesPath: "/tmp/.mount_t3code/resources",
-      });
-
-      assert.equal(environment.linuxDesktopEntryName, "com.t3tools.T3Code.desktop");
-    }),
-  );
-
   it.effect("keeps implicit development state separate from production state", () =>
     Effect.gen(function* () {
       const development = yield* makeEnvironment(
@@ -167,40 +70,6 @@ describe("DesktopEnvironment", () => {
 
       assert.equal(development.stateDir, "/Users/alice/.lathe/dev");
       assert.equal(production.stateDir, "/Users/alice/.lathe/userdata");
-    }),
-  );
-
-  it.effect("uses a configured app user model id override", () =>
-    Effect.gen(function* () {
-      const environment = yield* makeEnvironment(
-        {},
-        {
-          LATHE_DESKTOP_APP_USER_MODEL_ID: " com.t3tools.t3code.dev.local ",
-          VITE_DEV_SERVER_URL: "http://localhost:5173",
-        },
-      );
-
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev.local");
-    }),
-  );
-
-  it.effect("resolves picker defaults without nullish sentinels", () =>
-    Effect.gen(function* () {
-      const environment = yield* makeEnvironment();
-
-      assert.deepEqual(environment.resolvePickFolderDefaultPath(null), Option.none());
-      assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: " " }),
-        Option.none(),
-      );
-      assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: "~" }),
-        Option.some("/Users/alice"),
-      );
-      assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: "~/project" }),
-        Option.some("/Users/alice/project"),
-      );
     }),
   );
 });

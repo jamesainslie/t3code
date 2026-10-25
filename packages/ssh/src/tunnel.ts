@@ -1,8 +1,5 @@
 import type { DesktopSshEnvironmentBootstrap, DesktopSshEnvironmentTarget } from "@lathe/contracts";
-import {
-  describeReadinessCause,
-  waitForHttpReady as waitForHttpReadyShared,
-} from "@lathe/shared/httpReadiness";
+import { waitForHttpReady as waitForHttpReadyShared } from "@lathe/shared/httpReadiness";
 import { cliReleaseDownloadBaseUrl } from "@lathe/shared/cliRelease";
 import * as KeyedLock from "@lathe/shared/KeyedLock";
 import * as NetService from "@lathe/shared/Net";
@@ -12,6 +9,7 @@ import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -25,7 +23,6 @@ import * as SshAuth from "./auth.ts";
 import {
   baseSshArgs,
   buildSshHostSpecEffect,
-  collectProcessOutput,
   getLastNonEmptyOutputLine,
   remoteStateKey,
   resolveSshCommand,
@@ -48,6 +45,7 @@ const REMOTE_PORT_SCAN_WINDOW = 200;
 const SSH_READY_TIMEOUT_MS = 20_000;
 const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
+const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
 const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
 // A cold archive launch also downloads and unpacks a ~70 MB release archive
@@ -234,9 +232,7 @@ function applyScriptPlaceholders(
   return result;
 }
 
-export { describeReadinessCause };
-
-export const REMOTE_PICK_PORT_SCRIPT = `const fs = require("node:fs");
+const REMOTE_PICK_PORT_SCRIPT = `const fs = require("node:fs");
 const net = require("node:net");
 const filePath = process.argv[2] ?? "";
 const defaultPort = Number.parseInt(process.argv[3] ?? "", 10);
@@ -457,21 +453,13 @@ lathe_runtime_ready() {
 }
 if ! lathe_runtime_ready; then
   mkdir -p "$HOME/.lathe/runtime/versions"
-  # Concurrent launches (two clients, a retry racing a slow first run) must
-  # not both install: mkdir is the atomic lock and the ready check repeats
-  # under it.
   LATHE_LOCK="$HOME/.lathe/runtime/versions/.$LATHE_ARCHIVE_VERSION.install.lock"
-  # mkdir is the only portable atomic exclusive create (mv would silently
-  # nest a candidate inside an existing lock). The owner publishes its pid
-  # right after, so a lock with a live owner is never reclaimed however
-  # slow its download is, and a lock whose owner is dead is reclaimed at
-  # once. A lock with no pid at all is a crash between mkdir and the pid
-  # write; it is reclaimed after a short grace so a live owner has time to
-  # publish.
+  # uutils mkdir can report success on EEXIST, so use shell noclobber.
+  # An empty lock gets a short grace period for its owner to publish a PID.
   LATHE_LOCK_WAITED=0
   LATHE_LOCK_UNOWNED=0
-  while ! mkdir "$LATHE_LOCK" 2>/dev/null; do
-    LATHE_LOCK_OWNER="$(cat "$LATHE_LOCK/pid" 2>/dev/null || true)"
+  while ! (set -C; printf '%s\\n' "$$" > "$LATHE_LOCK") 2>/dev/null; do
+    LATHE_LOCK_OWNER="$(cat "$LATHE_LOCK" 2>/dev/null || true)"
     if [ -n "$LATHE_LOCK_OWNER" ]; then
       LATHE_LOCK_UNOWNED=0
       if ! kill -0 "$LATHE_LOCK_OWNER" 2>/dev/null; then
@@ -492,7 +480,6 @@ if ! lathe_runtime_ready; then
     sleep 1
     LATHE_LOCK_WAITED=$((LATHE_LOCK_WAITED + 1))
   done
-  printf '%s\\n' "$$" > "$LATHE_LOCK/pid.tmp" && mv "$LATHE_LOCK/pid.tmp" "$LATHE_LOCK/pid"
   trap 'rm -rf "$LATHE_LOCK"' EXIT
 fi
 if ! lathe_runtime_ready; then
@@ -846,7 +833,7 @@ export function buildRemoteNodeEnvScript(input?: RemoteLatheRunnerOptions): stri
   );
 }
 
-export function buildRemoteLaunchScript(input?: RemoteLatheRunnerOptions): string {
+function buildRemoteLaunchScript(input?: RemoteLatheRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
     LATHE_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
     LATHE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
@@ -861,17 +848,14 @@ export function buildRemoteLaunchScript(input?: RemoteLatheRunnerOptions): strin
   });
 }
 
-export function buildRemotePairingScript(
-  stateKey: string,
-  input?: RemoteLatheRunnerOptions,
-): string {
+function buildRemotePairingScript(stateKey: string, input?: RemoteLatheRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_PAIRING_SCRIPT, {
     LATHE_STATE_KEY: stateKey,
     LATHE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteLatheRunnerScript(input)),
   });
 }
 
-export function buildRemoteStopScript(stateKey: string): string {
+function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
     LATHE_STATE_KEY: stateKey,
   });
@@ -1044,7 +1028,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
   return result.stdout.trim();
 });
 
-export const waitForHttpReady = (input: {
+const waitForHttpReady = (input: {
   readonly baseUrl: string;
   readonly timeoutMs?: number;
   readonly intervalMs?: number;
@@ -1180,6 +1164,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     "-N",
     "-L",
     `${input.localPort}:127.0.0.1:${input.remotePort}`,
+    "--",
     hostSpec,
   ];
   const sshCommand = yield* resolveSshCommand;
@@ -1240,8 +1225,21 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     process: child,
     scope,
   };
+  // Readiness cancels the exit waiter, but diagnostics must drain until the tunnel closes.
+  let stderrTail = "";
+  const stderrDrain = yield* child.stderr.pipe(
+    Stream.decodeText(),
+    Stream.runForEach((chunk) =>
+      Effect.sync(() => {
+        stderrTail = (stderrTail + chunk).slice(-TUNNEL_STDERR_TAIL_CHARS);
+      }),
+    ),
+    // Diagnostics are best-effort: a failed read must not hide the real exit.
+    Effect.ignore,
+    Effect.forkIn(scope),
+  );
   const exitFailure = Effect.all(
-    [collectProcessOutput(child.stderr), child.exitCode.pipe(Effect.map(Number))],
+    [Fiber.join(stderrDrain), child.exitCode.pipe(Effect.map(Number))],
     { concurrency: "unbounded" },
   ).pipe(
     Effect.mapError(
@@ -1257,7 +1255,8 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
           cause,
         }),
     ),
-    Effect.flatMap(([stderr, exitCode]) => {
+    Effect.flatMap(([, exitCode]) => {
+      const stderr = stderrTail;
       const error = new SshCommandError({
         command: tunnelCommand,
         exitCode,
@@ -1422,7 +1421,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       attempt,
       destination: target.alias.trim() || target.hostname.trim(),
       username: target.username,
-      prompt: `Enter the SSH password for ${hostSpec}.`,
+      prompt: `Enter the SSH password or verification code for ${hostSpec}.`,
     });
     if (password === null) {
       yield* Effect.logWarning("ssh.auth.passwordPrompt.cancelled", {

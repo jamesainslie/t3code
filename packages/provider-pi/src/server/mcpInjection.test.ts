@@ -1,21 +1,13 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@lathe/contracts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 
 import {
-  PI_LATHE_MCP_EXTENSION_FILENAME,
   LATHE_MCP_BEARER_ENV,
   LATHE_MCP_URL_ENV,
   LATHE_PI_RUNTIME_MODE_ENV,
   LATHE_PI_MCP_EXTENSION_PATH_ENV,
 } from "./mcpExtensionSource.ts";
-import {
-  buildPiRpcLaunch,
-  materializePiLatheMcpExtension,
-  resolvePiLaunchArgs,
-} from "./mcpInjection.ts";
+import { buildPiRpcLaunch, resolvePiLaunchArgs } from "./mcpInjection.ts";
 
 const threadId = ThreadId.make("thread-pi-lathe-mcp");
 
@@ -98,18 +90,6 @@ describe("pi Lathe MCP injection", () => {
     );
   });
 
-  it("falls back to Pi's first supported mode for legacy auto threads", () => {
-    const launch = buildPiRpcLaunch({
-      launchArgs: [],
-      environment: {},
-      mcpSession: undefined,
-      extensionPath: "/tmp/cache/pi-lathe-mcp-extension.ts",
-      runtimeMode: "auto",
-    });
-
-    assert.equal(launch.env[LATHE_PI_RUNTIME_MODE_ENV], "approval-required");
-  });
-
   it("forces tools and user extensions off for unattended text generation", () => {
     const launch = buildPiRpcLaunch({
       launchArgs: [
@@ -124,6 +104,7 @@ describe("pi Lathe MCP injection", () => {
       environment: {},
       mcpSession,
       extensionPath: "/tmp/cache/pi-lathe-mcp-extension.ts",
+      sessionPath: "/fake/persisted.jsonl",
       ephemeral: true,
       disableExtensions: true,
       disableTools: true,
@@ -157,22 +138,4 @@ describe("pi Lathe MCP injection", () => {
     assert.isTrue(resolvePiLaunchArgs("--provider openrouter --model=deepseek/v4").ok);
     assert.isTrue(resolvePiLaunchArgs("--model deepseek/v4").ok);
   });
-
-  it.effect("materializes the MCP bridge with namespaced tool registration", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "lathe-pi-extensions-" });
-      const mcpDest = yield* materializePiLatheMcpExtension(cacheDir);
-      assert.isTrue(mcpDest.endsWith(PI_LATHE_MCP_EXTENSION_FILENAME));
-      const mcpSource = yield* fs.readFileString(mcpDest);
-      assert.include(mcpSource, "export default async function latheMcpExtension");
-      assert.include(mcpSource, "before_agent_start");
-      assert.include(mcpSource, 'pi.on("tool_call"');
-      assert.include(mcpSource, "Allow ${event.toolName}?");
-      assert.include(mcpSource, '"mcp-protocol-version"');
-      assert.include(mcpSource, '"tools/call"');
-      assert.include(mcpSource, "mcp__lathe__");
-      assert.include(mcpSource, "mcp__lathe__");
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
 });

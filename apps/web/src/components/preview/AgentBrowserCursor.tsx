@@ -1,5 +1,3 @@
-"use client";
-
 import type { DesktopPreviewPointerEvent } from "@lathe/contracts";
 import { MousePointer2 } from "lucide-react";
 import { useEffect, useState } from "react";

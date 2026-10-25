@@ -173,8 +173,8 @@ export function layer(
       attributes: {
         "service.namespace": "t3code",
         "service.runtime": resource.runtime,
-        "service.component": resource.component ?? "relay-client",
-        "t3.client.surface": resource.client,
+        "lathe.component": resource.component ?? "relay-client",
+        "lathe.client.surface": resource.client,
       },
     },
   }).pipe(Layer.provide(OtlpSerialization.layerJson));

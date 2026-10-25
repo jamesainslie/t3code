@@ -4,6 +4,7 @@ import {
   isXAiTaskCompletedWakeNotification,
   xAiRateLimitedErrorCode,
 } from "./xaiAcpExtension.ts";
+import { discoverGrokSkills, leadingGrokSkillMention } from "./skills.ts";
 import * as HostProcess from "@lathe/shared/HostProcess";
 import { resolveSelfInvocation, type SelfInvocation } from "@lathe/shared/nodeRuntime";
 import {
@@ -43,6 +44,7 @@ import {
   extractXAiBackgroundTaskCompletion,
   extractXAiKilledBackgroundTasks,
   extractXAiMonitorTaskId,
+  xAiBackgroundShellTaskId,
   isXAiPersistentMonitor,
   extractXAiExitPlanMarkdown,
   registerXAiSubagentFinished,
@@ -56,6 +58,10 @@ import {
 } from "./xaiAcpExtension.ts";
 import { mergeProviderInstanceEnvironment } from "@lathe/provider-core/server/instanceEnvironment";
 import { acpPermissionDisposition } from "@lathe/provider-acp/server/clientPolicy";
+import {
+  findModelConfigOption,
+  sessionModelStateFromInitialize,
+} from "@lathe/provider-acp/server/runtimeModel";
 import * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
 import * as ProviderEventLoggers from "@lathe/provider-core/server/ProviderEventLoggers";
 import * as IdAllocator from "@lathe/provider-core/server/IdAllocator";
@@ -80,7 +86,7 @@ export const GROK_DEFAULT_INSTANCE_ID = defaultInstanceIdForDriver(GROK_DRIVER_K
 const DEFAULT_GROK_SETTINGS = Schema.decodeSync(GrokSettings)({});
 const isAcpRequestError = Schema.is(EffectAcpErrors.AcpRequestError);
 
-export const GrokProviderCapabilitiesV2 = {
+const GrokProviderCapabilitiesV2 = {
   ...AcpProviderCapabilitiesV2,
   sessions: {
     ...AcpProviderCapabilitiesV2.sessions,
@@ -186,9 +192,7 @@ const registerGrokAskUserQuestionExtensions = ({
       runtime.handleExtRequest(method, XAiAskUserQuestionRequest, (params, requestContext) => {
         const identity = extractXAiAskUserQuestionIdentity(params);
         const questions = extractXAiAskUserQuestions(params).map((question) => ({
-          id: question.id,
-          header: question.header,
-          question: question.question,
+          ...question,
           options: [...question.options],
         }));
         return requestUserInput(
@@ -248,25 +252,57 @@ export function makeGrokAcpAdapterFlavor(
     // still accepts image content blocks (verified with real screenshots).
     supportsImagePrompts: true,
     supportsCompaction: true,
+    // Grok expands only a leading `/name`, while the `$` picker inserts `$name` from the
+    // `grok inspect` catalog. Ask that catalog again so other `$` text is left alone.
+    rewriteUserText: (text, turnInput) => {
+      const mention = leadingGrokSkillMention(text);
+      if (mention === undefined) return Effect.succeed(text);
+      return discoverGrokSkills(
+        options.settings,
+        options.environment,
+        turnInput.runtimePolicy.cwd ?? undefined,
+      ).pipe(
+        Effect.map((skills) =>
+          skills.some((skill) => skill.enabled && skill.name === mention.name)
+            ? `/${mention.name}${mention.rest}`
+            : text,
+        ),
+        Effect.orElseSucceed(() => text),
+      );
+    },
     resolveModelId: (selection) => resolveGrokAcpBaseModelId(selection.model),
-    applyModelSelection: ({ runtime, startResult, modelSelection }) =>
-      Effect.gen(function* () {
-        const legacy = startResult.initializeResult.protocolVersion === 1;
-        const options = legacy ? [] : yield* runtime.getConfigOptions;
-        const configuredModel = options.find((option) => option.category === "model")?.currentValue;
-        return yield* applyGrokAcpModelSelection({
-          runtime: legacy
-            ? runtime
-            : { setSessionModel: (model) => runtime.setModel(model).pipe(Effect.as({})) },
-          currentModelId: legacy
-            ? currentGrokModelIdFromSessionSetup(startResult.sessionSetupResult)
-            : typeof configuredModel === "string"
-              ? configuredModel
-              : undefined,
-          requestedModelId: resolveGrokAcpBaseModelId(modelSelection.model),
-          mapError: (cause) => cause,
-        });
-      }),
+    getModelContextWindow: (selection, session) => {
+      if (selection.instanceId !== options.instanceId) return undefined;
+      const modelId = resolveGrokAcpBaseModelId(selection.model);
+      const models =
+        session.sessionSetupResult.models ??
+        sessionModelStateFromInitialize(session.initializeResult);
+      const window = models?.availableModels.find((model) => model.modelId === modelId)?._meta
+        ?.totalContextTokens;
+      // contextWindows includes selectable larger windows; totalContextTokens is the default.
+      return typeof window === "number" && Number.isSafeInteger(window) && window > 0
+        ? window
+        : undefined;
+    },
+    applyModelSelection: Effect.fn("GrokAdapter.applyModelSelection")(function* ({
+      runtime,
+      startResult,
+      modelSelection,
+    }) {
+      const legacy = startResult.initializeResult.protocolVersion === 1;
+      const options = legacy ? [] : yield* runtime.getConfigOptions;
+      const configuredModel = findModelConfigOption(options)?.currentValue;
+      return yield* applyGrokAcpModelSelection({
+        runtime: legacy
+          ? runtime
+          : { setSessionModel: (model) => runtime.setModel(model).pipe(Effect.as({})) },
+        currentModelId: legacy
+          ? currentGrokModelIdFromSessionSetup(startResult.sessionSetupResult)
+          : configuredModel,
+        requestedModelId: resolveGrokAcpBaseModelId(modelSelection.model),
+        mapError: (cause) => cause,
+      });
+    }),
     makeRuntime:
       options.makeRuntime ??
       (({ runtimePolicy, ...input }) =>
@@ -307,6 +343,7 @@ export function makeGrokAcpAdapterFlavor(
         homeDirectory,
       }),
     extractBackgroundTaskId: extractXAiMonitorTaskId,
+    isBackgroundCommandTool: (toolCall) => xAiBackgroundShellTaskId(toolCall) !== undefined,
     extractBackgroundToolMutation: extractXAiAcpBackgroundToolMutation,
     extractBackgroundTaskCompletion: (toolCall) => [
       ...extractXAiBackgroundTaskCompletion(toolCall),
