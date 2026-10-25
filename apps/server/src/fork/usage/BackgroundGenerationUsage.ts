@@ -95,8 +95,8 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const path = config.dbPath;
 
-  const record = (purpose: BackgroundGenerationPurpose, report: TextGenerationUsageReport) =>
-    Effect.gen(function* () {
+  const record = Effect.fn("BackgroundGenerationUsage.record")(
+    function* (purpose: BackgroundGenerationPurpose, report: TextGenerationUsageReport) {
       if (report.sessionId.length === 0 && report.usage === undefined) return;
       const recordedAtMs = yield* Clock.currentTimeMillis;
       const usageJson = report.usage === undefined ? null : encodeStoredUsage(report.usage);
@@ -108,14 +108,17 @@ const make = Effect.gen(function* () {
           ${report.model}, ${usageJson}
         )
       `;
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("background generation usage not recorded", { purpose, cause }),
+    },
+    (effect, purpose) =>
+      effect.pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("background generation usage not recorded", { purpose, cause }),
+        ),
       ),
-    );
+  );
 
-  const read = (input: { readonly sinceMs: number; readonly retentionCutoffMs: number }) =>
-    Effect.gen(function* () {
+  const read = Effect.fn("BackgroundGenerationUsage.read")(
+    function* (input: { readonly sinceMs: number; readonly retentionCutoffMs: number }) {
       yield* sql`
         DELETE FROM background_generation_usage WHERE recorded_at_ms < ${input.retentionCutoffMs}
       `;
@@ -135,13 +138,13 @@ const make = Effect.gen(function* () {
       if (rows.length === 0) return EMPTY_WINDOW;
       const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(path));
       return windowFromRows(rows, { path, volumeId });
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("background generation usage not read", { cause }).pipe(
-          Effect.as(EMPTY_WINDOW),
-        ),
+    },
+    Effect.catchCause((cause) =>
+      Effect.logWarning("background generation usage not read", { cause }).pipe(
+        Effect.as(EMPTY_WINDOW),
       ),
-    );
+    ),
+  );
 
   return { record, read };
 });

@@ -4,6 +4,7 @@ import {
   DEFAULT_HOSTED_APP_URL,
 } from "@lathe/shared/connectAuth";
 import { clerkFrontendApiUrlFromPublishableKey } from "@lathe/shared/relayAuth";
+import { isRelayTracingEnabled } from "@lathe/shared/otelEnvironment";
 import { normalizeSecureRelayUrl } from "@lathe/shared/relayUrl";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -85,6 +86,10 @@ export function resolveRelayClientTracingConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
   fallback = buildTimeRelayClientTracing,
 ) {
+  if (!isRelayTracingEnabled(env)) {
+    return null;
+  }
+
   const tracesUrl = env.LATHE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() || fallback.tracesUrl;
   const tracesDataset =
     env.LATHE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() || fallback.tracesDataset;

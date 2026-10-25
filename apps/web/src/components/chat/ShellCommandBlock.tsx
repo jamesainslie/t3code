@@ -2,7 +2,7 @@ import {
   commandHighlightLanguage,
   withVisibleControlCharacters,
 } from "@lathe/client-runtime/work-log/command-label";
-import { Suspense, use, useMemo } from "react";
+import { Suspense, use } from "react";
 
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { HighlightedTokens } from "./HighlightedTokens";
@@ -35,10 +35,7 @@ function HighlightedCommand({ code }: { code: string }) {
   const { embeddedScripts } = use(loadEmbeddedScripts());
   const language = commandHighlightLanguage(code);
   // Only shell syntax nests scripts; PowerShell's own grammar colors its strings.
-  const embedded = useMemo(
-    () => (language === "shellscript" ? embeddedScripts(code) : []),
-    [code, embeddedScripts, language],
-  );
+  const embedded = language === "shellscript" ? embeddedScripts(code) : [];
   return (
     <HighlightedTokens
       code={code}

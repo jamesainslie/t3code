@@ -5,7 +5,7 @@ import {
   terminalTranscript,
   type TerminalSegment,
 } from "@lathe/client-runtime/work-log/terminal";
-import { memo, type ReactNode, useMemo } from "react";
+import { memo, type ReactNode } from "react";
 
 import { useTheme } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
@@ -21,7 +21,7 @@ export interface TerminalOutputState {
 
 const TerminalText = memo(function TerminalText({ text }: { readonly text: string }) {
   const { resolvedTheme } = useTheme();
-  const segments = useMemo(() => parseTerminalText(text), [text]);
+  const segments = parseTerminalText(text);
   const palette = TERMINAL_PALETTE[resolvedTheme];
   return segments.map((segment: TerminalSegment, index) => {
     const { fg, bg, bold, dim, italic, underline } = segment.style;
@@ -64,15 +64,11 @@ export const TerminalCard = memo(function TerminalCard(
   },
 ) {
   const failed = props.exitCode !== undefined && props.exitCode !== 0;
-  const transcript = useMemo(
-    () =>
-      terminalTranscript({
-        command: props.command,
-        output: props.output,
-        exitCode: props.exitCode,
-      }),
-    [props.command, props.output, props.exitCode],
-  );
+  const transcript = terminalTranscript({
+    command: props.command,
+    output: props.output,
+    exitCode: props.exitCode,
+  });
   return (
     <div
       className={cn(

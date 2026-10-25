@@ -34,7 +34,7 @@ import {
   UnlinkIcon,
   XIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
 import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
@@ -727,7 +727,7 @@ function NotesSection(props: {
   readonly onCommand: RoadmapCardBodyHandlers["onCommand"];
 }) {
   const { item } = props;
-  const notes = useMemo(() => roadmapCardNotes(item), [item]);
+  const notes = roadmapCardNotes(item);
   if (notes.length === 0) return null;
   return (
     <section className="flex flex-col gap-2">
@@ -796,17 +796,14 @@ export function RoadmapItemDetails(
   const full = !props.essentialsOnly;
   const readOnlyHint = roadmapReadOnlyHint(item);
   const today = localIsoDate(new Date());
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
+  const byId = roadmapItemsById(items);
   const priority = effectivePriority(item.id, byId);
   const area = effectiveArea(item.id, byId);
   const path = parentPath(item, byId);
   const blocked = blockedState(item, byId);
   const blocks = blocksOf(item, items);
   const criteria = criteriaProgress(item.criteria);
-  const slots = useMemo(
-    () => roadmapCardSlots({ item, items, sprints, areaSettings, today }),
-    [areaSettings, item, items, sprints, today],
-  );
+  const slots = roadmapCardSlots({ item, items, sprints, areaSettings, today });
   const { daysLeft } = slots;
   const forecastText = slots.forecast === null ? null : cardForecastText(slots.forecast, today);
   const snoozedUntil = isSnoozed(item, today) ? item.snoozedUntil : null;

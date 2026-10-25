@@ -1,5 +1,6 @@
 import { useNavigation, type NavigationProp } from "@react-navigation/native";
 import { executeProjectSync } from "@lathe/client-runtime/state/project-sync";
+import { settlePromise, squashAtomCommandFailure } from "@lathe/client-runtime/state/runtime";
 import type { EnvironmentId, ThreadId } from "@lathe/contracts";
 import * as Option from "effect/Option";
 import { useState } from "react";
@@ -26,20 +27,20 @@ export function SyncedConversation({
     if (Option.isNone(prepared) || pending) return;
     setPending(true);
     setError(null);
-    try {
-      const response = await runtime.runPromise(
-        executeProjectSync(prepared.value, { operation: "continue", threadId }),
-      );
-      if (response.threadId)
-        navigation.navigate("Thread", {
-          environmentId: String(environmentId),
-          threadId: String(response.threadId),
-        });
-    } catch (cause) {
+    const result = await settlePromise(() =>
+      runtime.runPromise(executeProjectSync(prepared.value, { operation: "continue", threadId })),
+    );
+    setPending(false);
+    if (result._tag === "Failure") {
+      const cause = squashAtomCommandFailure(result);
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setPending(false);
+      return;
     }
+    if (result.value.threadId)
+      navigation.navigate("Thread", {
+        environmentId: String(environmentId),
+        threadId: String(result.value.threadId),
+      });
   };
   return (
     <View className="gap-3 bg-screen px-4 pt-4" style={{ paddingBottom: bottomInset + 12 }}>

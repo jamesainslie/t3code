@@ -196,109 +196,108 @@ const make = Effect.gen(function* () {
    * refuses fails the import; otherwise it is skipped with a log line, as
    * every sub-issue is.
    */
-  const importTree = (input: {
+  const importTree = Effect.fn("RoadmapGitHubSync.importTree")(function* (input: {
     readonly roots: ReadonlyArray<GitHubIssueApi.GitHubIssue>;
     readonly parent: RoadmapWorkItem | null;
     readonly area: RoadmapArea | null;
     readonly account: Account;
     readonly known: Set<string>;
     readonly strict: boolean;
-  }) =>
-    Effect.gen(function* () {
-      const created: Array<RoadmapItemId> = [];
-      const syncedAt = DateTime.formatIso(yield* DateTime.now);
-      let level: Array<{
-        readonly issue: GitHubIssueApi.GitHubIssue;
-        readonly parentId: RoadmapItemId | null;
-        readonly parentType: RoadmapItemType | null;
-        readonly parentNodeId: string | null;
-        readonly root: boolean;
-      }> = input.roots.map((issue) => ({
-        issue,
-        parentId: input.parent?.id ?? null,
-        parentType: input.parent?.type ?? null,
-        parentNodeId: input.parent?.source?.nodeId ?? null,
-        root: true,
-      }));
-      for (const entry of level) input.known.add(entry.issue.nodeId);
-      while (level.length > 0 && created.length < IMPORT_LIMIT) {
-        const next: typeof level = [];
-        for (const { issue, parentId, parentType, parentNodeId, root } of level) {
-          if (created.length >= IMPORT_LIMIT) break;
-          const itemType = issueItemType(parentType, issue.subIssueNodeIds.length > 0);
-          if (itemType === null) {
-            if (root && input.strict) {
-              return yield* new RoadmapError({
-                code: "invalid_parent",
-                message: `Issue #${issue.number} cannot sit under ${input.parent === null ? "the top level" : `${input.parent.type} "${input.parent.title}"`}.`,
-              });
-            }
-            yield* Effect.logWarning("roadmap import skipped an issue with no place to go", {
-              number: issue.number,
-            });
-            continue;
-          }
-          const itemId = RoadmapItemId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
-          const imported = yield* dispatch(
-            (commandId) => ({
-              type: "roadmap.source.import",
-              commandId,
-              itemId,
-              itemType,
-              title: issue.title,
-              parentId,
-              area: root ? input.area : null,
-              state: issue.closed ? "done" : "backlog",
-              source: sourceOf(
-                issue,
-                {
-                  title: issue.title,
-                  closed: issue.closed,
-                  parentNodeId,
-                  // The first sweep links blockers, once every end is an item.
-                  blockedByNodeIds: [],
-                },
-                syncedAt,
-              ),
-            }),
-            "import",
-            itemId,
-          ).pipe(
-            Effect.as(true),
-            Effect.catchTags({
-              RoadmapError: (error) =>
-                root && input.strict
-                  ? Effect.fail(error)
-                  : Effect.logWarning("roadmap import skipped an issue", {
-                      number: issue.number,
-                      code: error.code,
-                    }).pipe(Effect.as(false)),
-            }),
-          );
-          if (!imported) continue;
-          created.push(itemId);
-          const children = issue.subIssueNodeIds.filter((nodeId) => !input.known.has(nodeId));
-          if (children.length === 0) continue;
-          for (const nodeId of children) input.known.add(nodeId);
-          const found = yield* issueApi
-            .issues({ host: issue.host, nodeIds: children })
-            .pipe(asAccount(input.account));
-          for (const child of found) {
-            next.push({
-              issue: child,
-              parentId: itemId,
-              parentType: itemType,
-              parentNodeId: issue.nodeId,
-              root: false,
+  }) {
+    const created: Array<RoadmapItemId> = [];
+    const syncedAt = DateTime.formatIso(yield* DateTime.now);
+    let level: Array<{
+      readonly issue: GitHubIssueApi.GitHubIssue;
+      readonly parentId: RoadmapItemId | null;
+      readonly parentType: RoadmapItemType | null;
+      readonly parentNodeId: string | null;
+      readonly root: boolean;
+    }> = input.roots.map((issue) => ({
+      issue,
+      parentId: input.parent?.id ?? null,
+      parentType: input.parent?.type ?? null,
+      parentNodeId: input.parent?.source?.nodeId ?? null,
+      root: true,
+    }));
+    for (const entry of level) input.known.add(entry.issue.nodeId);
+    while (level.length > 0 && created.length < IMPORT_LIMIT) {
+      const next: typeof level = [];
+      for (const { issue, parentId, parentType, parentNodeId, root } of level) {
+        if (created.length >= IMPORT_LIMIT) break;
+        const itemType = issueItemType(parentType, issue.subIssueNodeIds.length > 0);
+        if (itemType === null) {
+          if (root && input.strict) {
+            return yield* new RoadmapError({
+              code: "invalid_parent",
+              message: `Issue #${issue.number} cannot sit under ${input.parent === null ? "the top level" : `${input.parent.type} "${input.parent.title}"`}.`,
             });
           }
+          yield* Effect.logWarning("roadmap import skipped an issue with no place to go", {
+            number: issue.number,
+          });
+          continue;
         }
-        level = next;
+        const itemId = RoadmapItemId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+        const imported = yield* dispatch(
+          (commandId) => ({
+            type: "roadmap.source.import",
+            commandId,
+            itemId,
+            itemType,
+            title: issue.title,
+            parentId,
+            area: root ? input.area : null,
+            state: issue.closed ? "done" : "backlog",
+            source: sourceOf(
+              issue,
+              {
+                title: issue.title,
+                closed: issue.closed,
+                parentNodeId,
+                // The first sweep links blockers, once every end is an item.
+                blockedByNodeIds: [],
+              },
+              syncedAt,
+            ),
+          }),
+          "import",
+          itemId,
+        ).pipe(
+          Effect.as(true),
+          Effect.catchTags({
+            RoadmapError: (error) =>
+              root && input.strict
+                ? Effect.fail(error)
+                : Effect.logWarning("roadmap import skipped an issue", {
+                    number: issue.number,
+                    code: error.code,
+                  }).pipe(Effect.as(false)),
+          }),
+        );
+        if (!imported) continue;
+        created.push(itemId);
+        const children = issue.subIssueNodeIds.filter((nodeId) => !input.known.has(nodeId));
+        if (children.length === 0) continue;
+        for (const nodeId of children) input.known.add(nodeId);
+        const found = yield* issueApi
+          .issues({ host: issue.host, nodeIds: children })
+          .pipe(asAccount(input.account));
+        for (const child of found) {
+          next.push({
+            issue: child,
+            parentId: itemId,
+            parentType: itemType,
+            parentNodeId: issue.nodeId,
+            root: false,
+          });
+        }
       }
-      // Blockers wait for a sweep, which links them once both ends are items.
-      for (const itemId of created) requested.add(itemId);
-      return created;
-    });
+      level = next;
+    }
+    // Blockers wait for a sweep, which links them once both ends are items.
+    for (const itemId of created) requested.add(itemId);
+    return created;
+  });
 
   const readFailure = (error: GitHubIssueApi.GitHubIssueApiError, label: string) =>
     error._tag === "GitHubApiNotFoundError"
@@ -386,152 +385,151 @@ const make = Effect.gen(function* () {
   });
 
   /** Applies one reconciliation; records the agreement only when every change landed. */
-  const apply = (
+  const apply = Effect.fn("RoadmapGitHubSync.apply")(function* (
     item: RoadmapWorkItem,
     remote: GitHubIssueApi.GitHubIssue,
     result: IssueReconciliation,
     account: Account,
-  ) =>
-    Effect.gen(function* () {
-      let complete = true;
-      const local = (build: (commandId: CommandId) => RoadmapCommand, kind: string) =>
-        dispatch(build, kind, item.id).pipe(
-          Effect.catchTags({
-            RoadmapError: (error) => {
-              complete = false;
-              return Effect.logWarning("roadmap sync could not apply a GitHub change", {
-                itemId: item.id,
-                kind,
-                code: error.code,
-              });
-            },
-          }),
-        );
-      for (const change of result.local) {
-        switch (change.kind) {
-          case "title":
-          case "state":
+  ) {
+    let complete = true;
+    const local = (build: (commandId: CommandId) => RoadmapCommand, kind: string) =>
+      dispatch(build, kind, item.id).pipe(
+        Effect.catchTags({
+          RoadmapError: (error) => {
+            complete = false;
+            return Effect.logWarning("roadmap sync could not apply a GitHub change", {
+              itemId: item.id,
+              kind,
+              code: error.code,
+            });
+          },
+        }),
+      );
+    for (const change of result.local) {
+      switch (change.kind) {
+        case "title":
+        case "state":
+          yield* local(
+            (commandId) => ({
+              type: "roadmap.item.update",
+              commandId,
+              itemId: item.id,
+              patch: change.kind === "title" ? { title: change.title } : { state: change.state },
+            }),
+            change.kind,
+          );
+          break;
+        case "move":
+          if (change.itemType !== undefined || change.area !== undefined) {
             yield* local(
               (commandId) => ({
                 type: "roadmap.item.update",
                 commandId,
                 itemId: item.id,
-                patch: change.kind === "title" ? { title: change.title } : { state: change.state },
+                patch: {
+                  ...(change.itemType === undefined ? {} : { type: change.itemType }),
+                  ...(change.area === undefined ? {} : { area: change.area }),
+                },
               }),
-              change.kind,
+              "retype",
             );
-            break;
-          case "move":
-            if (change.itemType !== undefined || change.area !== undefined) {
-              yield* local(
-                (commandId) => ({
-                  type: "roadmap.item.update",
-                  commandId,
-                  itemId: item.id,
-                  patch: {
-                    ...(change.itemType === undefined ? {} : { type: change.itemType }),
-                    ...(change.area === undefined ? {} : { area: change.area }),
-                  },
-                }),
-                "retype",
-              );
-            }
-            yield* local(
-              (commandId) => ({
-                type: "roadmap.item.move",
-                commandId,
-                itemId: item.id,
-                parentId: change.parentId,
-              }),
-              "move",
-            );
-            break;
-          case "blocker":
-            yield* local(
-              (commandId) => ({
-                type: change.linked ? "roadmap.blocker.link" : "roadmap.blocker.unlink",
-                commandId,
-                itemId: item.id,
-                blockedById: change.blockedById,
-              }),
-              "blocker",
-            );
-            break;
-        }
-      }
-      for (const entry of result.notes) {
-        yield* roadmap
-          .dispatch(
-            {
-              type: "roadmap.note.add",
-              commandId: CommandId.make(`github:note:${item.id}:${hash(entry.key)}`),
+          }
+          yield* local(
+            (commandId) => ({
+              type: "roadmap.item.move",
+              commandId,
               itemId: item.id,
-              noteId: `github:${hash(entry.key)}`,
-              kind: "sync",
-              text: entry.text,
-            },
-            github,
-          )
-          .pipe(Effect.ignore);
+              parentId: change.parentId,
+            }),
+            "move",
+          );
+          break;
+        case "blocker":
+          yield* local(
+            (commandId) => ({
+              type: change.linked ? "roadmap.blocker.link" : "roadmap.blocker.unlink",
+              commandId,
+              itemId: item.id,
+              blockedById: change.blockedById,
+            }),
+            "blocker",
+          );
+          break;
       }
-      const host = remote.host;
-      for (const change of result.remote) {
-        const push =
-          change.kind === "title"
-            ? issueApi.setTitle({ host, issueId: remote.nodeId, title: change.title })
-            : change.kind === "closed"
-              ? issueApi.setClosed({ host, issueId: remote.nodeId, closed: change.closed })
-              : change.kind === "parent"
-                ? issueApi.setParent({
-                    host,
-                    issueId: remote.nodeId,
-                    parentId: change.parentNodeId,
-                    previousParentId: change.previousParentNodeId,
-                  })
-                : issueApi.setBlockedBy({
-                    host,
-                    issueId: remote.nodeId,
-                    blockingIssueId: change.blockingNodeId,
-                    blocked: change.blocked,
-                  });
-        const pushed = yield* push.pipe(
-          asAccount(account),
-          Effect.as(true),
-          Effect.catch((error) =>
-            notePause(account, error).pipe(
-              Effect.andThen(
-                Effect.logWarning("roadmap sync could not update an issue", {
-                  itemId: item.id,
-                  change: change.kind,
-                  error: error._tag,
-                }),
-              ),
-              Effect.as(false),
+    }
+    for (const entry of result.notes) {
+      yield* roadmap
+        .dispatch(
+          {
+            type: "roadmap.note.add",
+            commandId: CommandId.make(`github:note:${item.id}:${hash(entry.key)}`),
+            itemId: item.id,
+            noteId: `github:${hash(entry.key)}`,
+            kind: "sync",
+            text: entry.text,
+          },
+          github,
+        )
+        .pipe(Effect.ignore);
+    }
+    const host = remote.host;
+    for (const change of result.remote) {
+      const push =
+        change.kind === "title"
+          ? issueApi.setTitle({ host, issueId: remote.nodeId, title: change.title })
+          : change.kind === "closed"
+            ? issueApi.setClosed({ host, issueId: remote.nodeId, closed: change.closed })
+            : change.kind === "parent"
+              ? issueApi.setParent({
+                  host,
+                  issueId: remote.nodeId,
+                  parentId: change.parentNodeId,
+                  previousParentId: change.previousParentNodeId,
+                })
+              : issueApi.setBlockedBy({
+                  host,
+                  issueId: remote.nodeId,
+                  blockingIssueId: change.blockingNodeId,
+                  blocked: change.blocked,
+                });
+      const pushed = yield* push.pipe(
+        asAccount(account),
+        Effect.as(true),
+        Effect.catch((error) =>
+          notePause(account, error).pipe(
+            Effect.andThen(
+              Effect.logWarning("roadmap sync could not update an issue", {
+                itemId: item.id,
+                change: change.kind,
+                error: error._tag,
+              }),
             ),
+            Effect.as(false),
           ),
-        );
-        // A failed push leaves the old agreement, so the next sweep tries again.
-        if (!pushed) complete = false;
-      }
-      const source = item.source!;
-      const unchanged =
-        source.writable === remote.writable &&
-        source.remoteUpdatedAt === remote.updatedAt &&
-        sameBase(source.base, result.base);
-      if (!complete || unchanged) return complete;
-      yield* local(
-        (commandId) => ({
-          type: "roadmap.source.sync",
-          commandId,
-          itemId: item.id,
-          writable: remote.writable,
-          remoteUpdatedAt: remote.updatedAt,
-          base: result.base,
-        }),
-        "sync",
+        ),
       );
-      return complete;
-    });
+      // A failed push leaves the old agreement, so the next sweep tries again.
+      if (!pushed) complete = false;
+    }
+    const source = item.source!;
+    const unchanged =
+      source.writable === remote.writable &&
+      source.remoteUpdatedAt === remote.updatedAt &&
+      sameBase(source.base, result.base);
+    if (!complete || unchanged) return complete;
+    yield* local(
+      (commandId) => ({
+        type: "roadmap.source.sync",
+        commandId,
+        itemId: item.id,
+        writable: remote.writable,
+        remoteUpdatedAt: remote.updatedAt,
+        base: result.base,
+      }),
+      "sync",
+    );
+    return complete;
+  });
 
   const sweep = Effect.fn("RoadmapGitHubSync.sweep")(function* (scope: "all" | "requested") {
     if (!(yield* roadmap.isHome)) return;

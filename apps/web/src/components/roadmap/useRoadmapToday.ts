@@ -20,7 +20,6 @@ import type {
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { Atom } from "effect/reactivity";
-import { useMemo } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -68,10 +67,10 @@ const todayBaselineFor = createTodayBaselines({
  * When Today was last opened on this client before this page load, so
  * "Newly unblocked" compares against the previous visit rather than this one.
  */
-export function useRoadmapTodayLastOpenedAt(home: EnvironmentId, now: string): string | null {
+export function roadmapTodayLastOpenedAt(home: EnvironmentId, now: string): string | null {
   // Repeat calls for a home return the cached baseline, so a render React
   // discards or repeats records nothing new.
-  return useMemo(() => todayBaselineFor(home, now), [home, now]);
+  return todayBaselineFor(home, now);
 }
 
 // React cannot subscribe to a list of atoms whose length changes, so the
@@ -99,11 +98,11 @@ export interface RoadmapTodaySignals {
  * pull request listing per environment whose attached threads link one.
  */
 export function useRoadmapTodaySignals(items: ReadonlyArray<RoadmapWorkItem>): RoadmapTodaySignals {
-  const refs = useMemo(() => roadmapTodayThreadRefs(items), [items]);
+  const refs = roadmapTodayThreadRefs(items);
   const refsKey = JSON.stringify(refs);
   const shells = useAtomValue(refs.length === 0 ? NO_SHELLS_ATOM : attachedShellsAtom(refsKey));
   const localVisits = useUiStateStore((state) => state.threadLastVisitedAtById);
-  const threads = useMemo(() => {
+  const threads = (() => {
     const byKey = new Map<string, RoadmapTodayThread>();
     for (const shell of shells) {
       if (shell === null) continue;
@@ -116,17 +115,14 @@ export function useRoadmapTodaySignals(items: ReadonlyArray<RoadmapWorkItem>): R
       byKey.set(roadmapTodayThreadKey(thread.ref), thread);
     }
     return byKey;
-  }, [localVisits, shells]);
-  const targets = useMemo(() => roadmapReviewTargets(threads.values()), [threads]);
+  })();
+  const targets = roadmapReviewTargets(threads.values());
   const reviews = usePullRequestList(targets);
   const entries = reviews.data?.entries ?? NO_ENTRIES;
-  return useMemo(
-    () => ({
-      threadSignals: roadmapThreadSignals(items, threads),
-      reviewRequests: roadmapReviewRequests(items, threads, entries),
-    }),
-    [entries, items, threads],
-  );
+  return {
+    threadSignals: roadmapThreadSignals(items, threads),
+    reviewRequests: roadmapReviewRequests(items, threads, entries),
+  };
 }
 
 /** Stable across renders, so memoized rows only re-render for their own data. */
@@ -233,14 +229,11 @@ export function useRoadmapTodayActions(home: EnvironmentId): RoadmapTodayActions
   const stableDone = useStableCallback(done);
   const stableTogglePin = useStableCallback(togglePin);
   const stableNewThread = useStableCallback(newThread);
-  return useMemo(
-    () => ({
-      snooze: (item, until) => void stableSnooze(item, until),
-      unsnooze: stableUnsnooze,
-      done: (item) => void stableDone(item),
-      togglePin: (item) => void stableTogglePin(item),
-      newThread: stableNewThread,
-    }),
-    [stableDone, stableNewThread, stableSnooze, stableTogglePin, stableUnsnooze],
-  );
+  return {
+    snooze: (item, until) => void stableSnooze(item, until),
+    unsnooze: stableUnsnooze,
+    done: (item) => void stableDone(item),
+    togglePin: (item) => void stableTogglePin(item),
+    newThread: stableNewThread,
+  };
 }

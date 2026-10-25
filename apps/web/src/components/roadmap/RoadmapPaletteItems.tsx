@@ -6,7 +6,6 @@ import type { ScopedThreadRef } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
 import { useRouter } from "@tanstack/react-router";
 import { CircleDotIcon, LinkIcon, MapIcon, PlusIcon, SunIcon, UnlinkIcon } from "lucide-react";
-import { useMemo } from "react";
 
 import { useRoadmapLive } from "../../state/roadmap";
 import {
@@ -35,7 +34,7 @@ export function useRoadmapAttachPickerGroups(
     threadRef !== null && availability.supported ? availability.home : null,
   );
   const items = live.data?.items ?? null;
-  return useMemo(() => {
+  return (() => {
     if (threadRef === null || items === null) return [];
     const groups = attachPickerGroups(items, { excludeAttachedTo: threadRef });
     if (groups.length === 0) {
@@ -78,7 +77,7 @@ export function useRoadmapAttachPickerGroups(
         run: () => actions.attach(threadRef, entry.item),
       })),
     }));
-  }, [actions, items, router, threadRef]);
+  })();
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { KeyRoundIcon } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { useClientSettings } from "../../hooks/useSettings";
 import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
@@ -26,13 +26,13 @@ export function ProxyLoginAlertCoordinator() {
   const openLogin = useAtomSet(proxyLoginPanelAtom);
   const previous = useRef<ReadonlySet<string> | null>(null);
 
-  const flagged = useMemo(() => {
+  const flagged = (() => {
     const selected = selectProxySource(configs, [primaryEnvironmentId]);
     if (!selected || selected.snapshot.proxy?.auth.state !== "signedIn") return null;
     return selected.snapshot.accounts
       .filter((account) => account.proxy?.state === "reauthentication")
       .map((account) => account.id);
-  }, [configs, primaryEnvironmentId]);
+  })();
 
   // Runs on every published snapshot; loginAlerts reports only what changed,
   // so a re-publish with the same flags is no news.

@@ -24,7 +24,7 @@ import {
   CrosshairIcon,
   ListChecksIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useRoadmapAreaSettings } from "~/state/roadmap";
 import { Button } from "../ui/button";
@@ -125,47 +125,37 @@ export function RoadmapOutline({
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // Select mode holds the picked ids; null when not selecting.
   const [picked, setPicked] = useState<ReadonlySet<RoadmapItemId> | null>(null);
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
-  const tree = useMemo(() => buildTree(items), [items]);
+  const byId = roadmapItemsById(items);
+  const tree = buildTree(items);
   const { level, focus } = layout;
-  const laidOut = useMemo(() => outlineRoots(tree, { level, focus }), [focus, level, tree]);
-  const filtered = useMemo(() => filterOutlineTree(laidOut, filter), [filter, laidOut]);
-  const focusedIds = useMemo(
-    () => items.filter((item) => item.focusedAt !== null).map((item) => item.id),
-    [items],
-  );
+  const laidOut = outlineRoots(tree, { level, focus });
+  const filtered = filterOutlineTree(laidOut, filter);
+  const focusedIds = items.filter((item) => item.focusedAt !== null).map((item) => item.id);
   const filterKey = outlineFilterKey(filter);
   const collapsed = activeCollapsed(collapseState, filterKey);
-  const updateCollapsed = useCallback(
-    (update: (current: ReadonlySet<RoadmapItemId>) => ReadonlySet<RoadmapItemId>) =>
-      setCollapseState((current) => {
-        const next = updateOutlineCollapse(current, filterKey, update);
-        if (next.saved !== current.saved) writeCollapsed(next.saved);
-        return next;
-      }),
-    [filterKey],
-  );
-  const everythingCollapsed = useMemo(
-    () => allCollapsed(filtered, collapsed),
-    [collapsed, filtered],
-  );
-  const hasExpandable = useMemo(() => expandableIds(filtered).size > 0, [filtered]);
+  const updateCollapsed = (
+    update: (current: ReadonlySet<RoadmapItemId>) => ReadonlySet<RoadmapItemId>,
+  ) =>
+    setCollapseState((current) => {
+      const next = updateOutlineCollapse(current, filterKey, update);
+      if (next.saved !== current.saved) writeCollapsed(next.saved);
+      return next;
+    });
+  const everythingCollapsed = allCollapsed(filtered, collapsed);
+  const hasExpandable = expandableIds(filtered).size > 0;
   const toggleAll = () =>
     updateCollapsed((current) =>
       everythingCollapsed ? expandAllIn(current, filtered) : collapseAllIn(current, filtered),
     );
-  const setFocused = useCallback(
-    (itemId: RoadmapItemId, focused: boolean) =>
-      dispatch(
-        {
-          type: focused ? "roadmap.item.focus" : "roadmap.item.unfocus",
-          commandId: newRoadmapCommandId(),
-          itemId,
-        },
-        "Could not change the focus set",
-      ),
-    [dispatch],
-  );
+  const setFocused = (itemId: RoadmapItemId, focused: boolean) =>
+    dispatch(
+      {
+        type: focused ? "roadmap.item.focus" : "roadmap.item.unfocus",
+        commandId: newRoadmapCommandId(),
+        itemId,
+      },
+      "Could not change the focus set",
+    );
   const applyPicked = (next: ReadonlySet<RoadmapItemId>) => {
     const changes = focusChanges(items, next);
     for (const itemId of changes.focus) void setFocused(itemId, true);
@@ -173,26 +163,23 @@ export function RoadmapOutline({
     setPicked(null);
     onLayoutChange({ level, focus: next.size > 0 });
   };
-  const forecasts = useMemo(() => {
+  const forecasts = (() => {
     const labels = new Map<RoadmapItemId, RoadmapForecastLabel>();
     for (const [itemId, value] of roadmapForecasts({ items, sprints, areaSettings, today })) {
       const label = forecastLabel(value, today);
       if (label !== null) labels.set(itemId, label);
     }
     return labels;
-  }, [areaSettings, items, sprints, today]);
+  })();
   // A selected item is revealed even when an ancestor is collapsed.
-  const effectiveCollapsed = useMemo(() => {
+  const effectiveCollapsed = (() => {
     if (selectedId === null) return collapsed;
     const revealed = new Set(collapsed);
     for (const ancestorId of ancestorIds(selectedId, byId)) revealed.delete(ancestorId);
     return revealed;
-  }, [byId, collapsed, selectedId]);
-  const rows = useMemo(
-    () => flattenOutline(filtered, effectiveCollapsed),
-    [effectiveCollapsed, filtered],
-  );
-  const rowFacts = useMemo(() => {
+  })();
+  const rows = flattenOutline(filtered, effectiveCollapsed);
+  const rowFacts = (() => {
     const childTypes = new Map<RoadmapItemId, Array<RoadmapItemType>>();
     for (const item of items) {
       if (item.parentId === null) continue;
@@ -212,99 +199,93 @@ export function RoadmapOutline({
         ] as const;
       }),
     );
-  }, [byId, items]);
+  })();
 
   const itemsRef = useRef(items);
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
-  const actions = useMemo<RoadmapRowActions>(
-    () => ({
-      toggle: (itemId) =>
-        updateCollapsed((current) => {
-          const next = new Set(current);
-          if (!next.delete(itemId)) next.add(itemId);
-          return next;
-        }),
-      select: (itemId) =>
-        setPicked((current) => {
-          if (current === null) return current;
-          const next = new Set(current);
-          if (!next.delete(itemId)) next.add(itemId);
-          return next;
-        }),
-      setFocused: (itemId, focused) => void setFocused(itemId, focused),
-      update: (itemId: RoadmapItemId, patch: RoadmapItemPatch) =>
-        void dispatch({
-          type: "roadmap.item.update",
-          commandId: newRoadmapCommandId(),
-          itemId,
-          patch,
-        }),
-      addChild: onAddChild,
-      edit: onEdit,
-      open: onSelect,
-      markReviewed: (itemId) =>
-        void dispatch({
-          type: "roadmap.item.mark-reviewed",
-          commandId: newRoadmapCommandId(),
-          itemId,
-        }),
-      remove: (item) => {
-        const current = roadmapItemsById(itemsRef.current);
-        const childCount = itemsRef.current.filter((entry) =>
-          ancestorIds(entry.id, current).includes(item.id),
-        ).length;
-        void dispatch(
-          { type: "roadmap.item.delete", commandId: newRoadmapCommandId(), itemId: item.id },
-          "Could not delete the work item",
-        ).then((deleted) => {
-          if (!deleted) return;
-          const toastId = toastManager.add({
-            type: "success",
-            title: `Deleted ${item.title}`,
-            ...(childCount > 0
-              ? {
-                  description: `With ${childCount} item${childCount === 1 ? "" : "s"} under it.`,
-                }
-              : {}),
-            actionProps: {
-              children: "Undo",
-              onClick: () => {
-                toastManager.close(toastId);
-                void dispatch(
-                  {
-                    type: "roadmap.item.restore",
-                    commandId: newRoadmapCommandId(),
-                    itemId: item.id,
-                  },
-                  "Could not restore the work item",
-                );
-              },
+  const actions: RoadmapRowActions = {
+    toggle: (itemId) =>
+      updateCollapsed((current) => {
+        const next = new Set(current);
+        if (!next.delete(itemId)) next.add(itemId);
+        return next;
+      }),
+    select: (itemId) =>
+      setPicked((current) => {
+        if (current === null) return current;
+        const next = new Set(current);
+        if (!next.delete(itemId)) next.add(itemId);
+        return next;
+      }),
+    setFocused: (itemId, focused) => void setFocused(itemId, focused),
+    update: (itemId: RoadmapItemId, patch: RoadmapItemPatch) =>
+      void dispatch({
+        type: "roadmap.item.update",
+        commandId: newRoadmapCommandId(),
+        itemId,
+        patch,
+      }),
+    addChild: onAddChild,
+    edit: onEdit,
+    open: onSelect,
+    markReviewed: (itemId) =>
+      void dispatch({
+        type: "roadmap.item.mark-reviewed",
+        commandId: newRoadmapCommandId(),
+        itemId,
+      }),
+    remove: (item) => {
+      const current = roadmapItemsById(itemsRef.current);
+      const childCount = itemsRef.current.filter((entry) =>
+        ancestorIds(entry.id, current).includes(item.id),
+      ).length;
+      void dispatch(
+        { type: "roadmap.item.delete", commandId: newRoadmapCommandId(), itemId: item.id },
+        "Could not delete the work item",
+      ).then((deleted) => {
+        if (!deleted) return;
+        const toastId = toastManager.add({
+          type: "success",
+          title: `Deleted ${item.title}`,
+          ...(childCount > 0
+            ? {
+                description: `With ${childCount} item${childCount === 1 ? "" : "s"} under it.`,
+              }
+            : {}),
+          actionProps: {
+            children: "Undo",
+            onClick: () => {
+              toastManager.close(toastId);
+              void dispatch(
+                {
+                  type: "roadmap.item.restore",
+                  commandId: newRoadmapCommandId(),
+                  itemId: item.id,
+                },
+                "Could not restore the work item",
+              );
             },
-          });
+          },
         });
-      },
-    }),
-    [dispatch, onAddChild, onEdit, onSelect, setFocused, updateCollapsed],
-  );
+      });
+    },
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const targetFor = useCallback(
-    (event: DragMoveEvent | DragEndEvent): DropTarget | null => {
-      const { active, over, activatorEvent, delta } = event;
-      if (over === null || !(activatorEvent instanceof PointerEvent)) return null;
-      const activeId = String(active.id) as RoadmapItemId;
-      const overId = String(over.id) as RoadmapItemId;
-      if (activeId === overId) return null;
-      const pointerY = activatorEvent.clientY + delta.y;
-      const ratio = (pointerY - over.rect.top) / Math.max(over.rect.height, 1);
-      const zone = outlineDropZone(ratio, canNestInside(byId, activeId, overId));
-      return resolveOutlineDrop(items, activeId, overId, zone) === null ? null : { overId, zone };
-    },
-    [byId, items],
-  );
+  const targetFor = (event: DragMoveEvent | DragEndEvent): DropTarget | null => {
+    const { active, over, activatorEvent, delta } = event;
+    if (over === null || !(activatorEvent instanceof PointerEvent)) return null;
+    const activeId = String(active.id) as RoadmapItemId;
+    const overId = String(over.id) as RoadmapItemId;
+    if (activeId === overId) return null;
+    const pointerY = activatorEvent.clientY + delta.y;
+    const ratio = (pointerY - over.rect.top) / Math.max(over.rect.height, 1);
+    const zone = outlineDropZone(ratio, canNestInside(byId, activeId, overId));
+    return resolveOutlineDrop(items, activeId, overId, zone) === null ? null : { overId, zone };
+  };
 
   const handleDragMove = (event: DragMoveEvent) => {
     const next = targetFor(event);

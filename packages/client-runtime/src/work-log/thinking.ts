@@ -1,5 +1,7 @@
 import type { OrchestrationV2TurnItem } from "@lathe/contracts";
 
+import type { ThreadStructureTurnItem } from "../state/models.ts";
+
 /**
  * Fork: thinking is presented apart from tool calls. A thought never shares a
  * work group with anything else, so the timeline reads as alternating thoughts
@@ -46,8 +48,8 @@ export function withQuestionLeadInItems(
  * the still-running tool call that raised it, and stops at anything else.
  */
 export function questionLeadIn(
-  turnItems: ReadonlyArray<OrchestrationV2TurnItem>,
-  request: OrchestrationV2TurnItem,
+  turnItems: ReadonlyArray<ThreadStructureTurnItem>,
+  request: ThreadStructureTurnItem,
 ): string | undefined {
   if (request.providerTurnId === null) return undefined;
   const earlier = turnItems
@@ -63,7 +65,8 @@ export function questionLeadIn(
   for (let index = earlier.length - 1; index >= 0; index -= 1) {
     const item = earlier[index]!;
     if (item.type === "reasoning") {
-      const text = item.text.trim();
+      // A thread structure leaves streamed text out; only full projections carry it.
+      const text = "text" in item && typeof item.text === "string" ? item.text.trim() : "";
       if (text) thoughts.unshift(text);
       continue;
     }

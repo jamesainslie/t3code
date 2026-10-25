@@ -144,7 +144,7 @@ export function GitHubAccountRulesSettings({
     updateSettings({ gitHubAccountRules: next });
   const setError = (key: string, message: string | null) =>
     setErrors((current) => {
-      const { [key]: _removed, ...rest } = current;
+      const rest = Object.fromEntries(Object.entries(current).filter(([entry]) => entry !== key));
       return message === null ? rest : { ...rest, [key]: message };
     });
   const commitOwner = (index: number, value: string) => {

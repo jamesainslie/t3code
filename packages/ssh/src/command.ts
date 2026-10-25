@@ -50,6 +50,8 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly observe?: { readonly source: SshOutputSource; readonly stdout?: boolean };
   /** What the command is for, such as "launch" or "control-probe"; tags its span and failures. */
   readonly purpose?: string;
+  /** Keep the end of long failed-command stdout, where the final cause usually is. */
+  readonly keepErrorOutputTail?: boolean;
 }
 
 /**
@@ -205,11 +207,12 @@ export function redactSshOutput(output: string): string {
     .replace(new RegExp(`([#?&](?:${TOKEN_KEYS})=)[^\\s&#"']+`, "giu"), "$1[redacted]");
 }
 
-function redactSshErrorOutput(output: string): string {
+function redactSshErrorOutput(output: string, keepTail = false): string {
   const redacted = redactSshOutput(output);
-  return redacted.length > MAX_SSH_ERROR_OUTPUT_LENGTH
-    ? `${redacted.slice(0, MAX_SSH_ERROR_OUTPUT_LENGTH)}\n[truncated]`
-    : redacted;
+  if (redacted.length <= MAX_SSH_ERROR_OUTPUT_LENGTH) return redacted;
+  return keepTail
+    ? `[truncated]\n${redacted.slice(-MAX_SSH_ERROR_OUTPUT_LENGTH)}`
+    : `${redacted.slice(0, MAX_SSH_ERROR_OUTPUT_LENGTH)}\n[truncated]`;
 }
 
 function normalizeSshErrorMessage(input: {
@@ -270,6 +273,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
       ...(input.multiplex === undefined ? {} : { multiplex: input.multiplex }),
     }),
     ...(input.preHostArgs ?? []),
+    "--",
     hostSpec,
     ...(input.remoteCommandArgs ?? []),
   ];
@@ -343,7 +347,7 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   );
 
   if (exitCode !== 0) {
-    const diagnosticStdout = redactSshErrorOutput(stdout);
+    const diagnosticStdout = redactSshErrorOutput(stdout, input.keepErrorOutputTail);
     yield* Effect.logWarning("ssh.command.failed", {
       ...sshTargetLogFields(target),
       purpose: input.purpose ?? null,

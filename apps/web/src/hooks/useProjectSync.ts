@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EnvironmentId, ProjectSyncRequest, ProjectSyncResponse } from "@lathe/contracts";
 import { executeProjectSync } from "@lathe/client-runtime/state/project-sync";
 import * as Option from "effect/Option";
 import { runtime } from "../lib/runtime";
+import { useStableCallback } from "./useStableCallback";
 import { usePreparedConnection } from "../state/session";
 
 export function useProjectSync(environmentId: EnvironmentId) {
@@ -15,42 +16,43 @@ export function useProjectSync(environmentId: EnvironmentId) {
   const [pending, setPending] = useState(false);
   const generation = useRef(0);
   const busy = useRef<number | null>(null);
-  const run = useCallback(
-    async (request: ProjectSyncRequest) => {
-      const current = generation.current;
-      if (busy.current === current) throw new Error("A sync request is already in progress.");
-      busy.current = current;
-      setPending(true);
-      setError(null);
-      try {
-        if (!prepared) throw new Error("Connect to this environment before managing sync.");
-        const response = await runtime.runPromise(executeProjectSync(prepared, request));
-        if (current !== generation.current)
-          throw new Error(
-            "The environment changed while the request was running. Refresh sync status.",
-          );
-        setResult({ environmentId, value: response });
-        return response;
-      } catch (cause) {
-        if (current === generation.current)
-          setError(cause instanceof Error ? cause.message : String(cause));
-        throw cause;
-      } finally {
-        if (current === generation.current) {
-          busy.current = null;
-          setPending(false);
-        }
+  const run = async (request: ProjectSyncRequest) => {
+    const current = generation.current;
+    if (busy.current === current) throw new Error("A sync request is already in progress.");
+    busy.current = current;
+    setPending(true);
+    setError(null);
+    const settle = () => {
+      busy.current = null;
+      setPending(false);
+    };
+    // No try/finally: the React Compiler skips a hook that uses one.
+    const fail = (cause: unknown): never => {
+      if (current === generation.current) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        settle();
       }
-    },
-    [environmentId, prepared],
-  );
+      throw cause;
+    };
+    if (!prepared) return fail(new Error("Connect to this environment before managing sync."));
+    const response = await runtime.runPromise(executeProjectSync(prepared, request)).catch(fail);
+    if (current !== generation.current)
+      throw new Error(
+        "The environment changed while the request was running. Refresh sync status.",
+      );
+    setResult({ environmentId, value: response });
+    settle();
+    return response;
+  };
+  // Stable, so the status request reruns only when the connection changes.
+  const runStable = useStableCallback(run);
   useEffect(() => {
     generation.current += 1;
-    if (prepared) void run({ operation: "status" }).catch(() => undefined);
+    if (prepared) void runStable({ operation: "status" }).catch(() => undefined);
     return () => {
       generation.current += 1;
     };
-  }, [prepared, run]);
+  }, [prepared, runStable]);
   return {
     data: result?.environmentId === environmentId ? result.value : null,
     error,

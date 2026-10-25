@@ -28,7 +28,7 @@ import { FORK_NPM_LAUNCHER_SCRIPT } from "@lathe/shared/forkCliArtifacts";
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
-import { windowsSystemTar } from "./build-cli-archive.ts";
+import { windowsSystemTar } from "./lib/windows-tar.ts";
 
 export const NPM_LAUNCHER_PACKAGE_NAME = FORK_IDENTITY.npmPackageName;
 

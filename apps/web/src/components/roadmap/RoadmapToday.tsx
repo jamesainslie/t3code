@@ -14,7 +14,7 @@ import type {
 import { effectivePriority } from "@lathe/shared/roadmap";
 import { localDateOf } from "@lathe/shared/roadmapCalc";
 import { ChevronRightIcon, SunIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { useRoadmapAreaSettings } from "~/state/roadmap";
@@ -33,7 +33,7 @@ import {
 import {
   type RoadmapTodayActions,
   useRoadmapTodayActions,
-  useRoadmapTodayLastOpenedAt,
+  roadmapTodayLastOpenedAt,
   useRoadmapTodaySignals,
 } from "./useRoadmapToday";
 
@@ -58,27 +58,23 @@ export function RoadmapToday({
 }: RoadmapTodayProps) {
   // Fixed for the visit: it is both "now" for the rules and the visit Today records.
   const [now] = useState(() => new Date().toISOString());
-  const lastOpenedAt = useRoadmapTodayLastOpenedAt(home, now);
+  const lastOpenedAt = roadmapTodayLastOpenedAt(home, now);
   const areaSettings = useRoadmapAreaSettings(home);
   const { threadSignals, reviewRequests } = useRoadmapTodaySignals(items);
   const actions = useRoadmapTodayActions(home);
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
-  const model = useMemo(
-    () =>
-      buildToday({
-        items,
-        sprints,
-        areaSettings,
-        threadSignals,
-        reviewRequests,
-        lastOpenedAt,
-        today,
-        now,
-        dateOf: localDateOf,
-      }),
-    [areaSettings, items, lastOpenedAt, now, reviewRequests, sprints, threadSignals, today],
-  );
-  const split = useMemo(() => splitTodayAtCapacity(model.sections), [model.sections]);
+  const byId = roadmapItemsById(items);
+  const model = buildToday({
+    items,
+    sprints,
+    areaSettings,
+    threadSignals,
+    reviewRequests,
+    lastOpenedAt,
+    today,
+    now,
+    dateOf: localDateOf,
+  });
+  const split = splitTodayAtCapacity(model.sections);
   const capacity = todayCapacityText(model.capacity);
 
   const renderSections = (sections: ReadonlyArray<RoadmapTodaySection>) =>

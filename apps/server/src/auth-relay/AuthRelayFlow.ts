@@ -365,19 +365,22 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
       ),
   });
 
-  const runSignIn = (flow: ActiveFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) =>
-    Effect.gen(function* () {
+  const runSignIn = Effect.fn("AuthRelayFlow.runSignIn")(
+    function* (flow: ActiveFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) {
       yield* stopSessions.pipe(Effect.ensuring(stopOwnedProcesses));
       yield* driver.signIn(makeHandle(flow));
-    }).pipe(
-      Effect.scoped,
-      Effect.timeoutOrElse({
-        duration: AUTH_RELAY_TIMEOUT_MS,
-        orElse: () => Effect.fail(setupError("start", copy.expired)),
-      }),
-      Effect.exit,
-      Effect.flatMap((result) => finishFlow(flow, result)),
-    );
+    },
+    (effect, flow) =>
+      effect.pipe(
+        Effect.scoped,
+        Effect.timeoutOrElse({
+          duration: AUTH_RELAY_TIMEOUT_MS,
+          orElse: () => Effect.fail(setupError("start", copy.expired)),
+        }),
+        Effect.exit,
+        Effect.flatMap((result) => finishFlow(flow, result)),
+      ),
+  );
 
   const stopFlow = (flow: ActiveFlow, phase: "cancelled" | "failed", message: string) =>
     Effect.uninterruptible(
@@ -410,18 +413,21 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
       }),
     );
 
-  const requireFlow = (ownerSessionId: string, flowId: string, name: string) =>
-    Effect.gen(function* () {
-      const flow = activeFlow;
-      if (!flow || flow.id !== flowId || flow.ownerSessionId !== ownerSessionId) {
-        return yield* setupError(name, "This sign-in is no longer active in this client.");
-      }
-      const now = yield* Clock.currentTimeMillis;
-      if (now >= flow.expiresAtMillis) {
-        return yield* setupError(name, copy.expired);
-      }
-      return flow;
-    });
+  const requireFlow = Effect.fn("AuthRelayFlow.requireFlow")(function* (
+    ownerSessionId: string,
+    flowId: string,
+    name: string,
+  ) {
+    const flow = activeFlow;
+    if (!flow || flow.id !== flowId || flow.ownerSessionId !== ownerSessionId) {
+      return yield* setupError(name, "This sign-in is no longer active in this client.");
+    }
+    const now = yield* Clock.currentTimeMillis;
+    if (now >= flow.expiresAtMillis) {
+      return yield* setupError(name, copy.expired);
+    }
+    return flow;
+  });
 
   const validateCallback = driver.validateCallback ?? validateLoopbackCallbackUrl;
   const forwardCallback = driver.forwardCallback ?? forwardLoopbackCallback;

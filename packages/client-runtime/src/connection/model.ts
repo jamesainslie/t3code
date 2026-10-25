@@ -1,4 +1,5 @@
 import { EnvironmentId } from "@lathe/contracts";
+import { RelayEnvironmentEndpointFailure } from "@lathe/contracts/relay";
 import * as Schema from "effect/Schema";
 
 const ConnectionTargetBase = {
@@ -64,6 +65,7 @@ export const ConnectionTransientReason = Schema.Literals([
   "endpoint-unavailable",
   "relay-unavailable",
   "remote-unavailable",
+  "session-pending",
 ]);
 export type ConnectionTransientReason = typeof ConnectionTransientReason.Type;
 
@@ -83,6 +85,33 @@ export const ConnectionSocketClose = Schema.Struct({
 });
 export type ConnectionSocketClose = typeof ConnectionSocketClose.Type;
 
+/** A part of the path to an environment: this device, Lathe Connect, the host's tunnel, or Lathe on the host. */
+export const ConnectionHop = Schema.Literals(["device", "relay", "tunnel", "server"]);
+export type ConnectionHop = typeof ConnectionHop.Type;
+
+/** The relay's endpoint failures plus the causes the client can name from other errors. */
+export const ConnectionFailureCause = Schema.Literals([
+  ...RelayEnvironmentEndpointFailure.literals,
+  "clock_skew",
+  "not_linked",
+  "relay_error",
+  "tunnel_pending",
+  "tunnel_not_enabled",
+]);
+export type ConnectionFailureCause = typeof ConnectionFailureCause.Type;
+
+/**
+ * Where and why a failure happened, when the code that saw it knows. See
+ * `presentConnectionDiagnosis`. `via` names the route when the hop alone does
+ * not: Lathe on the host can fail behind the tunnel or on a direct route.
+ */
+const ConnectionFailureFields = {
+  hop: Schema.optionalKey(ConnectionHop),
+  via: Schema.optionalKey(Schema.Literals(["relay", "direct"])),
+  failureCause: Schema.optionalKey(ConnectionFailureCause),
+  httpStatus: Schema.optionalKey(Schema.Number),
+};
+
 export class ConnectionTransientError extends Schema.TaggedError<ConnectionTransientError>()(
   "ConnectionTransientError",
   {
@@ -90,6 +119,7 @@ export class ConnectionTransientError extends Schema.TaggedError<ConnectionTrans
     detail: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
     socketClose: Schema.optionalKey(ConnectionSocketClose),
+    ...ConnectionFailureFields,
   },
 ) {
   override get message(): string {
@@ -103,6 +133,7 @@ export class ConnectionBlockedError extends Schema.TaggedError<ConnectionBlocked
     reason: ConnectionBlockedReason,
     detail: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
+    ...ConnectionFailureFields,
 
     serverUpdateRequired: Schema.optionalKey(Schema.Boolean),
   },

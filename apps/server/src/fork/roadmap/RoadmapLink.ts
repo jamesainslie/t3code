@@ -161,33 +161,30 @@ const make = Effect.gen(function* () {
     ),
   );
 
-  const call = <A, E>(
+  const call = Effect.fn("RoadmapLink.call")(function* <A, E>(
     request: (client: RoadmapHomeClient) => Effect.Effect<A, E>,
-  ): Effect.Effect<A, RoadmapError | RoadmapLinkUnavailableError> =>
-    Effect.gen(function* () {
-      const current = yield* Ref.get(connection);
-      if (Option.isNone(current)) {
-        return yield* new RoadmapLinkUnavailableError({ reason: "not_linked" });
-      }
-      const client = yield* makeRoadmapHomeClient(current.value).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
-      return yield* request(client).pipe(
-        Effect.timeout(REQUEST_TIMEOUT),
-        Effect.mapError((cause): RoadmapError | RoadmapLinkUnavailableError =>
-          isRoadmapError(cause)
-            ? cause
-            : new RoadmapLinkUnavailableError({
-                reason: isLinkRefused(cause) ? "unauthorized" : "unreachable",
-                cause,
-              }),
-        ),
-        Effect.tap(() => markAnswered),
-        Effect.tapError((error) =>
-          error._tag === "RoadmapError" ? markAnswered : markUnreachable,
-        ),
-      );
-    });
+  ): Effect.fn.Return<A, RoadmapError | RoadmapLinkUnavailableError> {
+    const current = yield* Ref.get(connection);
+    if (Option.isNone(current)) {
+      return yield* new RoadmapLinkUnavailableError({ reason: "not_linked" });
+    }
+    const client = yield* makeRoadmapHomeClient(current.value).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+    );
+    return yield* request(client).pipe(
+      Effect.timeout(REQUEST_TIMEOUT),
+      Effect.mapError((cause): RoadmapError | RoadmapLinkUnavailableError =>
+        isRoadmapError(cause)
+          ? cause
+          : new RoadmapLinkUnavailableError({
+              reason: isLinkRefused(cause) ? "unauthorized" : "unreachable",
+              cause,
+            }),
+      ),
+      Effect.tap(() => markAnswered),
+      Effect.tapError((error) => (error._tag === "RoadmapError" ? markAnswered : markUnreachable)),
+    );
+  });
 
   const storageFailed = (cause: unknown) =>
     Effect.logWarning("Could not save the roadmap link.", { cause }).pipe(
@@ -198,39 +195,41 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const connect = (input: { readonly homeUrl: string; readonly credential: string }) =>
-    Effect.gen(function* () {
-      const homeUrl = normalizeHomeUrl(input.homeUrl);
-      if (homeUrl === null) {
-        return yield* new RoadmapLinkError({
-          reason: "invalid_url",
-          message: "The roadmap home's address must be an http or https URL.",
-        });
-      }
-      const host = new URL(homeUrl).host;
-      const exchanged = yield* exchangeRoadmapLinkGrant({ homeUrl, grant: input.credential }).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-        Effect.timeout(REQUEST_TIMEOUT),
-        Effect.mapError((cause) =>
-          isGrantRefused(cause)
-            ? new RoadmapLinkError({
-                reason: "credential_rejected",
-                message: `The roadmap home at ${host} refused the link credential. Link again for a new one.`,
-              })
-            : new RoadmapLinkError({
-                reason: "unreachable",
-                message: `Could not reach the roadmap home at ${host}.`,
-              }),
-        ),
-      );
-      const encode = (value: string) => new TextEncoder().encode(value);
-      yield* secrets.set(HOME_URL_SECRET, encode(homeUrl)).pipe(Effect.catch(storageFailed));
-      yield* secrets
-        .set(HOME_CREDENTIAL_SECRET, encode(exchanged.access_token))
-        .pipe(Effect.catch(storageFailed));
-      yield* Ref.set(connection, Option.some({ homeUrl, session: exchanged.access_token }));
-      yield* markAnswered;
-    });
+  const connect = Effect.fn("RoadmapLink.connect")(function* (input: {
+    readonly homeUrl: string;
+    readonly credential: string;
+  }) {
+    const homeUrl = normalizeHomeUrl(input.homeUrl);
+    if (homeUrl === null) {
+      return yield* new RoadmapLinkError({
+        reason: "invalid_url",
+        message: "The roadmap home's address must be an http or https URL.",
+      });
+    }
+    const host = new URL(homeUrl).host;
+    const exchanged = yield* exchangeRoadmapLinkGrant({ homeUrl, grant: input.credential }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.timeout(REQUEST_TIMEOUT),
+      Effect.mapError((cause) =>
+        isGrantRefused(cause)
+          ? new RoadmapLinkError({
+              reason: "credential_rejected",
+              message: `The roadmap home at ${host} refused the link credential. Link again for a new one.`,
+            })
+          : new RoadmapLinkError({
+              reason: "unreachable",
+              message: `Could not reach the roadmap home at ${host}.`,
+            }),
+      ),
+    );
+    const encode = (value: string) => new TextEncoder().encode(value);
+    yield* secrets.set(HOME_URL_SECRET, encode(homeUrl)).pipe(Effect.catch(storageFailed));
+    yield* secrets
+      .set(HOME_CREDENTIAL_SECRET, encode(exchanged.access_token))
+      .pipe(Effect.catch(storageFailed));
+    yield* Ref.set(connection, Option.some({ homeUrl, session: exchanged.access_token }));
+    yield* markAnswered;
+  });
 
   const disconnect = Effect.gen(function* () {
     yield* secrets.remove(HOME_CREDENTIAL_SECRET).pipe(Effect.catch(storageFailed));

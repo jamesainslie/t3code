@@ -48,12 +48,13 @@ export const layerRoadmapLinkAuth = Layer.effect(
   }),
 );
 
-const requireLinkScope = (scope: AuthEnvironmentScope) =>
-  Effect.gen(function* () {
-    const link = yield* EnvironmentRoadmapLinkPrincipal;
-    if (!link.scopes.has(scope)) return yield* failEnvironmentScopeRequired(scope);
-    return link;
-  });
+const requireLinkScope = Effect.fn("RoadmapHttp.requireLinkScope")(function* (
+  scope: AuthEnvironmentScope,
+) {
+  const link = yield* EnvironmentRoadmapLinkPrincipal;
+  if (!link.scopes.has(scope)) return yield* failEnvironmentScopeRequired(scope);
+  return link;
+});
 
 /** The environment an actor acts from; users and GitHub act from none. */
 const actorEnvironment = (actor: RoadmapActor): EnvironmentId | null =>

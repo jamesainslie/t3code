@@ -126,8 +126,17 @@ export function DocumentCommentsMargin({
       ranges.set(draft.id, draft.range);
       tops.set(draft.id, draft.range.getBoundingClientRect().top - origin);
     }
+    // oxlint-disable-next-line react/set-state-in-effect -- Passage positions come from measuring the committed DOM, which render cannot read.
     setLayout({ tops, ranges, detached });
-  }, [comments, contents, container, draft, layoutVersion, source]);
+  }, [
+    comments,
+    container,
+    draft,
+    source,
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- New contents and resizes move the passages without changing the anchors, so they re-measure.
+    contents,
+    layoutVersion,
+  ]);
 
   // Cards size to their text, so push-down needs their measured heights.
   useLayoutEffect(() => {
@@ -136,6 +145,7 @@ export function DocumentCommentsMargin({
     const changed =
       measured.size !== heights.size ||
       [...measured].some(([id, height]) => heights.get(id) !== height);
+    // oxlint-disable-next-line react/set-state-in-effect -- Card heights come from measuring the committed DOM, which render cannot read.
     if (changed) setHeights(measured);
   });
 

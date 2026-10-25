@@ -116,12 +116,12 @@ const LATHE_MCP_TOOLS: Readonly<Record<string, LatheMcpToolDefinition>> = {
     "pull-request",
   ),
   unwatch_pull_request: tool(
-    ["Stop watching", "Stopping watching", "Stopped watching", "a pull request"],
+    ["Stop watching", "Unwatching", "Stopped watching", "a pull request"],
     "unwatch-pr",
     "pull-request",
   ),
   write_pull_request_guides: tool(
-    ["Write", "Writing", "Started", "review guides"],
+    ["Write", "Writing", "Started writing", "review guides"],
     "write-pr-guides",
     "pull-request",
   ),
@@ -137,7 +137,7 @@ const LATHE_MCP_TOOLS: Readonly<Record<string, LatheMcpToolDefinition>> = {
   delegate_task: tool(["Delegate", "Delegating", "Delegated", "a child task"], "delegate"),
   task_status: tool(["Get", "Getting", "Got", "delegated task status"], "task-status"),
   task_cancel: tool(
-    ["Cancel", "Canceling", "Requested cancellation of", "delegated task"],
+    ["Cancel", "Canceling", "Requested cancellation of", "a delegated task"],
     "task-cancel",
   ),
   schedule_task: tool(
@@ -487,10 +487,4 @@ export function resolveLatheMcpToolPresentation(
 ): LatheMcpToolPresentation | null {
   const definition = resolveLatheMcpToolDefinition(toolName);
   return definition === null ? null : { displayName: definition.displayName, logo: "lathe" };
-}
-
-export function resolveLatheMcpToolSummaryAction(
-  toolName: string | null | undefined,
-): LatheMcpToolSummaryAction | null {
-  return resolveLatheMcpToolDefinition(toolName)?.summaryAction ?? null;
 }

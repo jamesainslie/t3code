@@ -10,7 +10,7 @@ import {
   MessageCircleQuestionIcon,
   MessageSquareIcon,
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { getDiffLineStat } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
@@ -68,7 +68,7 @@ export function GuideStop({
   onFinish: (() => void) | null;
   onOpenFile: (path: string) => void;
 }) {
-  const { lettered, byExcerpt } = useMemo(() => letterStopNotes(stop), [stop]);
+  const { lettered, byExcerpt } = letterStopNotes(stop);
   const excerptPaths = new Set(stop.excerpts.map((excerpt) => excerpt.path));
   const otherFiles = stop.files.filter((file) => !excerptPaths.has(file.path));
 
@@ -246,7 +246,7 @@ export function GuideStop({
                   >
                     <MessageCircleQuestionIcon
                       aria-hidden
-                      className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                      className="size-3.5 h-lh shrink-0 text-muted-foreground"
                     />
                     <span className="sr-only">Ask an agent: </span>
                     <span>

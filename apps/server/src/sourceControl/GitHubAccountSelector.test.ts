@@ -7,6 +7,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/process";
 import {
   ProjectId,
+  SourceControlProviderKind,
   VcsProcessExitError,
   type RepositoryIdentity,
   type ServerSettings,
@@ -34,7 +35,7 @@ const identity = (input: {
     remoteUrl: `git@${input.host ?? "github.com"}:${input.owner}/repo.git`,
   },
   rootPath: input.rootPath,
-  provider: input.provider ?? "github",
+  provider: SourceControlProviderKind.make(input.provider ?? "github"),
   owner: input.owner,
   name: "repo",
 });

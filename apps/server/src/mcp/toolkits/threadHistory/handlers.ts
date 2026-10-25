@@ -59,16 +59,17 @@ const make = Effect.gen(function* () {
    * A whole thread, with its v1 transcript imported first when it predates v2. Archived
    * threads hold finished work an agent may pick up, so they read like active ones.
    */
-  const threadDetail = (threadId: ThreadId) =>
-    Effect.gen(function* () {
-      const shell = yield* threadShell(threadId);
-      if (shell === null) return Option.none<HistoryThread>();
-      yield* threadManagement.ensureLegacyTranscript(threadId).pipe(Effect.ignore);
-      const projection = yield* threadManagement
-        .getThreadProjection(threadId)
-        .pipe(Effect.mapError(readFailed));
-      return Option.some<HistoryThread>(projection);
-    });
+  const threadDetail = Effect.fn("ThreadHistoryToolkit.threadDetail")(function* (
+    threadId: ThreadId,
+  ) {
+    const shell = yield* threadShell(threadId);
+    if (shell === null) return Option.none<HistoryThread>();
+    yield* threadManagement.ensureLegacyTranscript(threadId).pipe(Effect.ignore);
+    const projection = yield* threadManagement
+      .getThreadProjection(threadId)
+      .pipe(Effect.mapError(readFailed));
+    return Option.some<HistoryThread>(projection);
+  });
 
   const threadShell = (threadId: ThreadId) =>
     threadManagement.getThreadShell(threadId).pipe(

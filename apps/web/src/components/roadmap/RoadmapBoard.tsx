@@ -24,7 +24,7 @@ import {
   roadmapItemsById,
 } from "@lathe/client-runtime/roadmap/tree";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 import { useRoadmapAreaSettings } from "~/state/roadmap";
@@ -74,17 +74,17 @@ export function RoadmapBoard({
 }: RoadmapBoardProps) {
   const dispatch = useRoadmapDispatch(home);
   const areaSettings = useRoadmapAreaSettings(home);
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
-  const columns = useMemo(() => boardColumns(items, { underId }), [items, underId]);
+  const byId = roadmapItemsById(items);
+  const columns = boardColumns(items, { underId });
   // Only slipping work gets a badge: a column of "On track" would bury the ones that matter.
-  const warnings = useMemo(() => {
+  const warnings = (() => {
     const labels = new Map<RoadmapItemId, RoadmapForecastLabel>();
     for (const [itemId, value] of roadmapForecasts({ items, sprints, areaSettings, today })) {
       const label = forecastLabel(value, today);
       if (label !== null && label.status !== "on-track") labels.set(itemId, label);
     }
     return labels;
-  }, [areaSettings, items, sprints, today]);
+  })();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {

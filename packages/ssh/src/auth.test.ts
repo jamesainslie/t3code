@@ -9,11 +9,7 @@ import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import {
-  buildSshAskpassHelperDescriptor,
-  buildSshChildEnvironment,
-  isSshAuthFailure,
-} from "./auth.ts";
+import { buildSshChildEnvironment, isSshAuthFailure } from "./auth.ts";
 
 describe("ssh auth", () => {
   it.effect("detects ssh auth failures from common permission denied messages", () =>
@@ -111,23 +107,5 @@ describe("ssh auth", () => {
         ),
         Effect.scoped,
       ),
-  );
-
-  it.effect("builds a windows askpass launcher pair", () =>
-    Effect.gen(function* () {
-      const descriptor = yield* buildSshAskpassHelperDescriptor({
-        directory: "C:\\temp\\t3code-ssh-askpass",
-      }).pipe(
-        Effect.provide(
-          Layer.merge(NodeServices.layer, Layer.succeed(HostProcess.Platform, "win32")),
-        ),
-      );
-
-      assert.equal(descriptor.launcherPath, "C:\\temp\\t3code-ssh-askpass\\ssh-askpass.cmd");
-      assert.deepEqual(
-        descriptor.files.map((file) => file.path.split("\\").at(-1)),
-        ["ssh-askpass.cmd", "ssh-askpass.ps1"],
-      );
-    }),
   );
 });

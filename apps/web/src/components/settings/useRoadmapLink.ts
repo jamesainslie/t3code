@@ -3,7 +3,6 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@lathe/client-runtime/state/runtime";
-import { useCallback } from "react";
 
 import { roadmapEnvironment } from "~/state/roadmap";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -31,48 +30,42 @@ export function useLinkToRoadmapHome() {
     label: "roadmap link",
     reportFailure: false,
   });
-  return useCallback(
-    async (input: {
-      readonly environmentId: EnvironmentId;
-      readonly environmentLabel: string;
-      readonly home: EnvironmentId;
-      readonly homeUrl: string;
-    }): Promise<boolean> => {
-      const minted = await mint({
-        environmentId: input.home,
-        input: {
-          environmentId: input.environmentId,
-          label: `Roadmap link from ${input.environmentLabel}`,
-        },
-      });
-      if (minted._tag !== "Success") {
-        if (!isAtomCommandInterrupted(minted)) {
-          linkFailure("Could not create a roadmap link", squashAtomCommandFailure(minted));
-        }
-        return false;
-      }
-      const linked = await configure({
+  return async (input: {
+    readonly environmentId: EnvironmentId;
+    readonly environmentLabel: string;
+    readonly home: EnvironmentId;
+    readonly homeUrl: string;
+  }): Promise<boolean> => {
+    const minted = await mint({
+      environmentId: input.home,
+      input: {
         environmentId: input.environmentId,
-        input: { link: { homeUrl: input.homeUrl, credential: minted.value.credential } },
-      });
-      if (linked._tag !== "Success") {
-        if (!isAtomCommandInterrupted(linked)) {
-          linkFailure("Could not link to the roadmap home", squashAtomCommandFailure(linked));
-        }
-        return false;
+        label: `Roadmap link from ${input.environmentLabel}`,
+      },
+    });
+    if (minted._tag !== "Success") {
+      if (!isAtomCommandInterrupted(minted)) {
+        linkFailure("Could not create a roadmap link", squashAtomCommandFailure(minted));
       }
-      return true;
-    },
-    [configure, mint],
-  );
+      return false;
+    }
+    const linked = await configure({
+      environmentId: input.environmentId,
+      input: { link: { homeUrl: input.homeUrl, credential: minted.value.credential } },
+    });
+    if (linked._tag !== "Success") {
+      if (!isAtomCommandInterrupted(linked)) {
+        linkFailure("Could not link to the roadmap home", squashAtomCommandFailure(linked));
+      }
+      return false;
+    }
+    return true;
+  };
 }
 
 /** Forgets an environment's link; its agents lose the roadmap until it is linked again. */
 export function useUnlinkFromRoadmapHome() {
   const configure = useAtomCommand(roadmapEnvironment.configureRoadmapLink, "roadmap unlink");
-  return useCallback(
-    async (environmentId: EnvironmentId): Promise<boolean> =>
-      (await configure({ environmentId, input: { link: null } }))._tag === "Success",
-    [configure],
-  );
+  return async (environmentId: EnvironmentId): Promise<boolean> =>
+    (await configure({ environmentId, input: { link: null } }))._tag === "Success";
 }

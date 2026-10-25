@@ -9,8 +9,7 @@ import {
   type ProviderInteractionMode,
   type RuntimeMode,
 } from "@lathe/contracts";
-import { deriveThreadTitleSeed } from "@lathe/client-runtime/operations";
-import { assistantCitationsToPlainText } from "@lathe/shared/assistantCitations";
+import { deriveThreadTitleSeed, threadTitleTextFromPrompt } from "@lathe/client-runtime/operations";
 
 import type { UploadedMobileAttachment } from "./attachmentUpload";
 
@@ -22,6 +21,7 @@ export interface ProjectThreadStartTurnSpec {
   readonly messageId: string;
   readonly createdAt: string;
   readonly text: string;
+  readonly titleText?: string;
   readonly context?: OrchestrationMessageContext;
   readonly uploadedAttachments: ReadonlyArray<UploadedMobileAttachment | ChatAttachment>;
   readonly modelSelection: ModelSelection;
@@ -49,7 +49,9 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
       )[0]
     : undefined;
   const title = deriveThreadTitleSeed({
-    text: continuationSource ? `Continue: ${continuationSource.title}` : spec.text,
+    text: continuationSource
+      ? `Continue: ${continuationSource.title}`
+      : (spec.titleText ?? spec.text),
     attachments: spec.uploadedAttachments,
   });
   const isWorktree = spec.workspaceMode === "worktree";
@@ -97,11 +99,6 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
 }
 
 export function deriveThreadTitleFromPrompt(value: string): string {
-  const trimmed = assistantCitationsToPlainText(value).trim();
-  if (trimmed.length === 0) {
-    return "New thread";
-  }
-
-  const compact = trimmed.replace(/\s+/g, " ");
-  return compact.length <= 72 ? compact : `${compact.slice(0, 69).trimEnd()}...`;
+  const title = threadTitleTextFromPrompt(value) || "New thread";
+  return title.length <= 72 ? title : `${title.slice(0, 69).trimEnd()}...`;
 }

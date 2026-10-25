@@ -9,7 +9,6 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@lathe/client-runtime/state/runtime";
-import { useCallback } from "react";
 
 import { randomUUID } from "~/lib/utils";
 import { roadmapEnvironment } from "~/state/roadmap";
@@ -33,29 +32,26 @@ export function useRoadmapDispatch(home: EnvironmentId | null) {
     label: "roadmap dispatch",
     reportFailure: false,
   });
-  return useCallback(
-    async (
-      commands: RoadmapCommand | ReadonlyArray<RoadmapCommand>,
-      failureTitle = "Could not update the roadmap",
-    ): Promise<boolean> => {
-      if (home === null) return false;
-      const list: ReadonlyArray<RoadmapCommand> = "type" in commands ? [commands] : commands;
-      for (const command of list) {
-        const result = await dispatch({ environmentId: home, input: { command } });
-        if (result._tag === "Success") continue;
-        if (!isAtomCommandInterrupted(result)) {
-          toastManager.add({
-            type: "error",
-            title: failureTitle,
-            description: failureMessage(squashAtomCommandFailure(result)),
-          });
-        }
-        return false;
+  return async (
+    commands: RoadmapCommand | ReadonlyArray<RoadmapCommand>,
+    failureTitle = "Could not update the roadmap",
+  ): Promise<boolean> => {
+    if (home === null) return false;
+    const list: ReadonlyArray<RoadmapCommand> = "type" in commands ? [commands] : commands;
+    for (const command of list) {
+      const result = await dispatch({ environmentId: home, input: { command } });
+      if (result._tag === "Success") continue;
+      if (!isAtomCommandInterrupted(result)) {
+        toastManager.add({
+          type: "error",
+          title: failureTitle,
+          description: failureMessage(squashAtomCommandFailure(result)),
+        });
       }
-      return true;
-    },
-    [dispatch, home],
-  );
+      return false;
+    }
+    return true;
+  };
 }
 
 export type RoadmapDispatch = ReturnType<typeof useRoadmapDispatch>;

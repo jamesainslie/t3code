@@ -15,7 +15,7 @@ import {
 import { formatDiffCount } from "@lathe/client-runtime/diff-count";
 import { isJavaScriptReplTool } from "@lathe/shared/toolActivity";
 import { ExternalLinkIcon, GitBranchIcon, RotateCcwIcon } from "lucide-react";
-import { memo, Suspense, use, useMemo } from "react";
+import { memo, Suspense, use } from "react";
 
 import { useDiffThemeName } from "../../hooks/useDiffThemeName";
 import { cn } from "../../lib/utils";
@@ -24,7 +24,8 @@ import { useTurnItemDetail } from "../../state/queries";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import { Button } from "../ui/button";
-import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
+import ChatMarkdown from "../ChatMarkdown";
+import { ChatMarkdownAssetImage } from "./ChatMarkdownMedia";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import {
   CommandOutputPanel,
@@ -58,10 +59,7 @@ function SyntaxTokens({
 }) {
   const themeName = useDiffThemeName();
   const highlighter = use(getSyntaxHighlighterPromise(language, themeName));
-  const { tokens } = useMemo(
-    () => highlighter.codeToTokens(text, { lang: language, theme: themeName }),
-    [highlighter, text, language, themeName],
-  );
+  const { tokens } = highlighter.codeToTokens(text, { lang: language, theme: themeName });
   return tokens.flatMap((line, lineIndex) => [
     lineIndex > 0 ? "\n" : "",
     ...line.map((token) => (
@@ -75,6 +73,16 @@ function SyntaxTokens({
 const monoClassName =
   "font-mono text-(length:--font-size-code,var(--text-2xs)) leading-relaxed whitespace-pre-wrap break-words select-text";
 
+function isJsonText(text: string): boolean {
+  if (!text) return false;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function StructuredValue({
   value,
   highlightJson = false,
@@ -85,15 +93,7 @@ function StructuredValue({
   readonly language?: "typescript";
 }) {
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  const isJson = useMemo(() => {
-    if (!highlightJson || !text) return false;
-    try {
-      JSON.parse(text);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [highlightJson, text]);
+  const isJson = highlightJson && isJsonText(text);
   if (!text) return null;
   return (
     <pre className={cn("max-h-80 overflow-auto text-muted-foreground", monoClassName)}>
@@ -312,8 +312,8 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
             </span>
             {item.additions !== undefined || item.deletions !== undefined ? (
               <span>
-                <span className="text-success">+{formatDiffCount(item.additions ?? 0)}</span>{" "}
-                <span className="text-destructive">-{formatDiffCount(item.deletions ?? 0)}</span>
+                <span className="text-diff-addition">+{formatDiffCount(item.additions ?? 0)}</span>{" "}
+                <span className="text-diff-deletion">-{formatDiffCount(item.deletions ?? 0)}</span>
               </span>
             ) : null}
             {item.runId !== null ? (
@@ -331,8 +331,8 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
           ) : null}
           {item.changes !== undefined && item.changes.length > 0 ? (
             <ul className="space-y-1 font-mono text-muted-foreground">
-              {item.changes.map((change, index) => (
-                <li key={`${change.operation}:${change.path}:${index}`}>
+              {item.changes.map((change) => (
+                <li key={JSON.stringify([change.operation, change.oldPath, change.path])}>
                   {change.operation} {change.oldPath ? `${change.oldPath} → ` : ""}
                   {formatWorkspaceRelativePath(change.path, props.workspaceRoot)}
                   {change.fileType || change.mimeType

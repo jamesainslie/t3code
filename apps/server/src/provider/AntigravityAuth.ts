@@ -12,6 +12,7 @@ import type { LoopbackCallbackDelivery } from "../auth-relay/loopbackCallback.ts
 import {
   makeAuthRelayFlow,
   type AuthRelayFlow,
+  type AuthRelaySignInHandle,
   type PendingAuthorization,
 } from "../auth-relay/AuthRelayFlow.ts";
 import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRuntime";
@@ -120,23 +121,22 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
             }),
         ),
       ),
-    signIn: (handle) =>
-      Effect.gen(function* () {
-        const runtime = yield* options.makeRuntime({
-          onAuthorizationUrl: (url) =>
-            handle
-              .receiveAuthorizationUrl(url)
-              .pipe(
-                Effect.mapError(
-                  (error) =>
-                    new AcpErrors.AcpTransportError({ detail: error.detail, cause: undefined }),
-                ),
+    signIn: Effect.fn("AntigravityAuth.signIn")(function* (handle: AuthRelaySignInHandle) {
+      const runtime = yield* options.makeRuntime({
+        onAuthorizationUrl: (url) =>
+          handle
+            .receiveAuthorizationUrl(url)
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new AcpErrors.AcpTransportError({ detail: error.detail, cause: undefined }),
               ),
-        });
-        const started = yield* runtime.start();
-        yield* handle.verifying("Checking Antigravity access and models.");
-        yield* options.onAuthenticated(started, runtime);
-      }),
+            ),
+      });
+      const started = yield* runtime.start();
+      yield* handle.verifying("Checking Antigravity access and models.");
+      yield* options.onAuthenticated(started, runtime);
+    }),
     signOut: Effect.gen(function* () {
       const runtime = yield* options.makeRuntime({});
       const initialized = yield* runtime.initialize();

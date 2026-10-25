@@ -3,7 +3,7 @@ import type { RoadmapItemId, RoadmapSprint, RoadmapWorkItem } from "@lathe/contr
 import { roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleAlertIcon, CircleDotIcon, MapIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { isElectron } from "~/env";
 import { useEscapeToGoBack } from "~/hooks/useNavigateBack";
@@ -91,31 +91,29 @@ export function RoadmapPage() {
   // A cached or disconnected roadmap is read only: a write could not reach the home.
   const isLive = notice.kind === "live";
   const canEdit = useAtomValue(roadmapEnvironment.dispatchRoadmap.permissionAtom(home)) && isLive;
-  const items = useMemo(() => live.data?.items ?? [], [live.data]);
-  const sprints = useMemo(() => live.data?.sprints ?? [], [live.data]);
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
+  const items = live.data?.items ?? [];
+  const sprints = live.data?.sprints ?? [];
+  const byId = roadmapItemsById(items);
   const today = localIsoDate(new Date());
   const view = roadmapViewOf(search);
-  const underOptions = useMemo(() => boardUnderOptions(items), [items]);
+  const underOptions = boardUnderOptions(items);
   // An item that was deleted or never existed falls back to the whole board.
   const underId =
     search.under !== undefined && underOptions.some((option) => option.id === search.under)
       ? search.under
       : null;
-  const underLabels = useMemo(
-    () =>
-      Object.fromEntries([
-        [ALL, "Everything"],
-        ...underOptions.map((option) => [option.id, option.title]),
-      ]),
-    [underOptions],
-  );
+  const underLabels = Object.fromEntries([
+    [ALL, "Everything"],
+    ...underOptions.map((option) => [option.id, option.title]),
+  ]);
   const sprintFilter = knownSprintFilter(search, sprints);
   // A stable object keeps the Outline's filtered tree memoized across unrelated renders.
-  const outlineFilter = useMemo(
-    () => ({ area: search.area, type: search.type, state: search.itemState, sprint: sprintFilter }),
-    [search.area, search.itemState, search.type, sprintFilter],
-  );
+  const outlineFilter = {
+    area: search.area,
+    type: search.type,
+    state: search.itemState,
+    sprint: sprintFilter,
+  };
 
   const [localEditor, setLocalEditor] = useState<{
     readonly key: number;
@@ -149,15 +147,12 @@ export function RoadmapPage() {
     }));
   };
 
-  const setSearch = useCallback(
-    (next: (current: RoadmapSearch) => RoadmapSearch) =>
-      void navigate({ search: next, replace: true }),
-    [navigate],
-  );
+  const setSearch = (next: (current: RoadmapSearch) => RoadmapSearch) =>
+    void navigate({ search: next, replace: true });
 
   // The selected item, which the drawer shows; one deleted or never there shows nothing.
   const selectedItem = search.item === undefined ? undefined : byId.get(search.item);
-  const closeDrawer = useCallback(() => setSearch(({ item: _item, ...rest }) => rest), [setSearch]);
+  const closeDrawer = () => setSearch(({ item: _item, ...rest }) => rest);
   // Escape closes the innermost thing first: a dialog, then the drawer, then the page.
   useEscapeToGoBack(
     editor !== null || importOpen
@@ -167,38 +162,22 @@ export function RoadmapPage() {
         : undefined,
   );
 
-  const outlineLayout = useMemo(
-    () => ({ level: search.level, focus: search.focus === 1 }),
-    [search.focus, search.level],
-  );
-  const onOutlineLayoutChange = useCallback(
-    ({ level, focus }: RoadmapOutlineLayout) =>
-      setSearch(({ level: _level, focus: _focus, ...rest }) => ({
-        ...rest,
-        ...(level === undefined ? {} : { level }),
-        ...(focus ? { focus: 1 as const } : {}),
-      })),
-    [setSearch],
-  );
+  const outlineLayout = { level: search.level, focus: search.focus === 1 };
+  const onOutlineLayoutChange = ({ level, focus }: RoadmapOutlineLayout) =>
+    setSearch(({ level: _level, focus: _focus, ...rest }) => ({
+      ...rest,
+      ...(level === undefined ? {} : { level }),
+      ...(focus ? { focus: 1 as const } : {}),
+    }));
 
-  const openEditor = useCallback(
-    (mode: RoadmapItemEditorMode) =>
-      setLocalEditor((current) => ({ key: (current?.key ?? 0) + 1, mode })),
-    [],
-  );
-  const onAddChild = useCallback(
-    (parent: RoadmapWorkItem) => openEditor({ kind: "create", parentId: parent.id }),
-    [openEditor],
-  );
-  const onEdit = useCallback(
-    (item: RoadmapWorkItem) => openEditor({ kind: "edit", item }),
-    [openEditor],
-  );
-  const onSelect = useCallback(
-    (itemId: RoadmapItemId) => setSearch((current) => ({ ...current, item: itemId })),
-    [setSearch],
-  );
-  const onOpen = useCallback((item: RoadmapWorkItem) => onSelect(item.id), [onSelect]);
+  const openEditor = (mode: RoadmapItemEditorMode) =>
+    setLocalEditor((current) => ({ key: (current?.key ?? 0) + 1, mode }));
+  const onAddChild = (parent: RoadmapWorkItem) =>
+    openEditor({ kind: "create", parentId: parent.id });
+  const onEdit = (item: RoadmapWorkItem) => openEditor({ kind: "edit", item });
+  const onSelect = (itemId: RoadmapItemId) =>
+    setSearch((current) => ({ ...current, item: itemId }));
+  const onOpen = (item: RoadmapWorkItem) => onSelect(item.id);
   const closeEditor = (createdId?: RoadmapItemId) => {
     setLocalEditor(null);
     if (search.new === undefined && createdId === undefined) return;
@@ -469,15 +448,11 @@ function OutlineFilters({
   readonly sprintFilter: RoadmapSprintFilter | undefined;
   readonly setSearch: (next: (current: RoadmapSearch) => RoadmapSearch) => void;
 }) {
-  const sprintLabels = useMemo(
-    () =>
-      Object.fromEntries([
-        [ALL, "Any"],
-        ["none", "None"],
-        ...sprints.map((sprint) => [sprint.id, sprint.name]),
-      ]),
-    [sprints],
-  );
+  const sprintLabels = Object.fromEntries([
+    [ALL, "Any"],
+    ["none", "None"],
+    ...sprints.map((sprint) => [sprint.id, sprint.name]),
+  ]);
   return (
     <>
       <AreaFilter search={search} setSearch={setSearch} />

@@ -1,5 +1,6 @@
 import {
   isAtomCommandInterrupted,
+  settlePromise,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@lathe/client-runtime/state/runtime";
@@ -67,20 +68,19 @@ export function TerminalBrowserLaunchBanner({
     if (pending) return false;
     setPending(true);
     setError(null);
-    try {
-      const result = await request();
-      if (result._tag === "Success") return true;
-      if (!isAtomCommandInterrupted(result)) {
-        const failure = squashAtomCommandFailure(result);
-        setError(failure instanceof Error ? failure.message : "Could not finish sign-in.");
-      }
-      return false;
-    } catch {
+    const settled = await settlePromise(request);
+    setPending(false);
+    if (settled._tag === "Failure") {
       setError("Could not finish sign-in. Try again.");
       return false;
-    } finally {
-      setPending(false);
     }
+    const result = settled.value;
+    if (result._tag === "Success") return true;
+    if (!isAtomCommandInterrupted(result)) {
+      const failure = squashAtomCommandFailure(result);
+      setError(failure instanceof Error ? failure.message : "Could not finish sign-in.");
+    }
+    return false;
   }
 
   return (

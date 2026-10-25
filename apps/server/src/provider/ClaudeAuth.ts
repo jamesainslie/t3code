@@ -9,7 +9,11 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import { AuthRelayError } from "../auth-relay/AuthRelayError.ts";
-import { makeAuthRelayFlow, type AuthRelayFlow } from "../auth-relay/AuthRelayFlow.ts";
+import {
+  makeAuthRelayFlow,
+  type AuthRelayFlow,
+  type AuthRelaySignInHandle,
+} from "../auth-relay/AuthRelayFlow.ts";
 import { makeBrowserLaunchStderrHandler } from "../auth-relay/browserLaunchCapture.ts";
 import {
   MAX_CALLBACK_URL_LENGTH,
@@ -126,52 +130,51 @@ export const makeClaudeAuth = Effect.fn("makeClaudeAuth")(function* (
       describeFailure,
     },
     parseAuthorizationUrl: parseClaudeAuthorizationUrl,
-    signIn: (handle) =>
-      Effect.gen(function* () {
-        const login = yield* options.spawnLogin;
-        activeLogin = login;
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            if (activeLogin === login) activeLogin = undefined;
-          }),
-        );
-        const receive = (url: string) =>
-          handle.receiveAuthorizationUrl(url).pipe(
-            // A URL the CLI printed that is not its sign-in request is ordinary output.
-            Effect.catch((error) =>
-              error.detail.includes("more than one")
-                ? Effect.fail(setupError("start", error.detail))
-                : Effect.void,
-            ),
-          );
-        const handleStderr = makeBrowserLaunchStderrHandler({
-          marker: CLAUDE_AUTH_BROWSER_MARKER,
-          onUrl: receive,
-        });
-        // The scanners die with this scope, so a URL printed after exit is never acted on.
-        yield* login.stdout.pipe(
-          Stream.decodeText(),
-          Stream.mapEffect((text) =>
-            Effect.forEach(readStdoutUrls(text), receive, { discard: true }),
+    signIn: Effect.fn("ClaudeAuth.signIn")(function* (handle: AuthRelaySignInHandle) {
+      const login = yield* options.spawnLogin;
+      activeLogin = login;
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (activeLogin === login) activeLogin = undefined;
+        }),
+      );
+      const receive = (url: string) =>
+        handle.receiveAuthorizationUrl(url).pipe(
+          // A URL the CLI printed that is not its sign-in request is ordinary output.
+          Effect.catch((error) =>
+            error.detail.includes("more than one")
+              ? Effect.fail(setupError("start", error.detail))
+              : Effect.void,
           ),
-          Stream.runDrain,
-          Effect.ignoreCause({ log: true }),
-          Effect.forkScoped,
         );
-        yield* login.stderr.pipe(
-          Stream.runForEach((chunk) => handleStderr(decoder.decode(chunk, { stream: true }))),
-          Effect.ignoreCause({ log: true }),
-          Effect.forkScoped,
-        );
-        const exitCode = yield* login.exitCode.pipe(
-          Effect.mapError(() => setupError("start", "Claude sign-in stopped before it finished.")),
-        );
-        if (exitCode !== 0) {
-          return yield* setupError("start", "Claude sign-in did not finish. Start sign-in again.");
-        }
-        yield* handle.verifying("Checking the Claude account.");
-        yield* options.refreshSnapshot;
-      }),
+      const handleStderr = makeBrowserLaunchStderrHandler({
+        marker: CLAUDE_AUTH_BROWSER_MARKER,
+        onUrl: receive,
+      });
+      // The scanners die with this scope, so a URL printed after exit is never acted on.
+      yield* login.stdout.pipe(
+        Stream.decodeText(),
+        Stream.mapEffect((text) =>
+          Effect.forEach(readStdoutUrls(text), receive, { discard: true }),
+        ),
+        Stream.runDrain,
+        Effect.ignoreCause({ log: true }),
+        Effect.forkScoped,
+      );
+      yield* login.stderr.pipe(
+        Stream.runForEach((chunk) => handleStderr(decoder.decode(chunk, { stream: true }))),
+        Effect.ignoreCause({ log: true }),
+        Effect.forkScoped,
+      );
+      const exitCode = yield* login.exitCode.pipe(
+        Effect.mapError(() => setupError("start", "Claude sign-in stopped before it finished.")),
+      );
+      if (exitCode !== 0) {
+        return yield* setupError("start", "Claude sign-in did not finish. Start sign-in again.");
+      }
+      yield* handle.verifying("Checking the Claude account.");
+      yield* options.refreshSnapshot;
+    }),
     submitCode: (pasted) =>
       Effect.suspend(() => {
         const login = activeLogin;

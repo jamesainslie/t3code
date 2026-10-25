@@ -1,5 +1,4 @@
 import type { ScopedThreadRef, ThreadDocumentCommentMutation } from "@lathe/contracts";
-import { useMemo } from "react";
 
 import { documentCommentsEnvironment } from "~/state/documentComments";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -14,16 +13,13 @@ export function useDocumentCommentActions(
   const mutate = useAtomCommand(documentCommentsEnvironment.mutate);
   const { environmentId, threadId } = threadRef;
 
-  return useMemo(() => {
-    const send = (mutation: ThreadDocumentCommentMutation) =>
-      void mutate({ environmentId, input: { threadId, mutation } });
-    return {
-      add: ({ commentId, anchor, body }) =>
-        send({ type: "add", commentId, filePath, anchor, body }),
-      update: (commentId, body) => send({ type: "update", commentId, body }),
-      remove: (commentId) => send({ type: "delete", commentId }),
-      resolve: (commentId) => send({ type: "resolve", commentId, resolution: null }),
-      reopen: (commentId) => send({ type: "reopen", commentId }),
-    };
-  }, [environmentId, filePath, mutate, threadId]);
+  const send = (mutation: ThreadDocumentCommentMutation) =>
+    void mutate({ environmentId, input: { threadId, mutation } });
+  return {
+    add: ({ commentId, anchor, body }) => send({ type: "add", commentId, filePath, anchor, body }),
+    update: (commentId, body) => send({ type: "update", commentId, body }),
+    remove: (commentId) => send({ type: "delete", commentId }),
+    resolve: (commentId) => send({ type: "resolve", commentId, resolution: null }),
+    reopen: (commentId) => send({ type: "reopen", commentId }),
+  };
 }

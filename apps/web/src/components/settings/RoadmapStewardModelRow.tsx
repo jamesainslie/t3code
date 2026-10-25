@@ -12,6 +12,7 @@ import {
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
 } from "../../providerInstances";
+import { useEnvironmentProviders } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
@@ -46,9 +47,12 @@ export function RoadmapStewardModelRow() {
           first.settings.roadmap.stewardModelSelection,
         ),
     );
-  const providers = (environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS).filter(
-    (provider) => provider.supportsTextGeneration !== false,
-  );
+  const providersByEnvironment = useEnvironmentProviders();
+  const providers = (
+    (environment?.serverConfig
+      ? providersByEnvironment.get(environment.environmentId)
+      : undefined) ?? EMPTY_SERVER_PROVIDERS
+  ).filter((provider) => provider.supportsTextGeneration !== false);
   const instanceEntries = sortProviderInstanceEntries(
     applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings, null),
   );
@@ -114,8 +118,6 @@ export function RoadmapStewardModelRow() {
                 provider={instanceEntry.driverKind}
                 models={instanceEntry.models}
                 model={selection.model}
-                prompt=""
-                onPromptChange={() => {}}
                 modelOptions={selection.options ?? []}
                 allowPromptInjectedEffort={false}
                 planModeEnabled={settings.planModeEnabled || selectsPlanAgent(selection.options)}

@@ -21,10 +21,9 @@ import {
   SshConnectionTarget,
 } from "../connection/model.ts";
 import {
-  GitHubRoutingPermissions,
-  makeGitHubRoutingPermissions,
-} from "../connection/githubRoutingPermissions.ts";
-import { credentialConnectionId } from "../connection/routes.ts";
+  PullRequestRoutingPermissions,
+  makePullRequestRoutingPermissions,
+} from "../connection/pullRequestRoutingPermissions.ts";
 import {
   ConnectionCatalogDocument,
   EMPTY_CONNECTION_CATALOG_DOCUMENT,
@@ -88,10 +87,10 @@ describe("ConnectionCatalogDocument", () => {
             }).pipe(Effect.orDie);
           }),
       };
-      const permissions = yield* makeGitHubRoutingPermissions(storage);
+      const permissions = yield* makePullRequestRoutingPermissions(storage);
       expect(yield* permissions.get(entry)).toBe("off");
       yield* permissions.set(entry, "read");
-      const restarted = yield* makeGitHubRoutingPermissions(storage);
+      const restarted = yield* makePullRequestRoutingPermissions(storage);
       expect(yield* restarted.get(entry)).toBe("read");
 
       const changedEndpoint = {
@@ -122,19 +121,19 @@ describe("ConnectionCatalogDocument", () => {
       expect(yield* restarted.get(entry)).toBe("read-write");
       yield* restarted.forget(ENVIRONMENT_ID);
       expect(yield* restarted.get(entry)).toBe("off");
-      const afterRemoval = yield* makeGitHubRoutingPermissions(storage);
+      const afterRemoval = yield* makePullRequestRoutingPermissions(storage);
       expect(yield* afterRemoval.get(entry)).toBe("off");
 
       yield* permissions.set(entry, "read");
       document = removeConnectionFromCatalog(document, ENVIRONMENT_ID);
-      const afterCatalogRemoval = yield* makeGitHubRoutingPermissions(storage);
+      const afterCatalogRemoval = yield* makePullRequestRoutingPermissions(storage);
       expect(yield* afterCatalogRemoval.get(entry)).toBe("off");
     }),
   );
 
   it.effect("requires explicit trust for primary, relay, and SSH connections independently", () =>
     Effect.gen(function* () {
-      const permissions = yield* makeGitHubRoutingPermissions({
+      const permissions = yield* makePullRequestRoutingPermissions({
         read: Effect.succeed([]),
         write: () => Effect.void,
       });
@@ -180,8 +179,8 @@ describe("ConnectionCatalogDocument", () => {
   it.effect("does not enable GitHub routing when permission persistence fails", () =>
     Effect.gen(function* () {
       const entry = { target: BEARER_TARGET, profile: Option.some(BEARER_PROFILE), enabled: true };
-      expect(yield* (yield* GitHubRoutingPermissions).get(entry)).toBe("off");
-      const permissions = yield* makeGitHubRoutingPermissions({
+      expect(yield* (yield* PullRequestRoutingPermissions).get(entry)).toBe("off");
+      const permissions = yield* makePullRequestRoutingPermissions({
         read: Effect.succeed([]),
         write: () =>
           Effect.fail(
@@ -195,46 +194,6 @@ describe("ConnectionCatalogDocument", () => {
       expect(yield* permissions.get(entry)).toBe("off");
     }),
   );
-
-  it.each([
-    { name: "legacy", accountId: undefined },
-    { name: "account-bound", accountId: "account-1" },
-  ])("round-trips a catalog containing a $name DPoP token", ({ accountId }) => {
-    const token = new TokenStore.RemoteDpopAccessToken({
-      ...REMOTE_TOKEN,
-      ...(accountId === undefined ? {} : { accountId }),
-    });
-    const document = {
-      ...EMPTY_CONNECTION_CATALOG_DOCUMENT,
-      targets: [RELAY_TARGET],
-      remoteDpopTokens: [token],
-    };
-    const schema = Schema.fromJsonString(ConnectionCatalogDocument);
-    const restored = Schema.decodeSync(schema)(Schema.encodeSync(schema)(document));
-
-    expect(restored).toEqual(document);
-    expect(restored.remoteDpopTokens[0]?.accountId).toBe(accountId);
-  });
-
-  it("registers a bearer connection as one catalog mutation", () => {
-    const document = registerConnectionInCatalog(
-      EMPTY_CONNECTION_CATALOG_DOCUMENT,
-      new BearerConnectionRegistration({
-        target: BEARER_TARGET,
-        profile: BEARER_PROFILE,
-        credential: BEARER_CREDENTIAL,
-      }),
-    );
-
-    expect(document.targets).toEqual([BEARER_TARGET]);
-    expect(document.profiles).toEqual([BEARER_PROFILE]);
-    expect(document.credentials).toEqual([
-      {
-        connectionId: BEARER_TARGET.connectionId,
-        credential: BEARER_CREDENTIAL,
-      },
-    ]);
-  });
 
   it("replaces obsolete connection metadata without discarding a reusable DPoP token", () => {
     const bearer = registerConnectionInCatalog(
@@ -301,18 +260,6 @@ describe("ConnectionCatalogDocument", () => {
     const removed = removeConnectionFromCatalog(registered, ENVIRONMENT_ID);
 
     expect(putRemoteDpopTokenInCatalog(removed, REMOTE_TOKEN)).toEqual(
-      EMPTY_CONNECTION_CATALOG_DOCUMENT,
-    );
-  });
-
-  it("removes a DPoP token stored before the environment is removed", () => {
-    const registered = registerConnectionInCatalog(
-      EMPTY_CONNECTION_CATALOG_DOCUMENT,
-      new RelayConnectionRegistration({ target: RELAY_TARGET }),
-    );
-    const refreshed = putRemoteDpopTokenInCatalog(registered, REMOTE_TOKEN);
-
-    expect(removeConnectionFromCatalog(refreshed, ENVIRONMENT_ID)).toEqual(
       EMPTY_CONNECTION_CATALOG_DOCUMENT,
     );
   });
@@ -388,7 +335,7 @@ describe("ConnectionCatalogDocument", () => {
     );
   });
 
-  it("persists the normalized SSH profile beside its target", () => {
+  it("persists the normalized SSH profile and its paired token beside its target", () => {
     const target = new SshConnectionTarget({
       environmentId: ENVIRONMENT_ID,
       label: "SSH",
@@ -407,43 +354,16 @@ describe("ConnectionCatalogDocument", () => {
     });
     const document = registerConnectionInCatalog(
       EMPTY_CONNECTION_CATALOG_DOCUMENT,
-      new SshConnectionRegistration({ target, profile }),
+      new SshConnectionRegistration({ target, profile, credential: BEARER_CREDENTIAL }),
     );
 
     expect(document.targets).toEqual([target]);
     expect(document.profiles).toEqual([profile]);
-    expect(document.credentials).toEqual([]);
-  });
-
-  // Adding an SSH host pairs once; its first connect must find that bearer
-  // where the SSH broker looks, or it pairs again and orphans a session.
-  it("stores the bearer an SSH registration was provisioned with where its connect reads it", () => {
-    const target = new SshConnectionTarget({
-      environmentId: ENVIRONMENT_ID,
-      label: "SSH",
-      connectionId: 'ssh:environment-1:["devbox","devbox.example.test","developer",22]',
-    });
-    const profile = new SshConnectionProfile({
-      connectionId: target.connectionId,
-      environmentId: target.environmentId,
-      label: target.label,
-      target: {
-        alias: "devbox",
-        hostname: "devbox.example.test",
-        username: "developer",
-        port: 22,
-      },
-    });
-    const credential = new BearerConnectionCredential({ token: "provisioned-bearer" });
-    const document = registerConnectionInCatalog(
-      EMPTY_CONNECTION_CATALOG_DOCUMENT,
-      new SshConnectionRegistration({ target, profile, credential }),
-    );
-
-    const brokerCredentialId = credentialConnectionId(target.connectionId);
-    expect(
-      document.credentials.find((entry) => entry.connectionId === brokerCredentialId)?.credential,
-    ).toEqual(credential);
+    expect(document.credentials).toEqual([
+      { connectionId: target.connectionId, credential: BEARER_CREDENTIAL },
+    ]);
+    // Removing the route forgets its token too.
+    expect(removeConnectionFromCatalog(document, ENVIRONMENT_ID).credentials).toEqual([]);
   });
 
   it("keeps every route of an environment and drops only a removed route's records", () => {

@@ -14,7 +14,7 @@ type MermaidPart =
   | { kind: "mermaid"; sourceOffset: number; source: string; complete: boolean };
 
 /** The AST's code range includes its closing fence, even inside lists and quotes. */
-export function isMermaidFenceComplete(raw: string, code: string): boolean {
+function isMermaidFenceComplete(raw: string, code: string): boolean {
   const lines = raw.trimEnd().split(/\r?\n/);
   const opening = lines[0]?.match(/^\s*(`{3,}|~{3,})/);
   if (!opening || lines.length < 2) return false;

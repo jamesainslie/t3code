@@ -9,7 +9,7 @@ import {
   type RoadmapWorkItem,
   type ThreadId,
 } from "@lathe/contracts";
-import { parseChangeRequestUrl } from "@lathe/shared/changeRequestUrl";
+import { sourceControlDefinitions } from "../../../sourceControl/sourceControlDefinitions.ts";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -142,37 +142,35 @@ const make = Effect.gen(function* () {
 
   // The request namespace is per provider session, so one agent's retries
   // replay its own commands and never another session's.
-  const commandId = (
+  const commandId = Effect.fn("RoadmapToolkit.commandId")(function* (
     scope: McpInvocationContext.McpThreadInvocationScope,
     tool: string,
     clientRequestId: string | undefined,
-  ) =>
-    Effect.gen(function* () {
-      const requestKey = clientRequestId ?? (yield* crypto.randomUUIDv4().pipe(Effect.orDie));
-      return CommandId.make(
-        ["command", "mcp", scope.requestNamespace, "roadmap", tool, requestKey]
-          .map(encodeURIComponent)
-          .join(":"),
-      );
-    });
+  ) {
+    const requestKey = clientRequestId ?? (yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+    return CommandId.make(
+      ["command", "mcp", scope.requestNamespace, "roadmap", tool, requestKey]
+        .map(encodeURIComponent)
+        .join(":"),
+    );
+  });
 
-  const dispatch = (
+  const dispatch = Effect.fn("RoadmapToolkit.dispatch")(function* (
     scope: McpInvocationContext.McpThreadInvocationScope,
     tool: string,
     clientRequestId: string | undefined,
     build: (commandId: CommandId) => RoadmapItemCommand,
-  ) =>
-    Effect.gen(function* () {
-      const actor = yield* agentActor(scope);
-      const command = build(yield* commandId(scope, tool, clientRequestId));
-      const result = yield* fromService(roadmap.submit(command, actor));
-      // A replayed create returns the item the first attempt made, not this attempt's new id.
-      const itemId = result.itemId ?? command.itemId;
-      const change: RoadmapChangeResult = result.queued
-        ? { itemId, queued: true }
-        : { itemId, sequence: result.sequence };
-      return change;
-    });
+  ) {
+    const actor = yield* agentActor(scope);
+    const command = build(yield* commandId(scope, tool, clientRequestId));
+    const result = yield* fromService(roadmap.submit(command, actor));
+    // A replayed create returns the item the first attempt made, not this attempt's new id.
+    const itemId = result.itemId ?? command.itemId;
+    const change: RoadmapChangeResult = result.queued
+      ? { itemId, queued: true }
+      : { itemId, sequence: result.sequence };
+    return change;
+  });
 
   const refuseDoneWithOpenCriteria = (texts: ReadonlyArray<string>) =>
     texts.length === 0
@@ -456,7 +454,7 @@ const make = Effect.gen(function* () {
     lathe_roadmap_link_pull_request: McpToolAccess.actsAsCaller((input) =>
       Effect.gen(function* () {
         const scope = yield* requireRoadmap;
-        const link = parseChangeRequestUrl(input.url);
+        const link = sourceControlDefinitions.parseChangeRequestUrl(input.url)?.link ?? null;
         if (link === null) {
           return yield* new RoadmapToolFailure({
             code: "invalid_request",

@@ -267,8 +267,6 @@ export const prepareSshRegistration = Effect.fn(
       label,
       target: provisioned.bootstrap.target,
     }),
-    // Provisioning paired to check the host; keeping its bearer spares the
-    // first connect a second pairing and an orphaned 30-day session.
     credential: new BearerConnectionCredential({ token: provisioned.bearerToken }),
   });
 });

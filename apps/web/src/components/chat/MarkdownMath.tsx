@@ -1,58 +1,59 @@
-import type { KatexOptions } from "katex";
-import { Suspense, use, useMemo } from "react";
+import { lazy, memo, Suspense } from "react";
 
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 
-type RenderToString = (tex: string, options: KatexOptions) => string;
+const MathTypeset = lazy(() => import("./MathTypeset"));
 
-let katexPromise: Promise<RenderToString> | null = null;
-
-// KaTeX and its stylesheet load on the first formula, not with the app.
-export function loadKatex(): Promise<RenderToString> {
-  katexPromise ??= Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(
-    ([katex]) => katex.default.renderToString,
-    (error: unknown) => {
-      katexPromise = null;
-      throw error;
-    },
-  );
-  return katexPromise;
-}
-
-function TypesetMath({ source, display }: { source: string; display: boolean }) {
-  const renderToString = use(loadKatex());
-  // `trust` stays off, so \href, \includegraphics and raw HTML commands render
-  // as errors instead of markup. Invalid TeX shows in red rather than throwing.
-  const html = useMemo(
-    () => renderToString(source, { displayMode: display, throwOnError: false, strict: "ignore" }),
-    [display, renderToString, source],
-  );
-  // Copying a formula yields its TeX, not KaTeX's glyph soup.
-  return display ? (
-    <div
-      className="chat-markdown-math"
-      data-markdown-copy={`$$\n${source}\n$$\n\n`}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  ) : (
-    <span data-markdown-copy={`$${source}$`} dangerouslySetInnerHTML={{ __html: html }} />
-  );
-}
-
-/** TeX from `$…$`, `$$…$$` or a ```math fence, typeset with KaTeX. */
-export function MarkdownMath({ source, display }: { source: string; display: boolean }) {
-  const fallback = display ? (
-    <pre>
-      <code>{source}</code>
-    </pre>
-  ) : (
-    <code>{source}</code>
-  );
+/**
+ * One formula from `remark-math`. Shows its TeX until KaTeX loads, and
+ * keeps showing it when KaTeX cannot parse it, such as mid-stream. Copying
+ * any part of a formula copies its whole TeX source.
+ */
+export const MarkdownMath = memo(function MarkdownMath(props: {
+  tex: string;
+  display: boolean;
+  focusable?: boolean;
+}) {
+  const tex = props.tex.trim();
+  const source = props.display ? `\\[\n${tex}\n\\]` : `\\(${tex}\\)`;
+  const fallback = <span className="whitespace-pre-wrap">{source}</span>;
   return (
-    <RenderErrorBoundary resetKeys={[source]} fallback={fallback}>
-      <Suspense fallback={fallback}>
-        <TypesetMath source={source} display={display} />
-      </Suspense>
-    </RenderErrorBoundary>
+    <span
+      className={
+        props.display
+          ? "chat-markdown-math-display my-[0.65rem] block in-[.chat-markdown-table-container]:max-w-none in-[.chat-markdown-table-container]:overflow-visible"
+          : "inline-block max-w-full align-middle whitespace-nowrap wrap-normal break-normal in-[.chat-markdown-table-container]:max-w-none in-[.chat-markdown-table-container]:overflow-visible"
+      }
+      data-markdown-math={props.display ? "display" : "inline"}
+      data-markdown-copy={props.display ? `${source}\n\n` : source}
+      role={props.focusable === false ? undefined : "group"}
+      aria-label={
+        props.focusable === false
+          ? undefined
+          : props.display
+            ? "Display equation"
+            : "Inline equation"
+      }
+    >
+      <span
+        className="block max-w-full overflow-x-auto overflow-y-hidden in-[.chat-markdown-table-container]:max-w-none in-[.chat-markdown-table-container]:overflow-visible px-0.5 py-0.75 focus-visible:outline-1 focus-visible:outline-solid focus-visible:-outline-offset-1 focus-visible:outline-border [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:border [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-clip-content"
+        tabIndex={props.focusable === false ? -1 : 0}
+        aria-label={
+          props.focusable === false
+            ? undefined
+            : props.display
+              ? "Scroll display equation"
+              : "Scroll inline equation"
+        }
+      >
+        <span className={props.display ? "inline-block w-max min-w-full" : "inline-block w-max"}>
+          <RenderErrorBoundary resetKeys={[tex]} fallback={fallback}>
+            <Suspense fallback={fallback}>
+              <MathTypeset tex={tex} display={props.display} fallback={fallback} />
+            </Suspense>
+          </RenderErrorBoundary>
+        </span>
+      </span>
+    </span>
   );
-}
+});

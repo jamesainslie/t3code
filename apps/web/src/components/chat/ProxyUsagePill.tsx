@@ -4,7 +4,7 @@ import type {
   ProxyLedgerSummaryStyle,
   UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { useNowMinute } from "~/hooks/useNowMinute";
@@ -473,7 +473,7 @@ function Ledger({
   // The peek and the card unmount when they close, so this second-by-second
   // clock and the re-derivation it drives only run while someone is looking.
   const now = useNowSecond();
-  const pill = useMemo(() => deriveProxyPill(snapshot, now, { seconds: true }), [snapshot, now]);
+  const pill = deriveProxyPill(snapshot, now, { seconds: true });
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const auth = useAtomCommand(serverEnvironment.usageLimitSourceAuth, { reportFailure: false });
   useLiveGateway(environmentId);
@@ -623,17 +623,11 @@ export function ProxyUsagePill({
   const configs = useAtomValue(environmentServerConfigsAtom);
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
   const minute = useNowMinute();
-  const selected = useMemo(
-    () => selectProxySource(configs, [threadEnvironmentId, primaryEnvironmentId]),
-    [configs, threadEnvironmentId, primaryEnvironmentId],
-  );
+  const selected = selectProxySource(configs, [threadEnvironmentId, primaryEnvironmentId]);
   const snapshot: UsageLimitSourceSnapshot | undefined = selected?.snapshot;
   const environmentId = (selected?.environmentId ?? threadEnvironmentId) as EnvironmentId;
   const threshold = snapshot?.proxy?.rotationThresholdPercent ?? 90;
-  const pill = useMemo(
-    () => (snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null),
-    [snapshot, minute],
-  );
+  const pill = snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null;
   // Hovering peeks at the ledger; clicking opens the card under the thread
   // details card, which stays until closed (a login in it sends the user to
   // another window). The peek stands down while the card is open so the
@@ -658,11 +652,11 @@ export function ProxyUsagePill({
     loginFor !== null || (mode === "inline" ? cardRequested : popoverRequested && mode !== null);
   // Room coming back ends the popover, as it does the details card's.
   if (mode === "inline" && popoverRequested) setPopoverRequested(false);
-  const closeCard = useCallback(() => {
+  const closeCard = () => {
     setLoginFor(null);
     if (mode === "popover") setPopoverRequested(false);
     else setCardRequested(false);
-  }, [mode, setCardRequested, setLoginFor]);
+  };
   if (!pill) return null;
   const { session, weekly } = windowsOf(pill.current);
   const dim = pill.status !== "live";

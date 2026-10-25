@@ -109,17 +109,19 @@ const make = Effect.gen(function* () {
       WHERE thread_id = ${threadId}
     `.pipe(Effect.map((rows) => rows[0]?.digestedUntil ?? null));
 
-  const writeCursor = (threadId: ThreadId, digestedUntil: string) =>
-    Effect.gen(function* () {
-      const ranAt = DateTime.formatIso(yield* DateTime.now);
-      yield* sql`
-        INSERT INTO roadmap_steward_threads (thread_id, digested_until, ran_at)
-        VALUES (${threadId}, ${digestedUntil}, ${ranAt})
-        ON CONFLICT (thread_id) DO UPDATE SET
-          digested_until = excluded.digested_until,
-          ran_at = excluded.ran_at
-      `;
-    });
+  const writeCursor = Effect.fn("RoadmapSteward.writeCursor")(function* (
+    threadId: ThreadId,
+    digestedUntil: string,
+  ) {
+    const ranAt = DateTime.formatIso(yield* DateTime.now);
+    yield* sql`
+      INSERT INTO roadmap_steward_threads (thread_id, digested_until, ran_at)
+      VALUES (${threadId}, ${digestedUntil}, ${ranAt})
+      ON CONFLICT (thread_id) DO UPDATE SET
+        digested_until = excluded.digested_until,
+        ran_at = excluded.ran_at
+    `;
+  });
 
   /** The roadmap as this environment sees it, or none when it has no roadmap to read. */
   const readRoadmap = Effect.gen(function* () {
@@ -151,8 +153,10 @@ const make = Effect.gen(function* () {
     return threads;
   };
 
-  const runThread = (threadId: ThreadId) =>
-    Effect.gen(function* () {
+  // Untraced because the span must end before the failure is logged away, so a
+  // failed run still records as failed.
+  const runThread = Effect.fnUntraced(
+    function* (threadId: ThreadId) {
       const environmentId = yield* identity.getEnvironmentId;
       const snapshot = yield* readRoadmap;
       if (Option.isNone(snapshot)) return;
@@ -214,18 +218,21 @@ const make = Effect.gen(function* () {
       }
       // Refused writes still count as read: the model would only say the same again.
       yield* writeCursor(threadId, newest.endedAt);
-    }).pipe(
-      Effect.withSpan("RoadmapSteward.runThread"),
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.logWarning("roadmap steward run failed", {
-              threadId,
-              // An unreachable home or a failed model call; the next turn or sweep retries.
-              cause: Cause.pretty(cause),
-            }),
+    },
+    (effect, threadId) =>
+      effect.pipe(
+        Effect.withSpan("RoadmapSteward.runThread"),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("roadmap steward run failed", {
+                threadId,
+                // An unreachable home or a failed model call; the next turn or sweep retries.
+                cause: Cause.pretty(cause),
+              }),
+        ),
       ),
-    );
+  );
 
   const pending = yield* Ref.make<ReadonlySet<ThreadId>>(new Set());
   const worker = yield* makeDrainableWorker((threadId: ThreadId) =>

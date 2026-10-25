@@ -8,16 +8,15 @@ import type {
   TerminalSummary,
   ThreadId,
 } from "@lathe/contracts";
+import { DEFAULT_MAX_TERMINAL_BUFFER_BYTES } from "@lathe/contracts";
 import {
   appendOutput,
-  DEFAULT_MAX_TERMINAL_BUFFER_BYTES,
   EMPTY_TERMINAL_OUTPUT_STATE,
   resetOutput,
   type TerminalOutputState,
 } from "./terminalOutput.ts";
 
 export {
-  DEFAULT_MAX_TERMINAL_BUFFER_BYTES,
   INITIAL_TERMINAL_OUTPUT_CURSOR,
   readTerminalOutputUpdate,
   terminalOutputText,
@@ -25,6 +24,7 @@ export {
   type TerminalOutputState,
   type TerminalOutputUpdate,
 } from "./terminalOutput.ts";
+export { DEFAULT_MAX_TERMINAL_BUFFER_BYTES } from "@lathe/contracts";
 
 /** A URL a command in the terminal asked to open, waiting on the client to act. */
 export type TerminalBrowserLaunch = Pick<

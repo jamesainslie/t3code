@@ -161,10 +161,12 @@ const make = Effect.gen(function* () {
   });
 
   /** The recorded refusal, when the home already refused this command. */
-  const insert = (command: RoadmapCommand, actor: RoadmapActor) =>
-    Effect.gen(function* () {
-      const now = DateTime.formatIso(yield* DateTime.now);
-      yield* sql`
+  const insert = Effect.fn("RoadmapLinkOutbox.insert")(function* (
+    command: RoadmapCommand,
+    actor: RoadmapActor,
+  ) {
+    const now = DateTime.formatIso(yield* DateTime.now);
+    yield* sql`
         INSERT INTO roadmap_link_outbox (
           command_id, command_json, actor_json, status, enqueued_at
         ) VALUES (
@@ -176,17 +178,17 @@ const make = Effect.gen(function* () {
         )
         ON CONFLICT (command_id) DO NOTHING
       `;
-      const existing = yield* selectExisting(command.commandId);
-      return Option.flatMap(existing, (row) =>
-        row.status === "rejected" && row.error !== null ? Option.some(row.error) : Option.none(),
-      );
-    }).pipe(Effect.catch(queueFailed));
+    const existing = yield* selectExisting(command.commandId);
+    return Option.flatMap(existing, (row) =>
+      row.status === "rejected" && row.error !== null ? Option.some(row.error) : Option.none(),
+    );
+  }, Effect.catch(queueFailed));
 
   const enqueue: RoadmapLinkOutbox["Service"]["enqueue"] = (command, actor) =>
     insert(command, actor).pipe(Effect.andThen(wake));
 
-  const submit: RoadmapLinkOutbox["Service"]["submit"] = (command, actor, wait) =>
-    Effect.gen(function* () {
+  const submit: RoadmapLinkOutbox["Service"]["submit"] = Effect.fn("RoadmapLinkOutbox.submit")(
+    function* (command, actor, wait) {
       // Registered before the insert, so a worker that answers first still finds it.
       const waiting = outcomes.get(command.commandId) ?? Deferred.makeUnsafe<RoadmapLinkOutcome>();
       outcomes.set(command.commandId, waiting);
@@ -200,7 +202,8 @@ const make = Effect.gen(function* () {
       yield* wake;
       const answered = yield* Deferred.await(waiting).pipe(Effect.timeoutOption(wait));
       return Option.getOrElse(answered, () => ({ _tag: "queued" }) as const);
-    });
+    },
+  );
 
   const counts: RoadmapLinkOutbox["Service"]["counts"] = sql<{
     readonly status: string;
@@ -226,16 +229,18 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const reject = (row: typeof PendingRow.Type, error: RoadmapError) =>
-    Effect.gen(function* () {
-      yield* sql`
-        UPDATE roadmap_link_outbox
-        SET status = 'rejected', error_json = ${yield* encodeError(error)}
-        WHERE row_id = ${row.rowId}
-      `;
-      yield* settle(row.commandId, { _tag: "rejected", error });
-      return "rejected" as const;
-    });
+  const reject = Effect.fn("RoadmapLinkOutbox.reject")(function* (
+    row: typeof PendingRow.Type,
+    error: RoadmapError,
+  ) {
+    yield* sql`
+      UPDATE roadmap_link_outbox
+      SET status = 'rejected', error_json = ${yield* encodeError(error)}
+      WHERE row_id = ${row.rowId}
+    `;
+    yield* settle(row.commandId, { _tag: "rejected", error });
+    return "rejected" as const;
+  });
 
   const runOnce: RoadmapLinkOutbox["Service"]["runOnce"] = Effect.gen(function* () {
     // This step reads the table, so it answers any wake that came before it; a

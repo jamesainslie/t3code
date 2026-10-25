@@ -2,7 +2,7 @@ import { scopeThreadRef } from "@lathe/client-runtime/environment";
 import type { ScopedThreadRef, ThreadId } from "@lathe/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, HistoryIcon } from "lucide-react";
-import { memo, useCallback, useMemo } from "react";
+import { memo } from "react";
 
 import { useContinuedInThreads, useThreadShell } from "~/state/entities";
 import {
@@ -39,24 +39,18 @@ export const ThreadContinuationBreadcrumbs = memo(function ThreadContinuationBre
   continuedFromThreadId: ThreadId | null;
 }) {
   const navigate = useNavigate();
-  const sourceRef = useMemo(
-    () =>
-      continuedFromThreadId === null
-        ? null
-        : scopeThreadRef(threadRef.environmentId, continuedFromThreadId),
-    [continuedFromThreadId, threadRef.environmentId],
-  );
+  const sourceRef =
+    continuedFromThreadId === null
+      ? null
+      : scopeThreadRef(threadRef.environmentId, continuedFromThreadId);
   const source = useThreadShell(sourceRef);
   // Built from live shells, so archived continuations are not listed.
   const continuedIn = useContinuedInThreads(threadRef);
-  const openThread = useCallback(
-    (threadId: ThreadId) =>
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: { environmentId: threadRef.environmentId, threadId },
-      }),
-    [navigate, threadRef.environmentId],
-  );
+  const openThread = (threadId: ThreadId) =>
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: { environmentId: threadRef.environmentId, threadId },
+    });
   if (continuedFromThreadId === null && continuedIn.length === 0) return null;
   const onlyContinuation = continuedIn.length === 1 ? continuedIn[0] : undefined;
 

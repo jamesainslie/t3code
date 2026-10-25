@@ -351,19 +351,20 @@ const make = Effect.gen(function* () {
   const localForThread = (thread: RoadmapThreadRef) =>
     store.forThread(thread).pipe(Effect.mapError(readFailed));
 
-  const localThreadContext = (thread: RoadmapThreadRef) =>
-    Effect.gen(function* () {
-      const items = yield* localForThread(thread);
-      // A thread is attached to one item at a time; see `already_attached`.
-      const [attached] = items;
-      if (attached === undefined) return { items, context: "" };
-      const current = yield* localSnapshot;
-      const { byId, progressOf } = RoadmapProgress.progressCalculator({
-        ...current,
-        today: yield* RoadmapProgress.todayUtc,
-      });
-      return { items, context: renderRoadmapContext(attached, byId, progressOf(attached)) };
+  const localThreadContext = Effect.fn("RoadmapService.localThreadContext")(function* (
+    thread: RoadmapThreadRef,
+  ) {
+    const items = yield* localForThread(thread);
+    // A thread is attached to one item at a time; see `already_attached`.
+    const [attached] = items;
+    if (attached === undefined) return { items, context: "" };
+    const current = yield* localSnapshot;
+    const { byId, progressOf } = RoadmapProgress.progressCalculator({
+      ...current,
+      today: yield* RoadmapProgress.todayUtc,
     });
+    return { items, context: renderRoadmapContext(attached, byId, progressOf(attached)) };
+  });
 
   const snapshot: RoadmapService["Service"]["snapshot"] = () =>
     routed(localSnapshot, link.snapshot);
@@ -380,8 +381,8 @@ const make = Effect.gen(function* () {
       link.threadContext(thread).pipe(Effect.map((context) => context.items)),
     );
 
-  const submit: RoadmapService["Service"]["submit"] = (command, actor) =>
-    Effect.gen(function* () {
+  const submit: RoadmapService["Service"]["submit"] = Effect.fn("RoadmapService.submit")(
+    function* (command, actor) {
       const where = yield* location;
       if (where === "home") {
         return { queued: false, ...(yield* dispatch(command, actor)) } as const;
@@ -398,7 +399,8 @@ const make = Effect.gen(function* () {
       return outcome._tag === "accepted"
         ? ({ queued: false, ...outcome.result } as const)
         : ({ queued: true, itemId: commandItemId(command) } as const);
-    });
+    },
+  );
 
   const linkStatus: RoadmapService["Service"]["linkStatus"] = Effect.gen(function* () {
     const { homeUrl, unreachableSince } = yield* link.status;

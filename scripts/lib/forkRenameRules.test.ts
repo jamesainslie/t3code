@@ -147,6 +147,23 @@ describe("FORK_RENAME_RULES", () => {
     ["apps/server/src/cli/thread.ts", '      clientName: "t3-thread-cli",', "identifier"],
     ["apps/server/src/mcp/AcpMcpStdioBridge.ts", 'clientName: "t3-code-acp-cli" }', "wire-peer"],
     ["apps/server/src/mcp/AcpMcpStdioBridge.ts", "const id = `t3-cli-${nextId++}`;", "identifier"],
+    ["apps/server/src/serviceLauncher.test.ts", '"t3_boot_service_unit=bad",', "kept"],
+    ["apps/mobile/src/lib/projectIcon.test.ts", '["t3code", "T3", "teal"],', "kept"],
+    [
+      "packages/shared/src/paletteSearch.test.ts",
+      'expect(rankTitles("t3coed", [thread("t3code perf audit")])).toEqual([',
+      "upstream-reference",
+    ],
+    [
+      "apps/mobile/src/lib/composerChipPresentation.test.ts",
+      'const theme = getMobileThemeVariables("t3-code", "dark");',
+      "kept",
+    ],
+    [
+      "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
+      "            T3",
+      "upstream-reference",
+    ],
     [
       "apps/server/src/vcs/GitVcsDriverCore.ts",
       "const key = (branch: string) => `branch.${branch}.t3-merge-base`;",
@@ -166,7 +183,7 @@ describe("FORK_RENAME_RULES", () => {
     [
       "packages/client-runtime/src/connection/diagnosis.ts",
       'return "the-host-runs-an-older-t3-code";',
-      "upstream-reference",
+      "display",
     ],
     [
       "apps/server/src/telemetry/AnalyticsService.ts",

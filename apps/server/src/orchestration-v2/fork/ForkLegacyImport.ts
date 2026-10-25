@@ -179,16 +179,18 @@ const importForkFields = Effect.gen(function* () {
  * Wraps upstream's shell import: fork thread references are rewritten before it, and fork
  * thread fields are carried after it.
  */
-export const aroundLegacyImport = <A, E, R, E2, R2>(
-  environmentId: Effect.Effect<EnvironmentId, E2, R2>,
-  importShells: Effect.Effect<A, E, R>,
-) =>
-  Effect.gen(function* () {
-    const rewritten = yield* prepareContextRecords(yield* environmentId);
-    const result = yield* importShells;
-    const imported = yield* importForkFields;
-    if (rewritten > 0 || imported > 0) {
-      yield* Effect.logInfo("Carried fork thread data into v2", { rewritten, imported });
-    }
-    return result;
-  });
+export const aroundLegacyImport = Effect.fn("ForkLegacyImport.aroundLegacyImport")(function* <
+  A,
+  E,
+  R,
+  E2,
+  R2,
+>(environmentId: Effect.Effect<EnvironmentId, E2, R2>, importShells: Effect.Effect<A, E, R>) {
+  const rewritten = yield* prepareContextRecords(yield* environmentId);
+  const result = yield* importShells;
+  const imported = yield* importForkFields;
+  if (rewritten > 0 || imported > 0) {
+    yield* Effect.logInfo("Carried fork thread data into v2", { rewritten, imported });
+  }
+  return result;
+});

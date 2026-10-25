@@ -2,7 +2,7 @@ import {
   nextTerminalBrowserLaunchExpiry,
   pendingTerminalBrowserLaunches,
 } from "@lathe/client-runtime/state/terminal";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * The launches of a terminal that the environment still accepts. The server
@@ -15,7 +15,7 @@ export function usePendingTerminalBrowserLaunches<T extends { readonly expiresAt
   launches: ReadonlyArray<T>,
 ): ReadonlyArray<T> {
   const [now, setNow] = useState(() => Date.now());
-  const pending = useMemo(() => pendingTerminalBrowserLaunches(launches, now), [launches, now]);
+  const pending = pendingTerminalBrowserLaunches(launches, now);
   useEffect(() => {
     const delay = nextTerminalBrowserLaunchExpiry(pending, Date.now());
     if (delay === null) return;

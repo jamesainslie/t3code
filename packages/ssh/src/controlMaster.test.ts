@@ -183,7 +183,8 @@ const makeHarness = (input: {
     if (args.includes("-O")) return `control.${args[args.indexOf("-O") + 1]}`;
     if (args.includes("-N")) return "tunnel";
     if (args.at(-1) === "true") return "probe";
-    if (args.includes("--")) return "launch";
+    // Every ssh ends its options with `--`; only the launch passes a second one to the remote sh.
+    if (args.indexOf("--") !== args.lastIndexOf("--")) return "launch";
     return "script";
   };
 

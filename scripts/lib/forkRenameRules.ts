@@ -302,9 +302,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "upstream-connect-troubleshooting-anchors",
     class: "upstream-reference",
     reason:
-      "Heading anchors in upstream's T3 Connect troubleshooting doc, which connection diagnoses link to on upstream's GitHub.",
+      "Troubleshooting anchors for headings that name upstream's T3 Connect service, which the fork's copy of the doc keeps.",
     token:
-      /the-t3-connect-address-does-not-resolve-or-answer|this-device-cant-reach-t3-connect|the-host-runs-an-older-t3-code|t3-connect-returned-an-error/,
+      /the-t3-connect-address-does-not-resolve-or-answer|this-device-cant-reach-t3-connect|t3-connect-returned-an-error/,
+  },
+  {
+    id: "display-connect-troubleshooting-anchors",
+    class: "display",
+    reason: "Troubleshooting anchors for headings that name the product, renamed with the doc.",
+    token: /the-host-runs-an-older-t3-code/,
   },
   {
     id: "kept-mobile-app",
@@ -466,7 +472,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "Variables a pinned service launcher passes to newer and older servers, and that installed unit files hold.",
-    token: /T3_SERVICE_LAUNCHER_CONTEXT|T3_BOOT_SERVICE_UNIT/,
+    token: /T3_SERVICE_LAUNCHER_CONTEXT|T3_BOOT_SERVICE_UNIT/i,
   },
   {
     id: "kept-os-registrations",
@@ -606,7 +612,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       (/^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-        ((/[Tt]heme/.test(o.path) || /[Tt]heme\(|\bpalettes?\b/.test(o.line)) &&
+        ((/[Tt]heme/.test(o.path) || /[Tt]heme(?:Variables)?\(|\bpalettes?\b/.test(o.line)) &&
           /^t3-(?:code|chat|grove|ocean|ember|iris)(?:-(?:dark|light))?$/.test(o.token))),
   },
   {
@@ -837,6 +843,20 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     line: /for \(const text of \["T3", "/,
   },
   {
+    id: "kept-derived-monogram",
+    class: "kept",
+    reason: "A monogram the code derives from a project titled t3code, not the product name.",
+    path: /projectIcon\.test\.ts$/,
+    line: /\["t3code", "T3", /,
+  },
+  {
+    id: "upstream-palette-search-samples",
+    class: "upstream-reference",
+    reason:
+      "Palette search samples picked for their shape (a word with digits, two words run together) and the legacy t3code/ branch prefix the search still strips.",
+    path: /^packages\/shared\/src\/paletteSearch(?:\.test)?\.ts$/,
+  },
+  {
     id: "kept-upstream-alpha-dir",
     class: "kept",
     reason:
@@ -853,7 +873,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       /^T3(?:\s|'s|$)/.test(o.line.slice(o.column)) &&
       (/projectSync\/|ProjectSync|ProjectsSettings\.|SyncedConversation\./.test(o.path) ||
         /synced from T3 Code/.test(o.line) ||
-        (o.path.endsWith("/Sidebar.tsx") && /^\s*T3\s*$/.test(o.line))),
+        (/\/Sidebar(?:ThreadRow)?\.tsx$/.test(o.path) && /^\s*T3\s*$/.test(o.line))),
   },
 
   // agent-facing: names agents see and address
