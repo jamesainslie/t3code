@@ -1,53 +1,39 @@
-import * as AzureDevOpsCli from "@lathe/source-control-azure-devops/server/AzureDevOpsCli";
-import * as AzureDevOpsPullRequestCli from "@lathe/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
-import * as AzureDevOpsDriver from "@lathe/source-control-azure-devops/server/driver";
-import * as BitbucketApi from "@lathe/source-control-bitbucket/server/BitbucketApi";
-import * as BitbucketPullRequestApi from "@lathe/source-control-bitbucket/server/BitbucketPullRequestApi";
-import * as BitbucketDriver from "@lathe/source-control-bitbucket/server/driver";
-import * as ForgejoCli from "@lathe/source-control-forgejo/server/ForgejoCli";
-import * as ForgejoDriver from "@lathe/source-control-forgejo/server/driver";
-import * as GitCafeApi from "@lathe/source-control-gitcafe/server/GitCafeApi";
-import * as GitCafeCredentials from "@lathe/source-control-gitcafe/server/GitCafeCredentials";
-import * as GitCafeDriver from "@lathe/source-control-gitcafe/server/driver";
-import * as GitHubRest from "@lathe/source-control-github/server/GitHubRest";
+import type {
+  SourceControlDriver,
+  SourceControlDriverInstance,
+} from "@lathe/source-control-core/server/driver";
+import * as SourceControlRateLimit from "@lathe/source-control-core/server/SourceControlRateLimit";
 // Fork: roadmap.
 import * as GitHubIssueApi from "@lathe/source-control-github/server/GitHubIssueApi";
-import * as GitHubPullRequestApi from "@lathe/source-control-github/server/GitHubPullRequestApi";
-import * as GitHubDriver from "@lathe/source-control-github/server/driver";
-import * as GitLabCli from "@lathe/source-control-gitlab/server/GitLabCli";
-import * as GitLabPullRequestCli from "@lathe/source-control-gitlab/server/GitLabPullRequestCli";
-import * as GitLabDriver from "@lathe/source-control-gitlab/server/driver";
-import type { SourceControlDriver } from "@lathe/source-control-core/server/driver";
+import * as GitHubRest from "@lathe/source-control-github/server/GitHubRest";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerSourceControlHost from "./ServerSourceControlHost.ts";
+import { BUILT_IN_SOURCE_CONTROL_DRIVER_LIST } from "./sourceControlDefinitions.ts";
 
-const drivers = [
-  GitHubDriver.driver,
-  GitLabDriver.driver,
-  AzureDevOpsDriver.driver,
-  BitbucketDriver.driver,
-  ForgejoDriver.driver,
-  GitCafeDriver.driver,
-];
+export interface SourceControlDriverEntry {
+  readonly driver: Pick<SourceControlDriver, "kind" | "definition">;
+  readonly instance: SourceControlDriverInstance;
+}
 
-export type BuiltInSourceControlDriversEnv =
-  (typeof drivers)[number] extends SourceControlDriver<infer R> ? R : never;
+/** Every driver's instance, in registry order. Everything that reads a host reads it here. */
+export class SourceControlDrivers extends Context.Service<
+  SourceControlDrivers,
+  ReadonlyArray<SourceControlDriverEntry>
+>()("lathe/sourceControl/builtInDrivers/SourceControlDrivers") {}
 
-export const BUILT_IN_SOURCE_CONTROL_DRIVERS: ReadonlyArray<
-  SourceControlDriver<BuiltInSourceControlDriversEnv>
-> = drivers;
+const make = Effect.forEach(BUILT_IN_SOURCE_CONTROL_DRIVER_LIST, (driver) =>
+  driver.make.pipe(Effect.map((instance) => ({ driver, instance }))),
+);
 
-export const layer = Layer.mergeAll(
-  // `GitHubRest.layerWithDependencies` carries the quota reserve and rate-limit pause every GitHub
-  // reader shares, so the server builds it once, here.
-  // Fork: roadmap. Issue reads share the pull request API's quota and rate-limit pause.
-  Layer.merge(GitHubPullRequestApi.layer, GitHubIssueApi.layer).pipe(
-    Layer.provideMerge(GitHubRest.layerWithDependencies),
-  ),
-  AzureDevOpsPullRequestCli.layer.pipe(Layer.provideMerge(AzureDevOpsCli.layer)),
-  BitbucketPullRequestApi.layer.pipe(Layer.provideMerge(BitbucketApi.layer)),
-  ForgejoCli.layer,
-  GitCafeApi.layer.pipe(Layer.provideMerge(GitCafeCredentials.layer)),
-  GitLabPullRequestCli.layer.pipe(Layer.provideMerge(GitLabCli.layer)),
-).pipe(Layer.provideMerge(ServerSourceControlHost.layer));
+export const layer = Layer.merge(
+  Layer.effect(SourceControlDrivers, make),
+  // Fork: roadmap. The GitHub driver keeps its request stack private, so issue reads build their
+  // own. They still share the server's rate-limit pause, but keep a separate quota reserve.
+  GitHubIssueApi.layer.pipe(Layer.provide(GitHubRest.layerWithDependencies)),
+).pipe(
+  Layer.provideMerge(ServerSourceControlHost.layer),
+  Layer.provideMerge(SourceControlRateLimit.layer),
+);

@@ -1,6 +1,6 @@
 import type { DesktopCliCommandState } from "@lathe/contracts";
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -26,28 +26,25 @@ export function CliCommandSettingsRow() {
     };
   }, [bridge]);
 
-  const change = useCallback(
-    (action: "install" | "uninstall") => {
-      if (!bridge || pending) return;
-      setPending(true);
-      void bridge[action]()
-        .then(setState)
-        .catch((error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title:
-                action === "install"
-                  ? `Could not install ${FORK_IDENTITY.cliBin}`
-                  : `Could not remove ${FORK_IDENTITY.cliBin}`,
-              description: error instanceof Error ? error.message : "Something went wrong.",
-            }),
-          );
-        })
-        .finally(() => setPending(false));
-    },
-    [bridge, pending],
-  );
+  const change = (action: "install" | "uninstall") => {
+    if (!bridge || pending) return;
+    setPending(true);
+    void bridge[action]()
+      .then(setState)
+      .catch((error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title:
+              action === "install"
+                ? `Could not install ${FORK_IDENTITY.cliBin}`
+                : `Could not remove ${FORK_IDENTITY.cliBin}`,
+            description: error instanceof Error ? error.message : "Something went wrong.",
+          }),
+        );
+      })
+      .finally(() => setPending(false));
+  };
 
   if (!bridge || !state?.supported) return null;
   const installed = state.installedPath !== null;

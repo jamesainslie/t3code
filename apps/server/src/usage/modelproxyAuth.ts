@@ -93,70 +93,75 @@ export const makeModelproxyAuth = Effect.gen(function* () {
   // cleared. Taking turns, the second caller finds the first one's token.
   const tokenLock = yield* Semaphore.make(1);
 
-  const discover = (issuer: string) =>
-    Effect.gen(function* () {
-      const cached = endpoints.get(issuer);
-      if (cached) return cached;
-      const found = yield* oidc.discover(issuer);
-      endpoints.set(issuer, found);
-      return found;
-    });
+  const discover = Effect.fn("ModelproxyAuth.discover")(function* (issuer: string) {
+    const cached = endpoints.get(issuer);
+    if (cached) return cached;
+    const found = yield* oidc.discover(issuer);
+    endpoints.set(issuer, found);
+    return found;
+  });
 
-  const loadSession = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      const cached = sessions.get(sourceId);
-      if (cached) return cached;
-      const stored = yield* secretStore
-        .get(sessionSecretName(sourceId))
-        .pipe(Effect.orElseSucceed(() => Option.none<Uint8Array>()));
-      const session = Option.isSome(stored)
-        ? yield* decodeSession(textDecoder.decode(stored.value)).pipe(
-            Effect.map(Option.some),
-            Effect.orElseSucceed(() => Option.none<TokenSet>()),
-          )
-        : Option.none<TokenSet>();
-      sessions.set(sourceId, session);
-      return session;
-    });
+  const loadSession = Effect.fn("ModelproxyAuth.loadSession")(function* (
+    sourceId: UsageLimitSourceId,
+  ) {
+    const cached = sessions.get(sourceId);
+    if (cached) return cached;
+    const stored = yield* secretStore
+      .get(sessionSecretName(sourceId))
+      .pipe(Effect.orElseSucceed(() => Option.none<Uint8Array>()));
+    const session = Option.isSome(stored)
+      ? yield* decodeSession(textDecoder.decode(stored.value)).pipe(
+          Effect.map(Option.some),
+          Effect.orElseSucceed(() => Option.none<TokenSet>()),
+        )
+      : Option.none<TokenSet>();
+    sessions.set(sourceId, session);
+    return session;
+  });
 
-  const saveSession = (sourceId: UsageLimitSourceId, tokens: TokenSet) =>
-    Effect.gen(function* () {
+  const saveSession = Effect.fn("ModelproxyAuth.saveSession")(
+    function* (sourceId: UsageLimitSourceId, tokens: TokenSet) {
       sessions.set(sourceId, Option.some(tokens));
       const json = yield* encodeSession(tokens);
       yield* secretStore.set(sessionSecretName(sourceId), textEncoder.encode(json));
-    }).pipe(Effect.ignoreCause({ log: true }));
+    },
+    Effect.ignoreCause({ log: true }),
+  );
 
-  const clearSession = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
+  const clearSession = Effect.fn("ModelproxyAuth.clearSession")(
+    function* (sourceId: UsageLimitSourceId) {
       sessions.set(sourceId, Option.none());
       yield* secretStore.remove(sessionSecretName(sourceId));
-    }).pipe(Effect.ignoreCause({ log: true }));
+    },
+    Effect.ignoreCause({ log: true }),
+  );
 
-  const clearPending = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      const flow = pending.get(sourceId);
-      if (!flow) return;
-      pending.delete(sourceId);
-      yield* Fiber.interrupt(flow.fiber);
-    });
+  const clearPending = Effect.fn("ModelproxyAuth.clearPending")(function* (
+    sourceId: UsageLimitSourceId,
+  ) {
+    const flow = pending.get(sourceId);
+    if (!flow) return;
+    pending.delete(sourceId);
+    yield* Fiber.interrupt(flow.fiber);
+  });
 
-  const authState = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* (): Effect.fn.Return<UsageLimitSourceAuthState> {
-      const flow = pending.get(sourceId);
-      if (flow) {
-        const { userCode, verificationUrl, verificationUrlComplete, expiresAt } =
-          flow.authorization;
-        return {
-          state: "pending",
-          userCode,
-          verificationUrl,
-          ...(verificationUrlComplete ? { verificationUrlComplete } : {}),
-          expiresAt,
-        };
-      }
-      const session = yield* loadSession(sourceId);
-      return { state: Option.isSome(session) ? "signedIn" : "signedOut" };
-    });
+  const authState = Effect.fn("ModelproxyAuth.authState")(function* (
+    sourceId: UsageLimitSourceId,
+  ): Effect.fn.Return<UsageLimitSourceAuthState> {
+    const flow = pending.get(sourceId);
+    if (flow) {
+      const { userCode, verificationUrl, verificationUrlComplete, expiresAt } = flow.authorization;
+      return {
+        state: "pending",
+        userCode,
+        verificationUrl,
+        ...(verificationUrlComplete ? { verificationUrlComplete } : {}),
+        expiresAt,
+      };
+    }
+    const session = yield* loadSession(sourceId);
+    return { state: Option.isSome(session) ? "signedIn" : "signedOut" };
+  });
 
   /**
    * A token good for at least the next minute, refreshed through the issuer
@@ -213,13 +218,13 @@ export const makeModelproxyAuth = Effect.gen(function* () {
   // Polls the token endpoint until the user finishes, the code expires, or
   // the flow is cancelled. Runs in the service scope so a cancelled or
   // replaced flow is interrupted rather than left polling.
-  const poll = (
-    sourceId: UsageLimitSourceId,
-    config: ModelproxyUsageLimitSourceConfig,
-    found: OidcEndpoints,
-    authorization: DeviceAuthorization,
-  ) =>
-    Effect.gen(function* () {
+  const poll = Effect.fn("ModelproxyAuth.poll")(
+    function* (
+      sourceId: UsageLimitSourceId,
+      config: ModelproxyUsageLimitSourceConfig,
+      found: OidcEndpoints,
+      authorization: DeviceAuthorization,
+    ) {
       let interval = authorization.intervalSeconds;
       const deadline = Date.parse(authorization.expiresAt);
       while (true) {
@@ -238,18 +243,23 @@ export const makeModelproxyAuth = Effect.gen(function* () {
             return;
         }
       }
-    }).pipe(
-      Effect.ignoreCause({ log: true }),
-      // The finaliser runs on completion and on interruption alike; only a
-      // flow that finished on its own owns the pending slot at that point.
-      Effect.ensuring(
-        Effect.gen(function* () {
-          const flow = pending.get(sourceId);
-          if (flow?.authorization.deviceCode === authorization.deviceCode) pending.delete(sourceId);
-          yield* publish(sourceId);
-        }),
+    },
+    (effect, sourceId, _config, _found, authorization) =>
+      effect.pipe(
+        Effect.ignoreCause({ log: true }),
+        // The finaliser runs on completion and on interruption alike; only a
+        // flow that finished on its own owns the pending slot at that point.
+        Effect.ensuring(
+          Effect.gen(function* () {
+            const flow = pending.get(sourceId);
+            if (flow?.authorization.deviceCode === authorization.deviceCode) {
+              pending.delete(sourceId);
+            }
+            yield* publish(sourceId);
+          }),
+        ),
       ),
-    );
+  );
 
   const start = Effect.fn("ModelproxyAuth.start")(function* (
     sourceId: UsageLimitSourceId,
@@ -273,28 +283,25 @@ export const makeModelproxyAuth = Effect.gen(function* () {
     return yield* authState(sourceId);
   });
 
-  const cancel = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      yield* clearPending(sourceId);
-      yield* publish(sourceId);
-      return yield* authState(sourceId);
-    });
+  const cancel = Effect.fn("ModelproxyAuth.cancel")(function* (sourceId: UsageLimitSourceId) {
+    yield* clearPending(sourceId);
+    yield* publish(sourceId);
+    return yield* authState(sourceId);
+  });
 
-  const signOut = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      yield* clearPending(sourceId);
-      yield* clearSession(sourceId);
-      yield* publish(sourceId);
-      return yield* authState(sourceId);
-    });
+  const signOut = Effect.fn("ModelproxyAuth.signOut")(function* (sourceId: UsageLimitSourceId) {
+    yield* clearPending(sourceId);
+    yield* clearSession(sourceId);
+    yield* publish(sourceId);
+    return yield* authState(sourceId);
+  });
 
   /** A removed source takes its session with it; nothing to publish for a source nobody lists. */
-  const forget = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      yield* clearPending(sourceId);
-      yield* clearSession(sourceId);
-      sessions.delete(sourceId);
-    });
+  const forget = Effect.fn("ModelproxyAuth.forget")(function* (sourceId: UsageLimitSourceId) {
+    yield* clearPending(sourceId);
+    yield* clearSession(sourceId);
+    sessions.delete(sourceId);
+  });
 
   return {
     authState,

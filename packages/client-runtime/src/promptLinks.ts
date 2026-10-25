@@ -12,7 +12,7 @@ import {
   threadPullRequestKeyOf,
   threadPullRequestsOf,
   visibleThreadPullRequests,
-} from "@lathe/shared/threadPullRequests";
+} from "./threadPullRequests.ts";
 
 const repositoryKey = (repository: PromptLinkRepository) =>
   `github.com/${repository.owner}/${repository.name}`.toLowerCase();

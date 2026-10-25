@@ -25,13 +25,13 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 ### Command line
 
 ```bash
-curl -fsSL https://lathe.codes/install.sh | sh
+curl -fsSL https://t3.codes/install.sh | sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://lathe.codes/install.ps1 | iex
+irm https://t3.codes/install.ps1 | iex
 ```
 
 Then run `lathe` to start the server and open the local web app. `lathe service install` keeps it running in the background, `lathe update` moves to a newer release, and `lathe --help` has the full reference.

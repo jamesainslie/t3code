@@ -1,15 +1,8 @@
 import type { ScopedThreadRef } from "@lathe/contracts";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import {
   advanceDocumentSections,
   splitMarkdownDocument,
@@ -39,31 +32,23 @@ function useShownSections(
   return shown;
 }
 
-/** A stable callback that calls the latest `callback`, or undefined without one. */
-function useLatestCallback<Input>(
-  callback: ((input: Input) => void) | undefined,
-): ((input: Input) => void) | undefined {
-  const latest = useRef(callback);
-  useLayoutEffect(() => {
-    latest.current = callback;
-  });
-  const stable = useCallback((input: Input) => latest.current?.(input), []);
-  return callback ? stable : undefined;
-}
-
 /** A markdown file read as a document. A long one fills in section by section. */
 export function MarkdownDocument(props: {
   readonly text: string;
   readonly cwd: string | undefined;
   readonly imageBaseDir?: string | undefined;
   readonly threadRef?: ScopedThreadRef | undefined;
+  readonly workspaceMutationId?: string | null | undefined;
   readonly onTaskListChange?: TaskListChange | undefined;
 }) {
-  const sections = useMemo(() => splitMarkdownDocument(props.text), [props.text]);
+  const sections = splitMarkdownDocument(props.text);
   const shownSections = useShownSections(sections);
   // Callers pass a fresh callback each render; a stable one keeps the
   // memoized markdown from re-parsing whenever the surface around it updates.
-  const onTaskListChange = useLatestCallback(props.onTaskListChange);
+  const stableTaskListChange = useStableCallback((input: Parameters<TaskListChange>[0]) =>
+    props.onTaskListChange?.(input),
+  );
+  const onTaskListChange = props.onTaskListChange ? stableTaskListChange : undefined;
 
   if (sections.length === 1) {
     return (
@@ -72,6 +57,7 @@ export function MarkdownDocument(props: {
         cwd={props.cwd}
         imageBaseDir={props.imageBaseDir}
         threadRef={props.threadRef}
+        workspaceMutationId={props.workspaceMutationId}
         asDocument
         className="chat-markdown-document mx-auto max-w-4xl px-8 py-7"
         onTaskListChange={onTaskListChange}
@@ -93,6 +79,7 @@ export function MarkdownDocument(props: {
             cwd={props.cwd}
             imageBaseDir={props.imageBaseDir}
             threadRef={props.threadRef}
+            workspaceMutationId={props.workspaceMutationId}
             asDocument
             className="chat-markdown-document chat-markdown-section"
             onTaskListChange={onTaskListChange}
@@ -109,6 +96,7 @@ export function FileMarkdownPreview(props: {
   readonly relativePath: string;
   readonly text: string;
   readonly threadRef: ScopedThreadRef;
+  readonly workspaceMutationId: string | null;
   readonly onTaskListChange?: TaskListChange | undefined;
 }) {
   const lastSeparator = Math.max(
@@ -120,10 +108,11 @@ export function FileMarkdownPreview(props: {
       ? resolvePathLinkTarget(props.relativePath.slice(0, lastSeparator), props.cwd)
       : props.cwd;
 
+  const { sourceRef: bindSource } = props;
   // The citation source attributes let a selection here become a document quote.
   return (
     <div
-      ref={props.sourceRef}
+      ref={bindSource}
       data-document-citation-source={props.relativePath}
       data-document-citation-environment={props.threadRef.environmentId}
       data-document-citation-thread={props.threadRef.threadId}
@@ -133,6 +122,7 @@ export function FileMarkdownPreview(props: {
         cwd={props.cwd}
         imageBaseDir={imageBaseDir}
         threadRef={props.threadRef}
+        workspaceMutationId={props.workspaceMutationId}
         onTaskListChange={props.onTaskListChange}
       />
     </div>

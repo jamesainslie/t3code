@@ -2,8 +2,8 @@
  * Thin CLI entry.
  *
  * Commands that other processes spawn on hot paths (ACP bridges, the SSH
- * launch script's `--version` and `__ssh-helper` calls) dispatch in
- * ./cliEntry.ts before the full CLI module graph (seconds of evaluation)
+ * launch script's `--version` and `__ssh-helper` calls, Codex's managed-token
+ * helper) dispatch before the full CLI module graph (seconds of evaluation)
  * loads; everything else defers to the real CLI in ./binCli.ts.
  */
 import "./forkLegacyEnvBoot.ts";
@@ -17,5 +17,14 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
-  await runCliEntry(process.argv.slice(2));
+  // Guard sockets before either dispatch path can load outbound-capable modules.
+  const { ignoreMacosTypeOfServiceEinval } = await import("./outboundHttp.ts");
+  ignoreMacosTypeOfServiceEinval();
+  const args = process.argv.slice(2);
+  if (args[0] === "__managed-chatgpt-token") {
+    const { runManagedChatGptTokenCli } = await import("./cli/managedChatGptToken.ts");
+    await runManagedChatGptTokenCli(args.slice(1));
+  } else {
+    await runCliEntry(args);
+  }
 }

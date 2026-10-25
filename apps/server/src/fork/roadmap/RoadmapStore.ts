@@ -252,76 +252,81 @@ const make = Effect.gen(function* () {
       mapError("get"),
     );
 
-  const writeRecord = (record: RoadmapItemRecord, sequence: number) =>
-    Effect.gen(function* () {
-      const encoded = yield* encodeItem(record);
+  const writeRecord = Effect.fn("RoadmapStore.writeRecord")(function* (
+    record: RoadmapItemRecord,
+    sequence: number,
+  ) {
+    const encoded = yield* encodeItem(record);
+    yield* sql`
+      INSERT INTO projection_roadmap_items (
+        item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+      ) VALUES (
+        ${record.item.id},
+        ${record.item.parentId},
+        ${record.item.sortKey},
+        ${record.deletedAt},
+        ${encoded.item},
+        ${sequence}
+      )
+      ON CONFLICT (item_id) DO UPDATE SET
+        parent_id = excluded.parent_id,
+        sort_key = excluded.sort_key,
+        deleted_at = excluded.deleted_at,
+        payload_json = excluded.payload_json,
+        updated_sequence = excluded.updated_sequence
+    `;
+    yield* sql`DELETE FROM projection_roadmap_attachments WHERE item_id = ${record.item.id}`;
+    for (const attachment of record.item.attachments) {
       yield* sql`
-        INSERT INTO projection_roadmap_items (
-          item_id, parent_id, sort_key, deleted_at, payload_json, updated_sequence
+        INSERT INTO projection_roadmap_attachments (
+          item_id, environment_id, thread_id, attached_at
         ) VALUES (
           ${record.item.id},
-          ${record.item.parentId},
-          ${record.item.sortKey},
-          ${record.deletedAt},
-          ${encoded.item},
-          ${sequence}
+          ${attachment.thread.environmentId},
+          ${attachment.thread.threadId},
+          ${attachment.attachedAt}
         )
-        ON CONFLICT (item_id) DO UPDATE SET
-          parent_id = excluded.parent_id,
-          sort_key = excluded.sort_key,
-          deleted_at = excluded.deleted_at,
-          payload_json = excluded.payload_json,
-          updated_sequence = excluded.updated_sequence
       `;
-      yield* sql`DELETE FROM projection_roadmap_attachments WHERE item_id = ${record.item.id}`;
-      for (const attachment of record.item.attachments) {
-        yield* sql`
-          INSERT INTO projection_roadmap_attachments (
-            item_id, environment_id, thread_id, attached_at
-          ) VALUES (
-            ${record.item.id},
-            ${attachment.thread.environmentId},
-            ${attachment.thread.threadId},
-            ${attachment.attachedAt}
-          )
-        `;
-      }
-    });
+    }
+  });
 
-  const writeSprint = (change: RoadmapSprintChange, sequence: number) =>
-    Effect.gen(function* () {
-      if (change.removed) {
-        yield* sql`DELETE FROM projection_roadmap_sprints WHERE sprint_id = ${change.sprint.id}`;
-        return;
-      }
-      const encoded = yield* encodeSprint(change);
-      yield* sql`
-        INSERT INTO projection_roadmap_sprints (
-          sprint_id, area, start_date, payload_json, updated_sequence
-        ) VALUES (
-          ${change.sprint.id},
-          ${change.sprint.area},
-          ${change.sprint.startDate},
-          ${encoded.sprint},
-          ${sequence}
-        )
-        ON CONFLICT (sprint_id) DO UPDATE SET
-          area = excluded.area,
-          start_date = excluded.start_date,
-          payload_json = excluded.payload_json,
-          updated_sequence = excluded.updated_sequence
-      `;
-    });
+  const writeSprint = Effect.fn("RoadmapStore.writeSprint")(function* (
+    change: RoadmapSprintChange,
+    sequence: number,
+  ) {
+    if (change.removed) {
+      yield* sql`DELETE FROM projection_roadmap_sprints WHERE sprint_id = ${change.sprint.id}`;
+      return;
+    }
+    const encoded = yield* encodeSprint(change);
+    yield* sql`
+      INSERT INTO projection_roadmap_sprints (
+        sprint_id, area, start_date, payload_json, updated_sequence
+      ) VALUES (
+        ${change.sprint.id},
+        ${change.sprint.area},
+        ${change.sprint.startDate},
+        ${encoded.sprint},
+        ${sequence}
+      )
+      ON CONFLICT (sprint_id) DO UPDATE SET
+        area = excluded.area,
+        start_date = excluded.start_date,
+        payload_json = excluded.payload_json,
+        updated_sequence = excluded.updated_sequence
+    `;
+  });
 
-  const readRecords = (itemIds: ReadonlyArray<RoadmapItemId>) =>
-    Effect.gen(function* () {
-      const current = new Map<RoadmapItemId, RoadmapItemRecord>();
-      for (const itemId of itemIds) {
-        const rows = yield* selectItems({ itemId, includeDeleted: true });
-        if (rows[0] !== undefined) current.set(itemId, rows[0]);
-      }
-      return current;
-    });
+  const readRecords = Effect.fn("RoadmapStore.readRecords")(function* (
+    itemIds: ReadonlyArray<RoadmapItemId>,
+  ) {
+    const current = new Map<RoadmapItemId, RoadmapItemRecord>();
+    for (const itemId of itemIds) {
+      const rows = yield* selectItems({ itemId, includeDeleted: true });
+      if (rows[0] !== undefined) current.set(itemId, rows[0]);
+    }
+    return current;
+  });
 
   const touchedIds = (event: RoadmapItemEvent): ReadonlyArray<RoadmapItemId> => {
     switch (event.type) {
@@ -336,53 +341,57 @@ const make = Effect.gen(function* () {
     }
   };
 
-  const applyEvent = (event: RoadmapEvent, sequence: number) =>
-    Effect.gen(function* () {
-      if (isRoadmapSprintEvent(event)) {
-        const current = yield* readRecords(
-          event.type === "roadmap.sprint.deleted" ? event.payload.clearedItemIds : [],
-        );
-        const sprintRows = yield* selectSprints({ sprintId: event.sprintId });
-        const sprints = new Map<RoadmapSprintId, RoadmapSprint>(
-          sprintRows.map((row) => [row.sprint.id, row.sprint]),
-        );
-        const changed = projectRoadmapSprintEvent(
-          { item: (itemId) => current.get(itemId), sprint: (sprintId) => sprints.get(sprintId) },
-          event,
-        );
-        for (const change of changed.sprints) yield* writeSprint(change, sequence);
-        for (const record of changed.items) yield* writeRecord(record, sequence);
-        return changed;
-      }
-      const current = yield* readRecords(touchedIds(event));
-      const items = projectRoadmapEvent((itemId) => current.get(itemId), event);
-      for (const record of items) yield* writeRecord(record, sequence);
-      const change: RoadmapProjectionChange = { items, sprints: [] };
-      return change;
-    });
+  const applyEvent = Effect.fn("RoadmapStore.applyEvent")(function* (
+    event: RoadmapEvent,
+    sequence: number,
+  ) {
+    if (isRoadmapSprintEvent(event)) {
+      const current = yield* readRecords(
+        event.type === "roadmap.sprint.deleted" ? event.payload.clearedItemIds : [],
+      );
+      const sprintRows = yield* selectSprints({ sprintId: event.sprintId });
+      const sprints = new Map<RoadmapSprintId, RoadmapSprint>(
+        sprintRows.map((row) => [row.sprint.id, row.sprint]),
+      );
+      const changed = projectRoadmapSprintEvent(
+        { item: (itemId) => current.get(itemId), sprint: (sprintId) => sprints.get(sprintId) },
+        event,
+      );
+      for (const change of changed.sprints) yield* writeSprint(change, sequence);
+      for (const record of changed.items) yield* writeRecord(record, sequence);
+      return changed;
+    }
+    const current = yield* readRecords(touchedIds(event));
+    const items = projectRoadmapEvent((itemId) => current.get(itemId), event);
+    for (const record of items) yield* writeRecord(record, sequence);
+    const change: RoadmapProjectionChange = { items, sprints: [] };
+    return change;
+  });
 
   const apply: RoadmapStore["Service"]["apply"] = (event, sequence) =>
     applyEvent(event, sequence).pipe(mapError("apply"));
 
-  const append: RoadmapStore["Service"]["append"] = (event, commandId) =>
-    Effect.gen(function* () {
-      const encoded = yield* encodeEvent(event);
-      const rows = yield* sql<{ readonly sequence: number }>`
-        INSERT INTO roadmap_events (
-          event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
-        ) VALUES (
-          ${encoded.eventId},
-          ${commandId},
-          ${"sprintId" in encoded ? encoded.sprintId : encoded.itemId},
-          ${encoded.type},
-          ${yield* encodeJson(encoded.actor)},
-          ${yield* encodeJson(encoded.payload)},
-          ${encoded.occurredAt}
-        )
-        RETURNING sequence
-      `;
-      return rows[0]!.sequence;
-    }).pipe(mapError("append"));
+  const append: RoadmapStore["Service"]["append"] = Effect.fn("RoadmapStore.append")(function* (
+    event,
+    commandId,
+  ) {
+    const encoded = yield* encodeEvent(event);
+    const rows = yield* sql<{ readonly sequence: number }>`
+      INSERT INTO roadmap_events (
+        event_id, command_id, item_id, event_type, actor_json, payload_json, occurred_at
+      ) VALUES (
+        ${encoded.eventId},
+        ${commandId},
+        ${"sprintId" in encoded ? encoded.sprintId : encoded.itemId},
+        ${encoded.type},
+        ${yield* encodeJson(encoded.actor)},
+        ${yield* encodeJson(encoded.payload)},
+        ${encoded.occurredAt}
+      )
+      RETURNING sequence
+    `;
+    return rows[0]!.sequence;
+  }, mapError("append"));
 
   const latestSequence: RoadmapStore["Service"]["latestSequence"] = () =>
     sql<{ readonly sequence: number | null }>`
@@ -392,41 +401,43 @@ const make = Effect.gen(function* () {
       mapError("latestSequence"),
     );
 
-  const lastDeletion: RoadmapStore["Service"]["lastDeletion"] = (itemId) =>
-    Effect.gen(function* () {
-      const rows = yield* sql<{ readonly payload: string }>`
-        SELECT events.payload_json AS payload
-        FROM roadmap_events events
-        WHERE events.event_type = 'roadmap.item.deleted'
-          AND EXISTS (
-            SELECT 1 FROM json_each(events.payload_json, '$.deletedIds')
-            WHERE json_each.value = ${itemId}
-          )
-        ORDER BY events.sequence DESC
-        LIMIT 1
-      `;
-      if (rows[0] === undefined) return Option.none();
-      const payload = yield* decodeDeletion(rows[0].payload);
-      return Option.some(payload.deletedIds);
-    }).pipe(mapError("lastDeletion"));
-
-  const writeReceipt: RoadmapStore["Service"]["writeReceipt"] = (receipt) =>
-    Effect.gen(function* () {
-      const encoded = yield* encodeReceipt(receipt);
-      yield* sql`
-        INSERT INTO roadmap_command_receipts (
-          command_id, status, result_sequence, item_id, error_json, accepted_at
-        ) VALUES (
-          ${encoded.commandId},
-          ${encoded.status},
-          ${encoded.resultSequence},
-          ${encoded.itemId},
-          ${encoded.error},
-          ${encoded.acceptedAt}
+  const lastDeletion: RoadmapStore["Service"]["lastDeletion"] = Effect.fn(
+    "RoadmapStore.lastDeletion",
+  )(function* (itemId) {
+    const rows = yield* sql<{ readonly payload: string }>`
+      SELECT events.payload_json AS payload
+      FROM roadmap_events events
+      WHERE events.event_type = 'roadmap.item.deleted'
+        AND EXISTS (
+          SELECT 1 FROM json_each(events.payload_json, '$.deletedIds')
+          WHERE json_each.value = ${itemId}
         )
-        ON CONFLICT (command_id) DO NOTHING
-      `;
-    }).pipe(mapError("writeReceipt"));
+      ORDER BY events.sequence DESC
+      LIMIT 1
+    `;
+    if (rows[0] === undefined) return Option.none();
+    const payload = yield* decodeDeletion(rows[0].payload);
+    return Option.some(payload.deletedIds);
+  }, mapError("lastDeletion"));
+
+  const writeReceipt: RoadmapStore["Service"]["writeReceipt"] = Effect.fn(
+    "RoadmapStore.writeReceipt",
+  )(function* (receipt) {
+    const encoded = yield* encodeReceipt(receipt);
+    yield* sql`
+      INSERT INTO roadmap_command_receipts (
+        command_id, status, result_sequence, item_id, error_json, accepted_at
+      ) VALUES (
+        ${encoded.commandId},
+        ${encoded.status},
+        ${encoded.resultSequence},
+        ${encoded.itemId},
+        ${encoded.error},
+        ${encoded.acceptedAt}
+      )
+      ON CONFLICT (command_id) DO NOTHING
+    `;
+  }, mapError("writeReceipt"));
 
   const rebuild: RoadmapStore["Service"]["rebuild"] = () =>
     sql

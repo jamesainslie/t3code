@@ -67,23 +67,25 @@ const make = Effect.gen(function* () {
   };
 
   return RoadmapTurnContext.of({
-    forThread: (threadId) =>
-      Effect.gen(function* () {
+    forThread: Effect.fn("RoadmapTurnContext.forThread")(
+      function* (threadId: ThreadId) {
         const environmentId = yield* identity.getEnvironmentId;
         const { context } = yield* roadmap
           .threadContext({ environmentId, threadId })
           .pipe(Effect.timeout(HOME_WAIT));
         return yield* remember(threadId, context);
-      }).pipe(
-        Effect.catch((error) =>
-          // Unlinked, or the home moved: no block, and no stale copy of one.
-          error._tag === "RoadmapError" && error.code === "roadmap_home_elsewhere"
-            ? Effect.sync(() => lastGood.delete(threadId)).pipe(Effect.as(""))
-            : fallBack(threadId, error),
+      },
+      (effect, threadId) =>
+        effect.pipe(
+          Effect.catch((error) =>
+            // Unlinked, or the home moved: no block, and no stale copy of one.
+            error._tag === "RoadmapError" && error.code === "roadmap_home_elsewhere"
+              ? Effect.sync(() => lastGood.delete(threadId)).pipe(Effect.as(""))
+              : fallBack(threadId, error),
+          ),
+          Effect.catchDefect((defect) => fallBack(threadId, defect)),
         ),
-        Effect.catchDefect((defect) => fallBack(threadId, defect)),
-        Effect.withSpan("RoadmapTurnContext.forThread"),
-      ),
+    ),
   });
 });
 

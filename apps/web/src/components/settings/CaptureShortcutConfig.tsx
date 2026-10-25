@@ -7,10 +7,11 @@ import {
 import { parseKeybindingShortcut } from "@lathe/shared/keybindings";
 import { FileDiff } from "@pierre/diffs/react";
 import { parseDiffFromFile } from "@pierre/diffs";
-import { useMemo, useState } from "react";
+import { settlePromise } from "@lathe/client-runtime/state/runtime";
+import * as Cause from "effect/Cause";
+import { useState } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import { useDiffThemeName } from "../../hooks/useDiffThemeName";
-import { useTheme } from "../../hooks/useTheme";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
@@ -33,7 +34,6 @@ export function CaptureShortcutConfig({
   onComplete?: () => Promise<void>;
 }) {
   const bridge = getDesktopSnapShotBridge();
-  const { resolvedTheme } = useTheme();
   const diffThemeName = useDiffThemeName();
   const { copyToClipboard, isCopied } = useCopyToClipboard();
   const [preview, setPreview] = useState<DesktopCaptureConfigPreview | null>(null);
@@ -70,16 +70,13 @@ export function CaptureShortcutConfig({
     },
   });
   const actionBusy = busy || recorder.recording;
-  const diff = useMemo(
-    () =>
-      preview && changed
-        ? parseDiffFromFile(
-            { name: preview.path, contents: preview.before },
-            { name: preview.path, contents: preview.after },
-          )
-        : null,
-    [preview, changed],
-  );
+  const diff =
+    preview && changed
+      ? parseDiffFromFile(
+          { name: preview.path, contents: preview.before },
+          { name: preview.path, contents: preview.after },
+        )
+      : null;
   const begin = (phase: "reading" | "writing") => {
     setWorking(phase);
     onBusyChange?.(true);
@@ -95,28 +92,29 @@ export function CaptureShortcutConfig({
     setPreview(null);
     setResult(null);
     setCustomFile(chooseFile);
-    try {
-      setPreview(
-        await bridge.previewSnapShotConfig({
-          operation,
-          chooseFile,
-          ...(keys?.trim() ? { shortcut: keys.trim() } : {}),
-        }),
-      );
-    } catch (cause) {
+    const previewed = await settlePromise(() =>
+      bridge.previewSnapShotConfig!({
+        operation,
+        chooseFile,
+        ...(keys?.trim() ? { shortcut: keys.trim() } : {}),
+      }),
+    );
+    if (previewed._tag === "Success") {
+      setPreview(previewed.value);
+    } else {
+      const cause = Cause.squash(previewed.cause);
       setError({
         message: "Couldn't prepare the changes. Check Advanced for help.",
         ...(cause instanceof Error ? { detail: cause.message } : {}),
       });
-    } finally {
-      end();
     }
+    end();
   };
   const apply = async () => {
     if (actionBusy || !preview || !bridge?.applySnapShotConfig) return;
     begin("writing");
-    try {
-      const applied = await bridge.applySnapShotConfig(preview.id);
+    const saved = await settlePromise(async () => {
+      const applied = await bridge.applySnapShotConfig!(preview.id);
       setResult(applied);
       await onSaved?.();
       if (!applied.warning && preview.operation === "install" && onComplete) {
@@ -127,15 +125,16 @@ export function CaptureShortcutConfig({
         });
         await onComplete();
       }
-    } catch (cause) {
+    });
+    if (saved._tag === "Failure") {
+      const cause = Cause.squash(saved.cause);
       setError({
         message: "Couldn't save your shortcut. Review the changes and try again.",
         ...(cause instanceof Error ? { detail: cause.message } : {}),
       });
       setPreview(null);
-    } finally {
-      end();
     }
+    end();
   };
 
   return (

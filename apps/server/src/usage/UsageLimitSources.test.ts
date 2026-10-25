@@ -406,15 +406,11 @@ describe("UsageLimitSources", () => {
       live.send({ ...status, inflightTotal: 1 });
       yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === 1);
       live.send({ ...status, inflightTotal: 2 }, { ...status, inflightTotal: 3 });
-      yield* Effect.raceFirst(
-        firstWhere(sources, (s) => s.proxy?.inflightTotal === 3),
-        Effect.forever(
-          Effect.andThen(
-            Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve))),
-            TestClock.adjust("500 millis"),
-          ),
-        ),
-      );
+      // The burst reaches the follower through the body stream, outside the
+      // test clock. Either it is already held until the interval ends, or it
+      // arrives after the interval and goes out at once; both publish 3.
+      yield* TestClock.adjust("2 seconds");
+      yield* firstWhere(sources, (s) => s.proxy?.inflightTotal === 3);
       expect(published).not.toContain(2);
     }).pipe(Effect.scoped, Effect.provide(layer));
   });
@@ -428,20 +424,17 @@ describe("UsageLimitSources", () => {
       const first = live.nextOpen();
       yield* sources.watch;
       yield* first;
+      live.send(status);
+      yield* firstWhere(sources, (s) => s.proxy?.following === true);
 
       const second = live.nextOpen();
       live.end();
       // The close reaches the follower through the body stream, outside the
-      // test clock, so the clock moves only after the event loop has turned.
-      yield* Effect.raceFirst(
-        second,
-        Effect.forever(
-          Effect.andThen(
-            Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve))),
-            TestClock.adjust("1 second"),
-          ),
-        ),
-      );
+      // test clock. Dropping the live mark is its last step before it waits
+      // to reopen, so the clock moves only once it is waiting.
+      yield* firstWhere(sources, (s) => s.proxy?.following === undefined);
+      yield* TestClock.adjust("1 second");
+      yield* second;
       live.send({ ...status, queueDepth: 2 });
       yield* firstWhere(sources, (s) => s.proxy?.queueDepth === 2);
       expect(live.opens).toBe(2);

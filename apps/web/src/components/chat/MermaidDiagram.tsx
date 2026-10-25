@@ -1,4 +1,4 @@
-import { memo, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, use, useEffect, useRef, useState } from "react";
 import {
   CheckIcon,
   CodeIcon,
@@ -16,7 +16,8 @@ import { mermaidRepairPrompt } from "@lathe/client-runtime/mermaid";
 import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTrigger } from "../ui/dialog";
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
-import { MarkdownFindContext, useFindRevealRef } from "./markdownFindContext";
+import { serializeCodeBlockToMarkdown } from "../../markdown-clipboard";
+import { findRevealRef, MarkdownFindContext } from "./markdownFindContext";
 
 type DiagramTheme = "dark" | "light";
 
@@ -32,10 +33,7 @@ function DiagramCanvas({
   theme: DiagramTheme;
   onToggleTheme: () => void;
 }) {
-  const imageSource = useMemo(
-    () => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-    [svg],
-  );
+  const imageSource = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   const canvas = useRef<HTMLDivElement>(null);
   const image = useRef<HTMLImageElement>(null);
   const controls = useRef<ReturnType<typeof mountDiagramViewport> | null>(null);
@@ -199,8 +197,8 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   } | null>(null);
   const [showSource, setShowSource] = useState(false);
   const searching = use(MarkdownFindContext);
-  const revealSource = useCallback(() => setShowSource(true), []);
-  const sourceRevealRef = useFindRevealRef(revealSource);
+  const revealSource = () => setShowSource(true);
+  const sourceRevealRef = findRevealRef(revealSource);
   const [copiedSource, setCopiedSource] = useState<string | null>(null);
   const copied = copiedSource === source;
   const [copyError, setCopyError] = useState(false);
@@ -231,10 +229,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       ? result
       : null;
   const svg = current?.svg;
-  const imageSource = useMemo(
-    () => (svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : undefined),
-    [svg],
-  );
+  const imageSource = svg
+    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    : undefined;
   const error = pending ? undefined : current?.error;
   const copy = async () => {
     try {
@@ -249,6 +246,8 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     <div
       className="my-3 overflow-hidden rounded-xl border border-border bg-card"
       data-mermaid-diagram=""
+      data-markdown-mermaid=""
+      data-markdown-copy={serializeCodeBlockToMarkdown(source, "mermaid")}
     >
       {/* Find counts only the source, so the chrome must not highlight either. */}
       <div
@@ -360,7 +359,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       ) : null}
       {/* While find is open the source stays searchable; a selected match here shows it. */}
       {searching && !(showSource || error || copyError) ? (
-        <pre ref={sourceRevealRef} hidden>
+        <pre ref={sourceRevealRef} hidden aria-hidden>
           {source}
         </pre>
       ) : null}

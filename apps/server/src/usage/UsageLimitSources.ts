@@ -259,15 +259,14 @@ export const make = Effect.gen(function* () {
     return yield* readSourceOnce(id, config);
   });
 
-  const intervalMs = settingsService.getSettings.pipe(
-    Effect.map((settings) =>
-      Duration.toMillis(
-        Duration.fromInputUnsafe(
-          resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
-        ),
-      ),
+  const interval = settingsService.getSettings.pipe(
+    Effect.map(
+      (settings) => resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
     ),
-    Effect.orElseSucceed(() => Duration.toMillis(DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL)),
+    Effect.orElseSucceed(() => DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL),
+  );
+  const intervalMs = interval.pipe(
+    Effect.map((wait) => Duration.toMillis(Duration.fromInputUnsafe(wait))),
     Effect.map((ms) => (ms <= 0 ? 60_000 : ms)),
   );
 
@@ -285,18 +284,17 @@ export const make = Effect.gen(function* () {
     return { ...source, proxy: live ? { ...proxy, following: true } : proxy };
   };
 
-  const publishWith = (
+  const publishWith = Effect.fn("UsageLimitSources.publish")(function* (
     derive: (
       previous: ReadonlyArray<UsageLimitSourceSnapshot>,
     ) => ReadonlyArray<UsageLimitSourceSnapshot>,
-  ) =>
-    Effect.gen(function* () {
-      const published = yield* Ref.modify(stateRef, (previous) => {
-        const stamped = derive(previous).map(stampFollowing);
-        return Equal.equals(previous, stamped) ? [null, previous] : [stamped, stamped];
-      });
-      if (published) yield* PubSub.publish(changes, published);
+  ) {
+    const published = yield* Ref.modify(stateRef, (previous) => {
+      const stamped = derive(previous).map(stampFollowing);
+      return Equal.equals(previous, stamped) ? [null, previous] : [stamped, stamped];
     });
+    if (published) yield* PubSub.publish(changes, published);
+  });
   const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) => publishWith(() => next);
 
   // One refresh at a time: a slow hub read started before a settings change
@@ -330,28 +328,27 @@ export const make = Effect.gen(function* () {
     yield* publish(reads.map((read) => settleRead(read, previous, settle)));
   }).pipe(refreshLock.withPermits(1), Effect.ignoreCause({ log: true }));
 
-  const auth = (input: UsageLimitSourceAuthInput) =>
-    Effect.gen(function* () {
-      const settings = yield* settingsService.getSettings.pipe(
-        Effect.mapError(
-          () => new UsageLimitSourceError({ detail: "Could not read source settings." }),
-        ),
-      );
-      const config = settings.usageLimitSources[input.sourceId];
-      if (!config?.enabled || config.kind !== "modelproxy") {
-        return yield* new UsageLimitSourceError({
-          detail: "The gateway source is missing or disabled.",
-        });
-      }
-      switch (input.action) {
-        case "start":
-          return yield* modelproxyAuth.start(input.sourceId, config);
-        case "cancel":
-          return yield* modelproxyAuth.cancel(input.sourceId);
-        case "signOut":
-          return yield* modelproxyAuth.signOut(input.sourceId);
-      }
-    });
+  const auth = Effect.fn("UsageLimitSources.auth")(function* (input: UsageLimitSourceAuthInput) {
+    const settings = yield* settingsService.getSettings.pipe(
+      Effect.mapError(
+        () => new UsageLimitSourceError({ detail: "Could not read source settings." }),
+      ),
+    );
+    const config = settings.usageLimitSources[input.sourceId];
+    if (!config?.enabled || config.kind !== "modelproxy") {
+      return yield* new UsageLimitSourceError({
+        detail: "The gateway source is missing or disabled.",
+      });
+    }
+    switch (input.action) {
+      case "start":
+        return yield* modelproxyAuth.start(input.sourceId, config);
+      case "cancel":
+        return yield* modelproxyAuth.cancel(input.sourceId);
+      case "signOut":
+        return yield* modelproxyAuth.signOut(input.sourceId);
+    }
+  });
 
   // Every sign-in transition re-reads so the snapshot's auth state and,
   // once signed in, its accounts follow without waiting for the interval.
@@ -367,47 +364,47 @@ export const make = Effect.gen(function* () {
     Stream.runForEach(() => refresh),
     Effect.forkScoped,
   );
-  const accountLogin = (input: UsageLimitSourceAccountLoginInput) =>
-    Effect.gen(function* () {
-      const settings = yield* settingsService.getSettings.pipe(
-        Effect.mapError(
-          () => new UsageLimitSourceError({ detail: "Could not read source settings." }),
-        ),
-      );
-      const config = settings.usageLimitSources[input.sourceId];
-      if (!config?.enabled || config.kind !== "modelproxy") {
-        return yield* new UsageLimitSourceError({
-          detail: "The gateway source is missing or disabled.",
-        });
-      }
-      return yield* accountLogins.run(input.sourceId, input, {
-        baseUrl: config.url,
-        token: modelproxyAuth
-          .accessToken(input.sourceId, config, { forceRefresh: false })
-          .pipe(Effect.mapError((error) => new UsageLimitSourceError({ detail: error.detail }))),
+  const accountLogin = Effect.fn("UsageLimitSources.accountLogin")(function* (
+    input: UsageLimitSourceAccountLoginInput,
+  ) {
+    const settings = yield* settingsService.getSettings.pipe(
+      Effect.mapError(
+        () => new UsageLimitSourceError({ detail: "Could not read source settings." }),
+      ),
+    );
+    const config = settings.usageLimitSources[input.sourceId];
+    if (!config?.enabled || config.kind !== "modelproxy") {
+      return yield* new UsageLimitSourceError({
+        detail: "The gateway source is missing or disabled.",
       });
+    }
+    return yield* accountLogins.run(input.sourceId, input, {
+      baseUrl: config.url,
+      token: modelproxyAuth
+        .accessToken(input.sourceId, config, { forceRefresh: false })
+        .pipe(Effect.mapError((error) => new UsageLimitSourceError({ detail: error.detail }))),
     });
+  });
 
   // Shares the refresh lock so a stale in-flight read cannot overwrite a redemption.
-  const consumeResetCredit = (input: UsageLimitSourceConsumeResetCreditInput) =>
-    Effect.gen(function* () {
-      const settings = yield* settingsService.getSettings.pipe(
-        Effect.mapError(
-          () => new UsageLimitSourceError({ detail: "Could not read hub settings." }),
-        ),
-      );
-      const config = settings.usageLimitSources[input.sourceId];
-      if (!config?.enabled || config.kind !== "cliproxy" || !config.managementKey) {
-        return yield* new UsageLimitSourceError({
-          detail: "The usage limit source is missing or disabled.",
-        });
-      }
-      const result = yield* api.consume(config, input.accountId, input.creditId);
-      const { snapshot } = yield* readSource(input.sourceId, config);
-      const previous = yield* Ref.get(stateRef);
-      yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
-      return result;
-    }).pipe(refreshLock.withPermits(1));
+  const consumeResetCredit = Effect.fn("UsageLimitSources.consumeResetCredit")(function* (
+    input: UsageLimitSourceConsumeResetCreditInput,
+  ) {
+    const settings = yield* settingsService.getSettings.pipe(
+      Effect.mapError(() => new UsageLimitSourceError({ detail: "Could not read hub settings." })),
+    );
+    const config = settings.usageLimitSources[input.sourceId];
+    if (!config?.enabled || config.kind !== "cliproxy" || !config.managementKey) {
+      return yield* new UsageLimitSourceError({
+        detail: "The usage limit source is missing or disabled.",
+      });
+    }
+    const result = yield* api.consume(config, input.accountId, input.creditId);
+    const { snapshot } = yield* readSource(input.sourceId, config);
+    const previous = yield* Ref.get(stateRef);
+    yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
+    return result;
+  }, refreshLock.withPermits(1));
 
   // Fork: while a client watches a gateway, each signed-in modelproxy source
   // follows the gateway's status stream rather than waiting for the interval.
@@ -421,13 +418,14 @@ export const make = Effect.gen(function* () {
 
   // Shares the refresh lock so an interval read already in flight cannot
   // publish an older status over a newer streamed one.
-  const publishSource = (snapshot: UsageLimitSourceSnapshot) =>
-    Effect.gen(function* () {
-      const previous = yield* Ref.get(stateRef);
-      // A source the list does not have yet arrives with the next refresh.
-      if (!previous.some((source) => source.id === snapshot.id)) return;
-      yield* publish(previous.map((source) => (source.id === snapshot.id ? snapshot : source)));
-    }).pipe(refreshLock.withPermits(1));
+  const publishSource = Effect.fn("UsageLimitSources.publishSource")(function* (
+    snapshot: UsageLimitSourceSnapshot,
+  ) {
+    const previous = yield* Ref.get(stateRef);
+    // A source the list does not have yet arrives with the next refresh.
+    if (!previous.some((source) => source.id === snapshot.id)) return;
+    yield* publish(previous.map((source) => (source.id === snapshot.id ? snapshot : source)));
+  }, refreshLock.withPermits(1));
 
   const followSource = Effect.fn("UsageLimitSources.followSource")(function* (
     id: UsageLimitSourceId,
@@ -572,9 +570,14 @@ export const make = Effect.gen(function* () {
   );
 
   yield* Effect.forever(
-    intervalMs.pipe(
-      Effect.flatMap((ms) => Effect.sleep(Duration.millis(ms))),
-      Effect.andThen(backgroundPolicy.shouldRunScopeWork({ type: "provider-status" })),
+    interval.pipe(
+      Effect.flatMap((wait) => Effect.sleep(Duration.isPositive(wait) ? wait : "60 seconds")),
+      Effect.andThen(interval),
+      Effect.flatMap((current) =>
+        Duration.isPositive(current)
+          ? backgroundPolicy.shouldRunScopeWork({ type: "provider-status" })
+          : Effect.succeed(false),
+      ),
       Effect.flatMap((shouldRun) => (shouldRun ? refresh : Effect.void)),
       Effect.ignoreCause({ log: true }),
     ),

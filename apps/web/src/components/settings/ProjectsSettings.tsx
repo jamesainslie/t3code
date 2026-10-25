@@ -1,12 +1,15 @@
 import { EnvironmentId } from "@lathe/contracts";
+import { LayersIcon } from "lucide-react";
 
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { useEnvironments } from "../../state/environments";
+import { Button } from "../ui/button";
 import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { ProjectSyncSettings } from "./ProjectSyncSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
 import { SettingsPageContainer } from "./settingsLayout";
+import { ALL_ENVIRONMENTS_VALUE, selectEnvironmentAxis } from "./settingsScopeAxis";
 
 /**
  * Sync imports into one environment's database, so it needs exactly one
@@ -57,7 +60,26 @@ function ProjectSyncSection() {
 }
 
 export function ProjectsSettings() {
-  const { search: value, scope } = useSettingsScope();
+  const { search: value, scope, selectScope } = useSettingsScope();
+  const unavailable =
+    scope.kind === "unavailable" ? (
+      <SettingsPageContainer>
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-sm text-muted-foreground">{scope.message}</p>
+          {value.machine || value.checkout ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => selectScope(selectEnvironmentAxis(value, ALL_ENVIRONMENTS_VALUE))}
+            >
+              <LayersIcon />
+              Show all environments
+            </Button>
+          ) : null}
+        </div>
+      </SettingsPageContainer>
+    ) : null;
+  // Keep the panel mounted so it can follow members when regrouping changes the project key.
   const projectScope =
     scope.kind === "project" ||
     scope.kind === "checkout" ||
@@ -70,11 +92,10 @@ export function ProjectsSettings() {
           projectKey={value.project}
           environmentId={value.machine ? EnvironmentId.make(value.machine) : null}
           checkoutKey={value.checkout ?? null}
+          unavailable={unavailable}
         />
-      ) : scope.kind === "unavailable" ? (
-        <SettingsPageContainer>
-          <p className="text-sm text-muted-foreground">{scope.message}</p>
-        </SettingsPageContainer>
+      ) : unavailable ? (
+        unavailable
       ) : (
         <>
           {/* The notice sizes to its content here: its own flex-1 scroll area

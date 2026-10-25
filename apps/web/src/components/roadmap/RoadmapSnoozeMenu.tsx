@@ -4,7 +4,7 @@
  */
 import type { IsoDate } from "@lathe/contracts";
 import { addDays } from "@lathe/shared/roadmapCalc";
-import { useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 
 import { weekStartsOn } from "~/timestampFormat";
 import { Calendar } from "../ui/calendar";
@@ -46,7 +46,7 @@ export function RoadmapSnoozeMenu({
 }: RoadmapSnoozeMenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [picking, setPicking] = useState(false);
-  const choices = useMemo(() => roadmapSnoozeChoices(today), [today]);
+  const choices = roadmapSnoozeChoices(today);
   // "Pick a date" opens the picker in the same click that closes the menu, and
   // the two callbacks can arrive in either order, so both are tracked in a ref.
   const shown = useRef({ menu: false, picker: false });

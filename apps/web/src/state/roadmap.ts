@@ -7,7 +7,6 @@ import {
   type RoadmapAreasSettings,
 } from "@lathe/contracts";
 import { createRoadmapEnvironmentAtoms } from "@lathe/client-runtime/state/roadmap";
-import { useCallback } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -58,21 +57,18 @@ export function useRoadmapAreaSettings(home: EnvironmentId | null): RoadmapAreas
  */
 export function useUpdateRoadmapAreaSettings(home: EnvironmentId | null) {
   const update = useAtomCommand(serverEnvironment.updateSettings, "roadmap area settings");
-  return useCallback(
-    async (area: RoadmapArea, patch: RoadmapAreaSettingsPatch): Promise<boolean> => {
-      if (home === null) return false;
-      const result = await update({
-        environmentId: home,
-        input: {
-          patch: {
-            roadmap: { areas: area === "work" ? { work: patch } : { personal: patch } },
-          },
+  return async (area: RoadmapArea, patch: RoadmapAreaSettingsPatch): Promise<boolean> => {
+    if (home === null) return false;
+    const result = await update({
+      environmentId: home,
+      input: {
+        patch: {
+          roadmap: { areas: area === "work" ? { work: patch } : { personal: patch } },
         },
-      });
-      return result._tag === "Success";
-    },
-    [home, update],
-  );
+      },
+    });
+    return result._tag === "Success";
+  };
 }
 
 /** Whether the environment can link to a roadmap home, and mint links as one. */

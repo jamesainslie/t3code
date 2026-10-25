@@ -486,141 +486,128 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
           assert.isFalse(events.some((entry) => entry.event === "sigterm"));
           assert.equal(events.filter((entry) => entry.event === "listening").length, 1);
         }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
     );
 
-    it.live(
-      "adopts an external server named by the default runtime file and stops its own",
-      () =>
-        Effect.gen(function* () {
-          const fixture = yield* makeFixture;
-          const first = yield* fixture.launch;
-          const managedPid = Number(yield* fixture.readState("pid"));
-          const externalPid = yield* fixture.startExternalServer;
-          const external = (yield* fixture.events).find(
-            (entry) => entry.pid === externalPid && entry.event === "listening",
-          );
-          assert.isDefined(external);
+    it.live("adopts an external server named by the default runtime file and stops its own", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const first = yield* fixture.launch;
+        const managedPid = Number(yield* fixture.readState("pid"));
+        const externalPid = yield* fixture.startExternalServer;
+        const external = (yield* fixture.events).find(
+          (entry) => entry.pid === externalPid && entry.event === "listening",
+        );
+        assert.isDefined(external);
 
-          const second = yield* fixture.launch;
+        const second = yield* fixture.launch;
 
-          assert.deepEqual(second, {
-            remotePort: external?.port ?? -1,
-            serverKind: "external",
-            action: "replaced-by-external",
-          });
-          assert.notEqual(second.remotePort, first.remotePort);
-          assert.isNull(yield* fixture.readState("pid"));
-          assert.equal(yield* fixture.readState("managed"), "external");
-          assert.isFalse(isAlive(managedPid));
-          assert.isTrue(isAlive(externalPid));
-          assert.deepEqual(
-            (yield* fixture.events)
-              .filter((entry) => entry.event === "sigterm")
-              .map((entry) => entry.pid),
-            [managedPid],
-          );
+        assert.deepEqual(second, {
+          remotePort: external?.port ?? -1,
+          serverKind: "external",
+          action: "replaced-by-external",
+        });
+        assert.notEqual(second.remotePort, first.remotePort);
+        assert.isNull(yield* fixture.readState("pid"));
+        assert.equal(yield* fixture.readState("managed"), "external");
+        assert.isFalse(isAlive(managedPid));
+        assert.isTrue(isAlive(externalPid));
+        assert.deepEqual(
+          (yield* fixture.events)
+            .filter((entry) => entry.event === "sigterm")
+            .map((entry) => entry.pid),
+          [managedPid],
+        );
 
-          const third = yield* fixture.launch;
+        const third = yield* fixture.launch;
 
-          assert.deepEqual(third, { ...second, action: "reused-external" });
-        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
+        assert.deepEqual(third, { ...second, action: "reused-external" });
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
     );
 
-    it.live(
-      "adopts an external server on a first launch without starting its own",
-      () =>
-        Effect.gen(function* () {
-          const fixture = yield* makeFixture;
-          const externalPid = yield* fixture.startExternalServer;
+    it.live("adopts an external server on a first launch without starting its own", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const externalPid = yield* fixture.startExternalServer;
 
-          const first = yield* fixture.launch;
+        const first = yield* fixture.launch;
 
-          assert.equal(first.serverKind, "external");
-          assert.equal(first.action, "adopted-external");
-          assert.isTrue(isAlive(externalPid));
-          const listening = (yield* fixture.events).filter((entry) => entry.event === "listening");
-          assert.deepEqual(
-            listening.map((entry) => entry.pid),
-            [externalPid],
-          );
-        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
+        assert.equal(first.serverKind, "external");
+        assert.equal(first.action, "adopted-external");
+        assert.isTrue(isAlive(externalPid));
+        const listening = (yield* fixture.events).filter((entry) => entry.event === "listening");
+        assert.deepEqual(
+          listening.map((entry) => entry.pid),
+          [externalPid],
+        );
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
     );
 
-    it.live(
-      "restarts its own managed server when the runner changed",
-      () =>
-        Effect.gen(function* () {
-          const fixture = yield* makeFixture;
-          yield* fixture.launch;
-          const firstPid = Number(yield* fixture.readState("pid"));
-          const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
-          yield* fixture.fs.writeFileString(
-            runnerPath,
-            `${yield* fixture.fs.readFileString(runnerPath)}\n# older runner\n`,
-          );
+    it.live("restarts its own managed server when the runner changed", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        yield* fixture.launch;
+        const firstPid = Number(yield* fixture.readState("pid"));
+        const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
+        yield* fixture.fs.writeFileString(
+          runnerPath,
+          `${yield* fixture.fs.readFileString(runnerPath)}\n# older runner\n`,
+        );
 
-          const second = yield* fixture.launch;
+        const second = yield* fixture.launch;
 
-          assert.equal(second.serverKind, "managed");
-          assert.equal(second.action, "restarted-runner-changed");
-          const secondPid = Number(yield* fixture.readState("pid"));
-          assert.notEqual(secondPid, firstPid);
-          assert.isFalse(isAlive(firstPid));
-          const events = yield* fixture.events;
-          assert.deepEqual(
-            events.filter((entry) => entry.event === "sigterm").map((entry) => entry.pid),
-            [firstPid],
-          );
-          const listening = events.filter((entry) => entry.event === "listening");
-          assert.deepEqual(
-            listening.map((entry) => entry.pid),
-            [firstPid, secondPid],
-          );
-          assert.equal(second.remotePort, listening[1]?.port);
-        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
+        assert.equal(second.serverKind, "managed");
+        assert.equal(second.action, "restarted-runner-changed");
+        const secondPid = Number(yield* fixture.readState("pid"));
+        assert.notEqual(secondPid, firstPid);
+        assert.isFalse(isAlive(firstPid));
+        const events = yield* fixture.events;
+        assert.deepEqual(
+          events.filter((entry) => entry.event === "sigterm").map((entry) => entry.pid),
+          [firstPid],
+        );
+        const listening = events.filter((entry) => entry.event === "listening");
+        assert.deepEqual(
+          listening.map((entry) => entry.pid),
+          [firstPid, secondPid],
+        );
+        assert.equal(second.remotePort, listening[1]?.port);
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
     );
 
-    it.live(
-      "pairing replaces the runner atomically and leaves an identical one alone",
-      () =>
-        Effect.gen(function* () {
-          const fixture = yield* makeFixture;
-          const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
-          const heldPath = fixture.path.join(fixture.stateDir, "held-runner");
-          const pair = Effect.gen(function* () {
-            const result = yield* fixture.runScript(
-              buildRemotePairingScript("fixture", { nodeScriptPath: fixture.cliPath }),
-              [],
-            );
-            assert.equal(result.exitCode, 0, result.stderr);
-            assert.equal(result.stdout, '{"credential":"fixture"}\n');
-          });
-          // A launch may be executing the old runner; it must never see a partial rewrite.
-          yield* fixture.fs.writeFileString(runnerPath, "#!/bin/sh\nexit 1\n");
-          yield* fixture.fs.link(runnerPath, heldPath);
+    it.live("pairing replaces the runner atomically and leaves an identical one alone", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
+        const heldPath = fixture.path.join(fixture.stateDir, "held-runner");
+        const pair = Effect.gen(function* () {
+          const result = yield* fixture.runScript(
+            buildRemotePairingScript("fixture", { nodeScriptPath: fixture.cliPath }),
+            [],
+          );
+          assert.equal(result.exitCode, 0, result.stderr);
+          assert.equal(result.stdout, '{"credential":"fixture"}\n');
+        });
+        // A launch may be executing the old runner; it must never see a partial rewrite.
+        yield* fixture.fs.writeFileString(runnerPath, "#!/bin/sh\nexit 1\n");
+        yield* fixture.fs.link(runnerPath, heldPath);
 
-          yield* pair;
+        yield* pair;
 
-          assert.equal(yield* fixture.fs.readFileString(heldPath), "#!/bin/sh\nexit 1\n");
-          const replaced = yield* fixture.fs.stat(runnerPath);
-          assert.notDeepEqual(replaced.ino, (yield* fixture.fs.stat(heldPath)).ino);
-          assert.equal(replaced.mode & 0o777, 0o700);
-          // No temporary runner is left behind.
-          assert.deepEqual((yield* fixture.fs.readDirectory(fixture.stateDir)).toSorted(), [
-            "held-runner",
-            "port",
-            "run-lathe.sh",
-          ]);
+        assert.equal(yield* fixture.fs.readFileString(heldPath), "#!/bin/sh\nexit 1\n");
+        const replaced = yield* fixture.fs.stat(runnerPath);
+        assert.notDeepEqual(replaced.ino, (yield* fixture.fs.stat(heldPath)).ino);
+        assert.equal(replaced.mode & 0o777, 0o700);
+        // No temporary runner is left behind.
+        assert.deepEqual((yield* fixture.fs.readDirectory(fixture.stateDir)).toSorted(), [
+          "held-runner",
+          "port",
+          "run-lathe.sh",
+        ]);
 
-          yield* pair;
+        yield* pair;
 
-          assert.deepEqual((yield* fixture.fs.stat(runnerPath)).ino, replaced.ino);
-        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-      30_000,
+        assert.deepEqual((yield* fixture.fs.stat(runnerPath)).ino, replaced.ino);
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
     );
   },
 );

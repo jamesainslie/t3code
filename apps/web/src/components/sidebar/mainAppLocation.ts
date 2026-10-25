@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 
 export function isSidebarUtilityPage(pathname: string) {
   return (
@@ -34,18 +34,15 @@ export function MainAppLocationTracker() {
 
 export function useNavigateToMainApp() {
   const navigate = useNavigate();
-  return useCallback(() => navigate({ href: mainAppHref ?? "/" }), [navigate]);
+  return () => navigate({ href: mainAppHref ?? "/" });
 }
 
 /** Fork: roadmap. Back to where you were from the roadmap, or to the roadmap as you left it. */
 export function useToggleRoadmap(fallbackRoadmapHref: string) {
   const navigate = useNavigate();
   const onRoadmap = useLocation({ select: (location) => location.pathname === "/roadmap" });
-  return useCallback(
-    () =>
-      navigate({
-        href: onRoadmap ? (mainAppHref ?? "/") : (roadmapHref ?? fallbackRoadmapHref),
-      }),
-    [fallbackRoadmapHref, navigate, onRoadmap],
-  );
+  return () =>
+    navigate({
+      href: onRoadmap ? (mainAppHref ?? "/") : (roadmapHref ?? fallbackRoadmapHref),
+    });
 }

@@ -39,31 +39,30 @@ const CachedRoadmap = Schema.fromJsonString(
 const decodeCachedRoadmap = Schema.decodeUnknownEffect(CachedRoadmap);
 const encodeCachedRoadmap = Schema.encodeEffect(CachedRoadmap);
 
-const loadCachedRoadmap = (environmentId: EnvironmentId) =>
-  Effect.gen(function* () {
-    const store = yield* RoadmapCacheStore;
-    if (store === null) return Option.none<RoadmapLiveView>();
-    const stored = yield* store.load(environmentId);
-    if (Option.isNone(stored)) return Option.none<RoadmapLiveView>();
-    return yield* decodeCachedRoadmap(stored.value).pipe(
-      Effect.map(({ environmentId: owner, snapshotSequence, sequence, items, sprints }) =>
-        owner === environmentId
-          ? Option.some<RoadmapLiveView>({
-              snapshotSequence,
-              sequence,
-              items,
-              sprints,
-              source: "cache",
-            })
-          : Option.none<RoadmapLiveView>(),
-      ),
-      // A cache written by another version is only a slower first paint.
-      Effect.catch(() => Effect.succeedNone),
-    );
-  });
+const loadCachedRoadmap = Effect.fn("RoadmapCache.load")(function* (environmentId: EnvironmentId) {
+  const store = yield* RoadmapCacheStore;
+  if (store === null) return Option.none<RoadmapLiveView>();
+  const stored = yield* store.load(environmentId);
+  if (Option.isNone(stored)) return Option.none<RoadmapLiveView>();
+  return yield* decodeCachedRoadmap(stored.value).pipe(
+    Effect.map(({ environmentId: owner, snapshotSequence, sequence, items, sprints }) =>
+      owner === environmentId
+        ? Option.some<RoadmapLiveView>({
+            snapshotSequence,
+            sequence,
+            items,
+            sprints,
+            source: "cache",
+          })
+        : Option.none<RoadmapLiveView>(),
+    ),
+    // A cache written by another version is only a slower first paint.
+    Effect.catch(() => Effect.succeedNone),
+  );
+});
 
-const saveCachedRoadmap = (environmentId: EnvironmentId, state: RoadmapLiveState) =>
-  Effect.gen(function* () {
+const saveCachedRoadmap = Effect.fn("RoadmapCache.save")(
+  function* (environmentId: EnvironmentId, state: RoadmapLiveState) {
     const store = yield* RoadmapCacheStore;
     if (store === null) return;
     const payload = yield* encodeCachedRoadmap({
@@ -75,7 +74,9 @@ const saveCachedRoadmap = (environmentId: EnvironmentId, state: RoadmapLiveState
       sprints: state.sprints,
     });
     yield* store.save(environmentId, payload);
-  }).pipe(Effect.catchCause(() => Effect.logWarning("Could not cache the roadmap.")));
+  },
+  Effect.catchCause(() => Effect.logWarning("Could not cache the roadmap.")),
+);
 
 /** The cached roadmap, if any, then each live state, which also replaces the cache. */
 export const withRoadmapCache = <E, R>(

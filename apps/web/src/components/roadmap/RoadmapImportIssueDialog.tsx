@@ -10,7 +10,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@lathe/client-runtime/state/runtime";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 
 import { roadmapEnvironment } from "~/state/roadmap";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -56,12 +56,8 @@ export function RoadmapImportIssueDialog({
   const [importing, setImporting] = useState(false);
 
   // Bugs and support tickets hold nothing, so an issue cannot go under one.
-  const parentOptions = useMemo(
-    () =>
-      flattenOutline(buildTree(items), new Set()).filter(
-        (row) => row.node.item.type !== "bug" && row.node.item.type !== "support-ticket",
-      ),
-    [items],
+  const parentOptions = flattenOutline(buildTree(items), new Set()).filter(
+    (row) => row.node.item.type !== "bug" && row.node.item.type !== "support-ticket",
   );
   const parentItems = Object.fromEntries([
     [NO_PARENT, "No parent"],

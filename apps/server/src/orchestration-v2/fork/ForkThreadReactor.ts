@@ -165,76 +165,76 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const satisfyWaiters = (dependencyThreadId: ThreadId, reason: ThreadDependencySatisfiedReason) =>
-    Effect.gen(function* () {
-      const satisfiedAt = DateTime.formatIso(yield* DateTime.now);
-      const entries = yield* Ref.get(index);
-      yield* Effect.forEach(
-        entries,
-        ([threadId, entry]) => {
-          const linkedAt = entry.dependencies.get(dependencyThreadId);
-          return linkedAt === undefined
-            ? Effect.void
-            : dispatch({
-                type: "thread.fork.internal-update",
-                commandId: CommandId.make(
-                  `fork:dependency-satisfy:${threadId}:${dependencyThreadId}:${linkedAt}`,
-                ),
-                threadId,
-                update: {
-                  kind: "dependency.satisfy",
-                  dependsOnThreadId: dependencyThreadId,
-                  reason,
-                  satisfiedAt,
-                },
-              });
-        },
-        { discard: true },
-      );
-    });
+  const satisfyWaiters = Effect.fn("ForkThreadReactor.satisfyWaiters")(function* (
+    dependencyThreadId: ThreadId,
+    reason: ThreadDependencySatisfiedReason,
+  ) {
+    const satisfiedAt = DateTime.formatIso(yield* DateTime.now);
+    const entries = yield* Ref.get(index);
+    yield* Effect.forEach(
+      entries,
+      ([threadId, entry]) => {
+        const linkedAt = entry.dependencies.get(dependencyThreadId);
+        return linkedAt === undefined
+          ? Effect.void
+          : dispatch({
+              type: "thread.fork.internal-update",
+              commandId: CommandId.make(
+                `fork:dependency-satisfy:${threadId}:${dependencyThreadId}:${linkedAt}`,
+              ),
+              threadId,
+              update: {
+                kind: "dependency.satisfy",
+                dependsOnThreadId: dependencyThreadId,
+                reason,
+                satisfiedAt,
+              },
+            });
+      },
+      { discard: true },
+    );
+  });
 
-  const processEvent = (event: OrchestrationV2DomainEvent) =>
-    Effect.gen(function* () {
-      if (THREAD_EVENT_TYPES.has(event.type) && "payload" in event) {
-        const thread = event.payload as OrchestrationV2AppThread;
-        const entry = indexThread(thread);
-        yield* Ref.update(index, (current) => {
-          const next = new Map(current);
-          if (entry === null) next.delete(thread.id);
-          else next.set(thread.id, entry);
-          return next;
-        });
-        const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
-        if (
-          entry?.reminder != null &&
-          (entry.reminder.snoozedUntilMs === null || entry.reminder.snoozedUntilMs <= nowMs)
-        ) {
-          yield* deliverReminder(thread.id, entry.reminder);
-        }
-      }
+  // Runs for every domain event; most events return before any work is needed.
+  const processEvent = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
+    if (THREAD_EVENT_TYPES.has(event.type) && "payload" in event) {
+      const thread = event.payload as OrchestrationV2AppThread;
+      const entry = indexThread(thread);
+      yield* Ref.update(index, (current) => {
+        const next = new Map(current);
+        if (entry === null) next.delete(thread.id);
+        else next.set(thread.id, entry);
+        return next;
+      });
+      const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
       if (
-        event.type === "message.updated" &&
-        event.payload.role === "user" &&
-        event.payload.createdBy === "user" &&
-        // Imported history has no run; only a message sent now ends a wait.
-        event.payload.runId !== null
+        entry?.reminder != null &&
+        (entry.reminder.snoozedUntilMs === null || entry.reminder.snoozedUntilMs <= nowMs)
       ) {
-        const open = [...((yield* Ref.get(index)).get(event.threadId)?.dependencies.keys() ?? [])];
-        const [first, ...rest] = open;
-        if (first !== undefined) {
-          yield* dispatch({
-            type: "thread.fork.update",
-            commandId: CommandId.make(
-              `fork:dependency-clear:${event.threadId}:${event.payload.id}`,
-            ),
-            threadId: event.threadId,
-            update: { kind: "dependency.remove", dependsOnThreadIds: [first, ...rest] },
-          });
-        }
+        yield* deliverReminder(thread.id, entry.reminder);
       }
-      const reason = dependencySatisfiedReason(event);
-      if (reason !== null) yield* satisfyWaiters(event.threadId, reason);
-    });
+    }
+    if (
+      event.type === "message.updated" &&
+      event.payload.role === "user" &&
+      event.payload.createdBy === "user" &&
+      // Imported history has no run; only a message sent now ends a wait.
+      event.payload.runId !== null
+    ) {
+      const open = [...((yield* Ref.get(index)).get(event.threadId)?.dependencies.keys() ?? [])];
+      const [first, ...rest] = open;
+      if (first !== undefined) {
+        yield* dispatch({
+          type: "thread.fork.update",
+          commandId: CommandId.make(`fork:dependency-clear:${event.threadId}:${event.payload.id}`),
+          threadId: event.threadId,
+          update: { kind: "dependency.remove", dependsOnThreadIds: [first, ...rest] },
+        });
+      }
+    }
+    const reason = dependencySatisfiedReason(event);
+    if (reason !== null) yield* satisfyWaiters(event.threadId, reason);
+  });
 
   const start: ForkThreadReactor["Service"]["start"] = Effect.fn("ForkThreadReactor.start")(
     function* () {

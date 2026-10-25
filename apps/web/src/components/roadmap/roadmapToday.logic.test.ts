@@ -129,11 +129,11 @@ describe("roadmapTodayThreadRefs", () => {
   it("lists each thread attached to an open item once, in a stable order", () => {
     const t1 = ref(envB, "t1");
     const t2 = ref(envA, "t2");
-    const t3 = ref(envA, "t3");
+    const doneThread = ref(envA, "thread-3");
     const refs = roadmapTodayThreadRefs([
       item("a", { attachments: [attached(t1), attached(t2)] }),
       item("b", { attachments: [attached(t1)] }),
-      item("done", { state: "done", attachments: [attached(t3)] }),
+      item("done", { state: "done", attachments: [attached(doneThread)] }),
     ]);
     expect(refs).toEqual([t2, t1]);
   });
@@ -268,7 +268,7 @@ describe("roadmapReviewTargets", () => {
         projectId: ProjectId.make("p9"),
         pullRequestUrls: ["https://github.com/o/r/pull/2"],
       }),
-      todayThread(ref(envA, "t3"), {
+      todayThread(ref(envA, "thread-3"), {
         projectId: ProjectId.make("p1"),
         pullRequestUrls: ["https://github.com/o/r/pull/3"],
       }),

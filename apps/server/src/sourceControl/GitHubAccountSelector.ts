@@ -10,13 +10,14 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
-import { pullRequestHostOf, SourceControlProviderKind, type ProjectId } from "@lathe/contracts";
+import type { ProjectId } from "@lathe/contracts";
 import { resolveGitHubAccount } from "@lathe/shared/gitHubAccountRouting";
 import { resolveProjectSettings } from "@lathe/shared/projectSettings";
 import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
 
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { sourceControlDefinitions } from "./sourceControlDefinitions.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 
@@ -127,7 +128,7 @@ export const make = Effect.gen(function* () {
     }
     const settings = yield* serverSettings.getSettings.pipe(Effect.option);
     if (settings._tag === "None") return null;
-    const host = pullRequestHostOf(identity, SourceControlProviderKind.make("github"));
+    const host = sourceControlDefinitions.changeRequestHost(identity, "github");
     const [addressedOwner, addressedName] = input.repository?.split("/") ?? [];
     const borrowed =
       addressedOwner !== undefined &&

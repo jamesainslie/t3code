@@ -115,8 +115,13 @@ function feed(items: ReadonlyArray<OrchestrationV2TurnItem>) {
   );
 }
 
+// A lone call's row stands in for its group header, so it counts as a group row.
 function groupIds(rows: ReadonlyArray<ThreadFeedEntry>): string[] {
-  return rows.flatMap((row) => (row.type === "work-toggle" ? [row.groupId] : []));
+  return rows.flatMap((row) => {
+    if (row.type === "work-toggle") return [row.groupId];
+    const standIn = row.type === "activity-group" ? row.activities[0]?.groupStandIn : undefined;
+    return standIn ? [standIn.groupId] : [];
+  });
 }
 
 describe("thinking stays apart from tool calls on mobile", () => {

@@ -25,7 +25,7 @@ import type {
 import { effectivePriority } from "@lathe/shared/roadmap";
 import { localDateOf, type RoadmapForecastStatus } from "@lathe/shared/roadmapCalc";
 import { ChartGanttIcon } from "lucide-react";
-import { memo, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { cn } from "~/lib/utils";
@@ -81,41 +81,36 @@ export function RoadmapTimeline({
 }: RoadmapTimelineProps) {
   const areaSettings = useRoadmapAreaSettings(home);
   const select = useStableCallback(onSelect);
-  const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
-  const metrics = useMemo(
-    () => timelineMetrics({ items, sprints, today, areaSettings, dateOf: localDateOf }),
-    [areaSettings, items, sprints, today],
-  );
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const metrics = timelineMetrics({ items, sprints, today, areaSettings, dateOf: localDateOf });
   // Across both areas, so switching the area filter never shifts the axis.
-  const range = useMemo(
-    () => defaultTimelineRange({ items, forecasts: metrics.forecasts, today, dateOf: localDateOf }),
-    [items, metrics, today],
-  );
-  const layout = useMemo(
-    () =>
-      layoutTimeline({
-        items,
-        sprints,
-        today,
-        forecasts: metrics.forecasts,
-        progress: metrics.progress,
-        range,
-        area,
-        dateOf: localDateOf,
-      }),
-    [area, items, metrics, range, sprints, today],
-  );
-  const display = useMemo(() => timelineDisplayRows(layout), [layout]);
-  const edges = useMemo(() => timelineEdgePaths(layout, display.displayIndexOf), [display, layout]);
-  const ticks = useMemo(() => timelineWeekTicks(range), [range]);
-  const priorities = useMemo(() => {
+  const range = defaultTimelineRange({
+    items,
+    forecasts: metrics.forecasts,
+    today,
+    dateOf: localDateOf,
+  });
+  const layout = layoutTimeline({
+    items,
+    sprints,
+    today,
+    forecasts: metrics.forecasts,
+    progress: metrics.progress,
+    range,
+    area,
+    dateOf: localDateOf,
+  });
+  const display = timelineDisplayRows(layout);
+  const edges = timelineEdgePaths(layout, display.displayIndexOf);
+  const ticks = timelineWeekTicks(range);
+  const priorities = (() => {
     const result = new Map<RoadmapItemId, { priority: RoadmapPriority; inherited: boolean }>();
     for (const row of layout.rows) result.set(row.itemId, effectivePriority(row.itemId, byId));
     for (const group of layout.groups) {
       result.set(group.rootId, effectivePriority(group.rootId, byId));
     }
     return result;
-  }, [byId, layout]);
+  })();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrolledToToday = useRef(false);

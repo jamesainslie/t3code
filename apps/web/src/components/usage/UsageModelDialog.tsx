@@ -1,6 +1,5 @@
 import { formatPercent, formatTokens, formatUsd } from "@lathe/shared/usageFormat";
 import { isModelCostUnknown, type ModelTotals } from "@lathe/shared/usageMerge";
-import { useMemo } from "react";
 
 import { mergeAnsweredUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -32,6 +31,7 @@ export interface UsageChartWindow {
   readonly resolution: "day" | "hour";
   readonly timeZone: string;
   readonly referenceTime: string | undefined;
+  readonly hour12: boolean;
 }
 
 export function UsageModelDialog({
@@ -49,11 +49,8 @@ export function UsageModelDialog({
   readonly onSetPrice: () => void;
   readonly onClose: () => void;
 }) {
-  const usage = useMemo(
-    () => mergeAnsweredUsage(environments, (bucket) => isModelRowBucket(bucket, model)),
-    [environments, model],
-  );
-  const providers = useMemo(() => [model.provider], [model.provider]);
+  const usage = mergeAnsweredUsage(environments, (bucket) => isModelRowBucket(bucket, model));
+  const providers = [model.provider];
   const presentation = PROVIDER_PRESENTATION[model.provider];
   const costUnknown = isModelCostUnknown(model);
   const hitRate = cacheHitRate(model);
@@ -110,6 +107,7 @@ export function UsageModelDialog({
               referenceTime={chartWindow.referenceTime}
               resolution={chartWindow.resolution}
               timeZone={chartWindow.timeZone}
+              hour12={chartWindow.hour12}
             />
 
             <div className="grid gap-x-10 gap-y-8 sm:grid-cols-2">

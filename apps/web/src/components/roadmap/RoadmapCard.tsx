@@ -10,7 +10,7 @@ import { scopedThreadKey, scopeThreadRef } from "@lathe/client-runtime/environme
 import { MapIcon } from "lucide-react";
 import { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { openRoadmapAttachPicker } from "../../commandPaletteBus";
@@ -124,10 +124,10 @@ export function RoadmapCardControl({ thread }: { readonly thread: RoadmapThreadT
   const mode = placement?.mode ?? null;
   const cardOpen = mode === "inline" ? requested : popoverRequested && mode !== null;
   if (mode === "inline" && popoverRequested) setPopoverRequested(false);
-  const closeCard = useCallback(() => {
+  const closeCard = () => {
     if (mode === "popover") setPopoverRequested(false);
     else setOverride(false);
-  }, [mode, setOverride]);
+  };
 
   if (view.kind === "hidden") return null;
   const label =

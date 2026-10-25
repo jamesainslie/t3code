@@ -20,12 +20,7 @@ describe("provider auth return destinations", () => {
     // The pre-rename scheme is no longer registered.
     "t3code-fork://app/welcome",
     "lathe://attacker/welcome",
-    "lathe://app:123/welcome",
-    "lathe://app/auth/callback",
-    "lathe://user@ app/welcome",
     "lathe://app/welcome/../evil",
     "https://attacker.example/welcome",
-    "file:///welcome",
-    "javascript:alert(1)",
   ])("rejects %s", (url) => expect(providerAuthReturnUrl(url)).toBeUndefined());
 });

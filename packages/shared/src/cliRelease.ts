@@ -1,6 +1,7 @@
 import { FORK_IDENTITY } from "./forkIdentity.ts";
 
 const CLI_RELEASE_REPOSITORY = FORK_IDENTITY.releaseRepository;
+export const CLI_RELEASES_PAGE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases`;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "LATHE_RELEASE_BASE_URL";
 
@@ -42,10 +43,6 @@ export function cliArchiveTarCommand(
   if (platform !== "win32") return "tar";
   const systemRoot = env["SystemRoot"] ?? env["windir"] ?? "C:\\Windows";
   return `${systemRoot}\\System32\\tar.exe`;
-}
-
-export function cliArchiveFileName(version: string, platformKey: CliArchivePlatformKey): string {
-  return `t3-${version}-${platformKey}.${platformKey.startsWith("win32") ? "zip" : "tar.gz"}`;
 }
 
 const CLI_RELEASE_DEFAULT_BASE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases/download`;

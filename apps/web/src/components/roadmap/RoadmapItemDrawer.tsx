@@ -12,7 +12,7 @@ import type {
   RoadmapWorkItem,
 } from "@lathe/contracts";
 import { PencilIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 
 import { useRoadmapAreaSettings } from "~/state/roadmap";
 import { Button } from "../ui/button";
@@ -57,32 +57,24 @@ export function RoadmapItemDrawer({
     });
   }, [dispatch, reviewItemId]);
 
-  const onUpdate = useCallback(
-    (itemId: RoadmapItemId, patch: RoadmapItemPatch) =>
-      void dispatch(
-        { type: "roadmap.item.update", commandId: newRoadmapCommandId(), itemId, patch },
-        "Could not update the work item",
-      ),
-    [dispatch],
-  );
-  const onTick = useCallback(
-    (itemId: RoadmapItemId, criterionId: string, ticked: boolean) =>
-      void dispatch(
-        {
-          type: "roadmap.criterion.tick",
-          commandId: newRoadmapCommandId(),
-          itemId,
-          criterionId,
-          ticked,
-        },
-        ticked ? "Could not tick the criterion" : "Could not untick the criterion",
-      ),
-    [dispatch],
-  );
-  const onCommand = useCallback(
-    (command: RoadmapCommand, failureTitle: string) => dispatch(command, failureTitle),
-    [dispatch],
-  );
+  const onUpdate = (itemId: RoadmapItemId, patch: RoadmapItemPatch) =>
+    void dispatch(
+      { type: "roadmap.item.update", commandId: newRoadmapCommandId(), itemId, patch },
+      "Could not update the work item",
+    );
+  const onTick = (itemId: RoadmapItemId, criterionId: string, ticked: boolean) =>
+    void dispatch(
+      {
+        type: "roadmap.criterion.tick",
+        commandId: newRoadmapCommandId(),
+        itemId,
+        criterionId,
+        ticked,
+      },
+      ticked ? "Could not tick the criterion" : "Could not untick the criterion",
+    );
+  const onCommand = (command: RoadmapCommand, failureTitle: string) =>
+    dispatch(command, failureTitle);
 
   return (
     <aside

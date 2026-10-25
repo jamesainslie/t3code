@@ -9,7 +9,11 @@ import * as Scope from "effect/Scope";
 import type * as CodexClient from "effect-codex-app-server/client";
 import type * as CodexErrors from "effect-codex-app-server/errors";
 
-import { makeAuthRelayFlow, type AuthRelayFlow } from "../auth-relay/AuthRelayFlow.ts";
+import {
+  makeAuthRelayFlow,
+  type AuthRelayFlow,
+  type AuthRelaySignInHandle,
+} from "../auth-relay/AuthRelayFlow.ts";
 import { parseLoopbackAuthorizationUrl } from "../auth-relay/loopbackCallback.ts";
 
 const isSetupError = Schema.is(ProviderSetupError);
@@ -71,65 +75,64 @@ export const makeCodexAuth = Effect.fn("makeCodexAuth")(function* (
       describeFailure,
     },
     parseAuthorizationUrl: parseLoopbackAuthorizationUrl,
-    signIn: (handle) =>
-      Effect.gen(function* () {
-        const client = yield* options.withClient;
-        const completed = yield* Deferred.make<void, ProviderSetupError>();
-        let loginId: string | undefined;
-        yield* client.handleServerNotification("account/login/completed", (payload) =>
-          Effect.gen(function* () {
-            if (loginId !== undefined && payload.loginId && payload.loginId !== loginId) return;
-            if (payload.success) {
-              yield* Deferred.succeed(completed, undefined);
-              return;
-            }
-            // Codex's own error text can name the account or carry a code.
-            yield* Deferred.fail(
-              completed,
-              setupError(
-                "start",
-                /denied|cancel/i.test(payload.error ?? "")
-                  ? "Codex sign-in was not approved. Start sign-in again."
-                  : "Codex could not finish sign-in. Start sign-in again.",
-              ),
-            );
-          }),
-        );
-        const started = yield* client
-          .request("account/login/start", { type: "chatgptDeviceCode" })
-          .pipe(Effect.catch(() => client.request("account/login/start", { type: "chatgpt" })));
-        switch (started.type) {
-          case "chatgptDeviceCode":
-            loginId = started.loginId;
-            yield* handle.receiveDeviceCode({
-              userCode: started.userCode,
-              verificationUrl: started.verificationUrl,
-            });
-            break;
-          case "chatgpt":
-            loginId = started.loginId;
-            yield* handle
-              .receiveAuthorizationUrl(started.authUrl)
-              .pipe(Effect.mapError((error) => setupError("start", error.detail)));
-            break;
-          default:
-            return yield* setupError("start", "Codex started a sign-in Lathe cannot relay.");
-        }
-        // Cancel or expiry closes this scope before completion; tell Codex so
-        // its listener and device-code polling stop with the process.
-        yield* Effect.addFinalizer(() =>
-          Deferred.isDone(completed).pipe(
-            Effect.flatMap((done) =>
-              done || loginId === undefined
-                ? Effect.void
-                : client.request("account/login/cancel", { loginId }).pipe(Effect.ignore),
+    signIn: Effect.fn("CodexAuth.signIn")(function* (handle: AuthRelaySignInHandle) {
+      const client = yield* options.withClient;
+      const completed = yield* Deferred.make<void, ProviderSetupError>();
+      let loginId: string | undefined;
+      yield* client.handleServerNotification("account/login/completed", (payload) =>
+        Effect.gen(function* () {
+          if (loginId !== undefined && payload.loginId && payload.loginId !== loginId) return;
+          if (payload.success) {
+            yield* Deferred.succeed(completed, undefined);
+            return;
+          }
+          // Codex's own error text can name the account or carry a code.
+          yield* Deferred.fail(
+            completed,
+            setupError(
+              "start",
+              /denied|cancel/i.test(payload.error ?? "")
+                ? "Codex sign-in was not approved. Start sign-in again."
+                : "Codex could not finish sign-in. Start sign-in again.",
             ),
+          );
+        }),
+      );
+      const started = yield* client
+        .request("account/login/start", { type: "chatgptDeviceCode" })
+        .pipe(Effect.catch(() => client.request("account/login/start", { type: "chatgpt" })));
+      switch (started.type) {
+        case "chatgptDeviceCode":
+          loginId = started.loginId;
+          yield* handle.receiveDeviceCode({
+            userCode: started.userCode,
+            verificationUrl: started.verificationUrl,
+          });
+          break;
+        case "chatgpt":
+          loginId = started.loginId;
+          yield* handle
+            .receiveAuthorizationUrl(started.authUrl)
+            .pipe(Effect.mapError((error) => setupError("start", error.detail)));
+          break;
+        default:
+          return yield* setupError("start", "Codex started a sign-in Lathe cannot relay.");
+      }
+      // Cancel or expiry closes this scope before completion; tell Codex so
+      // its listener and device-code polling stop with the process.
+      yield* Effect.addFinalizer(() =>
+        Deferred.isDone(completed).pipe(
+          Effect.flatMap((done) =>
+            done || loginId === undefined
+              ? Effect.void
+              : client.request("account/login/cancel", { loginId }).pipe(Effect.ignore),
           ),
-        );
-        yield* Deferred.await(completed);
-        yield* handle.verifying("Checking the Codex account.");
-        yield* options.refreshSnapshot;
-      }),
+        ),
+      );
+      yield* Deferred.await(completed);
+      yield* handle.verifying("Checking the Codex account.");
+      yield* options.refreshSnapshot;
+    }),
     signOut: Effect.gen(function* () {
       const client = yield* options.withClient;
       yield* client.request("account/logout", undefined);

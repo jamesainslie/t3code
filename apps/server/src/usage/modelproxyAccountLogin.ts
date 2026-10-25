@@ -119,88 +119,90 @@ export const makeModelproxyAccountLogin = Effect.gen(function* () {
 
   const nowMs = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
 
-  const record = (sourceId: UsageLimitSourceId, login: UsageLimitSourceAccountLogin) =>
-    Effect.gen(function* () {
-      const accounts = logins.get(sourceId) ?? new Map<string, Tracked>();
-      logins.set(sourceId, accounts);
-      const previous = accounts.get(login.account);
-      const endedAtMs = terminal(login.state) ? (previous?.endedAtMs ?? (yield* nowMs)) : undefined;
-      accounts.set(login.account, endedAtMs === undefined ? { login } : { login, endedAtMs });
-      if (previous === undefined || !Equal.equals(previous.login, login)) {
-        yield* PubSub.publish(changes, sourceId);
-      }
-    });
+  const record = Effect.fn("ModelproxyAccountLogin.record")(function* (
+    sourceId: UsageLimitSourceId,
+    login: UsageLimitSourceAccountLogin,
+  ) {
+    const accounts = logins.get(sourceId) ?? new Map<string, Tracked>();
+    logins.set(sourceId, accounts);
+    const previous = accounts.get(login.account);
+    const endedAtMs = terminal(login.state) ? (previous?.endedAtMs ?? (yield* nowMs)) : undefined;
+    accounts.set(login.account, endedAtMs === undefined ? { login } : { login, endedAtMs });
+    if (previous === undefined || !Equal.equals(previous.login, login)) {
+      yield* PubSub.publish(changes, sourceId);
+    }
+  });
 
-  const forgetLogin = (sourceId: UsageLimitSourceId, account: string) =>
-    Effect.gen(function* () {
-      const running = polls.get(pollKey(sourceId, account));
-      polls.delete(pollKey(sourceId, account));
-      if (running) yield* Fiber.interrupt(running.fiber);
-      if (logins.get(sourceId)?.delete(account)) yield* PubSub.publish(changes, sourceId);
-    });
+  const forgetLogin = Effect.fn("ModelproxyAccountLogin.forgetLogin")(function* (
+    sourceId: UsageLimitSourceId,
+    account: string,
+  ) {
+    const running = polls.get(pollKey(sourceId, account));
+    polls.delete(pollKey(sourceId, account));
+    if (running) yield* Fiber.interrupt(running.fiber);
+    if (logins.get(sourceId)?.delete(account)) yield* PubSub.publish(changes, sourceId);
+  });
 
   /**
    * One call to the gateway's login API. A refusal that carries the session
    * (a code the provider refused, a login as the wrong account) is the
    * session's news, not a failure: it is returned like any other view.
    */
-  const call = (
+  const call = Effect.fn("ModelproxyAccountLogin.call")(function* (
     target: ModelproxyLoginTarget,
     method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
-  ): Effect.Effect<UsageLimitSourceAccountLogin | undefined, UsageLimitSourceError> =>
-    Effect.gen(function* () {
-      const token = yield* target.token;
-      const url = yield* Effect.try({
-        try: () => new URL(path, target.baseUrl).toString(),
-        catch: () => new UsageLimitSourceError({ detail: "The gateway URL is not valid." }),
-      });
-      const base =
-        method === "GET"
-          ? HttpClientRequest.get(url)
-          : method === "DELETE"
-            ? HttpClientRequest.delete(url)
-            : HttpClientRequest.post(url);
-      const authorized = base.pipe(HttpClientRequest.setHeader("Authorization", `Bearer ${token}`));
-      const request =
-        body === undefined
-          ? authorized
-          : yield* HttpClientRequest.bodyJson(body)(authorized).pipe(
-              Effect.mapError(
-                () =>
-                  new UsageLimitSourceError({ detail: "The login request could not be built." }),
-              ),
-            );
-      const response: HttpClientResponse.HttpClientResponse = yield* client.execute(request).pipe(
-        Effect.timeout("90 seconds"),
-        Effect.mapError(() => new UsageLimitSourceError({ detail: "The gateway did not answer." })),
-      );
-      if (response.status === 204) return undefined;
-      const json = yield* response.json.pipe(Effect.orElseSucceed((): unknown => null));
-      if (response.status >= 200 && response.status < 300) {
-        const view = yield* decodeView(json).pipe(
-          Effect.mapError(
-            () => new UsageLimitSourceError({ detail: "The gateway's login was not understood." }),
-          ),
-        );
-        return toLogin(view);
-      }
-      const refusal = yield* decodeError(json).pipe(Effect.option);
-      if (refusal._tag === "Some" && refusal.value.session) return toLogin(refusal.value.session);
-      const message = refusal._tag === "Some" ? refusal.value.error : undefined;
-      if (response.status === 404 && !message?.startsWith("unknown account")) {
-        return yield* new UsageLimitSourceError({
-          detail: "This gateway does not support logging accounts in yet; update it.",
-        });
-      }
-      if (response.status === 410) {
-        return yield* new UsageLimitSourceError({ detail: "The login timed out. Start again." });
-      }
-      return yield* new UsageLimitSourceError({
-        detail: message ?? `The gateway refused the login (HTTP ${response.status}).`,
-      });
+  ): Effect.fn.Return<UsageLimitSourceAccountLogin | undefined, UsageLimitSourceError> {
+    const token = yield* target.token;
+    const url = yield* Effect.try({
+      try: () => new URL(path, target.baseUrl).toString(),
+      catch: () => new UsageLimitSourceError({ detail: "The gateway URL is not valid." }),
     });
+    const base =
+      method === "GET"
+        ? HttpClientRequest.get(url)
+        : method === "DELETE"
+          ? HttpClientRequest.delete(url)
+          : HttpClientRequest.post(url);
+    const authorized = base.pipe(HttpClientRequest.setHeader("Authorization", `Bearer ${token}`));
+    const request =
+      body === undefined
+        ? authorized
+        : yield* HttpClientRequest.bodyJson(body)(authorized).pipe(
+            Effect.mapError(
+              () => new UsageLimitSourceError({ detail: "The login request could not be built." }),
+            ),
+          );
+    const response: HttpClientResponse.HttpClientResponse = yield* client.execute(request).pipe(
+      Effect.timeout("90 seconds"),
+      Effect.mapError(() => new UsageLimitSourceError({ detail: "The gateway did not answer." })),
+    );
+    if (response.status === 204) return undefined;
+    const json = yield* response.json.pipe(Effect.orElseSucceed((): unknown => null));
+    if (response.status >= 200 && response.status < 300) {
+      const view = yield* decodeView(json).pipe(
+        Effect.mapError(
+          () => new UsageLimitSourceError({ detail: "The gateway's login was not understood." }),
+        ),
+      );
+      return toLogin(view);
+    }
+    const refusal = yield* decodeError(json).pipe(Effect.option);
+    if (refusal._tag === "Some" && refusal.value.session) return toLogin(refusal.value.session);
+    const message = refusal._tag === "Some" ? refusal.value.error : undefined;
+    if (response.status === 404 && !message?.startsWith("unknown account")) {
+      return yield* new UsageLimitSourceError({
+        detail: "This gateway does not support logging accounts in yet; update it.",
+      });
+    }
+    if (response.status === 410) {
+      return yield* new UsageLimitSourceError({ detail: "The login timed out. Start again." });
+    }
+    return yield* new UsageLimitSourceError({
+      detail: message ?? `The gateway refused the login (HTTP ${response.status}).`,
+    });
+  });
 
   const loginPath = (account: string, sessionId?: string) =>
     `/api/accounts/${encodeURIComponent(account)}/login` +
@@ -211,13 +213,13 @@ export const makeModelproxyAccountLogin = Effect.gen(function* () {
    * at the next tick: the gateway keeps the session for its whole lifetime,
    * so one dropped answer is not the end of the login.
    */
-  const poll = (
-    sourceId: UsageLimitSourceId,
-    target: ModelproxyLoginTarget,
-    login: UsageLimitSourceAccountLogin,
-    owner: object,
-  ) =>
-    Effect.gen(function* () {
+  const poll = Effect.fn("ModelproxyAccountLogin.poll")(
+    function* (
+      sourceId: UsageLimitSourceId,
+      target: ModelproxyLoginTarget,
+      login: UsageLimitSourceAccountLogin,
+      _owner: object,
+    ) {
       while (true) {
         yield* Effect.sleep(POLL_EVERY);
         const read = yield* call(target, "GET", loginPath(login.account, login.sessionId)).pipe(
@@ -238,15 +240,18 @@ export const makeModelproxyAccountLogin = Effect.gen(function* () {
         yield* record(sourceId, read.success);
         if (terminal(read.success.state)) return;
       }
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          const key = pollKey(sourceId, login.account);
-          // Only the poll that still owns the slot clears it.
-          if (polls.get(key)?.owner === owner) polls.delete(key);
-        }),
+    },
+    (effect, sourceId, _target, login, owner) =>
+      effect.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            const key = pollKey(sourceId, login.account);
+            // Only the poll that still owns the slot clears it.
+            if (polls.get(key)?.owner === owner) polls.delete(key);
+          }),
+        ),
       ),
-    );
+  );
 
   const run = Effect.fn("ModelproxyAccountLogin.run")(function* (
     sourceId: UsageLimitSourceId,
@@ -297,27 +302,29 @@ export const makeModelproxyAccountLogin = Effect.gen(function* () {
   });
 
   /** The logins to publish on a source's snapshot, minus ones finished a while ago. */
-  const sessions = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      const now = yield* nowMs;
-      const accounts = logins.get(sourceId);
-      if (!accounts) return [];
-      for (const [account, tracked] of accounts) {
-        if (tracked.endedAtMs !== undefined && now - tracked.endedAtMs > KEEP_FINISHED_MS) {
-          accounts.delete(account);
-        }
+  const sessions = Effect.fn("ModelproxyAccountLogin.sessions")(function* (
+    sourceId: UsageLimitSourceId,
+  ) {
+    const now = yield* nowMs;
+    const accounts = logins.get(sourceId);
+    if (!accounts) return [];
+    for (const [account, tracked] of accounts) {
+      if (tracked.endedAtMs !== undefined && now - tracked.endedAtMs > KEEP_FINISHED_MS) {
+        accounts.delete(account);
       }
-      return [...accounts.values()].map((tracked) => tracked.login);
-    });
+    }
+    return [...accounts.values()].map((tracked) => tracked.login);
+  });
 
   /** A removed source takes its logins with it. */
-  const forget = (sourceId: UsageLimitSourceId) =>
-    Effect.gen(function* () {
-      for (const account of logins.get(sourceId)?.keys() ?? []) {
-        yield* forgetLogin(sourceId, account);
-      }
-      logins.delete(sourceId);
-    });
+  const forget = Effect.fn("ModelproxyAccountLogin.forget")(function* (
+    sourceId: UsageLimitSourceId,
+  ) {
+    for (const account of logins.get(sourceId)?.keys() ?? []) {
+      yield* forgetLogin(sourceId, account);
+    }
+    logins.delete(sourceId);
+  });
 
   return {
     run,

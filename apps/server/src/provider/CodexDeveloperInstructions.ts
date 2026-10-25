@@ -7,8 +7,15 @@ import {
 
 import {
   LATHE_BROWSER_TOOL_INSTRUCTIONS,
-  LATHE_ORCHESTRATION_INSTRUCTIONS,
+  LATHE_ORCHESTRATION_SECTIONS,
 } from "@lathe/provider-core/server/orchestrationInstructions";
+
+/**
+ * Codex cuts the middle out of any `additionalContext` value over 1,000 tokens,
+ * which it counts as UTF-8 bytes divided by four. It does this silently, so
+ * every value built here has to fit.
+ */
+export const CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES = 4_000;
 
 const LATHE_DEVICE_TOOL_INSTRUCTIONS = `## Lathe devices
 
@@ -186,7 +193,7 @@ In Default mode, strongly prefer making reasonable assumptions and executing the
 export interface CodexRuntimeInfo {
   readonly model: string;
   readonly modelName?: string | undefined;
-  readonly reasoningEffort: string;
+  readonly reasoningEffort?: string | undefined;
   /** Set only when the session has the thread history tools attached. */
   readonly threadHistory?: ThreadHistoryInstructionMode | undefined;
 }
@@ -207,9 +214,15 @@ export function buildCodexAdditionalContext(
   toolsAvailable: boolean | LatheToolAvailability = true,
 ): Record<string, V2TurnStartParams__AdditionalContextEntry> {
   const tools = toolInstructions(toolsAvailable);
-  // Separate keys keep each value under Codex's per-entry token cap.
+  // Separate keys keep each value under Codex's per-entry cap. Codex emits
+  // entries in key order, so the numbering preserves the authored order.
   return {
-    lathe_orchestration: { kind: "application", value: LATHE_ORCHESTRATION_INSTRUCTIONS },
+    ...Object.fromEntries(
+      LATHE_ORCHESTRATION_SECTIONS.map((section, index) => [
+        `lathe_orchestration_${String(index + 1).padStart(2, "0")}`,
+        { kind: "application" as const, value: section },
+      ]),
+    ),
     lathe_runtime: {
       kind: "application",
       value: buildRuntimeInstructions({ harness: "Codex", ...runtime }),

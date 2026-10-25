@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { resolveDiffThemeName } from "../lib/diffRendering";
 import { getSyntaxThemePreview, subscribeSyntaxThemePreview } from "../lib/syntaxThemePreview";
 import { useClientSettings } from "./useSettings";
-import { useTheme } from "./useTheme";
+import { useRenderedAppearance } from "./useTheme";
 
 const selectSyntaxTheme = (settings: ClientSettings) => settings.syntaxTheme;
 const getServerPreview = () => null;
@@ -14,7 +14,7 @@ const getServerPreview = () => null;
  * saved syntax theme, in the app's light or dark mode.
  */
 export function useDiffThemeName() {
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useRenderedAppearance();
   const syntaxTheme = useClientSettings(selectSyntaxTheme);
   const preview = useSyncExternalStore(
     subscribeSyntaxThemePreview,

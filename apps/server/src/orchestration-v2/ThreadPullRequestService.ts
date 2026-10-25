@@ -1,8 +1,4 @@
 import {
-  canonicalRepositoryKey,
-  sourceControlRepositorySelector,
-} from "@lathe/shared/sourceControl";
-import {
   CommandId,
   isSyncedThreadId,
   type OrchestrationProjectShell,
@@ -26,11 +22,13 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
+import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitManager from "../git/GitManager.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import { forkParked } from "../serverActivation.ts";
+import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 
 class ThreadPullRequestServiceV2 extends Context.Service<
@@ -77,12 +75,12 @@ function pullRequestMatchesProject(
   return (
     pullRequest.repositoryKey !== null &&
     project.repositoryIdentity != null &&
-    canonicalRepositoryKey(pullRequest.repositoryKey) ===
-      canonicalRepositoryKey(project.repositoryIdentity.canonicalKey)
+    sourceControlDefinitions.canonicalRepositoryKey(pullRequest.repositoryKey) ===
+      sourceControlDefinitions.canonicalRepositoryKey(project.repositoryIdentity.canonicalKey)
   );
 }
 
-export const resolveProjectForPullRequestDiscovery = Effect.fn(
+const resolveProjectForPullRequestDiscovery = Effect.fn(
   "ThreadPullRequestServiceV2.resolveProject",
 )(function* (
   project: OrchestrationProjectShell,
@@ -96,7 +94,7 @@ export const resolveProjectForPullRequestDiscovery = Effect.fn(
   });
   return {
     project: { ...project, repositoryIdentity },
-    repository: sourceControlRepositorySelector(repositoryIdentity),
+    repository: sourceControlDefinitions.repositorySelector(repositoryIdentity),
   };
 });
 
@@ -125,6 +123,7 @@ export const make = Effect.gen(function* () {
   const repositoryIdentities = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const crypto = yield* Crypto.Crypto;
   const fileSystem = yield* FileSystem.FileSystem;
+  const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const pendingBackfill = new Map<ThreadId, number>();
 
   const finishBackfill = (threads: ReadonlyArray<Pick<OrchestrationV2ThreadShell, "id">>) => {
@@ -147,12 +146,8 @@ export const make = Effect.gen(function* () {
     { readonly tag: string; readonly count: number; readonly since: number }
   >();
   let cyclesSinceRollup = 0;
-  const reportLookupFailure = (
-    groupKey: string,
-    threadIds: ReadonlyArray<ThreadId>,
-    cause: Cause.Cause<unknown>,
-  ) =>
-    Effect.gen(function* () {
+  const reportLookupFailure = Effect.fn("ThreadPullRequestServiceV2.reportLookupFailure")(
+    function* (groupKey: string, threadIds: ReadonlyArray<ThreadId>, cause: Cause.Cause<unknown>) {
       const tag = failureTag(cause);
       const known = lookupFailures.get(groupKey);
       if (known !== undefined && known.tag === tag) {
@@ -168,7 +163,8 @@ export const make = Effect.gen(function* () {
         threadIds,
         cause: Cause.pretty(cause),
       });
-    });
+    },
+  );
   const rollupLookupFailures = Effect.suspend(() => {
     cyclesSinceRollup += 1;
     if (cyclesSinceRollup < FAILURE_ROLLUP_CYCLES) return Effect.void;
@@ -288,7 +284,10 @@ export const make = Effect.gen(function* () {
                 const previous = yield* pullRequests.summary(thread.branchPullRequest, {
                   recoverTransientFailure: false,
                 });
-                if (previous.state === "merged" || previous.state === "closed") {
+                if (
+                  previous.headBranch === thread.branch &&
+                  (previous.state === "merged" || previous.state === "closed")
+                ) {
                   branchPullRequest = thread.branchPullRequest;
                 }
               }
@@ -468,6 +467,9 @@ export const make = Effect.gen(function* () {
         yield* worker.enqueue({ threadId: null, refresh: false, backfill: true });
         yield* worker.drain;
         yield* Effect.gen(function* () {
+          // The sweep only catches pull requests opened outside a turn, which
+          // nobody sees without a client. Thread events still refresh headless work.
+          if (!(yield* backgroundPolicy.shouldRunOpportunisticWork)) return;
           yield* worker.enqueue({ threadId: null, refresh: false });
           yield* worker.drain;
         }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.delay("1 minute"));

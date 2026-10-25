@@ -95,8 +95,8 @@ export class SshConnectionRegistration extends Schema.TaggedClass<SshConnectionR
   {
     target: SshConnectionTarget,
     profile: SshConnectionProfile,
-    /** The bearer provisioning already paired, so the first connect need not pair again. */
-    credential: Schema.optionalKey(BearerConnectionCredential),
+    /** The token from pairing over SSH, which later connects reuse. */
+    credential: BearerConnectionCredential,
   },
 ) {}
 

@@ -35,6 +35,7 @@ export interface PrContentGenerationInput {
   diffSummary: string;
   diffPatch: string;
   changeRequestTemplate?: string | undefined;
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
   modelSelection: ModelSelection;
 }
@@ -62,6 +63,7 @@ export interface ThreadTitleGenerationInput {
   message: string;
   previousTitle?: string | undefined;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
+  instructions?: string | undefined;
   modelSelection: ModelSelection;
 }
 

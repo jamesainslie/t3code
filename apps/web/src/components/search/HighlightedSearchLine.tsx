@@ -1,6 +1,6 @@
 import { getFiletypeFromFileName } from "@pierre/diffs";
 import type { ProjectContentMatch } from "@lathe/contracts";
-import { memo, Suspense, use, useMemo, type CSSProperties } from "react";
+import { memo, Suspense, use, type CSSProperties } from "react";
 
 import type { DiffThemeName } from "~/lib/diffRendering";
 import { getSyntaxHighlighterPromise } from "~/lib/syntaxHighlighting";
@@ -125,6 +125,19 @@ function HighlightedTokens(props: {
     );
 }
 
+function firstLineTokens(
+  highlighter: Awaited<ReturnType<typeof getSyntaxHighlighterPromise>>,
+  line: string,
+  language: string,
+  themeName: DiffThemeName,
+) {
+  try {
+    return highlighter.codeToTokens(line, { lang: language, theme: themeName }).tokens[0];
+  } catch {
+    return undefined;
+  }
+}
+
 function SyntaxHighlightedTokens(props: {
   readonly line: string;
   readonly language: string;
@@ -132,16 +145,7 @@ function SyntaxHighlightedTokens(props: {
   readonly themeName: DiffThemeName;
 }) {
   const highlighter = use(getSyntaxHighlighterPromise(props.language, props.themeName));
-  const tokens = useMemo(() => {
-    try {
-      return highlighter.codeToTokens(props.line, {
-        lang: props.language,
-        theme: props.themeName,
-      }).tokens[0];
-    } catch {
-      return undefined;
-    }
-  }, [highlighter, props.language, props.line, props.themeName]);
+  const tokens = firstLineTokens(highlighter, props.line, props.language, props.themeName);
 
   return tokens ? (
     <HighlightedTokens line={props.line} ranges={props.ranges} tokens={tokens} />
@@ -159,7 +163,7 @@ export const HighlightedSearchLine = memo(function HighlightedSearchLine(props: 
   readonly path: string;
   readonly themeName: DiffThemeName;
 }) {
-  const ranges = useMemo(() => normalizeRanges(props.match), [props.match]);
+  const ranges = normalizeRanges(props.match);
   const fallback = (
     <HighlightedTokens
       line={props.match.lineContent}

@@ -121,3 +121,26 @@ export function retainThreadLink(
 ): ScopedThreadRef | null {
   return link?.environmentId === environmentId ? link : null;
 }
+
+export function newTaskDestination(
+  _usesSplitView: boolean,
+  projects: ReadonlyArray<EnvironmentProject>,
+  currentProject: Pick<EnvironmentProject, "environmentId" | "id"> | undefined,
+  requestId: string,
+) {
+  const project =
+    projects.find(
+      (candidate) =>
+        candidate.environmentId === currentProject?.environmentId &&
+        candidate.id === currentProject.id,
+    ) ?? projects[0];
+  return project
+    ? {
+        draft: {
+          requestId,
+          environmentId: String(project.environmentId),
+          projectId: String(project.id),
+        },
+      }
+    : { draft: { requestId } };
+}

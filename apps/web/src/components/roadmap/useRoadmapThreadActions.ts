@@ -28,7 +28,7 @@ import {
 import { useRouter } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { openRoadmapAttachPicker } from "../../commandPaletteBus";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
@@ -359,29 +359,16 @@ export function useRoadmapThreadActions() {
   const stableMenuState = useStableCallback(menuState);
   const stableHandleMenuAction = useStableCallback(handleMenuAction);
   const stableOpenInRoadmap = useStableCallback(openInRoadmap);
-  const actions = useMemo(
-    () => ({
-      attach: stableAttach,
-      detach: stableDetach,
-      createFromThread: stableCreateFromThread,
-      updateItem: stableUpdateItem,
-      tickCriterion: stableTickCriterion,
-      runCommand: stableRunCommand,
-      menuState: stableMenuState,
-      handleMenuAction: stableHandleMenuAction,
-      openInRoadmap: stableOpenInRoadmap,
-    }),
-    [
-      stableAttach,
-      stableCreateFromThread,
-      stableDetach,
-      stableHandleMenuAction,
-      stableMenuState,
-      stableOpenInRoadmap,
-      stableRunCommand,
-      stableTickCriterion,
-      stableUpdateItem,
-    ],
-  );
+  const actions = {
+    attach: stableAttach,
+    detach: stableDetach,
+    createFromThread: stableCreateFromThread,
+    updateItem: stableUpdateItem,
+    tickCriterion: stableTickCriterion,
+    runCommand: stableRunCommand,
+    menuState: stableMenuState,
+    handleMenuAction: stableHandleMenuAction,
+    openInRoadmap: stableOpenInRoadmap,
+  };
   return { availability, actions };
 }

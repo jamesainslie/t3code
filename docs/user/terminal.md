@@ -48,3 +48,15 @@ Device-code sign-ins finish on the provider's website and need nothing pasted.
 Watch the terminal output to confirm the command finished. Dismissing the banner
 drops the link; run the command again to get a new one. A link is valid for five
 minutes.
+
+## fish
+
+Lathe starts fish with `no-query-term`, avoiding startup waits for terminal
+replies. This disables optional fish features that depend on those replies.
+Lathe's exported `fish_features` also hides any universal flags you set with
+`set -U fish_features`.
+
+To preserve those flags or enable queries with `query-term`, include them in
+`fish_features` in the environment that launches Lathe. A shell export applies
+when you launch Lathe from that shell; it does not configure a desktop app
+launched from the Dock or Finder. Enabling queries can restore the startup wait.

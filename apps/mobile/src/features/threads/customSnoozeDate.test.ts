@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   applySnoozePickerDate,
-  applySnoozePickerTime,
   initialCustomSnoozeDate,
   resolveSheetSnoozedUntil,
   snoozeDateToPickerDate,
@@ -26,15 +25,6 @@ describe("custom snooze calendar conversion", () => {
       next.getMinutes(),
     ]).toEqual([2026, 8, 20, 23, 45]);
     expect(date.getDate()).toBe(16);
-  });
-
-  it("applies a picked local time without changing the chosen calendar day", () => {
-    const date = new Date(2026, 8, 20, 23, 45);
-    const next = applySnoozePickerTime(date, new Date(2026, 8, 16, 8, 15, 30));
-    expect([next.getDate(), next.getHours(), next.getMinutes(), next.getSeconds()]).toEqual([
-      20, 8, 15, 0,
-    ]);
-    expect(date.getHours()).toBe(23);
   });
 });
 

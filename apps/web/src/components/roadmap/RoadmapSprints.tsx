@@ -86,9 +86,9 @@ function RoadmapSprintsDialog({
     setDraft((current) => ({ ...current, ...patch }));
     setError(null);
   };
-  const startNew = (area: RoadmapArea = draft.area) => {
+  const startNew = (area?: RoadmapArea) => {
     setEditing(null);
-    setDraft(emptySprintDraft(sprints, area, today));
+    setDraft(emptySprintDraft(sprints, area ?? draft.area, today));
     setError(null);
   };
 

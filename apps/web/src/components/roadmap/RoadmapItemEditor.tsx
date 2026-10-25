@@ -10,7 +10,7 @@ import type {
 } from "@lathe/contracts";
 import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree";
 import { effectiveArea } from "@lathe/shared/roadmap";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Button } from "../ui/button";
 import {
@@ -70,7 +70,7 @@ const NO_SPRINT = "none";
 export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: RoadmapItemEditorProps) {
   const id = useId();
   const dispatch = useRoadmapDispatch(home);
-  const byId = useMemo(() => roadmapItemsById(items), [items]);
+  const byId = roadmapItemsById(items);
   const editing = mode.kind === "edit" ? mode.item : null;
   const readOnlyHint = editing === null ? null : roadmapReadOnlyHint(editing);
   const [draft, setDraft] = useState<RoadmapEditorDraft>(() => {
@@ -97,16 +97,13 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
     });
   }, [dispatch, reviewItemId]);
 
-  const childTypes = useMemo(
-    () =>
-      editing === null
-        ? []
-        : items.filter((entry) => entry.parentId === editing.id).map((entry) => entry.type),
-    [editing, items],
-  );
+  const childTypes =
+    editing === null
+      ? []
+      : items.filter((entry) => entry.parentId === editing.id).map((entry) => entry.type);
   const parentType = draft.parentId === null ? null : (byId.get(draft.parentId)?.type ?? null);
   const typeOptions = typeOptionsFor(parentType, childTypes);
-  const parentOptions = useMemo(() => {
+  const parentOptions = (() => {
     const excluded = new Set<RoadmapItemId>();
     if (editing !== null) {
       excluded.add(editing.id);
@@ -119,7 +116,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
         !excluded.has(row.node.item.id) &&
         typeOptionsFor(row.node.item.type, childTypes).includes(draft.type),
     );
-  }, [byId, childTypes, draft.type, editing, items]);
+  })();
 
   const submit = async () => {
     if (saving) return;

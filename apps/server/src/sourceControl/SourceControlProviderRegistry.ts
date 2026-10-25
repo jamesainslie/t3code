@@ -13,11 +13,11 @@ import {
   type SourceControlProviderDiscoveryItem,
 } from "@lathe/contracts";
 import type {} from "@lathe/contracts";
-import { detectSourceControlProviderFromRemoteUrl } from "@lathe/shared/sourceControl";
 
 import * as BuiltInDrivers from "./builtInDrivers.ts";
 import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
 import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
+import { sourceControlDefinitions } from "./sourceControlDefinitions.ts";
 import * as SourceControlProvider from "@lathe/source-control-core/server/SourceControlProvider";
 import {
   probeSourceControlProvider,
@@ -76,13 +76,18 @@ function unsupportedProvider(
 ): SourceControlProvider.SourceControlProvider["Service"] {
   return SourceControlProvider.SourceControlProvider.of({
     kind,
+    // A remote on a host no provider recognizes (or no remote at all) has no change
+    // requests Lathe could know about. Answering with none keeps the status poller from
+    // failing, and warning, on every refresh of such a repository.
     listChangeRequests: (input) =>
-      new SourceControlProviderError({
-        provider: kind,
-        operation: "listChangeRequests",
-        cwd: input.cwd,
-        detail: `No ${kind} source control provider is registered.`,
-      }),
+      kind === "unknown"
+        ? Effect.succeed([])
+        : new SourceControlProviderError({
+            provider: kind,
+            operation: "listChangeRequests",
+            cwd: input.cwd,
+            detail: `No ${kind} source control provider is registered.`,
+          }),
     getChangeRequest: (input) =>
       new SourceControlProviderError({
         provider: kind,
@@ -141,7 +146,7 @@ function selectProviderContext(
 ): SourceControlProvider.SourceControlProviderContext | null {
   const candidates: Array<SourceControlProvider.SourceControlProviderContext> = [];
   for (const remote of remotes) {
-    const provider = detectSourceControlProviderFromRemoteUrl(remote.url);
+    const provider = sourceControlDefinitions.recognizeRemote(remote.url);
     if (provider) {
       candidates.push({
         provider,
@@ -367,7 +372,7 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
         if (input.url.protocol !== "https:" || input.url.username || input.url.password) {
           return undefined;
         }
-        const kind = detectSourceControlProviderFromRemoteUrl(input.url.href)?.kind;
+        const kind = sourceControlDefinitions.recognizeRemote(input.url.href)?.kind;
         return kind ? providers.get(kind)?.resolveLink?.(input) : undefined;
       },
       get,
@@ -387,17 +392,15 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
   },
 );
 
-export const make = Effect.gen(function* () {
-  const drivers = yield* Effect.forEach(BuiltInDrivers.BUILT_IN_SOURCE_CONTROL_DRIVERS, (driver) =>
-    driver.make.pipe(
-      Effect.map((instance): SourceControlProviderRegistration => ({
-        kind: driver.kind,
-        provider: instance.sourceControl,
-        discovery: instance.discovery,
-      })),
-    ),
+const make = Effect.gen(function* () {
+  const drivers = yield* BuiltInDrivers.SourceControlDrivers;
+  return yield* makeWithProviders(
+    drivers.map(({ driver, instance }): SourceControlProviderRegistration => ({
+      kind: driver.kind,
+      provider: instance.sourceControl,
+      discovery: instance.discovery,
+    })),
   );
-  return yield* makeWithProviders(drivers);
 });
 
 export const layer = Layer.effect(SourceControlProviderRegistry, make);
