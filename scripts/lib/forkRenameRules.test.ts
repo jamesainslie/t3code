@@ -140,6 +140,91 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["apps/web/src/lib/syntaxThemes.test.ts", '.toBe("t3-graphite-dark");', "identifier"],
     [
+      "apps/server/src/cli/thread.ts",
+      "      detail: `The server sent an unexpected ${tool} result. Update the t3 CLI to match the server.`,",
+      "display",
+    ],
+    ["apps/server/src/cli/thread.ts", '      clientName: "t3-thread-cli",', "identifier"],
+    ["apps/server/src/mcp/AcpMcpStdioBridge.ts", 'clientName: "t3-code-acp-cli" }', "wire-peer"],
+    ["apps/server/src/mcp/AcpMcpStdioBridge.ts", "const id = `t3-cli-${nextId++}`;", "identifier"],
+    [
+      "apps/server/src/vcs/GitVcsDriverCore.ts",
+      "const key = (branch: string) => `branch.${branch}.t3-merge-base`;",
+      "kept",
+    ],
+    ["apps/server/src/vcs/GitVcsDriverCore.test.ts", '"branch.feature.t3-merge-base-ref",', "kept"],
+    [
+      "apps/server/src/cloud/servicePreflight.ts",
+      "install this exact CLI: `curl -fsSL https://t3.codes/install.sh | sh`.",
+      "upstream-reference",
+    ],
+    [
+      "packages/contracts/src/environmentHttp.ts",
+      '  "this-device-cant-reach-t3-connect",',
+      "upstream-reference",
+    ],
+    [
+      "packages/client-runtime/src/connection/diagnosis.ts",
+      'return "the-host-runs-an-older-t3-code";',
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/telemetry/AnalyticsService.ts",
+      'Config.withDefault("https://ingest.t3.codes"),',
+      "wire-peer",
+    ],
+    [
+      "apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.ts",
+      '            "mcp_servers.t3-code": {',
+      "agent-facing",
+    ],
+    [
+      "apps/server/src/observability/Metrics.ts",
+      'Metric.gauge("t3_server_resident_bytes", {',
+      "identifier",
+    ],
+    [
+      "apps/server/src/resourceTelemetry/ProcessGroupMetrics.ts",
+      'Metric.gauge("t3_process_group_cpu_percent", {',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/chat/threadFindActionBus.ts",
+      'const THREAD_FIND_QUERY_EVENT = "t3:thread-find-query";',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/pullRequest/pullRequestDetail.logic.ts",
+      'const KEY = "t3.pullRequests.recentDetails";',
+      "identifier",
+    ],
+    [
+      "apps/server/src/preview/ServerBrowserPage.ts",
+      'worldName: "t3-preview-metrics",',
+      "identifier",
+    ],
+    [
+      "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts",
+      '["-c", SCRIPT, "t3-claude", options.command],',
+      "identifier",
+    ],
+    [
+      "apps/server/src/provider/CodexManagedTokenBroker.ts",
+      "return { endpoint: `\\\\\\\\.\\\\pipe\\\\t3-token-${id}` };",
+      "identifier",
+    ],
+    [
+      "apps/server/src/process/agentScope.ts",
+      'if (!unit.startsWith("t3code-")) return;',
+      "identifier",
+    ],
+    ["apps/web/vite/warmBundledDev.ts", 'const ID = "t3code-startup-warmup";', "identifier"],
+    [
+      "scripts/seed-issue-21397.py",
+      "NEW_DIR must not exist and must not be under the live ~/.t3. Then run the printed",
+      "identifier",
+    ],
+    [
       "packages/shared/src/t3McpToolPresentation.ts",
       'const LEGACY_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);',
       "agent-facing",

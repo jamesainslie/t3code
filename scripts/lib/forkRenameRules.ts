@@ -299,6 +299,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /^docs\/internals\/t3-connect\.md$/,
   },
   {
+    id: "upstream-connect-troubleshooting-anchors",
+    class: "upstream-reference",
+    reason:
+      "Heading anchors in upstream's T3 Connect troubleshooting doc, which connection diagnoses link to on upstream's GitHub.",
+    token:
+      /the-t3-connect-address-does-not-resolve-or-answer|this-device-cant-reach-t3-connect|the-host-runs-an-older-t3-code|t3-connect-returned-an-error/,
+  },
+  {
     id: "kept-mobile-app",
     class: "kept",
     reason:
@@ -377,7 +385,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "wire-upstream-hosts",
     class: "wire-peer",
     reason: "Upstream's Connect hosts and Clerk instance, used as-is.",
-    token: /(?:^|[^a-z])(?:relay|clerk|app|nightly\.app|preview)\.t3\.codes|Y2xlcmsudDMuY29kZXMk/,
+    token:
+      /(?:^|[^a-z])(?:relay|clerk|app|nightly\.app|preview|ingest)\.t3\.codes|Y2xlcmsudDMuY29kZXMk/,
   },
   {
     id: "wire-client-protocol",
@@ -486,6 +495,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "refs/t3/ checkpoint refs in users' repos, shared with upstream installs; the previous ref is recomputed from the prefix.",
     token: /refs\/t3\//,
+  },
+  {
+    id: "kept-git-branch-config",
+    class: "kept",
+    reason:
+      "branch.<name>.t3-merge-base keys in users' repos' git config; they describe the branch, so both apps share them.",
+    token: /\.t3-merge-base(?:-ref)?\b/,
   },
   {
     id: "kept-vendored-binary-imports",
@@ -880,7 +896,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "MCP server name (t3-code) and tool names (t3_*) agents call. Renamed to lathe and lathe_*; the old names stay recognised permanently, since stored tool calls and provider transcripts hold them.",
     token:
-      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*/,
+      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*|^mcp_servers\.t3-code$/,
   },
   {
     id: "agent-mcp-matchers",
@@ -1009,7 +1025,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason: "Storage keys and events that are transient or caches: renaming only clears them.",
     token:
-      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
+      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list|recentDetails)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open|thread-find-query)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
   },
   {
     id: "id-effect-service-tags",
@@ -1031,7 +1047,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "OpenTelemetry metric names (t3_*_total); renaming them means updating any dashboard that queries them.",
-    token: /^`?t3_[a-z_]+_(?:total|duration|wait|delay)`?$/,
+    token: /^`?t3_[a-z_]+_(?:total|duration|wait|delay|max|bytes|utilization|percent|count)`?$/,
   },
   {
     id: "id-runtime-ids-and-prefixes",
@@ -1039,11 +1055,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Runtime ids, temp and socket prefixes, log tags, MIME types, CSS transition names, asset files and test identities; nothing reads them across versions.",
     test: (o) =>
-      /t3(?:code)?-\$|t3_\$|t3-(?:host|mermaid|term|orchestrator-v2|preview-clipboard|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin)|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
+      /t3(?:code)?-\$|t3_\$|t3-(?:cli|token)-\$|^t3-claude$|t3code-startup-warmup|t3-(?:host|mermaid|term|orchestrator-v2|preview|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin)|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
         o.token,
       ) ||
       (/^t3[.:]?$/.test(o.token) &&
         /otelEnvironment|provider-pi\/src\/server\/adapter|build-cli-archive/.test(o.path)) ||
+      // systemd scope units the server creates and later finds by prefix.
+      (o.token === "t3code-" && /process\/agentScope/.test(o.path)) ||
+      (/^\/?\.t3\.?$/.test(o.token) && o.path.startsWith("scripts/seed-issue-")) ||
       (/^["'`]?t3code["'`]?,?$/.test(o.token) &&
         /user-agent|DISPLAY|attribution|oxlint-plugin-t3code|name: "t3code"/.test(o.line)),
   },
@@ -1095,7 +1114,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Links to upstream's site and legal pages, T3 Chat, upstream's web channel router, a vendored dependency's upstream branch, and upstream's own release workflow.",
     test: (o) =>
-      /^https:\/\/t3\.(?:codes|chat)(?:\/[a-z-]+)?\/?(?:$|\\)|t3code_web_channel|__t3code\/channel|tree\/t3code\//.test(
+      /^https:\/\/t3\.(?:codes|chat)(?:\/[a-z-]+(?:\.sh|\.ps1)?)?\/?(?:$|\\)|t3code_web_channel|__t3code\/channel|tree\/t3code\//.test(
         o.token,
       ) || o.path === ".github/workflows/release.yml",
   },
@@ -1113,7 +1132,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "The CLI command in help text, errors and docs (`t3 serve`, `npx t3`); the fork's CLI is lathe.",
     test: (o) =>
       /^t3$/.test(stem(o)) &&
-      /(?:^|[`'"( >])(?:npx |pnpm dlx |bunx )?t3(?: [a-z%][a-z-]*| --?[a-z]|`|'|"|\)|<|\\|$)/.test(
+      /(?:^|[`'"( >])(?:npx |pnpm dlx |bunx )?t3(?: [a-z%][a-z-]*| CLI\b| --?[a-z]|`|'|"|\)|<|\\|$)/.test(
         o.line,
       ),
   },
@@ -1121,9 +1140,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "id-binaries-and-scripts",
     class: "identifier",
     reason:
-      "Bundled helper binaries, shell functions, DOM data attributes and generated id prefixes built with the code.",
+      "Bundled helper binaries, shell functions, DOM data attributes, generated id prefixes, and the MCP client names the CLI sends to its own server.",
     token:
-      /t3-resource-monitor|t3-browser-secret|t3_fetch|\$__t3c|data-t3code-|data-t3-context|t3_\$\{|run-t3|t3-runtime|\.notarize-t3|t3-cli-archive|t3-screens/,
+      /t3-resource-monitor|t3-browser-secret|t3_fetch|\$__t3c|data-t3code-|data-t3-context|t3_\$\{|run-t3|t3-runtime|\.notarize-t3|t3-cli-archive|t3-screens|^t3-[a-z]+-cli$/,
   },
   {
     id: "kept-vcs-config-file",
