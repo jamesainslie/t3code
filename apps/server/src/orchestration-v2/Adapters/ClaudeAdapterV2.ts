@@ -20,6 +20,7 @@ import {
 
 import { isWorkspaceImagePreviewPath } from "@lathe/shared/filePreview";
 import { normalizeClaudeTurnTokenUsage } from "../../provider/ClaudeTurnTokenUsage.ts";
+import { claudeToolRequestWithoutTurn } from "../fork/ForkClaudeToolRequestWithoutTurn.ts";
 import {
   type CanUseTool,
   forkSession as forkClaudeSession,
@@ -8861,11 +8862,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         ) {
           const context = yield* Ref.get(activeTurn);
           if (context === null) {
-            return {
-              behavior: "deny",
-              message: "Claude V2 adapter has no active turn for this tool request.",
-              toolUseID: callbackOptions.toolUseID,
-            } satisfies PermissionResult;
+            return claudeToolRequestWithoutTurn(toolName, callbackOptions.toolUseID);
           }
 
           const nativeRequestId = callbackOptions.toolUseID;
