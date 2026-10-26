@@ -34,16 +34,10 @@ import {
 export type { AuthorizationCompletion, PendingAuthorization } from "./loopbackCallback.ts";
 
 /**
- * Driver-agnostic sign-in relay for one provider instance.
- *
- * A browser sign-in started on the environment prints a URL and waits on a
- * loopback listener that the user's browser, on another machine, can never
- * reach. The flow owns the state machine around that gap: it publishes the
- * URL to the one Lathe auth session that started the flow, takes the return URL
- * back from that session, replays it against the listener on this
- * environment, and reports completion only when the driver confirms the
- * native tool finished. A driver supplies how to obtain the URL, how to
- * recognize the callback, and how to sign out.
+ * A browser sign-in on the environment waits on a loopback listener the user's browser, on
+ * another machine, cannot reach. The flow shows the URL to the session that started it, takes
+ * the return URL back, replays it against the listener, and reports completion only when the
+ * driver confirms the native tool finished.
  */
 
 export const AUTH_RELAY_TIMEOUT_MS = 300_000;
@@ -81,6 +75,10 @@ export interface AuthRelayCopy<E> {
   readonly signOutTimedOut: string;
   readonly busy: string;
   readonly processBusy: string;
+  /** Replaces the starting message when the tool shows no sign-in step by `afterMs`. */
+  readonly noResponse?: { readonly afterMs: number; readonly message: string };
+  /** Replaces `expired` when the deadline passes before the tool showed any sign-in step. */
+  readonly unreachable?: string;
   /**
    * Safe text for a failed sign-in. Never quote the cause; it can carry a URL
    * or code. A `ProviderSetupError` here is the flow's own deadline or a
@@ -368,6 +366,20 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
   const runSignIn = Effect.fn("AuthRelayFlow.runSignIn")(
     function* (flow: ActiveFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) {
       yield* stopSessions.pipe(Effect.ensuring(stopOwnedProcesses));
+      const noResponse = copy.noResponse;
+      if (noResponse !== undefined) {
+        yield* Effect.sleep(noResponse.afterMs).pipe(
+          Effect.andThen(
+            lock.withPermits(1)(
+              Effect.gen(function* () {
+                if (activeFlow !== flow || flow.state.phase !== "starting") return;
+                yield* publishFlow(flow, { ...flow.state, message: noResponse.message });
+              }),
+            ),
+          ),
+          Effect.forkScoped,
+        );
+      }
       yield* driver.signIn(makeHandle(flow));
     },
     (effect, flow) =>
@@ -375,7 +387,15 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
         Effect.scoped,
         Effect.timeoutOrElse({
           duration: AUTH_RELAY_TIMEOUT_MS,
-          orElse: () => Effect.fail(setupError("start", copy.expired)),
+          orElse: () =>
+            Effect.fail(
+              setupError(
+                "start",
+                flow.state.phase === "starting" && copy.unreachable !== undefined
+                  ? copy.unreachable
+                  : copy.expired,
+              ),
+            ),
         }),
         Effect.exit,
         Effect.flatMap((result) => finishFlow(flow, result)),

@@ -1,10 +1,8 @@
 /**
- * Fork: roadmap writes waiting to reach the roadmap home, in the order they
- * were made. One worker sends the oldest pending row and nothing behind it,
- * so the home applies them in order. A transport failure leaves the row at
- * the head and retries it forever with a capped backoff; a refusal from the
- * home ends that row alone. A resend after a lost answer is harmless, because
- * the home's command receipts replay the first outcome.
+ * Fork: roadmap writes waiting for the roadmap home. One worker sends only the oldest pending row,
+ * so the home applies them in order. A transport failure retries that row forever with capped
+ * backoff; a refusal ends that row alone. A resend after a lost answer is harmless: the home's
+ * command receipts replay the first outcome.
  */
 import {
   type RoadmapActor,

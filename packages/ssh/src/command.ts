@@ -21,7 +21,7 @@ const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
 
 /**
  * ssh is a real executable everywhere (`ssh.exe` on Windows), so it is always
- * spawned directly — cmd.exe shell mode would re-tokenize arguments such as
+ * spawned directly. Shell mode in cmd.exe would re-tokenize arguments such as
  * identity-file paths containing spaces.
  */
 const sshCommandForPlatform = (platform: NodeJS.Platform): string =>
@@ -129,12 +129,9 @@ export const buildSshHostSpecEffect = (
   });
 
 /**
- * How one ssh invocation multiplexes. Left out, ~/.ssh/config decides, which
- * suits callers such as device automation that benefit from a user master.
- * A chosen mode is pinned ahead of the host, where ssh keeps the first value
- * of an option, so ~/.ssh/config cannot route the command through a stale user
- * master: `direct` connects on its own, `client` rides an owned master's
- * socket, and `master` makes this invocation that owned master.
+ * Left out, ~/.ssh/config decides. A chosen mode is pinned ahead of the host, where ssh keeps
+ * an option's first value, so a stale user master cannot take the command: `direct` connects
+ * alone, `client` rides an owned master's socket, `master` makes this invocation that master.
  */
 export type SshMultiplex =
   | { readonly mode: "direct" }
@@ -395,24 +392,24 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
     Effect.flatMap((result) =>
       Option.match(result, {
         onSome: Effect.succeed,
-        onNone: () =>
-          Effect.gen(function* () {
-            yield* Effect.logWarning("ssh.command.timedOut", {
-              ...sshTargetLogFields(target),
-              purpose: input.purpose ?? null,
-              timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
-              remoteCommandArgs: input.remoteCommandArgs ?? [],
-              preHostArgs: input.preHostArgs ?? [],
-              hasStdin: input.stdin !== undefined,
-            });
-            return yield* new SshCommandError({
-              command: ["ssh"],
-              exitCode: null,
-              stderr: "",
-              timedOut: true,
-              message: `SSH command timed out after ${input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS}ms.`,
-            });
-          }),
+        // The enclosing operation owns the span for this inline handler.
+        onNone: Effect.fnUntraced(function* () {
+          yield* Effect.logWarning("ssh.command.timedOut", {
+            ...sshTargetLogFields(target),
+            purpose: input.purpose ?? null,
+            timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
+            remoteCommandArgs: input.remoteCommandArgs ?? [],
+            preHostArgs: input.preHostArgs ?? [],
+            hasStdin: input.stdin !== undefined,
+          });
+          return yield* new SshCommandError({
+            command: ["ssh"],
+            exitCode: null,
+            stderr: "",
+            timedOut: true,
+            message: `SSH command timed out after ${input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS}ms.`,
+          });
+        }),
       }),
     ),
   );

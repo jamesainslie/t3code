@@ -9,7 +9,7 @@ import ChatMarkdown from "../ChatMarkdown";
  */
 export const QuestionLeadIn = memo(function QuestionLeadIn({ text }: { text: string }) {
   return (
-    <div className="mb-2 flex gap-2 border-border/70 border-b pb-2" data-question-lead-in>
+    <div className="flex gap-2 border-border/70 border-b pt-2 pb-2" data-question-lead-in>
       <BrainIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-icon-muted" />
       <ChatMarkdown
         text={text}

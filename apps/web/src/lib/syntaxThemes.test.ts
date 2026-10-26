@@ -54,20 +54,21 @@ describe("resolveSyntaxThemeName", () => {
     ]);
   });
 
-  it("registers a loader that builds the theme on Pierre's workbench colors", async () => {
-    resolveTheme.mockResolvedValue({ colors: { "gitDecoration.addedResourceForeground": "#0f0" } });
+  it("registers a Highlights loader that builds the theme on Pierre's editor colors", async () => {
+    resolveTheme.mockResolvedValue({
+      zed: { name: "pierre-light", appearance: "light", style: { created: "#0f0" } },
+    });
     resolveSyntaxThemeName("light", "ember");
-    const loader = registerCustomTheme.mock.calls.find(
-      ([name]) => name === "lathe-ember-light",
-    )?.[1];
+    const call = registerCustomTheme.mock.calls.find(([name]) => name === "lathe-ember-light");
 
-    const theme = await loader();
+    const theme = await call?.[1]();
 
-    expect(resolveTheme).toHaveBeenCalledWith("pierre-light");
+    expect(call?.[2]).toBe("zed");
+    expect(resolveTheme).toHaveBeenCalledWith("pierre-light", "highlights");
     expect(theme.name).toBe("lathe-ember-light");
-    expect(theme.type).toBe("light");
-    expect(theme.colors["gitDecoration.addedResourceForeground"]).toBe("#0f0");
-    expect(theme.colors["editor.background"]).toBe(SYNTAX_THEME_CODE_BACKGROUNDS.light);
+    expect(theme.appearance).toBe("light");
+    expect(theme.style.created).toBe("#0f0");
+    expect(theme.style["editor.background"]).toBe(SYNTAX_THEME_CODE_BACKGROUNDS.light);
   });
 });
 
@@ -77,8 +78,9 @@ describe("buildSyntaxTheme", () => {
     (theme, appearance) => {
       const built = buildSyntaxTheme(theme, appearance, {});
       const background = SYNTAX_THEME_CODE_BACKGROUNDS[appearance];
-      for (const rule of built.tokenColors) {
-        expect(contrast(rule.settings.foreground, background)).toBeGreaterThanOrEqual(3);
+      for (const style of Object.values(built.style.syntax ?? {})) {
+        const color = typeof style === "string" ? style : style.color!;
+        expect(contrast(color, background)).toBeGreaterThanOrEqual(3);
       }
     },
   );
@@ -87,10 +89,11 @@ describe("buildSyntaxTheme", () => {
     for (const theme of CUSTOM_THEMES) {
       for (const appearance of APPEARANCES) {
         const built = buildSyntaxTheme(theme, appearance, {});
-        const colorOf = (scope: string) =>
-          built.tokenColors.find((rule) => rule.scope.some((entry) => entry === scope))?.settings
-            .foreground;
-        const plain = built.colors["editor.foreground"];
+        const colorOf = (scope: string) => {
+          const style = built.style.syntax?.[scope];
+          return typeof style === "string" ? style : style?.color;
+        };
+        const plain = built.style["editor.foreground"];
         expect(colorOf("string"), `${theme} ${appearance}`).not.toBe(plain);
         expect(colorOf("comment"), `${theme} ${appearance}`).not.toBe(plain);
       }

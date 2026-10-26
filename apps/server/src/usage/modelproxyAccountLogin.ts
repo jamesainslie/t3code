@@ -1,14 +1,7 @@
 /**
- * Fork-only: logging a modelproxy gateway's pooled account in again from Lathe
- * Code. The gateway runs the OAuth flow and keeps the verifier and every
- * token (`/api/accounts/{name}/login`); this module relays its session view,
- * keeps the latest one per account for the published snapshot, and polls a
- * device-code login while the user approves it elsewhere, so every client of
- * this environment sees the same panel without polling the gateway itself.
- *
- * Each change publishes the source id; `UsageLimitSources` re-reads the
- * gateway on it, which is also how a finished login turns the account's row
- * back to ready.
+ * Fork-only: logging a modelproxy gateway's pooled account in again. The gateway runs the OAuth
+ * flow and keeps every token; this module relays and caches its session view per account and
+ * polls device-code logins, so clients never poll the gateway. Changes publish the source id.
  *
  * @module usage/modelproxyAccountLogin
  */

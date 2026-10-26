@@ -1,13 +1,8 @@
 /**
- * Fork-only. The Lathe rename as a pure text transform. Each `t3` occurrence
- * is classified by scripts/lib/forkRenameRules.ts; occurrences in a renamed
- * class (identifier, display, agent-facing, persisted) are rewritten through
- * one fixed table of brand units, and every other class is left exactly as it
- * is. The same transform runs over the fork and over upstream's tree for the
+ * Fork-only. The Lathe rename as a pure, idempotent text transform: `t3` occurrences in a renamed
+ * class (scripts/lib/forkRenameRules.ts) go through one fixed table of brand units; every other
+ * class is left exactly as it is. The same transform runs over upstream's tree for the
  * upstream-lathe mirror, so both sides of a sync agree on every renamed line.
- *
- * Deterministic and idempotent: renamed text holds no `t3` in a renamed
- * class, so a second pass changes nothing.
  */
 import {
   classifyRenameOccurrence,

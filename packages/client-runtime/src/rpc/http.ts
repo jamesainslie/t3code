@@ -20,6 +20,7 @@ import { FetchHttpClient, HttpClient, HttpClientError } from "effect/http";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 
 const isEnvironmentHttpCommonError = Schema.is(EnvironmentHttpCommonError);
+const isProjectSyncError = Schema.is(ProjectSyncError);
 
 export class RemoteEnvironmentAuthFetchError extends Data.TaggedError(
   "RemoteEnvironmentAuthFetchError",
@@ -127,7 +128,7 @@ const failRemoteRequest = (
   if (cause instanceof RemoteEnvironmentAuthTimeoutError) {
     return Effect.fail(cause);
   }
-  if (isEnvironmentHttpCommonError(cause) || Schema.is(ProjectSyncError)(cause)) {
+  if (isEnvironmentHttpCommonError(cause) || isProjectSyncError(cause)) {
     return Effect.fail(cause);
   }
   if (Schema.isSchemaError(cause)) {

@@ -1,15 +1,10 @@
 import type { TerminalBrowserLaunchResponseMode } from "@lathe/contracts";
 
 /**
- * How a terminal sign-in banner can carry the result back to the waiting
- * command:
- *
- * - `hosted`: the desktop stands in for the loopback listener on this machine,
- *   so the browser's return needs nothing from the user.
- * - `paste`: nobody is listening here, but the response rides in the return
- *   URL's query, so the user can paste that address.
- * - `unreachable`: the response is a form POST, which only a listener on the
- *   browser's own machine can catch. There is nothing to paste.
+ * How a terminal sign-in banner carries the result back to the waiting command. `hosted`: the
+ * desktop stands in for the loopback listener, so the return needs nothing from the user. `paste`:
+ * nobody listens here, but the response rides in the return URL's query for the user to paste.
+ * `unreachable`: a form POST only a listener on the browser's own machine can catch.
  */
 export type TerminalBrowserLaunchRelayMode = "hosted" | "paste" | "unreachable";
 
@@ -29,10 +24,9 @@ export function terminalBrowserLaunchRelayMode(
 }
 
 /**
- * The launches the environment still accepts at `now`. The server forgets a
- * capture at `expiresAt`, so a banner shown past it can only fail; a launch
- * with an unreadable deadline stays, since the server would reject it anyway
- * with a message the user can act on. Returns the same array when nothing
+ * The launches the environment still accepts at `now`: the server forgets a capture at
+ * `expiresAt`, so a later banner can only fail. A launch with an unreadable deadline stays, since
+ * the server rejects it with a message the user can act on. Returns the same array when nothing
  * expired so memoized consumers do not re-render.
  */
 export function pendingTerminalBrowserLaunches<T extends { readonly expiresAt: string }>(

@@ -12,6 +12,7 @@ import * as Cause from "effect/Cause";
 import { useState } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import { useDiffThemeName } from "../../hooks/useDiffThemeName";
+import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
@@ -180,6 +181,7 @@ export function CaptureShortcutConfig({
                   diffStyle: "unified",
                   theme: diffThemeName,
                   overflow: "wrap",
+                  preferredHighlighter: PREFERRED_HIGHLIGHTER,
                 }}
               />
             </div>

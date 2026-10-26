@@ -21,11 +21,10 @@ function originAndPath(url: string): string {
 }
 
 /**
- * Log annotations that say why an updater operation failed without carrying
- * anything secret: the error's name, code and HTTP status, and the first line
- * of its message with URLs cut to origin and path, token-like strings masked,
- * and the length bounded. Feed responses (GitHub's error pages, for example)
- * follow on later lines and are dropped.
+ * Log annotations that say why an updater operation failed without carrying anything secret: the
+ * error's name, code and HTTP status, and its message's first line with URLs cut to origin and
+ * path, token-like strings masked and length bounded. Later lines (feed responses such as
+ * GitHub's error pages) are dropped.
  */
 export function updaterErrorContext(cause: unknown): UpdaterErrorContext {
   if (!(cause instanceof Error)) {

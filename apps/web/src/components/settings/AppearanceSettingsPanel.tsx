@@ -521,6 +521,7 @@ function ThreadHighlightPaletteRow() {
           const resolved = resolveColorPreference(entry.color);
           return (
             <div
+              // oxlint-disable-next-line react/no-array-index-key -- fixed slots addressed by position
               key={index}
               className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5"
             >

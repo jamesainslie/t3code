@@ -1,12 +1,7 @@
 /**
- * Fork thread mutations on orchestration v2: highlights, thread dependencies,
- * snooze reminders, and continuation links.
- *
- * The orchestrator routes `thread.fork.update` and `thread.fork.internal-update`
- * to `decideForkThreadUpdate`, and calls `forkSnoozeFields` and
- * `forkCreateFields` from its own snooze and create paths. Everything lands on
- * the app thread's fork fields, so the orchestrator emits the result as a plain
- * `thread.metadata-updated`. A delivered snooze reminder also becomes a
+ * Fork thread mutations on orchestration v2: highlights, dependencies, snooze reminders, and
+ * continuation links. Everything lands on the app thread's fork fields, so the orchestrator emits
+ * the result as a plain `thread.metadata-updated`. A delivered snooze reminder also becomes a
  * `system_notice` turn item, which reaches the timeline without starting a run.
  */
 import {

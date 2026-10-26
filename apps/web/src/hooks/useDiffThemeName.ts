@@ -7,6 +7,7 @@ import { useClientSettings } from "./useSettings";
 import { useRenderedAppearance } from "./useTheme";
 
 const selectSyntaxTheme = (settings: ClientSettings) => settings.syntaxTheme;
+const selectRedesign = (settings: ClientSettings) => settings.redesignEnabled;
 const getServerPreview = () => null;
 
 /**
@@ -16,6 +17,8 @@ const getServerPreview = () => null;
 export function useDiffThemeName() {
   const resolvedTheme = useRenderedAppearance();
   const syntaxTheme = useClientSettings(selectSyntaxTheme);
+  // resolveDiffThemeName reads the New design from <html>; subscribing re-renders on its toggle.
+  useClientSettings(selectRedesign);
   const preview = useSyncExternalStore(
     subscribeSyntaxThemePreview,
     getSyntaxThemePreview,

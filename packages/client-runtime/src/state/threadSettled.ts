@@ -41,11 +41,8 @@ interface QueuedThreadShell {
 }
 
 /**
- * A queued turn start lives for at most this long: session adoption takes
- * seconds, so a user message still unadopted after the grace window is a
- * failed start (or stale data — shells from older servers can carry user
- * messages with no latestTurn at all), not pending work. Without this bound
- * such threads would be permanently unsettleable.
+ * Failed starts and stale shells from older servers can leave user messages unadopted.
+ * Bound the pending window so those threads can eventually settle.
  */
 export const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -86,6 +83,7 @@ export interface ThreadSnoozeShell extends QueuedThreadShell {
   readonly hasPendingApprovals: boolean;
   readonly hasPendingUserInput: boolean;
   readonly pendingSubagentRequest?: PendingSubagentRequest | null;
+  readonly pendingGuestMessageCount?: number;
 }
 
 /**
@@ -106,7 +104,8 @@ export function threadRaisedHandWhileSnoozed(shell: ThreadSnoozeShell): boolean 
 function threadAsksForUser(shell: ThreadRaisedHandShell): boolean {
   if (shell.hasPendingApprovals || shell.hasPendingUserInput) return true;
   if (shell.source?.pendingRuntimeRequest != null) return true;
-  return shell.pendingSubagentRequest != null;
+  if (shell.pendingSubagentRequest != null) return true;
+  return (shell.pendingGuestMessageCount ?? 0) > 0;
 }
 
 // V2 runtime.updatedAt includes metadata writes; prefer the failed run's completion.
@@ -145,18 +144,17 @@ function threadRaisedHandSince(shell: ThreadRaisedHandShell, referenceAt: string
   );
 }
 
-// "Depends on": the other overlay on the active lifecycle. A thread with an
-// open link waits in the Depends on shelf until the server marks every link
-// satisfied (the dependency finished, errored, asked, or went away) or the
-// thread raises its own hand. Nothing here is derived from the dependency's
-// live state: satisfaction is a persisted fact, so the classification never
-// flips back when the dependency starts its next turn.
+// "Depends on": the other overlay on the active lifecycle. A thread with an open link waits in
+// the Depends on shelf until the server marks every link satisfied (finished, errored, asked, or
+// gone) or the thread raises its own hand. Satisfaction is a persisted fact, not derived from the
+// dependency's live state, so the classification never flips back on the dependency's next turn.
 
 type ThreadRaisedHandShell = Pick<
   ThreadSnoozeShell,
   | "hasPendingApprovals"
   | "hasPendingUserInput"
   | "pendingSubagentRequest"
+  | "pendingGuestMessageCount"
   | "latestTurn"
   | "latestRun"
   | "session"
@@ -283,6 +281,7 @@ export function canSnooze(
     | "hasPendingApprovals"
     | "hasPendingUserInput"
     | "pendingSubagentRequest"
+    | "pendingGuestMessageCount"
     | "latestUserMessageAt"
     | "latestTurn"
     | "latestRun"
@@ -296,6 +295,8 @@ export function canSnooze(
   // The server rejects snoozing even for nonblocking questions.
   if (shell.source?.pendingRuntimeRequest != null) return false;
   if (shell.pendingSubagentRequest != null) return false;
+  // A waiting guest message would wake it at once.
+  if ((shell.pendingGuestMessageCount ?? 0) > 0) return false;
   if (hasQueuedTurnStart(shell, options)) return false;
   return true;
 }

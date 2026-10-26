@@ -1,13 +1,8 @@
 /**
- * Fork: roadmap. The pure half of GitHub sync: given an item, its issue as
- * GitHub shows it now, and where the two agreed at the last sync, decide what
- * changes here, what is pushed to GitHub, and the new agreement. Nothing here
- * does I/O.
- *
- * A field that moved on one side only is copied to the other. One that moved
- * on both sides to different values is a conflict, and the newer change wins
- * with a sync note. Parent and blockers count only issues that are themselves
- * items ("known"): GitHub links to anything else stay on GitHub.
+ * Fork: roadmap. The pure half of GitHub sync: from an item, its issue now, and the last synced
+ * agreement, decide the local changes, the GitHub pushes, and the new agreement. A field moved on
+ * one side is copied across; moved on both to different values, the newer wins with a sync note.
+ * Parent and blockers count only issues that are themselves items; other links stay on GitHub.
  */
 import type {
   RoadmapArea,

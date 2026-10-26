@@ -24,15 +24,10 @@ import {
 } from "../auth-relay/loopbackCallback.ts";
 
 /**
- * Pending browser launches per terminal.
- *
- * A capture is the URL a command wanted opened plus, when the URL advertised
- * one, the loopback listener it will wait on and how that listener wants its
- * response. Completing a capture replays the client's return, the final URL
- * or the form a client-side listener caught, against that listener once;
- * cancelling forgets it. A capture expires on the same deadline as a provider
- * sign-in. Unlike the provider flow, nothing here confirms that the tool
- * finished: the terminal output is the user's confirmation.
+ * Pending browser launches per terminal: the URL a command wanted opened, plus any advertised
+ * loopback listener and its response mode. Completing replays the client's return (final URL or
+ * caught form) against that listener once; cancelling forgets it. Captures expire on a provider
+ * sign-in's deadline, and nothing confirms the tool finished: the terminal output is the proof.
  */
 
 type TerminalRef = { readonly threadId: string; readonly terminalId: string };
@@ -103,12 +98,8 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
   return {
     capture: Effect.fn("terminalBrowserLaunches.capture")(function* (terminal, url) {
       if (url.length > BROWSER_LAUNCH_URL_MAX_LENGTH) return null;
-      let parsed: URL;
-      try {
-        parsed = new URL(url);
-      } catch {
-        return null;
-      }
+      const parsed = yield* Effect.try(() => new URL(url)).pipe(Effect.orElseSucceed(() => null));
+      if (parsed === null) return null;
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
       const captureId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
       const now = yield* Clock.currentTimeMillis;
@@ -194,12 +185,9 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
 const validateUnadvertisedLoopbackCallbackUrl = Effect.fn(
   "validateUnadvertisedLoopbackCallbackUrl",
 )(function* (callbackUrl: string): Effect.fn.Return<URL, AuthRelayError> {
-  let callback: URL | null = null;
-  try {
-    callback = new URL(callbackUrl);
-  } catch {
-    callback = null;
-  }
+  const callback = yield* Effect.try(() => new URL(callbackUrl)).pipe(
+    Effect.orElseSucceed(() => null),
+  );
   const origin = callback ? parseLoopbackRedirectUri(`${callback.origin}/`) : null;
   if (
     callback === null ||

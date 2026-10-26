@@ -150,7 +150,7 @@ Imported items stay in sync with GitHub while the roadmap home is running:
   and a note says so.
 
 Sync uses the roadmap home's GitHub logins, chosen per repository by the rules under **GitHub
-accounts** in the home's **Settings → Source Control** (see
+accounts** in the home's **Settings → Source control** (see
 [Several GitHub accounts](./source-control.md#several-github-accounts)). A project's own account
 choice does not apply, since an imported issue belongs to no project. The home needs a login for
 every account whose repositories you import from.

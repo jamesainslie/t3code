@@ -1,11 +1,8 @@
 /**
- * Fork-only document comments: a user's margin notes on rendered workspace files,
- * kept per thread and never written into the files.
- *
- * Comments live outside the orchestration event log, in the
- * `projection_thread_document_comments` table the v1 fork already used, so fork
- * databases carry them into v2 untouched. Each change publishes the thread's
- * whole list; clients and the MCP tools read the same service.
+ * Fork-only document comments: a user's margin notes on rendered workspace files, kept per thread
+ * and never written into the files. They live outside the event log, in the v1 fork's
+ * `projection_thread_document_comments` table, so fork databases carry them into v2 untouched.
+ * Each change publishes the thread's whole list; clients and the MCP tools read the same service.
  */
 import {
   type ThreadDocumentComment,
@@ -44,7 +41,7 @@ export class DocumentComments extends Context.Service<
 
 const failure = (message: string) => new ThreadDocumentCommentsError({ message });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const repository = yield* CommentRepository.ProjectionThreadDocumentCommentRepository;
   const orchestrator = yield* Orchestrator.OrchestratorV2;

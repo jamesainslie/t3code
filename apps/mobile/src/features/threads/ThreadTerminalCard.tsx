@@ -22,7 +22,7 @@ const TerminalOutput = memo(function TerminalOutput(props: {
         const { fg, bg, bold, dim, italic, underline } = segment.style;
         return (
           <Text
-            // Segments never reorder for a given output, so their index is a stable key.
+            // oxlint-disable-next-line react/no-array-index-key -- segments never reorder for one output
             key={index}
             style={{
               color: fg === undefined ? undefined : terminalColorHex(fg, palette),

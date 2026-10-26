@@ -1,14 +1,8 @@
 /**
- * Fork: roadmap. The steward relates attached threads' turns to their work
- * item's acceptance criteria. After a turn ends on a thread this environment
- * owns, and once a day for every such thread, it reads the turns since its last
- * look, asks the environment's steward model what they show, and submits ticks
- * with evidence and notes through `RoadmapService.submit`. Off the home those
- * writes queue for the home like an agent's.
- *
- * It never blocks or fails a turn: runs happen on a worker after the turn has
- * ended, and every failure is logged and dropped. The planner decides what the
- * steward may write; refusals are logged, not surfaced.
+ * Fork: roadmap. After a turn ends on an attached thread this environment owns, and daily for each,
+ * the steward asks its model what the new turns show against the item's acceptance criteria and
+ * submits ticks and notes through `RoadmapService.submit`. It never blocks or fails a turn: it runs
+ * on a worker after the turn, and failures and planner refusals are logged and dropped.
  */
 import type {
   OrchestrationV2DomainEvent,
@@ -222,14 +216,14 @@ const make = Effect.gen(function* () {
     (effect, threadId) =>
       effect.pipe(
         Effect.withSpan("RoadmapSteward.runThread"),
-        Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.failCause(cause)
-            : Effect.logWarning("roadmap steward run failed", {
-                threadId,
-                // An unreachable home or a failed model call; the next turn or sweep retries.
-                cause: Cause.pretty(cause),
-              }),
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterruptsOnly(cause),
+          (cause) =>
+            Effect.logWarning("roadmap steward run failed", {
+              threadId,
+              // An unreachable home or a failed model call; the next turn or sweep retries.
+              cause: Cause.pretty(cause),
+            }),
         ),
       ),
   );

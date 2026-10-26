@@ -8,11 +8,9 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { previewBridge } from "./previewBridge";
 
 /**
- * Finishes a sign-in the desktop caught on its way to the environment's
- * loopback listener: an in-app tab's navigation, or a request to a port the
- * desktop is holding, which is the only way a `form_post` response can come
- * back. The manual paste field stays as the fallback for query responses
- * everywhere else.
+ * Finishes a sign-in the desktop caught on its way to the environment's loopback listener: an
+ * in-app tab's navigation, or a request to a port the desktop holds, the only way a `form_post`
+ * response can come back. The manual paste field stays the fallback for query responses elsewhere.
  */
 export function AuthRelayCallbackHost() {
   const completeBrowserLaunch = useAtomCommand(terminalEnvironment.completeBrowserLaunch, {

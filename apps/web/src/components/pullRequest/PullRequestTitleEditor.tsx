@@ -12,7 +12,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { PullRequestDetailTitleRow } from "./PullRequestDetailLayout";
 import { PullRequestEditButton } from "./PullRequestEditButton";
 import { readableFailure } from "./pullRequestDetail.logic";
-import { canEditPullRequestChangeRequest } from "./pullRequestEditing.logic";
+import { canEditPullRequestChangeRequest } from "@lathe/client-runtime/pull-request-editing";
 
 /** The pull request title, which the reader can rename in place when the host allows it. */
 export function PullRequestTitleEditor({

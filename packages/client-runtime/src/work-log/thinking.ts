@@ -41,11 +41,10 @@ export function withQuestionLeadInItems(
 }
 
 /**
- * The reasoning the agent wrote right before asking a question, oldest first.
- * Claude often puts the question's explanation in a thinking block, so without
- * this the question panel shows options with none of the context behind them.
- * Within the request's provider turn it walks back from the request, skipping
- * the still-running tool call that raised it, and stops at anything else.
+ * The reasoning the agent wrote right before asking a question, oldest first: Claude often puts
+ * the explanation in a thinking block, which the question panel would otherwise lack. Within the
+ * request's provider turn it walks back from the request, skipping the still-running tool call
+ * that raised it, and stops at anything else.
  */
 export function questionLeadIn(
   turnItems: ReadonlyArray<ThreadStructureTurnItem>,

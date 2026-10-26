@@ -12,6 +12,7 @@ import { buildTree, roadmapItemsById } from "@lathe/client-runtime/roadmap/tree"
 import { effectiveArea } from "@lathe/shared/roadmap";
 import { useEffect, useId, useState } from "react";
 
+import { useNowMinute } from "~/hooks/useNowMinute";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -80,7 +81,8 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const today = localIsoDate(new Date());
+  const nowMinute = useNowMinute();
+  const today = localIsoDate(new Date(`${nowMinute}Z`));
   const update = (patch: Partial<RoadmapEditorDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setError(null);

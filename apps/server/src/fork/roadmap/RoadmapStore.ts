@@ -456,23 +456,29 @@ const make = Effect.gen(function* () {
     append,
     apply,
     get,
-    list: (options) =>
+    list: Effect.fn("RoadmapStore.list")((options?: { readonly includeDeleted?: boolean }) =>
       selectItems({ includeDeleted: options?.includeDeleted === true }).pipe(mapError("list")),
-    listSprints: () =>
+    ),
+    listSprints: Effect.fn("RoadmapStore.listSprints")(() =>
       selectSprints({}).pipe(
         Effect.map((rows) => rows.map((row) => row.sprint)),
         mapError("listSprints"),
       ),
-    forThread: (thread) =>
+    ),
+    forThread: Effect.fn("RoadmapStore.forThread")((thread: RoadmapThreadRef) =>
       selectThreadItems({ environmentId: thread.environmentId, threadId: thread.threadId }).pipe(
         Effect.map((rows) => rows.map((row) => row.item)),
         mapError("forThread"),
       ),
+    ),
     latestSequence,
-    history: (itemId) =>
+    history: Effect.fn("RoadmapStore.history")((itemId: RoadmapItemId) =>
       selectEvents({ itemId }).pipe(Effect.flatMap(toStoredEvents), mapError("history")),
+    ),
     lastDeletion,
-    receipt: (commandId) => selectReceipt(commandId).pipe(mapError("receipt")),
+    receipt: Effect.fn("RoadmapStore.receipt")((commandId: CommandId) =>
+      selectReceipt(commandId).pipe(mapError("receipt")),
+    ),
     writeReceipt,
     rebuild,
   });

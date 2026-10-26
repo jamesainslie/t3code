@@ -5,11 +5,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 /**
- * The launches of a terminal that the environment still accepts. The server
- * forgets a capture five minutes after the command printed its link, and the
- * attach stream says nothing when that happens, so the banner is dropped on
- * the same deadline instead of offering an Open button that can no longer
- * work. One timer per soonest deadline, no polling.
+ * The launches of a terminal that the environment still accepts. The server forgets a capture
+ * five minutes after the command printed its link and the attach stream says nothing, so the
+ * banner drops on the same deadline instead of offering an Open button that cannot work. One
+ * timer per soonest deadline, no polling.
  */
 export function usePendingTerminalBrowserLaunches<T extends { readonly expiresAt: string }>(
   launches: ReadonlyArray<T>,

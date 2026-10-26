@@ -1,10 +1,7 @@
 /**
- * Plain page shown in place of a sign-in's loopback response.
- *
- * Two paths serve it: an in-app tab whose return navigation the manager
- * intercepts, which loads it as a data URL because there is no response to
- * write, and the loopback host, which writes these bytes to whichever browser
- * on this machine made the request.
+ * Plain page shown in place of a sign-in's loopback response. An in-app tab whose return the
+ * manager intercepts loads it as a data URL, since there is no response to write; the loopback
+ * host writes these bytes to whichever browser on this machine made the request.
  */
 export const AUTH_RELAY_RETURN_PAGE_HTML =
   "<!doctype html><title>Returning to your environment</title>" +

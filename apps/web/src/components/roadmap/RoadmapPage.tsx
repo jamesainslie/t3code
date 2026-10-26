@@ -6,7 +6,7 @@ import { CircleAlertIcon, CircleDotIcon, MapIcon, PlusIcon, RefreshCwIcon } from
 import { useState } from "react";
 
 import { isElectron } from "~/env";
-import { useEscapeToGoBack } from "~/hooks/useNavigateBack";
+import { useNowMinute } from "~/hooks/useNowMinute";
 import { useEnvironmentPresentation } from "~/state/presentation";
 import {
   roadmapEnvironment,
@@ -28,6 +28,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { Skeleton } from "../ui/skeleton";
+import { useEscapeToGoBack } from "./useEscapeToGoBack";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
@@ -94,7 +95,9 @@ export function RoadmapPage() {
   const items = live.data?.items ?? [];
   const sprints = live.data?.sprints ?? [];
   const byId = roadmapItemsById(items);
-  const today = localIsoDate(new Date());
+  const nowMinute = useNowMinute();
+  // Follows the clock so a page left open past midnight moves to the new day.
+  const today = localIsoDate(new Date(`${nowMinute}Z`));
   const view = roadmapViewOf(search);
   const underOptions = boardUnderOptions(items);
   // An item that was deleted or never existed falls back to the whole board.

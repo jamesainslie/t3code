@@ -1,12 +1,8 @@
 /**
- * Fork: roadmap. Imports GitHub issues as work items and keeps them in step
- * with their issues. Only the roadmap home syncs, with its own gh logins: each
- * sweep checks the home first, so moving the home stops sync here at once.
- *
- * The reactor copies the shape of `PullRequestSyncReactor`: one sweep a
- * minute on a drainable worker, open issues every sweep and closed ones every
- * fifteen minutes, a pause per account while GitHub's rate limit holds, and a
- * targeted sweep for an item a user or agent just changed here.
+ * Fork: roadmap. Imports GitHub issues as work items and keeps them in step. Only the roadmap home
+ * syncs, with its own gh logins: each sweep checks the home first, so moving the home stops sync
+ * here at once. Like `PullRequestSyncReactor`: a sweep a minute, closed issues every fifteen
+ * minutes, a per-account pause while GitHub's rate limit holds, and targeted sweeps after edits.
  */
 import {
   CommandId,
@@ -190,11 +186,10 @@ const make = Effect.gen(function* () {
   });
 
   /**
-   * Creates items for `roots` under `parent`, then for their sub-issues no
-   * item holds, breadth first. Roots take `area`; the rest inherit. Returns
-   * the ids created, in creation order. With `strict`, a root the planner
-   * refuses fails the import; otherwise it is skipped with a log line, as
-   * every sub-issue is.
+   * Creates items for `roots` under `parent`, then breadth first for their sub-issues no item
+   * holds; roots take `area` and the rest inherit. Returns the created ids in creation order. With
+   * `strict`, a root the planner refuses fails the import; otherwise it is skipped with a log
+   * line, as every refused sub-issue is.
    */
   const importTree = Effect.fn("RoadmapGitHubSync.importTree")(function* (input: {
     readonly roots: ReadonlyArray<GitHubIssueApi.GitHubIssue>;

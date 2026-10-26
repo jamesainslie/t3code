@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
-// Renders the fork's edition artwork from `lib/edition-art.ts`:
-// - the web strips and gallery icon thumbnails in `apps/web/src/assets/editions/`
-// - the desktop icons in `assets/editions/<edition>/`, which the desktop build stages and
-//   the running app swaps in when "Match app icon" is on.
-// The tartan and blueprint strips stay React components; blueprint reuses the dev icons.
+// Renders the fork's edition artwork from `lib/edition-art.ts`: web strips and gallery icon
+// thumbnails in `apps/web/src/assets/editions/`, and desktop icons in `assets/editions/<edition>/`
+// that the desktop build stages and the app swaps in under "Match app icon". The tartan and
+// blueprint strips stay React components; blueprint reuses the dev icons.
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";

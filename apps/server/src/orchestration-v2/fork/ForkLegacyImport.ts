@@ -1,18 +1,8 @@
 /**
- * Carries fork data across the v1 to v2 cutover, around upstream's
- * `LegacyV1ThreadImporter` (see docs/internals/legacy-orchestration-migration.md).
- *
- * - `prepareContextRecords` runs before upstream's shell import. The fork's v1
- *   thread references carried a `projectId`; upstream's `ThreadContextRecord`
- *   carries an `environmentId`, and the importer decodes message context
- *   strictly, so fork records are rewritten to upstream's shape first.
- * - `importForkFields` runs after it. Highlights, dependency links, snooze
- *   notes, and continuation links live in fork columns of `projection_threads`,
- *   which upstream's importer does not read; they land on the v2 thread as one
- *   `thread.metadata-updated` per thread.
- *
- * Both only touch the v2 database copy, and both are idempotent: rewritten
- * records no longer match, and a field already on the v2 thread is skipped.
+ * Carries fork data across the v1 to v2 cutover (docs/internals/legacy-orchestration-migration.md).
+ * `prepareContextRecords` first rewrites fork thread refs from `projectId` to the `environmentId`
+ * upstream's strict importer decodes; `importForkFields` then lands fork `projection_threads`
+ * columns as one `thread.metadata-updated` per thread. Both touch only the v2 copy, idempotently.
  */
 import {
   EnvironmentId,

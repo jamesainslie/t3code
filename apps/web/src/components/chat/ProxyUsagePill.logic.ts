@@ -1,10 +1,7 @@
 /**
- * What the header pill and its ledger show for a `modelproxy` usage-limit
- * source. Pure over the published snapshot so the rules (which account,
- * which colour, which figure decides the account's fate soonest) are
- * testable without React.
- *
- * The runway rule mirrors modelproxy's own mini window: a spent shared
+ * What the header pill and its ledger show for a `modelproxy` usage-limit source, pure over the
+ * published snapshot so the rules (which account, which colour, which figure decides soonest) are
+ * testable without React. The runway rule mirrors modelproxy's mini window: a spent shared
  * window's reset governs, else the fleet forecast, else the horizon.
  */
 import type {
@@ -379,11 +376,10 @@ function fallbackText(snapshot: UsageLimitSourceSnapshot): string | null {
 }
 
 /**
- * The gateway source the pill shows, with the environment that owns it. A
- * gateway is the user's, not a thread's: the source is configured once, on
- * whichever environment the user happened to have selected in settings, and
- * every thread should see it. The thread's own environment wins when it has
- * one, then the primary environment, then any other, in catalog order.
+ * The gateway source the pill shows, with its owning environment. A gateway is the user's, not a
+ * thread's: it is configured once, on whichever environment settings had selected, and every
+ * thread should see it. The thread's environment wins, then the primary, then any other in catalog
+ * order.
  */
 export function selectProxySource<
   Config extends { usageLimitSources?: readonly UsageLimitSourceSnapshot[] | undefined },

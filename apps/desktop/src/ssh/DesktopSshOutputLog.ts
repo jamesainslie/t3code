@@ -33,7 +33,7 @@ export class DesktopSshOutputLog extends Context.Service<
   }
 >()("@lathe/desktop/ssh/DesktopSshOutputLog") {}
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const windows = yield* ElectronWindow.ElectronWindow;
   const buffers = new Map<string, SshOutputBuffer>();
@@ -61,20 +61,26 @@ export const make = Effect.gen(function* () {
 
   return DesktopSshOutputLog.of({
     observerFor: (target) => (chunk) => record(target, (buffer, at) => buffer.append(chunk, at)),
-    mark: (target, text) => record(target, (buffer, at) => buffer.mark(text, at)),
-    subscribe: (target) =>
+    mark: Effect.fn("DesktopSshOutputLog.mark")(
+      (target: DesktopSshEnvironmentTarget, text: string) =>
+        record(target, (buffer, at) => buffer.mark(text, at)),
+    ),
+    subscribe: Effect.fn("DesktopSshOutputLog.subscribe")((target: DesktopSshEnvironmentTarget) =>
       Effect.sync(() => {
         const key = targetConnectionKey(target);
         subscribers.set(key, (subscribers.get(key) ?? 0) + 1);
         return { key, entries: [...bufferFor(key).entries()] };
       }),
-    unsubscribe: (target) =>
-      Effect.sync(() => {
-        const key = targetConnectionKey(target);
-        const remaining = (subscribers.get(key) ?? 0) - 1;
-        if (remaining > 0) subscribers.set(key, remaining);
-        else subscribers.delete(key);
-      }),
+    ),
+    unsubscribe: Effect.fn("DesktopSshOutputLog.unsubscribe")(
+      (target: DesktopSshEnvironmentTarget) =>
+        Effect.sync(() => {
+          const key = targetConnectionKey(target);
+          const remaining = (subscribers.get(key) ?? 0) - 1;
+          if (remaining > 0) subscribers.set(key, remaining);
+          else subscribers.delete(key);
+        }),
+    ),
   });
 });
 

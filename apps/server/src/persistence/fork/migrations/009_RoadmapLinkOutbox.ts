@@ -2,11 +2,9 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * Roadmap writes an environment off the home sends to the home, in the order
- * they were made. `row_id` is that order. A delivered row is deleted; a row
- * the home refused stays as `rejected` with the home's error, so a refusal is
- * recorded and never retried. `command_id` is unique because the home's
- * receipts already make a resend of one command harmless, and one row per
+ * Roadmap writes an environment off the home sends to the home, ordered by `row_id`. A delivered
+ * row is deleted; one the home refused stays `rejected` with its error and is never retried.
+ * `command_id` is unique because home receipts already make resends harmless, and one row per
  * command keeps a retried agent call from queueing it twice.
  */
 export default Effect.gen(function* () {

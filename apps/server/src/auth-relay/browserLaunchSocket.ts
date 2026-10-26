@@ -13,25 +13,10 @@ import * as Scope from "effect/Scope";
 import { AuthRelayError } from "./AuthRelayError.ts";
 
 /**
- * `BROWSER` capture for processes that run inside a PTY.
- *
- * A tool in a Lathe terminal that opens a sign-in page inherits `BROWSER` from
- * the shell. The inline stderr helper in `browserLaunchCapture.ts` cannot be
- * used there: the helper's stderr is the terminal itself, and ConPTY on
- * Windows re-flows long lines, so nothing in-band survives every platform.
- * This helper instead connects to a private local socket owned by the
- * terminal manager and hands over its token and the URL. The token, issued
- * per terminal process, is the only thing the socket trusts.
- *
- * The Node helper lives under the manager's directory. Each registration gets
- * its own launcher script beside it, with the token baked in, that sets
- * `ELECTRON_RUN_AS_NODE` (the desktop strips that variable from terminal
- * environments and the runtime may be Electron) and execs the helper.
- * `BROWSER` is that launcher's bare path and nothing else: Python's
- * `webbrowser` and Go's browser packages run the value as one program with
- * the URL appended and never shell-split it, so a quoted path or an argument
- * in the value would silently open nothing. Python-style `%s` substitution
- * and appended-URL launchers both reach the helper the same way.
+ * `BROWSER` capture inside a PTY, where the stderr helper fails (stderr is the terminal and ConPTY
+ * re-flows long lines): this helper hands the URL and its per-terminal token, the only thing the
+ * socket trusts, to the manager's private socket. `BROWSER` must be a launcher's bare path, since
+ * Python and Go run it unsplit with the URL appended; the launcher sets `ELECTRON_RUN_AS_NODE`.
  */
 
 const BROWSER_LAUNCH_SOCKET_MAX_MESSAGE_BYTES = 20_480;
@@ -141,12 +126,10 @@ function isUsableBrowserPath(platform: NodeJS.Platform, value: string): boolean 
 }
 
 /**
- * Writes the helper under `directory`, listens on the private socket for the
- * rest of the scope, and issues per-process tokens, each with its own
- * launcher. Launchers live beside the helper unless that path could not
- * survive a launcher's `BROWSER` handling, in which case they move to a
- * temporary directory; when neither works the socket fails and callers run
- * terminals without capture rather than with a broken one.
+ * Writes the helper under `directory`, listens on the private socket for the scope, and issues
+ * per-process tokens with their own launchers. Launchers move to a temporary directory when the
+ * helper's path could not survive `BROWSER` handling; when neither works the socket fails, and
+ * callers run terminals without capture rather than with a broken one.
  */
 export const makeBrowserLaunchSocket = Effect.fn("makeBrowserLaunchSocket")(function* (input: {
   readonly directory: string;

@@ -82,7 +82,7 @@ export class GitHubAccountSelector extends Context.Service<
 const tokenKey = (selection: GitHubAccountSelection) =>
   `${selection.host.toLowerCase()}\0${selection.login}`;
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const identities = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
@@ -270,9 +270,9 @@ export const gitRemoteCredentialsLayer = Layer.effect(
 export const layerUnselected = Layer.succeed(
   GitHubAccountSelector,
   GitHubAccountSelector.of({
-    forCheckout: () => Effect.succeed(null),
-    pinFor: () => Effect.succeed(null),
-    forRepository: () => Effect.succeed(null),
-    invalidate: () => Effect.void,
+    forCheckout: Effect.fn("GitHubAccountSelector.forCheckout")(() => Effect.succeed(null)),
+    pinFor: Effect.fn("GitHubAccountSelector.pinFor")(() => Effect.succeed(null)),
+    forRepository: Effect.fn("GitHubAccountSelector.forRepository")(() => Effect.succeed(null)),
+    invalidate: Effect.fn("GitHubAccountSelector.invalidate")(() => Effect.void),
   }),
 );

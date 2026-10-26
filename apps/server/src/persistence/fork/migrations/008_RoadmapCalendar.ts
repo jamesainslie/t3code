@@ -2,18 +2,10 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * Items keep their calendar history (state changes, completion, pins, snooze,
- * sprint, logged hours) inside `payload_json`, so no item column is needed.
- *
- * Phase 1 items have none of those fields. The projection takes them from
- * `updated_at`, the closest record of when the state last moved. Created
- * events are upgraded too, with the creation time, because a `rebuild`
- * decodes every stored event with the current schema and replays later state
- * changes on top. Each step only touches rows that still lack the fields, so
- * running it again is harmless.
- *
- * Sprint events name their sprint in `roadmap_events.item_id`; the column is
- * the event's subject, not always an item.
+ * Items keep calendar history in `payload_json`. Phase 1 items lack it, so they take it from
+ * `updated_at`; created events are upgraded too because `rebuild` decodes every stored event with
+ * the current schema. Steps only touch rows still lacking the fields, so reruns are harmless.
+ * Sprint events name their sprint in `roadmap_events.item_id`: the subject, not always an item.
  */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

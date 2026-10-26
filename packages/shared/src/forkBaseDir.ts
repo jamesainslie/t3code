@@ -1,13 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off - synchronous so every resolver can swap one line.
 /**
- * Fork-only. The fork's base directory was `.t3f` before the Lathe rename and
- * is `.lathe` after it. An existing `.t3f` stays in use where it is, because
- * running servers, SSH-launched remote servers, pinned runtimes and the `t3f`
- * launcher symlink all point into it; moving it from under them would strand
- * them. Moving `.t3f` to `.lathe` by hand, with nothing running, completes the
- * rename, and this then picks `.lathe`.
- *
- * Node only: the web bundle must not import this module.
+ * Fork-only, Node only: the web bundle must not import it. The base directory was `.t3f` before
+ * the Lathe rename and `.lathe` after. An existing `.t3f` stays in use because running and
+ * SSH-launched servers, pinned runtimes and the `t3f` launcher point into it; moving it by hand
+ * with nothing running completes the rename, and this then picks `.lathe`.
  */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";

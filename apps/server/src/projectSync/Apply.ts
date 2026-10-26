@@ -1,15 +1,8 @@
 /**
- * Writes sync batches into orchestration v2.
- *
- * Imported conversations become v2 threads with `historyOrigin: "v1_import"`
- * and run-less turn items, the same shape upstream's legacy importer gives a
- * pre-v2 thread. That reuse is deliberate: the orchestrator already hands a
- * v1-import thread's history to the provider on its first run, which is what a
- * continued conversation needs, and synced threads never run at all
- * (`rejectSyncedThreadRun`).
- *
- * Project changes go through `ProjectService` like any client command. Thread
- * changes and the batch record land in one transaction.
+ * Writes sync batches into orchestration v2. Imported conversations take the shape upstream's
+ * legacy importer gives a pre-v2 thread (`historyOrigin: "v1_import"`, run-less turn items), so a
+ * continued conversation's first run hands its history to the provider; synced threads never run
+ * (`rejectSyncedThreadRun`). Thread changes and the batch record land in one transaction.
  */
 import {
   CommandId,

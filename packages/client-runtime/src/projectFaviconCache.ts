@@ -1,5 +1,5 @@
 import { EnvironmentId } from "@lathe/contracts";
-import { mediaMimeType } from "@lathe/shared/filePreview";
+import { mediaMimeType } from "@lathe/shared/mediaPreview";
 import {
   getProjectFaviconCacheKey,
   getProjectFaviconResourceKey,

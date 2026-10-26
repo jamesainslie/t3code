@@ -181,6 +181,21 @@ describe("FORK_RENAME_RULES", () => {
       "upstream-reference",
     ],
     [
+      "apps/server/src/provider/userInputAttachments.test.ts",
+      '            "Lantern\\t\\t37",',
+      "false-positive",
+    ],
+    [
+      "apps/desktop/src/app/DesktopCliShim.test.ts",
+      '      shimPath: "C:\\\\Users\\\\José\\\\.t3\\\\bin\\\\t3.cmd",',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/CommandPalette.logic.test.ts",
+      '    expect(search("t3", true)).toEqual([["Projects", ["t3code"]]]);',
+      "upstream-reference",
+    ],
+    [
       ".task-cache.json",
       '  "endpoint": "https://t3-task-cache.pinglabs.workers.dev/projects/t3code"',
       "upstream-reference",
@@ -512,7 +527,7 @@ describe("FORK_RENAME_RULES", () => {
       '  it.each(["t3code", "t3code/"])("joins static prefix", () => {',
       "upstream-reference",
     ],
-    ["packages/ssh/src/tunnel.test.ts", '    "exec \"$T3_RUNTIME_DIR/lathe\"",', "identifier"],
+    ["packages/ssh/src/tunnel.test.ts", '    "exec "$T3_RUNTIME_DIR/lathe"",', "identifier"],
     [
       "packages/ssh/src/tunnel.test.ts",
       "      `tar -czf '${release}/t3-${archiveVersion}-${asset}'`,",
