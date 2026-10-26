@@ -1,4 +1,4 @@
-import { isWorkspaceImagePreviewPath } from "@lathe/shared/filePreview";
+import { isWorkspaceImagePreviewPath } from "@lathe/shared/mediaPreview";
 import { COMPUTER_USE_TOOL_SOURCE, dynamicToolSurface } from "@lathe/shared/toolActivity";
 import type {
   ToolActivityIcon,

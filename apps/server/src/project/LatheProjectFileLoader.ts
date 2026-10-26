@@ -28,10 +28,7 @@ export class LatheProjectFileLoadError extends Schema.TaggedError<LatheProjectFi
 export class LatheProjectFileLoader extends Context.Service<
   LatheProjectFileLoader,
   {
-    /**
-     * Never fails: missing, unreadable, or invalid files resolve to `Option.none` (invalid files
-     * are logged as warnings).
-     */
+    /** Never fails; missing/unreadable/invalid files return none, with warnings for invalid files. */
     readonly load: (workspaceRoot: string) => Effect.Effect<Option.Option<LatheProjectFile>>;
   }
 >()("lathe/project/LatheProjectFileLoader") {}
@@ -46,7 +43,7 @@ const logLatheProjectFileLoadError = (error: LatheProjectFileLoadError) =>
     }),
   );
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

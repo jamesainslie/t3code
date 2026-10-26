@@ -123,7 +123,7 @@ function headline(host: string, located: Located, failure: ConnectionAttemptErro
         ? "T3 Connect did not accept this device's sign-in"
         : "This device can't reach T3 Connect";
     case "tunnel":
-      // The relay already reached the host when this device fails on its own (#17629).
+      // The relay already reached the host when this device fails on its own.
       return failure?.reason === "network" ||
         failure?.reason === "transport" ||
         failure?.reason === "timeout"
@@ -217,7 +217,7 @@ function helpSection(
     case "offline":
       return "this-device-cant-reach-t3-connect";
     case "outdated":
-      return "the-host-runs-an-older-t3-code";
+      return "the-host-runs-an-older-lathe";
     case "clock_skew":
       return "the-clock-is-off";
     case "not_linked":

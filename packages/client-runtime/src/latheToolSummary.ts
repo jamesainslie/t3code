@@ -176,6 +176,9 @@ export function summarizeLatheToolCalls(
     case "task-status":
       label = phrase("Checked", "check", `task status ${times}`);
       break;
+    case "background-wait":
+      label = phrase("Updated", "update", `background waits ${times}`);
+      break;
     case "task-cancel":
       label = phrase(
         "Requested cancellation of",

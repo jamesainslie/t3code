@@ -158,9 +158,9 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
             "LATHE_HOME=/bad",
             "t3code_home=/bad",
             "T3_BOOT_SERVICE_UNIT=bad",
-            "lathe_boot_service_unit=bad",
+            "t3_boot_service_unit=bad",
             "T3_SERVICE_LAUNCHER_CONTEXT=bad",
-            "lathe_service_launcher_context=bad",
+            "t3_service_launcher_context=bad",
           ].join("\n"),
         );
         assert.deepEqual(yield* Effect.promise(() => readServiceEnvironment(root, inherited)), {
