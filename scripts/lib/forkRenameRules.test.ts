@@ -206,6 +206,11 @@ describe("FORK_RENAME_RULES", () => {
       "upstream-reference",
     ],
     [
+      "infra/task-cache/src/telemetry.ts",
+      "/* oxlint-disable t3code/no-global-process-runtime -- This bootstrap runs before dependencies are installed. */",
+      "identifier",
+    ],
+    [
       ".github/actions/setup-ci-deps/action.yml",
       "        T3_TASK_CACHE_READ_TOKEN: ${{ inputs.task-cache-read-token }}",
       "upstream-reference",

@@ -277,7 +277,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Upstream's shared Vite task cache: the endpoint, its service under infra/task-cache, and the CI read token that wires it up. The fork has no token, so CI skips it.",
     test: (o) =>
-      /^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) || /T3_TASK_CACHE_/.test(o.token),
+      // Its lint directives name the shared oxlint plugin, which the fork renames.
+      !(/^t3code\/[a-z-]+$/.test(o.token) && /lint-(?:disable|enable)/.test(o.line)) &&
+      (/^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) || /T3_TASK_CACHE_/.test(o.token)),
   },
   {
     id: "upstream-linux-metainfo",
