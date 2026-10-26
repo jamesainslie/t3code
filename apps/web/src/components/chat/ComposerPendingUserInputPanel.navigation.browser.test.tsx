@@ -16,14 +16,20 @@ vi.mock(import("../ChatMarkdown"), async (importOriginal) => ({
 
 // The hook reads pending requests from the thread's full projection atom, which
 // needs a live environment. A projection the test writes stands in for it.
-const mocked = vi.hoisted(() => ({ pendingRequestsAtom: null as unknown }));
+const mocked = vi.hoisted(() => ({
+  pendingRequestsAtom: null as unknown,
+  requestedThreadIds: [] as string[],
+}));
 vi.mock(import("../../state/threads"), async (importOriginal) => {
   const original = await importOriginal();
   return {
     ...original,
     environmentThreadDetails: {
       ...original.environmentThreadDetails,
-      pendingRequestsAtom: () => mocked.pendingRequestsAtom as never,
+      pendingRequestsAtom: (ref: { threadId: string }) => {
+        mocked.requestedThreadIds.push(ref.threadId);
+        return mocked.pendingRequestsAtom as never;
+      },
     },
   };
 });
@@ -211,4 +217,18 @@ it("isolates drafts by environment, thread and request and discards only resolve
       index === 0 ? undefined : `Answer ${index}`,
     );
   }
+});
+
+it("does not subscribe to a draft's thread before the server has created it", async () => {
+  using _timers = fakeTimers();
+  mocked.requestedThreadIds = [];
+  const environmentId = EnvironmentId.make("draft-environment");
+  const draftThreadId = ThreadId.make("draft-thread");
+  const projection = questionProjection(draftThreadId);
+  await using screen = await render(probeElement({ environmentId, projection, loading: true }));
+  expect(mocked.requestedThreadIds).not.toContain(draftThreadId);
+
+  await screen.rerender(probeElement({ environmentId, projection }));
+  expect(mocked.requestedThreadIds).toContain(draftThreadId);
+  expect(requests.activePendingUserInput?.requestId).toBe("first");
 });
