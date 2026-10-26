@@ -155,9 +155,12 @@ export function usePendingThreadRequests(input: {
   const setPendingUserInputQuestionIndexByRequestId = usePendingUserInputQuestionIndex.setState;
   const projectedThreadId = serverProjection?.thread.id;
   // Fork: read from the full projection, since a question's lead-in comes from
-  // reasoning text the thread structure leaves out.
+  // reasoning text the thread structure leaves out. Wait for ChatView's own
+  // projection: a draft's thread id does not exist on the server yet, and a
+  // subscription that sees it missing marks the id deleted for good, so the
+  // thread stays blank once it is created.
   const threadPendingRequests = useAtomValue(
-    activeThreadId === null
+    activeThreadId === null || projectedThreadId !== activeThreadId
       ? NO_PENDING_REQUESTS_ATOM
       : environmentThreadDetails.pendingRequestsAtom(scopeThreadRef(environmentId, activeThreadId)),
   );
