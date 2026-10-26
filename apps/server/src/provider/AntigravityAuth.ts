@@ -19,6 +19,13 @@ import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRu
 import { parseAntigravityAuthorizationUrl } from "./antigravityAuthSupport.ts";
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
 
+// A healthy agent shows the Google link or finishes within seconds. Its bundled Python has no
+// IPv4 fallback race, so a host with broken IPv6 waits about two minutes per Google request.
+const NO_RESPONSE_HINT_MS = 30_000;
+const NO_RESPONSE_MESSAGE =
+  "Antigravity has not reached Google after 30 seconds. Check this machine's network connection. Broken IPv6 is a common cause.";
+const UNREACHABLE_MESSAGE =
+  "Antigravity could not reach Google. Check this machine's network connection, then start sign-in again.";
 const isSetupError = Schema.is(ProviderSetupError);
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
 
@@ -102,6 +109,8 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
       signOutTimedOut: "Antigravity sign-out timed out.",
       busy: "Antigravity setup is already in progress.",
       processBusy: "Antigravity sign-in or sign-out is in progress. Try again after it finishes.",
+      noResponse: { afterMs: NO_RESPONSE_HINT_MS, message: NO_RESPONSE_MESSAGE },
+      unreachable: UNREACHABLE_MESSAGE,
       describeFailure: (cause) => safeAuthFailure(cause, usesBrowser),
     },
     parseAuthorizationUrl: (url) =>

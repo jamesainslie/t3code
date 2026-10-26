@@ -2,11 +2,9 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * Items gained an issue `source` and linked `pullRequests`. The contract
- * decodes a missing source as null and a missing list as empty, so stored
- * events replay without an upgrade; this writes both fields into the item
- * projection so stored items match what the server now writes. Items that
- * already carry either field keep it.
+ * Items gained an issue `source` and linked `pullRequests`. Stored events already replay, since
+ * the contract decodes them as null and empty; this writes both into the item projection so
+ * stored items match what the server now writes. Items that already carry either field keep it.
  */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

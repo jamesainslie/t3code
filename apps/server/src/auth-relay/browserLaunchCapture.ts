@@ -11,14 +11,9 @@ import { collectUint8StreamText } from "@lathe/provider-core/server/collectStrea
 import { AuthRelayError } from "./AuthRelayError.ts";
 
 /**
- * `BROWSER` hijack for tools that open a sign-in page from the environment.
- *
- * The user is never at the environment, so a browser there is always wrong.
- * Instead `BROWSER` points at a tiny helper that writes the URL it was asked
- * to open to its stderr behind a marker, then exits successfully so the tool
- * believes the browser opened and keeps waiting for its callback. The process
- * that spawned the tool reads the marker line and relays the URL to the
- * client that owns the flow.
+ * `BROWSER` hijack for tools that open a sign-in page from the environment, where the user never
+ * is. The helper writes the URL to stderr behind a marker and exits successfully, so the tool
+ * keeps waiting for its callback; the spawning process relays the marked URL to the flow's client.
  */
 
 export const BROWSER_LAUNCH_URL_MAX_LENGTH = 16_384;
@@ -38,12 +33,10 @@ export interface BrowserLaunchCommand {
 }
 
 /**
- * Python splits `BROWSER` on the platform path separator before it parses
- * quotes, so the source keeps clear of both colons and semicolons. EPIPE
- * must still exit 0 so Python does not fall back to an OS browser after
- * cancellation. Python replaces `%s` with the URL; Go and shell tools append
- * it instead, so the helper reports the last argument that is not the
- * literal placeholder.
+ * Python splits `BROWSER` on the path separator before parsing quotes, so the source avoids colons
+ * and semicolons. EPIPE must still exit 0 or Python falls back to an OS browser after cancelling.
+ * Python substitutes `%s` while Go and shell tools append the URL, so the helper reports the last
+ * argument that is not the literal placeholder.
  */
 export function browserLaunchHelperSource(marker: string): string {
   return (
@@ -150,14 +143,10 @@ export const preflightBrowserLaunchCommand = Effect.fn("preflightBrowserLaunchCo
 });
 
 /**
- * Consumes a tool's stderr text and hands every helper-reported URL to
- * `onUrl`. Text is buffered across chunks, so a marker line may arrive in
- * pieces. Lines that are not marker lines, and marker lines that do not
- * decode, are dropped without logging: stderr can carry anything. Failures
- * from `onUrl` propagate so the flow owner can stop the process.
- *
- * `readLine` lets a caller recognize an extra native line format that also
- * carries the URL; it returns the URL for such a line, or `undefined`.
+ * Hands every helper-reported URL in a tool's stderr to `onUrl`, buffering marker lines split
+ * across chunks. Other lines and undecodable markers are dropped silently, since stderr can carry
+ * anything; `onUrl` failures propagate so the flow owner can stop the process. `readLine` lets a
+ * caller recognize an extra native line format, returning its URL or `undefined`.
  */
 export function makeBrowserLaunchStderrHandler<E>(input: {
   readonly marker: string;

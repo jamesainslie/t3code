@@ -1,60 +1,12 @@
 /**
- * Fork-only. The names the self-contained CLI is published and installed
- * under. Upstream calls the executable `t3` and its release archives
- * `t3-<version>-<platform>-<arch>`; the fork's executable is `lathe`
- * (`FORK_IDENTITY.cliBin`).
- *
- * Machines and remote hosts that run an older release keep fetching
- * `t3-<version>-...` archives and running `<runtime>/t3`, including for
- * releases published after the rename: older CLIs running `update`, older
- * desktops' SSH runners, and older servers' remote self-update. So the move
- * happens in two phases, and this module holds both names until the second.
- *
- * Phase 1 (now), readers first:
- *   - Every archive holds the executable as `lathe` and as `t3` (a relative
- *     symlink in tar.gz, a copy in zip; scripts/lib/forkCliArchive.ts), and the
- *     top-level directory inside keeps upstream's `t3-<version>-<platform>`
- *     stem, which pre-rename install.ps1 copies look up by name.
- *   - Each release publishes the same bytes as `lathe-...` and `t3-...`, both
- *     in SHA256SUMS (scripts/fork-cli-release-assets.ts).
- *   - Readers download whichever name SHA256SUMS lists, `lathe-` first, and
- *     run `<dir>/lathe`, falling back to `<dir>/t3` for runtimes unpacked
- *     before the rename.
- *   - The npm launcher (`bin/lathe.mjs`, built from scripts/npm-launcher/lathe.mjs)
- *     downloads its exact version's archive from the release like the
- *     installers do, so it is a reader too: `lathe-` first, then `<dir>/lathe`
- *     or `<dir>/t3`.
- *   - The Windows desktop's WSL runtime runs `lathe` with no fallback: its
- *     archive is bundled by the same build and its cache is keyed by that
- *     archive's digest, so no older tree is ever selected.
- *
- * Phase 2 checklist (a later release, once every machine and remote host runs a
- * phase 1 release or newer, so nothing fetches `t3-*` or runs `<new runtime>/t3`):
- *   - Writers: stop writing the `t3` alias (scripts/lib/forkCliArchive.ts) and
- *     the `t3-*` asset copies (scripts/fork-cli-release-assets.ts, and the
- *     comment on its step in .github/workflows/release-fork.yml).
- *   - Asset names: drop `LEGACY_CLI_NAME` from `forkCliArchiveFileNames` and
- *     `forkCliArchiveShell`, and the `t3` candidate from the loops in
- *     scripts/install.sh and scripts/install.ps1. Releases from before phase 1
- *     then install only through an older installer or npm.
- *   - Stem: rename it to `lathe-<version>-<platform>` (`cliArchiveStem` in
- *     scripts/build-cli-archive.ts, `wslRuntimeArchiveStem` in
- *     scripts/build-desktop-artifact.ts), and first make install.ps1 move the
- *     archive's single top-level directory instead of looking up `$stem`.
- *   - npm: drop the `t3` candidates from scripts/npm-launcher/lathe.mjs.
- *   - Executables: keep the `t3` fallback in `forkCliExecutableNames` and both
- *     installers' executable pickers for as long as a `runtime/versions/<v>`
- *     unpacked before phase 1 can still start (service rollback, an existing
- *     boot unit, `update --allow-downgrade`, a remote's cached runtime). It
- *     costs one existence check; drop it last, or never.
- *   - Then delete whatever no longer has a second name to choose from here.
- *
- * Dependency-free so every runtime (server, desktop, scripts, mobile through
- * cliRelease) can import it.
+ * Fork-only, dependency-free (every runtime imports it). The CLI ships as `lathe` and keeps
+ * upstream's `t3` names because older CLIs, SSH runners and self-updating servers still fetch
+ * `t3-*` archives and run `<runtime>/t3`. Drop `t3` only once every host runs a dual-name release,
+ * and keep the `t3` executable fallback last, for runtimes unpacked before the rename.
  */
 import { FORK_IDENTITY } from "./forkIdentity.ts";
 
-/** Upstream's executable name and archive prefix. Phase 2 removes it. */
+/** Upstream's executable name and archive prefix, kept for pre-rename readers. */
 const LEGACY_CLI_NAME = "t3";
 
 /** Executable base names, the one to run first. */

@@ -12,11 +12,9 @@ import { selectProxySource } from "./ProxyUsagePill.logic";
 import { proxyLoginPanelAtom } from "./proxyLoginRequest";
 
 /**
- * Fork-only: tells the user when a gateway account needs a login, so a dead
- * credential surfaces before a turn stalls on it. Follows the same rules as
- * thread notifications: a toast while the window has focus, a desktop
- * notification (when enabled) while it does not. Either one opens the
- * gateway pill on that account's login panel.
+ * Fork-only: tells the user when a gateway account needs a login, so a dead credential surfaces
+ * before a turn stalls on it. Like thread notifications: a toast while the window has focus, a
+ * desktop notification (when enabled) otherwise. Either one opens that account's login panel.
  */
 export function ProxyLoginAlertCoordinator() {
   const configs = useAtomValue(environmentServerConfigsAtom);

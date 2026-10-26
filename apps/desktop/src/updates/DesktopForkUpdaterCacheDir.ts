@@ -14,12 +14,10 @@ export function withForkUpdaterCacheDir(raw: string, dirName: string): string {
 }
 
 /**
- * Fork-only. electron-builder writes `updaterCacheDirName` from the bundled
- * package.json name, which stays `t3code` because it names the keychain item,
- * and offers no override. Lathe and upstream Lathe therefore shared one
- * download cache and replaced each other's pending updates. This points the
- * updater at a copy of the bundled feed with Lathe's own cache directory. An
- * app without a bundled feed (dev, preview builds) is left alone.
+ * Fork-only. electron-builder derives `updaterCacheDirName` from the bundled package.json name,
+ * which stays `t3code` because it names the keychain item, so Lathe and upstream would share one
+ * download cache and replace each other's pending updates. This points the updater at a copy of
+ * the bundled feed with Lathe's own cache directory; builds without a bundled feed are left alone.
  */
 export const applyForkUpdaterCacheDir = Effect.fn("desktop.updates.applyForkUpdaterCacheDir")(
   function* (input: {

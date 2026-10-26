@@ -28,9 +28,9 @@ const TerminalText = memo(function TerminalText({ text }: { readonly text: strin
     if (fg === undefined && bg === undefined && !bold && !dim && !italic && !underline) {
       return segment.text;
     }
-    // Segments never reorder for a given output, so their index is a stable key.
     return (
       <span
+        // oxlint-disable-next-line react/no-array-index-key -- segments never reorder for one output
         key={index}
         className={cn(
           bold && "font-semibold",

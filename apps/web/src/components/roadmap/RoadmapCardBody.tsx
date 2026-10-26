@@ -37,6 +37,7 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
+import { useNowMinute } from "~/hooks/useNowMinute";
 import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
 import ChatMarkdown from "../ChatMarkdown";
 import { cn, randomUUID } from "~/lib/utils";
@@ -795,7 +796,8 @@ export function RoadmapItemDetails(
   const { item, items, sprints, areaSettings, canChange, onOpenItem, onUpdate } = props;
   const full = !props.essentialsOnly;
   const readOnlyHint = roadmapReadOnlyHint(item);
-  const today = localIsoDate(new Date());
+  const nowMinute = useNowMinute();
+  const today = localIsoDate(new Date(`${nowMinute}Z`));
   const byId = roadmapItemsById(items);
   const priority = effectivePriority(item.id, byId);
   const area = effectiveArea(item.id, byId);

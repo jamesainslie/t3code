@@ -9,16 +9,10 @@ import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 
 /**
- * Small helpers the SSH launch script needs on the remote host. The script
- * used to run these as inline `node -` snippets; archive-distributed runtimes
- * have no Node on the remote, so the executable provides them instead. Output
- * and exit codes match the snippets exactly because the shell script parses
- * them.
- *
- * The launch script runs several of these per reconnect, so bin.ts dispatches
- * them here before the full CLI graph loads. Keep this module on Node
- * built-ins only; `__ssh-helper` in ./sshHelper.ts wraps the same functions
- * for help and for anything that drives the full CLI.
+ * Helpers the SSH launch script needs on the remote host, where archive-distributed runtimes have
+ * no Node. Output and exit codes must match the old `node -` snippets because the script parses
+ * them. bin.ts dispatches these before the full CLI graph loads, so keep this module on Node
+ * built-ins only; `__ssh-helper` in ./sshHelper.ts wraps the same functions for the full CLI.
  */
 
 const canBind = (port: number) =>

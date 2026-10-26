@@ -7,11 +7,10 @@ export async function openReadOnlyDatabase(filename: string) {
 }
 
 /**
- * Copies a database that another connection in this process may hold open,
- * including committed WAL pages, into a private destination file. `VACUUM
- * INTO` runs synchronously on the read-only connection: `node:sqlite`'s async
- * `backup()` only settles when something else wakes the event loop, so an
- * otherwise idle Effect fiber awaiting it hangs.
+ * Copies a database another connection in this process may hold open, committed WAL pages
+ * included, into a private file. `VACUUM INTO` runs synchronously on the read-only connection
+ * because `node:sqlite`'s async `backup()` only settles when something else wakes the event loop,
+ * so an otherwise idle fiber awaiting it hangs.
  */
 export async function snapshotDatabase(source: string, destination: string): Promise<void> {
   const db = await openReadOnlyDatabase(source);

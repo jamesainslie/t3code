@@ -29,11 +29,10 @@ function visibleText(node: TextTreeNode): string {
 }
 
 /**
- * Gives every heading the id GitHub would, so a document's own `#section`
- * links (a table of contents, a "see below") land on the heading they name.
- * The sanitizer later prefixes these with `user-content-`, which the fragment
- * click handler already looks through. A section of a longer document passes
- * the headings before it, so a repeated heading keeps the document's count.
+ * Gives every heading the id GitHub would, so a document's own `#section` links land on the heading
+ * they name. The sanitizer later prefixes these with `user-content-`, which the fragment click
+ * handler looks through. A section of a longer document passes the headings before it, so a
+ * repeated heading keeps the document's count.
  */
 export function remarkHeadingIds(options?: { readonly precedingHeadings?: ReadonlyArray<string> }) {
   return (tree: MarkdownAstNode) => {
@@ -182,13 +181,10 @@ function atxHeadingText(line: string): string | null {
 }
 
 /**
- * Splits a long markdown file into sections that render one at a time, so a
- * large document never blocks the page while it parses. A cut falls only on a
- * blank line before an unindented block, which ends whatever came before it,
- * and never inside a code fence, display math, an HTML comment or `<details>`,
- * nor between list items. Each section repeats the document's one-line link
- * reference definitions, which markdown resolves document-wide. Footnotes and
- * setext headings stay local to their section.
+ * Splits a long markdown file into sections that render one at a time so parsing never blocks the
+ * page. A cut falls only on a blank line before an unindented block, never inside a code fence,
+ * display math, an HTML comment or `<details>`, nor between list items. Link reference definitions
+ * resolve document-wide, so each section repeats them; footnotes and setext headings stay local.
  */
 export function splitMarkdownDocument(
   markdown: string,

@@ -112,11 +112,9 @@ interface OwnedMaster {
 }
 
 /**
- * How `acquire` found a target's master: kept a healthy one, started one,
- * gave up on masters for this target for good (`unavailable`), could not start
- * one this time and will try again on the next acquire (`failed`), or has none
- * to give because no socket directory was configured or the platform has no
- * masters. `reason` says why there is no master.
+ * How `acquire` found a target's master: kept or started one, gave up on this target for good
+ * (`unavailable`), failed this time and retries on the next acquire (`failed`), or has none because
+ * no socket directory is configured or the platform has no masters. `reason` says why.
  */
 export type ControlMasterOutcome =
   | { readonly socketPath: string; readonly decision: "reused" | "created" }
@@ -139,13 +137,10 @@ interface ControlMasterRequest<E, R> {
 }
 
 /**
- * One owned ssh ControlMaster per target, so one-shot commands share a
- * connection whose health Lathe checks itself instead of trusting whatever
- * ~/.ssh/config set up. Callers hold the target's lock around every call.
- *
- * The master is a foreground `ssh -N` child: `ControlPersist` would make ssh
- * fork into the background after authenticating, leaving a master no process
- * handle owns. A master left by a crash is told to exit on the next start.
+ * One owned ssh ControlMaster per target, so one-shot commands share a connection whose health
+ * Lathe checks itself instead of trusting ~/.ssh/config. Callers hold the target's lock around
+ * every call. The master is a foreground `ssh -N` child because `ControlPersist` would background
+ * it with no owning handle; a master left by a crash is told to exit on the next start.
  */
 export const make = Effect.fn("ssh/controlMaster.make")(function* (options: {
   readonly directory: string | undefined;

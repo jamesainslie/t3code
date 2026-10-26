@@ -425,10 +425,18 @@ const make = Effect.gen(function* () {
     submit,
     linkStatus,
     configureLink,
-    list: () => snapshot().pipe(Effect.map((current) => current.items)),
-    listSprints: () => snapshot().pipe(Effect.map((current) => current.sprints)),
-    localRecords: () => store.list({ includeDeleted: true }).pipe(Effect.mapError(readFailed)),
-    get: (itemId) => item(itemId).pipe(Effect.map((read) => Option.fromNullOr(read.item))),
+    list: Effect.fn("RoadmapService.list")(() =>
+      snapshot().pipe(Effect.map((current) => current.items)),
+    ),
+    listSprints: Effect.fn("RoadmapService.listSprints")(() =>
+      snapshot().pipe(Effect.map((current) => current.sprints)),
+    ),
+    localRecords: Effect.fn("RoadmapService.localRecords")(() =>
+      store.list({ includeDeleted: true }).pipe(Effect.mapError(readFailed)),
+    ),
+    get: Effect.fn("RoadmapService.get")((itemId: RoadmapItemId) =>
+      item(itemId).pipe(Effect.map((read) => Option.fromNullOr(read.item))),
+    ),
     forThread,
     snapshot,
     item,

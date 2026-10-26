@@ -360,11 +360,9 @@ export interface TodayLastOpenedStore {
 }
 
 /**
- * The "Newly unblocked" baseline for each home, fixed for one page load.
- * Today remounts whenever the user switches roadmap tabs, so recording each
- * mount as the last visit would make the next mount compare against a moment
- * ago and drop everything it had just shown. Only the first visit in a page
- * load reads the stored time and records itself.
+ * The "Newly unblocked" baseline for each home, fixed for one page load. Today remounts on every
+ * roadmap tab switch, so recording each mount as the last visit would compare against a moment
+ * ago and drop everything just shown. Only a page load's first visit reads and records the time.
  */
 export function createTodayBaselines(
   store: TodayLastOpenedStore,

@@ -1,6 +1,7 @@
 import { type ChatEventTimestampStyle, DEFAULT_UNIFIED_SETTINGS } from "@lathe/contracts/settings";
 
 import { formatChatEventTimestamp } from "../../chatEventTimestamps";
+import { useNowMinute } from "../../hooks/useNowMinute";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";
@@ -21,7 +22,8 @@ export function ChatEventTimestampSettings() {
   const seconds = useScopedSettings((settings) => settings.chatEventTimestampSeconds);
   const timestampFormat = useScopedSettings((settings) => settings.timestampFormat);
   const updateSettings = useUpdateScopedSettings();
-  const example = formatChatEventTimestamp(new Date().toISOString(), timestampFormat, {
+  const nowMinute = useNowMinute();
+  const example = formatChatEventTimestamp(`${nowMinute}:00.000Z`, timestampFormat, {
     style,
     seconds,
   });

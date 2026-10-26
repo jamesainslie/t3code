@@ -1,11 +1,8 @@
 /**
- * Fork: roadmap. The Timeline tab: dated work on a calendar with forecasts,
- * blockers and sprints. The page owns the area filter and the selected item.
- *
- * Every row is drawn, without windowing: rows are only the dated items of one
- * person's roadmap, each costs a handful of elements, rows are memoized so a
- * selection change re-renders two of them, and the vertical scroller belongs
- * to the page. Elements scale with rows, never with days.
+ * Fork: roadmap. The Timeline tab: dated work on a calendar with forecasts, blockers and sprints.
+ * The page owns the area filter, the selected item and the vertical scroller. Rows skip windowing:
+ * they are one person's dated items, cheap, and memoized so a selection re-renders two of them.
+ * Elements scale with rows, never with days.
  */
 import {
   defaultTimelineRange,

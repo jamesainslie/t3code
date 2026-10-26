@@ -16,18 +16,10 @@ import * as Scope from "effect/Scope";
 import { AUTH_RELAY_RETURN_PAGE_HTML } from "./AuthRelayReturnPage.ts";
 
 /**
- * Stands in for a sign-in's loopback listener on the client machine.
- *
- * The listener the tool opened lives on the environment and is unreachable
- * from here, so while a capture is pending the desktop binds the same port
- * locally and takes whatever the browser sends back: a GET carrying the code
- * in its query, or the form POST Entra makes with `response_mode=form_post`,
- * whose body no pasted URL could ever carry. Any browser on this machine
- * reaches it, not only an in-app tab.
- *
- * Hosting is best effort. When the port is already taken, `hosted` is false
- * and the caller falls back to the in-app tab interception plus the paste
- * field, which still cover the GET case.
+ * Stands in for a sign-in's loopback listener on the client machine: the tool's listener lives on
+ * the environment, so while a capture is pending the desktop binds the same port and takes the GET
+ * query or Entra's `response_mode=form_post` POST from any browser here. Best effort: when the
+ * port is taken, `hosted` is false and the caller falls back to tab interception plus paste.
  */
 export type AuthRelayCallbackListener = (
   event: DesktopPreviewAuthRelayCallback,
@@ -120,13 +112,13 @@ const make = Effect.gen(function* AuthRelayLoopbackHostMake() {
       listeners,
       (listener) =>
         listener(event).pipe(
-          Effect.catchCause((cause) =>
-            Cause.hasInterrupts(cause)
-              ? Effect.failCause(cause)
-              : Effect.logWarning("Desktop auth relay host listener failed.", {
-                  hostId: event.hostId,
-                  cause,
-                }),
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterrupts(cause),
+            (cause) =>
+              Effect.logWarning("Desktop auth relay host listener failed.", {
+                hostId: event.hostId,
+                cause,
+              }),
           ),
         ),
       { discard: true },
@@ -283,7 +275,7 @@ const make = Effect.gen(function* AuthRelayLoopbackHostMake() {
   return AuthRelayLoopbackHost.of({
     host,
     release,
-    subscribe: (listener) =>
+    subscribe: Effect.fn("AuthRelayLoopbackHost.subscribe")((listener: AuthRelayCallbackListener) =>
       Effect.acquireRelease(
         Ref.update(listenersRef, (listeners) => new Set([...listeners, listener])),
         () =>
@@ -293,6 +285,7 @@ const make = Effect.gen(function* AuthRelayLoopbackHostMake() {
             return next;
           }),
       ).pipe(Effect.asVoid),
+    ),
   });
 }).pipe(Effect.withSpan("AuthRelayLoopbackHost.make"));
 

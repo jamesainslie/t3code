@@ -17,7 +17,7 @@ import {
 import { classifyMarkdownImageSource } from "@lathe/client-runtime/markdown-images";
 import { resolveMediaSource } from "@lathe/client-runtime/media-source";
 import { sourceControlClients } from "@lathe/client-runtime/source-control-clients";
-import { isWorkspaceImagePreviewPath } from "@lathe/shared/filePreview";
+import { isWorkspaceImagePreviewPath } from "@lathe/shared/mediaPreview";
 import { formatTokens } from "@lathe/shared/usageFormat";
 import { classifyToolActivity } from "@lathe/shared/toolActivity";
 import { toolOutputIndicatesFailure } from "@lathe/shared/toolOutput";
@@ -232,10 +232,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function nonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function workLogEntryIsToolLike(entry: WorkLogPresentationEntry): boolean {
@@ -490,6 +486,7 @@ function summaryActionPriority(action: ToolGroupAction | LatheMcpToolSummaryActi
     case "thread-send":
     case "thread-interrupt":
     case "workflow-stop":
+    case "background-wait":
     case "schedule-create":
     case "schedule-update":
     case "schedule-delete":

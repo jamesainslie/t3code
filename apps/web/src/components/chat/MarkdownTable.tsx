@@ -1,7 +1,8 @@
 import { Check, Copy } from "lucide";
 import { WrapTextIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { getClientSettings } from "../../hooks/useSettings";
 import {
   serializeTableElementToCsv,
@@ -22,46 +23,24 @@ import { reportMarkdownActionFailure } from "./markdownActionFailure";
 export function MarkdownTable({ children, ...props }: ComponentProps<"table">) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wrapped, setWrapped] = useState(() => getClientSettings().wordWrap);
-  const [copied, setCopied] = useState(false);
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { copyToClipboard, isCopied: copied } = useCopyToClipboard<"markdown" | "csv">({
+    timeout: 1200,
+    onError: (cause, format) =>
+      reportMarkdownActionFailure({ operation: "copy-table", format }, cause),
+  });
   const wrapLabel = wrapped ? "Disable line wrap" : "Wrap lines";
   const copyLabel = copied ? "Copied" : "Copy table";
 
   const handleCopy = (format: "markdown" | "csv") => {
     const table = containerRef.current?.querySelector("table");
-    if (!table || typeof navigator === "undefined" || navigator.clipboard == null) {
-      return;
-    }
-    const text =
+    if (!table) return;
+    copyToClipboard(
       format === "markdown"
         ? serializeTableElementToMarkdown(table)
-        : serializeTableElementToCsv(table);
-    void navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        if (copiedTimerRef.current != null) {
-          clearTimeout(copiedTimerRef.current);
-        }
-        setCopied(true);
-        copiedTimerRef.current = setTimeout(() => {
-          setCopied(false);
-          copiedTimerRef.current = null;
-        }, 1200);
-      })
-      .catch((cause) => {
-        reportMarkdownActionFailure({ operation: "copy-table", format }, cause);
-      });
+        : serializeTableElementToCsv(table),
+      format,
+    );
   };
-
-  useEffect(
-    () => () => {
-      if (copiedTimerRef.current != null) {
-        clearTimeout(copiedTimerRef.current);
-        copiedTimerRef.current = null;
-      }
-    },
-    [],
-  );
 
   return (
     <div
@@ -72,7 +51,8 @@ export function MarkdownTable({ children, ...props }: ComponentProps<"table">) {
       <ScrollArea radius="none" chainVerticalScroll scrollFade className="w-full max-w-full">
         <table {...props}>{children}</table>
       </ScrollArea>
-      <div className="mt-0.5 flex items-center justify-between select-none">
+      {/* Stays within the row's px-1: the chat lane clips sideways overflow. */}
+      <div className="mt-0.5 -mx-1 flex items-center justify-between select-none">
         <Tooltip>
           <TooltipTrigger
             render={

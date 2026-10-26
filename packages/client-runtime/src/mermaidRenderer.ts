@@ -73,11 +73,9 @@ function config(theme: "dark" | "light"): MermaidConfig {
 }
 
 /**
- * Mermaid emits its root as `width="100%"` with a `max-width` style and a
- * viewBox. Shown through an <img>, that root fills the image box and the
- * drawing sits at its left edge, so the diagram cannot be centered. Pin the
- * root to its viewBox size instead; the image then has natural dimensions
- * and the viewer scales and centers it like any other picture.
+ * Mermaid's root is `width="100%"` with a `max-width` style, so inside an <img> it fills the box
+ * and the drawing sits at the left edge. Pinning the root to its viewBox size gives the image
+ * natural dimensions, so the viewer scales and centers it like any other picture.
  */
 export function sizeMermaidSvg(svg: string): string {
   return svg.replace(/<svg\b[^>]*>/, (root) => {

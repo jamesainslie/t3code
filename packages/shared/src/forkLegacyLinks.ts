@@ -1,9 +1,7 @@
 /**
- * Fork-only. Lathe's in-app links use the schemes lathe-citation:,
- * lathe-thread: and lathe-context:; before the rename they used t3-*.
- * Messages, drafts and transcripts stored before the rename hold the old
- * links, so the link readers accept both and treat an old link as its Lathe
- * form. Writers only ever produce the Lathe form.
+ * Fork-only. Lathe links use the lathe-citation:, lathe-thread: and lathe-context: schemes, but
+ * messages, drafts and transcripts stored before the rename hold t3-* links, so readers accept
+ * both and treat an old link as its Lathe form. Writers only ever produce the Lathe form.
  */
 const LEGACY_LINK_SCHEME = /^t3-(citation|thread|context):/;
 

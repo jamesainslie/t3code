@@ -1,8 +1,6 @@
-// Fork-only. Lathe's renderer storage keys start with "lathe:" and "lathe.";
-// before the rename they started with "t3code:", "t3code.", "t3:" and "t3.".
-// index.html loads this before any other script, so the app finds what an
-// earlier build saved under the new key. A key already saved under its new
-// name wins, and the old keys stay for an older build.
+// Fork-only. index.html loads this before any other script, so keys a pre-rename build saved
+// under "t3code:", "t3code.", "t3:" or "t3." are found under their "lathe:" or "lathe." name.
+// A key already saved under its new name wins, and the old keys stay for an older build.
 (() => {
   const RENAMES = [
     ["t3code:", "lathe:"],

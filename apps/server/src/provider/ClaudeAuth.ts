@@ -97,11 +97,9 @@ const readStdoutUrls = (text: string): ReadonlyArray<string> =>
   Array.from(text.matchAll(/https:\/\/[^\s"'<>]+/g), (match) => match[0]);
 
 /**
- * Claude sign-in by driving `claude auth login` as a child process. The URL
- * is captured from the `BROWSER` helper or from stdout, whichever fires
- * first; the pasted code goes to the child's stdin, matching the CLI's own
- * prompt. Success is the child exiting zero, after which the snapshot is
- * re-probed so the account shows up.
+ * Claude sign-in by driving `claude auth login` as a child process. The URL comes from the
+ * `BROWSER` helper or stdout, whichever fires first; the pasted code goes to stdin, matching the
+ * CLI's own prompt. Success is the child exiting zero, after which the snapshot is re-probed.
  */
 export const makeClaudeAuth = Effect.fn("makeClaudeAuth")(function* (
   options: ClaudeAuthOptions,

@@ -918,11 +918,10 @@ describe("archive runner script", () => {
 
   const runRunner = (home: string, runner: string) => runScript(home, [runner, "--version"]);
 
-  // Fork: a current release publishes the archive as lathe-* and t3-*, holding
-  // `lathe` and `t3`; a release from before the rename has only t3-* holding only
-  // `t3`. Each executable names itself, and the current release's t3-* asset is a
-  // pre-rename archive, so the output shows which asset and which executable the
-  // runner chose.
+  // Fork: a current release publishes lathe-* and t3-* archives holding `lathe` and `t3`; a
+  // pre-rename release has only t3-* holding `t3`. The current t3-* asset is a pre-rename archive
+  // and each executable names itself, so the output shows which asset and executable the runner
+  // chose.
   const makeMirror = Effect.fn("makeMirror")(function* (
     root: string,
     release_: "current" | "pre-rename" = "current",

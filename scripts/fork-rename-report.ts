@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 /**
- * Fork-only. Classifies every `t3` (any case) in the tracked files with the
- * rules in scripts/lib/forkRenameRules.ts and writes a Markdown report: totals
- * per class, each rule's occurrences, and every occurrence no rule covers.
- * Exits non-zero while anything is unclassified, so a sync stops until a
- * person decides what new upstream names mean. It edits nothing.
- *
- *   node scripts/fork-rename-report.ts --output fork-rename-report.md
+ * Fork-only. Classifies every `t3` (any case) in tracked files with scripts/lib/forkRenameRules.ts
+ * and writes a Markdown report (`--output <file>`): totals per class, each rule's occurrences and
+ * every unclassified occurrence. Exits non-zero while anything is unclassified, so a sync stops
+ * until a person decides what new upstream names mean. It edits nothing.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";

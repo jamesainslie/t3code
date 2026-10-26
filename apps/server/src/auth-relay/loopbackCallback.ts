@@ -33,11 +33,9 @@ export type LoopbackCallbackForwarder = (
 export type LoopbackResponseMode = "query" | "form_post";
 
 /**
- * How the client's pasted return value reaches the tool once the user has
- * signed in on the page. Loopback: replay the return URL against the tool's
- * listener. Code: the page shows a code (or lands on a hosted callback URL)
- * that the tool takes on stdin. None: the tool finishes on its own, as with
- * device codes.
+ * How the client's pasted return reaches the tool after sign-in. Loopback: replay the return URL
+ * against the tool's listener. Code: the page shows a code (or lands on a hosted callback URL)
+ * that the tool takes on stdin. None: the tool finishes on its own, as with device codes.
  */
 export type AuthorizationCompletion =
   | { readonly kind: "loopback"; readonly callback: PendingLoopbackCallback }
@@ -93,12 +91,10 @@ export function parseLoopbackRedirectUri(value: string): URL | null {
 }
 
 /**
- * The listener an authorization request names in its own query, when it is
- * one Lathe can replay to. `state` rides along only with such a listener, since
- * it is only checked against that listener's callback. `responseMode` is how
- * the listener asked for its response; only `form_post` changes anything,
- * because the browser then posts the result instead of loading a URL a user
- * could copy.
+ * The listener an authorization request names in its own query, when Lathe can replay to it.
+ * `state` rides along only with such a listener, since only its callback checks it. Of the
+ * `responseMode` values only `form_post` matters: the browser then posts the result instead of
+ * loading a URL a user could copy.
  */
 export function readAuthorizationRequestCallback(url: URL): {
   readonly redirectUri: string | null;
@@ -278,11 +274,9 @@ export const validateLoopbackCallbackUrl = Effect.fn("validateLoopbackCallbackUr
 });
 
 /**
- * Accepts a form response a client-side listener caught: the posted-to
- * address must be the listener's (or any loopback origin when none was
- * advertised) with nothing in its query, and the urlencoded body must carry
- * the registered state and exactly one OAuth response. Failures never quote
- * the body.
+ * Accepts a form response a client-side listener caught. The posted-to address must be the
+ * listener's (any loopback origin when none was advertised) with an empty query, and the body
+ * must carry the registered state and exactly one OAuth response. Failures never quote the body.
  */
 export const validateLoopbackCallbackForm = Effect.fn("validateLoopbackCallbackForm")(function* (
   pending: PendingLoopbackCallback | null,

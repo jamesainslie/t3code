@@ -496,20 +496,22 @@ export class ProjectSyncService extends Context.Service<
         return yield* status;
       });
       return ProjectSyncService.of({
-        execute: (request) =>
-          mutex.withPermits(1)(
-            executeUnlocked(request).pipe(
-              Effect.provideService(SqlClient.SqlClient, sql),
-              Effect.mapError(error),
-              Effect.tapError((failure) =>
-                Effect.gen(function* () {
-                  if (request.operation === "status" || request.operation === "preview") return;
-                  const current = yield* readConfiguration;
-                  yield* saveConfiguration({ ...current, lastError: failure.message });
-                }).pipe(Effect.catch(() => Effect.void)),
+        execute: Effect.fn("ProjectSyncService.execute")(
+          (request: ProjectSyncRequest | { operation: "scheduled" }) =>
+            mutex.withPermits(1)(
+              executeUnlocked(request).pipe(
+                Effect.provideService(SqlClient.SqlClient, sql),
+                Effect.mapError(error),
+                Effect.tapError((failure) =>
+                  Effect.gen(function* () {
+                    if (request.operation === "status" || request.operation === "preview") return;
+                    const current = yield* readConfiguration;
+                    yield* saveConfiguration({ ...current, lastError: failure.message });
+                  }).pipe(Effect.ignore),
+                ),
               ),
             ),
-          ),
+        ),
       });
     }),
   );

@@ -1,10 +1,7 @@
-// Procedural artwork for the fork's stage editions. `export-edition-art.ts` renders these
-// into the web strips and the desktop icons; everything is seeded, so a rerun reproduces
-// the committed files byte for byte.
-//
-// Text is drawn from pixel glyph paths rather than <text>: the strips load as images, which
-// cannot use the page's fonts, and katakana would render as tofu on machines without CJK
-// fonts.
+// Procedural artwork for the fork's stage editions, rendered by `export-edition-art.ts` into the
+// web strips and desktop icons. Everything is seeded, so a rerun reproduces the committed files
+// byte for byte. Text uses pixel glyph paths, not <text>: the strips load as images, which cannot
+// use the page's fonts, and katakana would render as tofu on machines without CJK fonts.
 
 export const GENERATED_EDITIONS = [
   "lathe",

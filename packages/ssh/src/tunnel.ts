@@ -59,12 +59,9 @@ const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
 const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
-// A cold archive launch also downloads and unpacks a ~70 MB release archive
-// and may wait on another installer's lock. The budgets nest: the checksum
-// file is tiny and the archive download is bounded; a waiter outlasts both
-// downloads plus extraction so it can reuse the result; and the SSH command
-// outlasts an install (own or waited-for) plus readiness, with slack for
-// verification and extraction, which have no timeout of their own.
+// Cold archive launches download and extract ~70 MB and may wait on an install lock.
+// Lock waits must outlast both downloads and extraction; SSH must outlast install or wait plus readiness.
+// Leave slack for verification and extraction, which have no timeout.
 const REMOTE_ARCHIVE_CHECKSUMS_SECONDS = 30;
 const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
@@ -2021,11 +2018,10 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         });
       }).pipe(Effect.ignore),
     );
-    // A tunnel whose ssh exits on its own leaves the map, so the next ensure
-    // creates one instead of probing a dead port. The entry is gone before its
-    // scope closes, so the finalizer skips the remote stop; a managed server
-    // is still stopped at shutdown through `managedRemotes`. Forked after the
-    // finalizer so a normal close interrupts this watcher before the kill.
+    // A tunnel whose ssh exits on its own leaves the map, so the next ensure creates one instead
+    // of probing a dead port; its finalizer then skips the remote stop, and `managedRemotes` still
+    // stops a managed server at shutdown. Forked after the finalizer so a normal close interrupts
+    // this watcher before the kill.
     yield* tunnelEntry.process.exitCode.pipe(
       Effect.ignore,
       Effect.andThen(

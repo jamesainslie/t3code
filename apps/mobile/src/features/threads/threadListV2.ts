@@ -67,6 +67,7 @@ export function resolveThreadListV2ProviderDrivers(
 export type ThreadListV2Status =
   | "approval"
   | "input"
+  | "request"
   | "working"
   | "waiting"
   | "failed"
@@ -192,6 +193,7 @@ export function resolveThreadListV2Status(
     | "hasPendingApprovals"
     | "hasPendingUserInput"
     | "pendingSubagentRequest"
+    | "pendingGuestMessageCount"
     | "runtime"
     | "blockedOnThreadWait"
   >,
@@ -201,6 +203,10 @@ export function resolveThreadListV2Status(
   }
   if (thread.hasPendingUserInput || thread.pendingSubagentRequest === "user_input") {
     return "input";
+  }
+  // A guest is waiting on the owner; the agent's own requests come first.
+  if ((thread.pendingGuestMessageCount ?? 0) > 0) {
+    return "request";
   }
   if (thread.runtime?.status === "running" && thread.blockedOnThreadWait === true) {
     return "waiting";
@@ -301,6 +307,8 @@ export interface ThreadListV2Item {
 export interface ThreadListV2Layout {
   readonly items: ThreadListV2Item[];
   readonly hiddenSettledCount: number;
+  /** The settled rows the shelf may list, before its visible limit. */
+  readonly listedSettledThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly workingCount: number;
   readonly workingShelfHeaderIndex: number | null;
   readonly snoozedCount: number;
@@ -312,10 +320,7 @@ export interface ThreadListV2Layout {
   readonly snoozedShelfHeaderIndex: number | null;
   readonly settledCount: number;
   readonly settledShelfHeaderIndex: number | null;
-  /**
-   * Callers arm a timeout at this boundary so the list re-partitions the moment
-   * a snooze expires instead of on the next minute tick.
-   */
+  /** Arm a timeout here to repartition at snooze expiry rather than the next minute tick. */
   readonly nextSnoozeWakeAt: string | null;
   /** Threads listed only because their messages match the search. */
   readonly contentOnlyThreadKeys: ReadonlySet<string>;
@@ -329,11 +334,7 @@ export interface ThreadListV2ThreadListItem {
   readonly timeLabel: string;
   readonly snoozePresetMinute: string | undefined;
   readonly showTrailingDivider: boolean;
-  /**
-   * Carried on the item so an outbox write (which never touches the thread
-   * shell) reaches the row through recycled-list equality instead of leaving a
-   * stale icon.
-   */
+  /** Include queued state in item equality; outbox writes do not update thread shells. */
   readonly hasQueuedMessages: boolean;
   readonly canMoveUp: boolean;
   readonly canMoveDown: boolean;
@@ -370,11 +371,7 @@ export interface ThreadListV2SnoozedShelfListItem {
   readonly key: "v2-snoozed-shelf";
   readonly count: number;
   readonly expanded: boolean;
-  /**
-   * Carried on the item because a recycled cell ignores the render closure —
-   * without it the header would stay visibly disabled (or enabled too early)
-   * after the preference load lands.
-   */
+  /** Include disabled state in item equality; recycled cells ignore render-closure updates. */
   readonly disabled: boolean;
 }
 
@@ -407,11 +404,7 @@ export function isThreadListV2ListItem(value: {
   );
 }
 
-/**
- * Item objects are rebuilt on every minute tick and every partition run;
- * without this the lists would consider every mounted row changed and re-render
- * all of them (each carrying a swipeable + a PR subscription).
- */
+/** Compare rebuilt items by content so minute ticks and partition runs do not re-render every mounted row. */
 export function threadListV2ListItemsAreEqual(
   previous: ThreadListV2ListItem,
   item: ThreadListV2ListItem,
@@ -526,9 +519,7 @@ export function buildThreadListV2ListItems(input: {
       item.snoozed && item.thread.snoozedUntil != null && input.snoozeLabelNow !== undefined
         ? snoozeWakeLabel(item.thread.snoozedUntil, { now: input.snoozeLabelNow })
         : undefined;
-    // The minute clock belongs on the item, not the list's extraData, so the
-    // recycler's equality can confine the per-minute re-render to rows whose
-    // snooze menu actually shows preset times.
+    // Put the clock on items so recycler equality limits ticks to rows displaying snooze preset times.
     const snoozePresetMinute =
       !item.snoozed &&
       input.snoozeLabelNow !== undefined &&
@@ -626,8 +617,7 @@ export function buildThreadListV2ListItems(input: {
   });
 }
 
-// Shells are immutable and the settled sort reads only their own fields, so an
-// element-identical input has an identical output.
+// Immutable shells and field-only sorting make element-identical inputs produce identical output.
 let lastSettledInput: ReadonlyArray<EnvironmentThreadShell> = [];
 let lastSettledOutput: ReadonlyArray<EnvironmentThreadShell> = [];
 
@@ -669,6 +659,7 @@ export function buildThreadListV2Items(input: {
   readonly now: string;
   readonly workingShelfEnabled?: boolean;
   readonly workingShelfExpanded?: boolean;
+  readonly isWorking?: (thread: EnvironmentThreadShell) => boolean;
   readonly inboxReturnAt?: (thread: EnvironmentThreadShell) => number | undefined;
   /** Fork: expands the Depends on shelf into rows. Collapsed is the default. */
   readonly blockedShelfExpanded?: boolean;
@@ -676,6 +667,10 @@ export function buildThreadListV2Items(input: {
   readonly settledShelfExpanded?: boolean;
   readonly selectedThreadKey?: string | null;
   readonly queuedThreadKeys?: ReadonlySet<string>;
+  /** Whether the shelf may list a settled row yet; older settled rows load in pages. */
+  readonly isListedSettled?: (thread: EnvironmentThreadShell) => boolean;
+  /** Settled threads in scope that are not local (older settled threads not loaded). */
+  readonly unloadedSettledCount?: number;
 }): ThreadListV2Layout {
   const now = input.now;
   const pending =
@@ -761,7 +756,7 @@ export function buildThreadListV2Items(input: {
       settled.push(thread);
     } else if (thread.pinnedAt != null) {
       pinned.push(thread);
-    } else if (workingShelfEnabled && isThreadWorking(thread)) {
+    } else if (workingShelfEnabled && (input.isWorking ?? isThreadWorking)(thread)) {
       working.push(thread);
     } else {
       active.push(thread);
@@ -810,6 +805,7 @@ export function buildThreadListV2Items(input: {
         isLast: index === results.length - 1,
       })),
       hiddenSettledCount: 0,
+      listedSettledThreads: [],
       workingCount: 0,
       workingShelfHeaderIndex: null,
       blockedCount: 0,
@@ -852,15 +848,21 @@ export function buildThreadListV2Items(input: {
           (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
         );
   const orderedSettled = sortSettledThreadsReusingLast(settled);
+  const listedSettled =
+    input.isListedSettled === undefined
+      ? orderedSettled
+      : orderedSettled.filter(input.isListedSettled);
+  const settledTotal = orderedSettled.length + (input.unloadedSettledCount ?? 0);
   const settledLimit = input.settledLimit ?? Number.POSITIVE_INFINITY;
   const limitedSettled =
-    orderedSettled.length > settledLimit ? orderedSettled.slice(0, settledLimit) : orderedSettled;
+    listedSettled.length > settledLimit ? listedSettled.slice(0, settledLimit) : listedSettled;
   const selectedSettled =
-    selectedThreadKey === null
+    selectedThreadKey === null ||
+    limitedSettled.some((thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey)
       ? undefined
-      : orderedSettled
-          .slice(limitedSettled.length)
-          .find((thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey);
+      : orderedSettled.find(
+          (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
+        );
   const pagedSettled =
     selectedSettled === undefined ? limitedSettled : [...limitedSettled, selectedSettled];
   const visibleSettled =
@@ -950,7 +952,7 @@ export function buildThreadListV2Items(input: {
       isLast: false,
     });
   }
-  const settledShelfHeaderIndex = orderedSettled.length > 0 ? items.length : null;
+  const settledShelfHeaderIndex = settledTotal > 0 ? items.length : null;
   for (const thread of visibleSettled) {
     items.push({
       thread,
@@ -969,14 +971,15 @@ export function buildThreadListV2Items(input: {
   }
   return {
     items,
-    hiddenSettledCount: orderedSettled.length - pagedSettled.length,
+    hiddenSettledCount: Math.max(0, settledTotal - pagedSettled.length),
+    listedSettledThreads: listedSettled,
     workingCount: orderedWorking.length,
     workingShelfHeaderIndex,
     snoozedCount: orderedSnoozed.length,
     snoozedShelfHeaderIndex,
     blockedCount: orderedBlocked.length,
     blockedShelfHeaderIndex,
-    settledCount: orderedSettled.length,
+    settledCount: settledTotal,
     settledShelfHeaderIndex,
     nextSnoozeWakeAt,
     contentOnlyThreadKeys,

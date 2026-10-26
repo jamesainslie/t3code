@@ -4,13 +4,9 @@ import { Argument, Command } from "effect/cli";
 import { runPickPort, runRuntimePort, runWaitReady } from "./sshHelperFastPath.ts";
 
 /**
- * Helpers the SSH launch script runs on the remote host; see
- * ./sshHelperFastPath.ts for what each one does.
- *
- * Invocations with the exact argument shapes the script sends dispatch through
- * the bin.ts fast path before the CLI graph loads. These definitions keep the
- * commands wired for malformed arguments and for anything that drives the
- * full CLI programmatically. Both routes run the same functions.
+ * Helpers the SSH launch script runs on the remote host. Its exact argument shapes take the
+ * bin.ts fast path in ./sshHelperFastPath.ts; these definitions keep malformed arguments and
+ * programmatic CLI use wired to the same functions.
  */
 
 const pickPort = Command.make("pick-port", {

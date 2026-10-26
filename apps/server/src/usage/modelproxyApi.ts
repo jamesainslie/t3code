@@ -1,9 +1,7 @@
 /**
- * modelproxy's dashboard status API, read as the signed-in operator, and its
- * mapping onto the usage-limit source shape clients already render. The
- * per-account vocabulary (live, ready, cooling, spent) is derived here the
- * same way modelproxy's own dashboard derives it, so Lathe and the gateway
- * never disagree about what an account is doing.
+ * modelproxy's dashboard status API, read as the signed-in operator, mapped onto the usage-limit
+ * source shape. The per-account states (live, ready, cooling, spent) are derived exactly as
+ * modelproxy's own dashboard derives them, so Lathe and the gateway never disagree.
  *
  * @module usage/modelproxyApi
  */

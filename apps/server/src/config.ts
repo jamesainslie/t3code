@@ -13,9 +13,21 @@ import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import * as PlatformError from "effect/PlatformError";
 import { restorePendingRecovery } from "./projectSync/Recovery.ts";
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
-import { DEFAULT_SIGNAL_EXPORT, type SignalExport } from "@lathe/shared/observability";
+import {
+  DEFAULT_SIGNAL_EXPORT,
+  nodeProcessRuntimeAttributes,
+  processServiceInstanceId,
+  type SignalExport,
+} from "@lathe/shared/observability";
 import * as OtelEnvironment from "@lathe/shared/otelEnvironment";
+import { type ReleaseChannel, releaseResourceAttributes } from "@lathe/shared/releaseResource";
 import packageJson from "../package.json" with { type: "json" };
+
+// Official release workflows set this telemetry channel; other builds report dev.
+// Unlike __LATHE_BUILD_CHANNEL__, this is not the sign-in page's latest/nightly channel.
+declare const __LATHE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
+export const telemetryChannel: ReleaseChannel =
+  typeof __LATHE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __LATHE_TELEMETRY_CHANNEL__;
 
 export const DEFAULT_PORT = FORK_IDENTITY.defaultPort;
 
@@ -75,6 +87,8 @@ export class ServerConfig extends Context.Service<
     readonly mode: RuntimeMode;
     readonly port: number;
     readonly host: string | undefined;
+    /** Set when the host was defaulted to a private-network listener for the service. */
+    readonly privateNetworkOnly?: boolean | undefined;
     readonly cwd: string;
     readonly baseDir: string;
     readonly staticDir: string | undefined;
@@ -115,7 +129,10 @@ export const otlpResource = (
     "service.namespace": "t3code",
     "service.runtime": "t3-server",
     "lathe.server.managed_by": config.mode === "desktop" ? "desktop" : "standalone",
+    "service.instance.id": processServiceInstanceId(config.otelEnvironment.resourceAttributes),
+    ...releaseResourceAttributes(telemetryChannel, config.otelEnvironment.resourceAttributes),
     "host.name": config.otelEnvironment.resourceAttributes["host.name"] || hostName,
+    ...nodeProcessRuntimeAttributes(),
   },
 });
 

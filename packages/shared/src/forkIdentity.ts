@@ -1,10 +1,7 @@
 /**
- * Fork identity: every value that must differ from upstream `pingdotgg/t3code`
- * so this fork (`jamesainslie/t3code`) can be installed and run beside the
- * upstream nightly on the same machine.
- *
- * Fork-only module. Upstream files consume it through a single import and a
- * one-line literal swap so that merges from upstream stay mechanical. Keep it
+ * Fork identity: every value that must differ from upstream `pingdotgg/t3code` so this fork
+ * (`jamesainslie/t3code`) installs and runs beside the upstream nightly. Upstream files consume it
+ * through one import and a one-line literal swap so merges stay mechanical. Keep it
  * dependency-free: the web bundle imports it too.
  */
 export const FORK_IDENTITY = Object.freeze({

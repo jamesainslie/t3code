@@ -1,9 +1,7 @@
 /**
- * Fork-only orchestration contracts: the fields the fork adds to v2 threads,
- * the fork thread commands, document comments, and project sync records.
- *
- * Upstream contracts reach this module through single spread or union lines,
- * so upstream merges stay mechanical. Keep fork schema here rather than in
+ * Fork-only orchestration contracts: fork fields on v2 threads, fork thread commands, document
+ * comments and project sync records. Upstream contracts reach this module through single spread
+ * or union lines so upstream merges stay mechanical; keep fork schema here, not in
  * `orchestrationV2.ts`.
  */
 import * as Schema from "effect/Schema";

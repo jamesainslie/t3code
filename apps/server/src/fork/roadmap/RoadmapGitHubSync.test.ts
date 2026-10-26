@@ -12,6 +12,7 @@ import * as GitHubIssueApi from "@lathe/source-control-github/server/GitHubIssue
 import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHubRequestPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
@@ -94,15 +95,13 @@ function fakeGitHub() {
             issue.number === input.number,
         ),
       ).pipe(
-        Effect.flatMap((issue) =>
-          issue === undefined
-            ? Effect.fail(
-                new GitHubRequestPolicy.GitHubApiNotFoundError({
-                  host: input.host,
-                  operation: "roadmapIssue",
-                }),
-              )
-            : Effect.succeed(issue),
+        Effect.filterOrFail(
+          Predicate.isNotUndefined,
+          () =>
+            new GitHubRequestPolicy.GitHubApiNotFoundError({
+              host: input.host,
+              operation: "roadmapIssue",
+            }),
         ),
       ),
     issues: (input) => read(() => input.nodeIds.flatMap((nodeId) => issues.get(nodeId) ?? [])),

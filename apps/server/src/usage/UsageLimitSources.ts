@@ -1,20 +1,7 @@
 /**
- * UsageLimitSources. Quota from places this environment cannot run turns
- * on: a CLIProxyAPI hub pooling several subscription accounts, or a
- * modelproxy gateway read as the signed-in operator.
- *
- * Each configured `settings.usageLimitSources` entry is polled on the
- * provider health-check interval and on every settings change, then
- * published as one snapshot per source over `subscribeServerConfig`. While a
- * client watches, a modelproxy source follows the gateway's status stream
- * instead, so its snapshot changes when the gateway does. A source
- * that fails keeps its row with `error` set so the user can see it is
- * configured but unreachable. Nothing is persisted: like provider status,
- * this is live state that re-derives on boot. The one exception is a
- * modelproxy sign-in session, which `modelproxyAuth` keeps in the secret
- * store so a restart does not ask the user to sign in again.
- *
- * @module usage/UsageLimitSources
+ * Quota from places this environment cannot run turns on, polled per configured source and
+ * published over `subscribeServerConfig`; a watched modelproxy follows its status stream instead.
+ * Nothing is persisted except a modelproxy sign-in session, which survives a restart.
  */
 import {
   DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL,
@@ -123,10 +110,9 @@ const LIVE_PUBLISH_INTERVAL = Duration.seconds(2);
 const UNSUPPORTED_READ_INTERVAL = Duration.seconds(5);
 
 /**
- * A transient failure within two polling intervals of a good read keeps
- * that read: one missed poll, such as a laptop waking before its network
- * does, is not an outage. The kept snapshot keeps its own `checkedAt`, so it
- * never claims to be newer than it is. Past that, the failure shows.
+ * A transient failure within two polling intervals of a good read keeps that read, so one
+ * missed poll (a laptop waking before its network) is not an outage. The kept snapshot keeps
+ * its own `checkedAt`, so it never claims to be newer than it is.
  */
 function settleRead(
   read: SourceRead,
@@ -146,7 +132,7 @@ function settleRead(
   return keepGatewayRoutes(read.snapshot, previous);
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
   const modelproxy = yield* makeModelproxyApi;
@@ -270,11 +256,9 @@ export const make = Effect.gen(function* () {
     Effect.map((ms) => (ms <= 0 ? 60_000 : ms)),
   );
 
-  // Fork: gateways whose status stream is open right now. Every publish
-  // stamps the mark from this set, so an interval read during the stream
-  // keeps it and nothing else has to remember it. A plain set rather than a
-  // Ref because it is read inside `Ref.modify`, where a change made just
-  // before the write is always seen.
+  // Fork: gateways whose status stream is open right now. Every publish stamps the mark from
+  // this set, so an interval read during the stream keeps it. A plain set, not a Ref, because
+  // it is read inside `Ref.modify`, where a change made just before the write is always seen.
   const following = new Set<UsageLimitSourceId>();
   const stampFollowing = (source: UsageLimitSourceSnapshot): UsageLimitSourceSnapshot => {
     if (!source.proxy) return source;
@@ -297,9 +281,7 @@ export const make = Effect.gen(function* () {
   });
   const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) => publishWith(() => next);
 
-  // One refresh at a time: a slow hub read started before a settings change
-  // must not publish after the change's own refresh and resurrect a removed
-  // source. Callers queue behind the in-flight run and see current settings.
+  // Serialize refreshes so slow old-settings reads cannot resurrect removed sources after newer refreshes.
   const refreshLock = yield* Semaphore.make(1);
   const refresh = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings.pipe(

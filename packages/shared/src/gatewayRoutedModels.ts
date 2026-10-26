@@ -1,10 +1,7 @@
 /**
- * Models a modelproxy gateway serves under a routed name (`kimi-k3` answered
- * by OpenRouter) and the Claude instances that should offer them. Fork-only:
- * the gateway publishes its routes on the usage-limit source snapshot, and
- * the server merges them into the provider catalog it sends clients, so a
- * route added on the gateway reaches the picker with no Lathe configuration
- * beyond the per-instance opt-in.
+ * Fork-only. Models a modelproxy gateway serves under a routed name (`kimi-k3` via OpenRouter) and
+ * the Claude instances that offer them. The server merges the gateway's published routes into the
+ * client catalog, so a new route reaches the picker with only the per-instance opt-in.
  *
  * @module gatewayRoutedModels
  */

@@ -1,4 +1,4 @@
-import { mediaKindFromPath } from "@lathe/shared/filePreview";
+import { mediaKindFromPath } from "@lathe/shared/mediaPreview";
 import { mediaUrlReference } from "@lathe/client-runtime/media-reference";
 import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";

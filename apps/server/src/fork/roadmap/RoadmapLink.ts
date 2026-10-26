@@ -246,13 +246,19 @@ const make = Effect.gen(function* () {
       ),
       unreachableSince: Ref.get(unreachableSince),
     }),
-    configure: (link) => configuring.withPermits(1)(link === null ? disconnect : connect(link)),
+    configure: Effect.fn("RoadmapLink.configure")((link: RoadmapLinkConfigureInput["link"]) =>
+      configuring.withPermits(1)(link === null ? disconnect : connect(link)),
+    ),
     snapshot: call((client) => client.snapshot({ headers: {} })),
-    item: (itemId) => call((client) => client.item({ headers: {}, params: { itemId } })),
-    threadContext: (thread) =>
+    item: Effect.fn("RoadmapLink.item")((itemId: RoadmapItemId) =>
+      call((client) => client.item({ headers: {}, params: { itemId } })),
+    ),
+    threadContext: Effect.fn("RoadmapLink.threadContext")((thread: RoadmapThreadRef) =>
       call((client) => client.forThread({ headers: {}, payload: { thread } })),
-    dispatch: (command, actor) =>
+    ),
+    dispatch: Effect.fn("RoadmapLink.dispatch")((command: RoadmapCommand, actor: RoadmapActor) =>
       call((client) => client.dispatch({ headers: {}, payload: { command, actor } })),
+    ),
   });
 });
 

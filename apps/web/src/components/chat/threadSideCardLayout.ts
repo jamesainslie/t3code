@@ -1,14 +1,8 @@
 /**
- * Fork-only: where the floating side cards (the Iris gateway card, the
- * Roadmap card) sit. They stack under the thread details card at the same
- * width, so they read as one column; with no details card showing the first
- * takes that card's place under the header.
- *
- * They yield that column on the details card's own terms. When the canvas is
- * too narrow for the details card inline, or the cards above leave too little
- * height, a card stops being part of the layout and opens only on request,
- * under the header and over whatever is there, like the details card's
- * popover.
+ * Fork-only: where the floating side cards (Iris gateway, Roadmap) sit. They stack under the
+ * thread details card at its width as one column, the first taking its place when it is hidden.
+ * When the canvas is too narrow for the details card inline, or the cards above leave too little
+ * height, a card leaves the layout and opens only on request over the content, like its popover.
  */
 
 import { THREAD_DETAILS_CARD_WIDTH } from "./threadDetailsCardLayout";

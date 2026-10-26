@@ -1,13 +1,7 @@
 /**
- * Sign-in sessions for `modelproxy` usage-limit sources. One session per
- * source: the refresh and access tokens sit in the secret store beside the
- * source's client secret, a pending device-code flow lives in memory with
- * the fiber that polls the issuer for it, and every transition publishes
- * the source id so the source list re-reads and clients see the new state.
- *
- * Only the device grant is supported. It needs no redirect URI, so the Lathe
- * server can sit on one host while the user finishes the login in a browser
- * on another, which is the normal remote arrangement.
+ * Sign-in sessions for `modelproxy` usage-limit sources: tokens in the secret store, a pending
+ * device-code flow in memory with its polling fiber, and a publish on every transition. Only the
+ * device grant is supported; it needs no redirect URI, so server and browser may be on two hosts.
  *
  * @module usage/modelproxyAuth
  */
@@ -111,7 +105,7 @@ export const makeModelproxyAuth = Effect.gen(function* () {
       .pipe(Effect.orElseSucceed(() => Option.none<Uint8Array>()));
     const session = Option.isSome(stored)
       ? yield* decodeSession(textDecoder.decode(stored.value)).pipe(
-          Effect.map(Option.some),
+          Effect.asSome,
           Effect.orElseSucceed(() => Option.none<TokenSet>()),
         )
       : Option.none<TokenSet>();

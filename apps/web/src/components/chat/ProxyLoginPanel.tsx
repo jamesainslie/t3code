@@ -12,11 +12,10 @@ import {
 } from "./ProxyUsagePill.logic";
 
 /**
- * Logs one of the gateway's accounts in again, inside the pill's ledger. The
- * gateway runs the OAuth flow; this panel starts it, shows what the user has
- * to do (paste the code an Anthropic consent page shows, or approve a Codex
- * device code on OpenAI's site) and follows the login as the server
- * publishes it, so the panel reads the same on every client.
+ * Logs one of the gateway's accounts in again, inside the pill's ledger. The gateway runs the
+ * OAuth flow; this panel starts it, shows what the user must do (paste an Anthropic consent code
+ * or approve a Codex device code on OpenAI's site) and follows the login as the server publishes
+ * it, so the panel reads the same on every client.
  */
 export function ProxyLoginPanel({
   environmentId,
