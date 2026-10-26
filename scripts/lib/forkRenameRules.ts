@@ -279,7 +279,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) =>
       // Its lint directives name the shared oxlint plugin, which the fork renames.
       !(/^t3code\/[a-z-]+$/.test(o.token) && /lint-(?:disable|enable)/.test(o.line)) &&
-      (/^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) || /T3_TASK_CACHE_/.test(o.token)),
+      (/^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) ||
+        /T3_TASK_CACHE_/.test(o.token)),
   },
   {
     id: "upstream-linux-metainfo",
