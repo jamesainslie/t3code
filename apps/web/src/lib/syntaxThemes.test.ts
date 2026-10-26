@@ -99,6 +99,22 @@ describe("buildSyntaxTheme", () => {
       }
     }
   });
+
+  it.each(APPEARANCES)(
+    "colors Four Kinds %s function definitions and types alike, leaving variables and tags plain",
+    (appearance) => {
+      const built = buildSyntaxTheme("four-kinds", appearance, {});
+      const colorOf = (scope: string) => {
+        const style = built.style.syntax?.[scope];
+        return typeof style === "string" ? style : style?.color;
+      };
+      const plain = built.style["editor.foreground"];
+      expect(colorOf("function.definition")).not.toBe(plain);
+      expect(colorOf("type")).toBe(colorOf("function.definition"));
+      expect(colorOf("variable")).toBe(plain);
+      expect(colorOf("tag")).toBe(plain);
+    },
+  );
 });
 
 describe("syntax theme catalog", () => {
