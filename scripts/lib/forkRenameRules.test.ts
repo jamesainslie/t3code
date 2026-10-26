@@ -181,6 +181,46 @@ describe("FORK_RENAME_RULES", () => {
       "upstream-reference",
     ],
     [
+      ".task-cache.json",
+      '  "endpoint": "https://t3-task-cache.pinglabs.workers.dev/projects/t3code"',
+      "upstream-reference",
+    ],
+    [
+      "infra/task-cache/src/resources.ts",
+      '  return stage === "prod" ? "t3-task-cache" : `t3-task-cache-${stage}`;',
+      "upstream-reference",
+    ],
+    [
+      ".github/actions/setup-ci-deps/action.yml",
+      "        T3_TASK_CACHE_READ_TOKEN: ${{ inputs.task-cache-read-token }}",
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/mcp/toolkits/orchestrator/handlers.ts",
+      "    t3_background_wait: McpToolAccess.actsAsCaller((input) =>",
+      "agent-facing",
+    ],
+    [
+      "apps/web/src/lib/readableSyntaxTheme.ts",
+      'export const READABLE_LIGHT_THEME_NAME = "t3-light";',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/guest/GuestPage.tsx",
+      'const AWAITING_ROWS_KEY = "t3:guest-awaiting-rows";',
+      "identifier",
+    ],
+    [
+      "packages/contracts/src/guestShare.ts",
+      "export const guestSessionCookieName = (shareId: string) => `t3_guest_${shareId}`;",
+      "identifier",
+    ],
+    [
+      "oxlint-plugin-t3code/rules/react-effect-budget.ts",
+      "const JUSTIFIED = /oxlint-disable-next-line[^\\n]*t3code\\/react-effect-budget\\s+--\\s*\\S/;",
+      "identifier",
+    ],
+    [
       "packages/client-runtime/src/connection/diagnosis.ts",
       'return "the-host-runs-an-older-t3-code";',
       "display",

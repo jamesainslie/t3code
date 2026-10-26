@@ -273,6 +273,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /^packaging\//,
   },
   {
+    id: "upstream-task-cache",
+    class: "upstream-reference",
+    reason:
+      "Upstream's shared Vite task cache: the endpoint, its service under infra/task-cache, and the CI read token that wires it up. The fork has no token, so CI skips it.",
+    test: (o) =>
+      /^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) || /T3_TASK_CACHE_/.test(o.token),
+  },
+  {
     id: "upstream-linux-metainfo",
     class: "upstream-reference",
     reason: "Upstream's AppStream metainfo, which the fork does not ship.",
@@ -916,7 +924,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "MCP server name (t3-code) and tool names (t3_*) agents call. Renamed to lathe and lathe_*; the old names stay recognised permanently, since stored tool calls and provider transcripts hold them.",
     token:
-      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*|^mcp_servers\.t3-code$/,
+      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve|background)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*|^mcp_servers\.t3-code$/,
   },
   {
     id: "agent-mcp-matchers",
@@ -967,8 +975,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "id-lint-plugin",
     class: "identifier",
-    reason: "The repo's oxlint plugin and rule names (t3code/no-*).",
-    token: /^t3code\/[a-z-]+$/,
+    reason:
+      "The repo's oxlint plugin and rule names (t3code/no-*), also where a rule matches its own name in a regex (t3code\\/rule\\s).",
+    token: /^t3code(?:\/|\\\/)[a-z-]+(?:\\s)?$/,
   },
   {
     id: "id-internal-env",
@@ -1045,7 +1054,21 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason: "Storage keys and events that are transient or caches: renaming only clears them.",
     token:
-      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list|recentDetails)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open|thread-find-query)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
+      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list|recentDetails)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open|thread-find-query|guest-awaiting-rows)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
+  },
+  {
+    id: "id-guest-session-cookie",
+    class: "identifier",
+    reason:
+      "Guest share session cookies (t3_guest_<share id>). Cookies ignore the port, so the rename keeps Lathe and upstream on one host from sharing them; a lost cookie only makes a guest open the link again.",
+    token: /t3_guest_\$/,
+  },
+  {
+    id: "id-readable-syntax-theme",
+    class: "identifier",
+    reason:
+      "The name of the generated readable light syntax theme, passed to the diff workers; nothing stores it.",
+    token: /(?:^|[^A-Za-z0-9-])t3-light(?:$|[^A-Za-z0-9-])/,
   },
   {
     id: "id-effect-service-tags",
