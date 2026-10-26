@@ -1,9 +1,8 @@
 /**
- * Fork-only. Lathe reads `LATHE_*` environment variables; before the rename
- * the fork read `T3CODE_*`. Installed services, shell profiles and scripts
- * still set the old names, so every process entry moves them to the new names
- * before anything reads its configuration, and warns once so they can be
- * found and fixed. A new name that is already set wins over its old one.
+ * Fork-only. Lathe reads `LATHE_*`; before the rename it read `T3CODE_*`, which installed
+ * services, shell profiles and scripts still set. Every process entry moves the old names to the
+ * new ones before anything reads its configuration, and warns once so they can be found and
+ * fixed. A new name that is already set wins over its old one.
  */
 const LEGACY_PREFIXES = ["T3CODE_", "VITE_T3CODE_"] as const;
 

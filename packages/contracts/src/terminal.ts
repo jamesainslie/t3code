@@ -26,7 +26,7 @@ export const TerminalThreadInput = Schema.Struct({
 });
 export type TerminalThreadInput = typeof TerminalThreadInput.Type;
 
-/** Terminal ids are ALWAYS chosen by the client and sent explicitly — no server-side allocation. */
+// Terminal ids are client-chosen; the server never allocates them.
 const TerminalSessionInput = Schema.Struct({
   ...TerminalThreadInput.fields,
   terminalId: TerminalIdSchema,
@@ -73,12 +73,9 @@ export const TerminalBrowserLaunchResponseMode = Schema.Literals(["query", "form
 export type TerminalBrowserLaunchResponseMode = typeof TerminalBrowserLaunchResponseMode.Type;
 
 /**
- * A command in the terminal asked to open a URL. The environment never opens a
- * browser; the client that owns the terminal shows the link and, for a
- * loopback sign-in, carries the return back through
- * `terminal.browserLaunchComplete`: the final page's address for a query
- * response, or that address plus the form body when the page posted its result
- * (`response_mode=form_post`) and a client-side listener caught it.
+ * A terminal command asked to open a URL. The environment never opens a browser; the owning
+ * client shows the link and, for a loopback sign-in, returns the final page's address (plus the
+ * form body for `response_mode=form_post`) through `terminal.browserLaunchComplete`.
  */
 export const TerminalBrowserLaunchCompleteInput = Schema.Struct({
   ...TerminalSessionInput.fields,

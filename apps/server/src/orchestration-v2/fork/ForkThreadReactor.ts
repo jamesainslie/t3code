@@ -1,17 +1,8 @@
 /**
- * Fork reactor for thread dependencies and snooze reminders.
- *
- * Keeps a small in-memory index of threads with open dependency links and of
- * threads holding a snooze reminder. It is seeded from the shell snapshot and
- * kept current from the domain event stream, where every thread event carries
- * the whole thread. From it:
- * - a dependency's finished run, pending request, archive, or delete satisfies
- *   the links waiting on it;
- * - a reminder whose snooze has ended, by its timer or any other way, is
- *   delivered into the chat;
- * - a message the user sends to a waiting thread ends its wait.
- * All go through fork commands with deterministic ids, so replays, restarts,
- * and races are no-ops.
+ * Fork reactor for thread dependencies and snooze reminders, indexed in memory from the shell
+ * snapshot and the domain event stream. It satisfies links when a dependency finishes, waits on a
+ * request, or is archived or deleted; delivers ended snoozes into the chat; and ends a wait when
+ * the user messages the thread. Fork commands with deterministic ids make replays no-ops.
  */
 import {
   CommandId,
@@ -132,13 +123,13 @@ export const make = Effect.gen(function* () {
   const dispatch = (command: Parameters<Orchestrator.OrchestratorV2["Service"]["dispatch"]>[0]) =>
     orchestrator.dispatch(command).pipe(
       Effect.asVoid,
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.logWarning("fork thread reactor dispatch failed", {
-              commandType: command.type,
-              cause: Cause.pretty(cause),
-            }),
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterruptsOnly(cause),
+        (cause) =>
+          Effect.logWarning("fork thread reactor dispatch failed", {
+            commandType: command.type,
+            cause: Cause.pretty(cause),
+          }),
       ),
     );
 

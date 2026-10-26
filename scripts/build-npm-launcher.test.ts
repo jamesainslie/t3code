@@ -49,11 +49,8 @@ const run = Effect.fn("test.run")(function* (
 
 const STUB_EXECUTABLE = '#!/bin/sh\necho "stub $* launcher=$LATHE_NPM_LAUNCHER_PATH"\nexit 7\n';
 
-/**
- * A release archive for this host with a stub executable that echoes its args
- * and launcher. Fork: a release after the Lathe rename lists `lathe-*` archives
- * holding `lathe`; one from before it lists `t3-*` holding `t3`.
- */
+// Fork: a release after the Lathe rename lists `lathe-*` archives holding
+// `lathe`; one from before it lists `t3-*` holding `t3`.
 const serveFakeRelease = Effect.fn("test.serveFakeRelease")(function* (
   root: string,
   release: {
@@ -130,11 +127,9 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         assert.equal(manifest.name, FORK_IDENTITY.npmPackageName);
         assert.equal(manifest.version, VERSION);
         assert.deepStrictEqual(manifest.bin, { lathe: "./bin/lathe.mjs" });
-        // Nothing for npm to resolve, so nothing that can lag behind the launcher.
         assert.isUndefined(manifest.dependencies);
         assert.isUndefined(manifest.optionalDependencies);
 
-        // Run what npm would install: the published tarball, unpacked.
         const installed = path.join(root, "installed");
         yield* fs.makeDirectory(installed);
         const unpack = yield* run("tar", ["-xzf", output.tarball, "-C", installed], {
@@ -158,7 +153,6 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         });
         assert.equal(first.stdout.trim(), `stub serve a b launcher=${launcher}`, first.stderr);
         assert.equal(first.exitCode, 7);
-        // The same layout the install scripts and `t3 update` use.
         const versionDir = path.join(home, "runtime/versions", VERSION);
         assert.equal(
           (yield* fs.readFileString(path.join(versionDir, ".install-complete"))).trim(),
@@ -170,14 +164,11 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
           [VERSION],
         );
 
-        // A second run reuses the download.
         const requestsAfterFirst = release.requests.length;
         const second = yield* run(process.execPath, [launcher, "--version"], { cwd: root, env });
         assert.equal(second.exitCode, 7);
         assert.equal(release.requests.length, requestsAfterFirst);
 
-        // Services installed before 0.0.41 fork dist/bin.mjs and talk to the
-        // server over IPC; the channel and SIGTERM must reach the executable.
         const ipcServer = path.join(home, "runtime/versions", VERSION, "lathe");
         yield* fs.writeFileString(
           ipcServer,
@@ -200,7 +191,6 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
           assert.deepStrictEqual(await exit, [23, null]);
         });
 
-        // Two first runs at once both start, and neither removes the other's install.
         const raceHome = path.join(root, "race-home");
         const launch = run(process.execPath, [launcher, "--version"], {
           cwd: root,
@@ -213,7 +203,6 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
           VERSION,
         ]);
 
-        // A download that does not match the release checksums is never installed.
         release.corruptChecksum();
         const corrupt = yield* run(process.execPath, [launcher, "--version"], {
           cwd: root,

@@ -1,40 +1,54 @@
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useLocation, useNavigate, type AnyRouter } from "@tanstack/react-router";
+
+import { GUEST_PAGE_PATH } from "../../guestPage";
+
+/** Settings and Usage open as modals over the last main-app view. */
+export function isAppModalPage(pathname: string) {
+  return pathname === "/settings" || pathname.startsWith("/settings/") || pathname === "/usage";
+}
 
 export function isSidebarUtilityPage(pathname: string) {
   return (
-    pathname === "/settings" ||
-    pathname.startsWith("/settings/") ||
     pathname.startsWith("/projects/") ||
-    pathname === "/usage" ||
     // Fork: roadmap.
     pathname === "/roadmap" ||
     pathname === "/pull-requests"
   );
 }
 
+// Pages the root route always renders without the app shell, so they are never
+// a page to return to. Other paths seen before auth or on a prompt-link landing
+// are still recorded; they are real app URLs, so returning to one is harmless.
+const SHELL_LESS_PATHS = new Set(["/pair", "/connect", "/connect-agent", GUEST_PAGE_PATH]);
+
 let mainAppHref: string | null = null;
+let appModalReturnHref: string | null = null;
 // Fork: roadmap. The roadmap as last left, view and filters included.
 let roadmapHref: string | null = null;
 
-export function MainAppLocationTracker() {
-  const location = useLocation({
-    select: (current) => ({ pathname: current.pathname, href: current.href }),
-  });
-  const href = isSidebarUtilityPage(location.pathname) ? null : location.href;
-  const roadmap = location.pathname === "/roadmap" ? location.href : null;
-  useEffect(() => {
-    if (href !== null) mainAppHref = href;
-  }, [href]);
-  useEffect(() => {
-    if (roadmap !== null) roadmapHref = roadmap;
-  }, [roadmap]);
-  return null;
+/** Remembers where Settings, Usage, and the utility pages lead back to. */
+export function startMainAppLocationTracking(router: AnyRouter): () => void {
+  const record = () => {
+    const { pathname, href } = router.state.location;
+    if (isAppModalPage(pathname) || SHELL_LESS_PATHS.has(pathname)) return;
+    appModalReturnHref = href;
+    if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
+    // Fork: roadmap.
+    if (pathname === "/roadmap") roadmapHref = href;
+  };
+  record();
+  return router.subscribe("onResolved", record);
 }
 
 export function useNavigateToMainApp() {
   const navigate = useNavigate();
   return () => navigate({ href: mainAppHref ?? "/" });
+}
+
+/** Leaves Settings or Usage for the page that opened it. */
+export function useCloseAppModal() {
+  const navigate = useNavigate();
+  return () => navigate({ href: appModalReturnHref ?? mainAppHref ?? "/" });
 }
 
 /** Fork: roadmap. Back to where you were from the roadmap, or to the roadmap as you left it. */

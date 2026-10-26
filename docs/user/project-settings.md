@@ -48,7 +48,7 @@ and other phone-only settings ignore the filter.
 
 ## Worktree branch names
 
-In **Settings → Source Control → Worktree branch naming**, choose a static prefix,
+In **Settings → Source control → Worktree branch naming**, choose a static prefix,
 a model-selected semantic prefix such as `feat/` or `fix/`, or custom instructions
 for the complete name. The static prefix defaults to `lathe/`; a trailing slash is
 optional, and an empty prefix adds nothing. Invalid characters in a static prefix
@@ -147,12 +147,12 @@ than** on the task.
 ## Defaults and inheritance
 
 General contains the model and workspace for new threads. Integrations controls agent browser
-and thread history access. Source Control contains automatic pull, the default pull request merge method, the GitHub
-account and text generation. The same rows edit environment defaults or project overrides depending
-on the project crumb. The GitHub account row appears only while a project is selected and the
-environment's `gh` has more than one signed-in account; its environment-wide rules live under
-**GitHub accounts** on the Source Control page. At **All environments** those rules edit every
-connected machine that supports them; choose one machine to give it rules of its own.
+and thread history access. Source control contains automatic pull, the default pull request merge
+method, the GitHub account and text generation. The same rows edit environment defaults or project
+overrides depending on the project crumb. The GitHub account row appears only while a project is
+selected and the environment's `gh` has more than one signed-in account; its environment-wide rules
+live under **GitHub accounts** on the Source control page. At **All environments** those rules edit
+every connected machine that supports them; choose one machine to give it rules of its own.
 
 The Project category, shown while a project is selected, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
@@ -296,7 +296,7 @@ from the icon palette, derived from the saved project name. For example, `Nebula
 
 ## Keep the default branch current
 
-In Source Control, enable **Automatically pull** to keep the default-branch checkout up to date
+In Source control, enable **Automatically pull** to keep the default-branch checkout up to date
 with its configured upstream. Choose an environment to set the default or a project to override it.
 On mobile, use **Settings → Source control** to change selected environment defaults or project overrides.
 

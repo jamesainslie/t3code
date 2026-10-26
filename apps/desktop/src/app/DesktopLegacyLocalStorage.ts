@@ -10,10 +10,7 @@ import { readChromiumLocalStorage } from "./chromiumLocalStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import { FORK_LEGACY_LOCAL_STORAGE } from "./DesktopForkLegacyLocalStorage.ts";
 
-/**
- * The V1 profile is only read, never opened by Chromium, so this works while V1
- * is still running.
- */
+/** Reads the V1 profile without opening it in Chromium, even while V1 runs. */
 export class DesktopLegacyLocalStorage extends Context.Service<
   DesktopLegacyLocalStorage,
   {

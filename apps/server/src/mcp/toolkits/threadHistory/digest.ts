@@ -28,7 +28,7 @@ export const DIGEST_LIMITS = {
 } as const;
 
 /** Index of the first turn a digest shows in detail. */
-export const recentStart = (turnCount: number, recentTurns: number) =>
+const recentStart = (turnCount: number, recentTurns: number) =>
   Math.max(0, turnCount - Math.max(0, recentTurns));
 
 export type ThreadDigestStatus =

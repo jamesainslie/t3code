@@ -81,11 +81,9 @@ function detailsEdges(element: Element) {
 }
 
 /**
- * Where a side card goes while it is wanted. The details card and the cards
- * above this one move and resize with the layout (the details card folds,
- * opens as a popover on a narrow canvas, closes), so this re-measures every
- * frame while active; that is a few queries and rects, and stops when nothing
- * wants the card.
+ * Where a side card goes while it is wanted. The details card and the cards above move and resize
+ * with the layout (fold, narrow-canvas popover, close), so this re-measures every frame while
+ * active: a few queries and rects, stopping once nothing wants the card.
  */
 export function useThreadSideCardPlacement(
   id: ThreadSideCardId,

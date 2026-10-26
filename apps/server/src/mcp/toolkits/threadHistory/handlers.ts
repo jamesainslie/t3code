@@ -17,7 +17,7 @@ import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
-import { buildThreadDigest, recentStart, toTurnDetail } from "./digest.ts";
+import { buildThreadDigest, toTurnDetail } from "./digest.ts";
 import { renderThreadDigest, renderThreadMatches, renderTurnDetails } from "./render.ts";
 import { canReadThread, canSearchThreads, collectReferencedThreadIds } from "./scope.ts";
 import {

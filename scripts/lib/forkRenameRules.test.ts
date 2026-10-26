@@ -181,6 +181,66 @@ describe("FORK_RENAME_RULES", () => {
       "upstream-reference",
     ],
     [
+      "apps/server/src/provider/userInputAttachments.test.ts",
+      '            "Lantern\\t\\t37",',
+      "false-positive",
+    ],
+    [
+      "apps/desktop/src/app/DesktopCliShim.test.ts",
+      '      shimPath: "C:\\\\Users\\\\José\\\\.t3\\\\bin\\\\t3.cmd",',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/CommandPalette.logic.test.ts",
+      '    expect(search("t3", true)).toEqual([["Projects", ["t3code"]]]);',
+      "upstream-reference",
+    ],
+    [
+      ".task-cache.json",
+      '  "endpoint": "https://t3-task-cache.pinglabs.workers.dev/projects/t3code"',
+      "upstream-reference",
+    ],
+    [
+      "infra/task-cache/src/resources.ts",
+      '  return stage === "prod" ? "t3-task-cache" : `t3-task-cache-${stage}`;',
+      "upstream-reference",
+    ],
+    [
+      "infra/task-cache/src/telemetry.ts",
+      "/* oxlint-disable t3code/no-global-process-runtime -- This bootstrap runs before dependencies are installed. */",
+      "identifier",
+    ],
+    [
+      ".github/actions/setup-ci-deps/action.yml",
+      "        T3_TASK_CACHE_READ_TOKEN: ${{ inputs.task-cache-read-token }}",
+      "upstream-reference",
+    ],
+    [
+      "apps/server/src/mcp/toolkits/orchestrator/handlers.ts",
+      "    t3_background_wait: McpToolAccess.actsAsCaller((input) =>",
+      "agent-facing",
+    ],
+    [
+      "apps/web/src/lib/readableSyntaxTheme.ts",
+      'export const READABLE_LIGHT_THEME_NAME = "t3-light";',
+      "identifier",
+    ],
+    [
+      "apps/web/src/components/guest/GuestPage.tsx",
+      'const AWAITING_ROWS_KEY = "t3:guest-awaiting-rows";',
+      "identifier",
+    ],
+    [
+      "packages/contracts/src/guestShare.ts",
+      "export const guestSessionCookieName = (shareId: string) => `t3_guest_${shareId}`;",
+      "identifier",
+    ],
+    [
+      "oxlint-plugin-t3code/rules/react-effect-budget.ts",
+      "const JUSTIFIED = /oxlint-disable-next-line[^\\n]*t3code\\/react-effect-budget\\s+--\\s*\\S/;",
+      "identifier",
+    ],
+    [
       "packages/client-runtime/src/connection/diagnosis.ts",
       'return "the-host-runs-an-older-t3-code";',
       "display",
@@ -472,7 +532,7 @@ describe("FORK_RENAME_RULES", () => {
       '  it.each(["t3code", "t3code/"])("joins static prefix", () => {',
       "upstream-reference",
     ],
-    ["packages/ssh/src/tunnel.test.ts", '    "exec \"$T3_RUNTIME_DIR/lathe\"",', "identifier"],
+    ["packages/ssh/src/tunnel.test.ts", '    "exec "$T3_RUNTIME_DIR/lathe"",', "identifier"],
     [
       "packages/ssh/src/tunnel.test.ts",
       "      `tar -czf '${release}/t3-${archiveVersion}-${asset}'`,",

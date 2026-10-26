@@ -26,12 +26,10 @@ interface TerminalBrowserLaunchBannerProps {
 }
 
 /**
- * A command in the terminal asked the environment to open a page. The
- * environment never does; this banner opens it where the user is and carries
- * the sign-in's result back to the waiting command. On desktop the app holds
- * the loopback port itself and needs nothing further from the user; elsewhere
- * a query response can still be pasted, and a form POST cannot be relayed at
- * all.
+ * A terminal command asked the environment to open a page, which it never does; this banner
+ * opens it where the user is and carries the sign-in's result back. On desktop the app holds the
+ * loopback port itself; elsewhere a query response can still be pasted, and a form POST cannot be
+ * relayed at all.
  */
 export function TerminalBrowserLaunchBanner({
   threadRef,

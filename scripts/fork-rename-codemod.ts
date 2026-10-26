@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 /**
- * Fork-only. Applies the Lathe rename (scripts/lib/forkRenameCodemod.ts) to
- * every tracked file outside `.repos/`: file contents first, then paths with
- * `git mv`. Without `--write` it only reports what it would change. Refuses
- * to run while any `t3` occurrence is unclassified, and when two paths would
- * rename to the same place.
- *
- *   node scripts/fork-rename-codemod.ts           # dry run
- *   node scripts/fork-rename-codemod.ts --write   # rename the working tree
+ * Fork-only. Applies the Lathe rename (scripts/lib/forkRenameCodemod.ts) to every tracked file
+ * outside `.repos/`: contents first, then paths with `git mv`. A dry run unless `--write`. Refuses
+ * to run while any `t3` occurrence is unclassified or two paths would rename to the same place.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";

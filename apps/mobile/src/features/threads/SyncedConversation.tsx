@@ -1,4 +1,3 @@
-import { useNavigation, type NavigationProp } from "@react-navigation/native";
 import { executeProjectSync } from "@lathe/client-runtime/state/project-sync";
 import { settlePromise, squashAtomCommandFailure } from "@lathe/client-runtime/state/runtime";
 import type { EnvironmentId, ThreadId } from "@lathe/contracts";
@@ -8,6 +7,7 @@ import { Pressable, View } from "react-native";
 import { AppText as Text } from "../../components/ui/AppText";
 import { runtime } from "../../lib/runtime";
 import { usePreparedConnection } from "../../state/session";
+import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 
 export function SyncedConversation({
   environmentId,
@@ -19,8 +19,7 @@ export function SyncedConversation({
   bottomInset: number;
 }) {
   const prepared = usePreparedConnection(environmentId);
-  const navigation =
-    useNavigation<NavigationProp<{ Thread: { environmentId: string; threadId: string } }>>();
+  const selectDetail = useSelectWorkspaceDetail();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const continueInFork = async () => {
@@ -37,9 +36,9 @@ export function SyncedConversation({
       return;
     }
     if (result.value.threadId)
-      navigation.navigate("Thread", {
-        environmentId: String(environmentId),
-        threadId: String(result.value.threadId),
+      selectDetail({
+        name: "Thread",
+        params: { environmentId, threadId: result.value.threadId },
       });
   };
   return (

@@ -1,9 +1,7 @@
 /**
- * Fork-only: which gateway accounts deserve an alert that they need a login.
- * An account that becomes flagged while the app watches is news worth a
- * desktop notification; accounts already flagged when the app first looks
- * are only mentioned, so a restart does not fire a burst of notifications
- * for something the user may already know.
+ * Fork-only: which gateway accounts deserve a needs-login alert. One flagged while the app
+ * watches is worth a desktop notification; ones already flagged at first look are only mentioned,
+ * so a restart does not fire a burst of notifications the user may already know about.
  */
 export interface LoginAlerts {
   /** Newly flagged: worth interrupting the user for. */

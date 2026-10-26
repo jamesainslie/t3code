@@ -17,6 +17,7 @@ import { Textarea } from "./ui/textarea";
 import { CalendarIcon } from "lucide-react";
 import { Calendar } from "./ui/calendar";
 import { weekStartsOn } from "../timestampFormat";
+import { useNowMinute } from "../hooks/useNowMinute";
 import { Popover, PopoverTrigger, PopoverPopup } from "./ui/popover";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -62,6 +63,12 @@ function finish(choice: SnoozeChoice | null) {
   request?.resolve(choice);
 }
 
+function startOfLocalDay(ms: number) {
+  const day = new Date(ms);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
 export function CustomSnoozeDialogHost() {
   const request = useRequest((state) => state.request);
   useEffect(() => () => finish(null), []);
@@ -76,6 +83,9 @@ function CustomSnoozeDialog({ options }: { options: CustomSnoozeOptions }) {
   const [initial] = useState(() =>
     initialSnoozedUntil ? new Date(initialSnoozedUntil) : new Date(Date.now() + 3_600_000),
   );
+  const nowMinute = useNowMinute();
+  // Follows the clock so a dialog left open past midnight stops offering yesterday.
+  const today = startOfLocalDay(Date.parse(`${nowMinute}Z`));
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
   const [date, setDate] = useState(initial);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -180,7 +190,7 @@ function CustomSnoozeDialog({ options }: { options: CustomSnoozeOptions }) {
                             selected={date}
                             defaultMonth={date}
                             {...(weekStartsOn === undefined ? {} : { weekStartsOn })}
-                            disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
+                            disabled={{ before: today }}
                             onSelect={(selected) => {
                               setDate(selected);
                               setCalendarOpen(false);

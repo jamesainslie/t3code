@@ -1,14 +1,8 @@
 /**
- * Fork: background generation usage. Every background text-generation call
- * (titles, branch names, commit and PR text, review guides, the roadmap
- * steward) leaves a row naming its purpose and the provider session that
- * answered. The usage scan files that session's records under the purpose, so
- * the Usage tab shows the spend on its own row. A provider that keeps no
- * history of the call (an ephemeral or deleted session) has its usage stored
- * on the row instead, which the scan reads as this environment's own source.
- *
- * Recording never fails a generation and reading never fails a usage scan:
- * storage errors are logged and the usage stays where it would have been.
+ * Fork: background generation usage. Each background text-generation call leaves a row naming
+ * its purpose and the answering provider session, so the usage scan shows that spend on its own
+ * row; a provider that keeps no history of the call has its usage stored on the row instead.
+ * Recording never fails a generation and reading never fails a scan: storage errors are logged.
  */
 import {
   type BackgroundGenerationPurpose,

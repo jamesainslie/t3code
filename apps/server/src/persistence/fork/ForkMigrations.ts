@@ -1,16 +1,8 @@
 /**
- * Fork-only schema, kept in its own migration ledger (`fork_sql_migrations`).
- *
- * Upstream's migrator skips every id at or below the highest one recorded, so
- * a fork migration that takes an id upstream later assigns masks upstream's
- * migration forever (docs/internals/legacy-orchestration-migration.md,
- * "Divergent migration ids"). Fork installs recorded their own migrations at
- * ids 49, 50, and 54 to 60 before this ledger existed. `reconcileForkLedger`
- * moves those rows out of upstream's ledger before upstream's migrator runs,
- * so upstream's orchestration v2 schema (55, 56) is created on fork databases.
- *
- * Both functions only ever see the v2 database: `initializeV2Database` copies
- * `state.sqlite` first, and the original stays untouched for the v1 build.
+ * Fork-only schema in its own ledger, `fork_sql_migrations`. Upstream skips ids at or below its
+ * highest recorded one, so a shared id masks upstream's migration forever (see "Divergent
+ * migration ids" in docs/internals/legacy-orchestration-migration.md). `reconcileForkLedger` moves
+ * old fork rows (49, 50, 54 to 60) out of upstream's ledger first. Both only see the v2 copy.
  */
 import * as Effect from "effect/Effect";
 import * as Migrator from "effect/sql/Migrator";

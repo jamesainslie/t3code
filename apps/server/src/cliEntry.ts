@@ -2,14 +2,10 @@ import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import packageJson from "../package.json" with { type: "json" };
 
 /**
- * Routes CLI arguments before the full CLI module graph (seconds of
- * evaluation) loads. Hot paths that other processes spawn repeatedly run
- * here: every ACP agent spawns `acp-mcp-bridge` while opening its session,
- * terminal-fallback agents run `acp-mcp-call` per tool call, and the SSH
- * launch script runs `--version` and several `__ssh-helper` calls per
- * reconnect. Everything else, including any argument shape a fast path does
- * not recognise, defers to the real CLI in ./binCli.ts so its output stays
- * the single source of truth.
+ * Routes CLI arguments before the full CLI module graph (seconds of evaluation) loads, for hot
+ * paths other processes spawn repeatedly: `acp-mcp-bridge`, `acp-mcp-call`, `--version` and
+ * `__ssh-helper`. Anything else, including an argument shape a fast path does not recognise,
+ * defers to ./binCli.ts so the real CLI's output stays the single source of truth.
  */
 export interface CliEntryLoaders {
   readonly fullCli: () => Promise<{ readonly runCli: () => void }>;

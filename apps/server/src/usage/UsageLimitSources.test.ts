@@ -42,11 +42,10 @@ const statusReply = () => Response.json(status);
 const downReply = () => new Response("upstream down", { status: 503 });
 
 /**
- * A signed-in modelproxy source. The session is stored the way
- * modelproxyAuth stores it and does not expire, so no read goes near the
- * issuer unless the gateway rejects the token. `gateway` answers each status
- * read; `demand` and `wake` stand in for the client activity that lets the
- * interval run, and `statusReads` counts what reached the gateway.
+ * A signed-in modelproxy source whose stored session never expires, so no read reaches the issuer
+ * unless the gateway rejects the token. `gateway` answers each status read, `demand` and `wake`
+ * stand in for the client activity that lets the interval run, and `statusReads` counts what
+ * reached the gateway.
  */
 function harness(
   options: {
@@ -530,7 +529,7 @@ describe("UsageLimitSources", () => {
           HttpClient.make(() => Effect.die("Unexpected network request")),
         ),
         Layer.mock(ServerSecretStore.ServerSecretStore)({
-          get: () => Effect.succeed(Option.none()),
+          get: () => Effect.succeedNone,
         }),
         NodeCrypto.layer,
       ]),

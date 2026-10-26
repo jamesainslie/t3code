@@ -26,14 +26,10 @@ export const forkArchiveExecutableName = (platform: ArchivePlatform): string =>
   executableNames(platform)[0] as string;
 
 /**
- * Adds `t3` beside the signed `lathe` in a staged archive directory, so
- * readers from before the rename still find the executable they run.
- *
- * tar.gz gets a relative symlink: every reader unpacks with tar, which keeps
- * it, and it costs nothing, where a hard link becomes a second full copy
- * under the `--hard-dereference` the Linux build packs with. The npm platform
- * packages drop it, since the registry refuses links. A zip holds no links,
- * so Windows gets a copy of the already signed executable.
+ * Adds `t3` beside the signed `lathe` in a staged archive directory so pre-rename readers still
+ * find their executable. tar.gz gets a relative symlink (tar keeps it; a hard link would become a
+ * full copy under the Linux build's `--hard-dereference`), npm platform packages drop it since the
+ * registry refuses links, and zip holds no links, so Windows gets a copy of the signed executable.
  */
 export const writeForkCliExecutableAlias = Effect.fn("writeForkCliExecutableAlias")(function* (
   contentDir: string,

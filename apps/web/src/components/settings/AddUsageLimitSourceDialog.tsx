@@ -49,11 +49,7 @@ const KIND_COPY: Record<SourceKind, { title: string; description: string; action
   },
 };
 
-/**
- * Adds a usage-limit source from provider settings on one environment. The
- * secret is sent once and kept in that server's secret store; settings only
- * ever carry a redaction marker for it afterwards.
- */
+/** Send the secret once to server secret storage; settings retain only a redaction marker. */
 export function AddUsageLimitSourceDialog({
   open,
   onOpenChange,

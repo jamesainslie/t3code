@@ -1,30 +1,26 @@
 /**
- * Fork-only. The taxonomy that decides what happens to every `t3` (any case)
- * in the fork's tracked files when the fork renames itself to Lathe. Each
- * occurrence goes to the first rule that matches it; an occurrence no rule
- * matches is unclassified, and the rename refuses to run until a rule covers
- * it. New upstream code therefore stops a sync until someone decides what its
+ * Fork-only. The taxonomy that decides what the Lathe rename does with every `t3` (any case) in
+ * tracked files. Each occurrence goes to the first matching rule; while any occurrence matches no
+ * rule the rename refuses to run, so new upstream code stops a sync until someone decides what its
  * names mean, instead of the codemod guessing.
- *
- * The classes, and what the rename does with each:
- *   identifier          renamed mechanically; never leaves the build
- *   display             text a person reads; substituted from the identity values
- *   agent-facing        names agents see (MCP server and tools, prompt tags); renamed
- *   persisted           stored by the fork; write the Lathe name, read both, warn
- *   kept                renaming would strand stored data or something the fork does not control; kept byte-identical
- *   wire-peer           exchanged with services and clients the fork does not run; kept byte-identical
- *   upstream-reference  credit or links to upstream; kept
- *   false-positive      not a reference at all (uint32, encoded data); ignored
  */
 
 export const RENAME_CLASSES = [
+  // Never leaves the build.
   "identifier",
+  // Text a person reads.
   "display",
+  // Names agents see: the MCP server and tools, prompt tags.
   "agent-facing",
+  // Stored by the fork.
   "persisted",
+  // Renaming would strand stored data or something the fork does not control.
   "kept",
+  // Exchanged with services and clients the fork does not run.
   "wire-peer",
+  // Credit or links to upstream.
   "upstream-reference",
+  // Not a reference at all (uint32, encoded data).
   "false-positive",
 ] as const;
 export type RenameClass = (typeof RENAME_CLASSES)[number];
@@ -133,6 +129,10 @@ const before = (occurrence: RenameOccurrence) =>
 const afterEscape = (occurrence: RenameOccurrence) =>
   /\\[nrt]$/.test(occurrence.token.slice(0, occurrence.offset));
 
+/** True when the hit's own t is an escape letter (\t37): an odd run of backslashes precedes it. */
+const isEscapeLetter = (occurrence: RenameOccurrence) =>
+  (occurrence.token.slice(0, occurrence.offset).match(/\\+$/)?.[0].length ?? 0) % 2 === 1;
+
 /** The token's word-part that holds the hit: its run of letters and digits. */
 const stem = (occurrence: RenameOccurrence) => {
   const lead = occurrence.token.slice(0, occurrence.offset).replace(/^.*\\[nrt]/, "");
@@ -195,11 +195,10 @@ const UPSTREAM_REPLACED_IDENTITY_LINES: ReadonlyArray<readonly [string, RegExp]>
 let rulesWithoutMobile: ReadonlyArray<RenameRule> | undefined;
 
 /**
- * Mobile source that must change with shared code even while the mobile app
- * keeps its names: imports of renamed packages and exports, the attribution
- * value shared code produces, and the text and agent names shared code renders,
- * which mobile shows and its tests assert. Native module names, fonts, storage
- * keys and bundle ids are none of these, so they stay.
+ * Mobile source that must change with shared code even while mobile keeps its names: imports of
+ * renamed packages and exports, the attribution value shared code produces, and the text and agent
+ * names shared code renders, which mobile shows and its tests assert. Native module names, fonts,
+ * storage keys and bundle ids are none of these, so they stay.
  */
 const mobileFollowsSharedCode = (o: RenameOccurrence): boolean => {
   if (/@t3tools/.test(o.token)) return true;
@@ -273,6 +272,17 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /^packaging\//,
   },
   {
+    id: "upstream-task-cache",
+    class: "upstream-reference",
+    reason:
+      "Upstream's shared Vite task cache: the endpoint, its service under infra/task-cache, and the CI read token that wires it up. The fork has no token, so CI skips it.",
+    test: (o) =>
+      // Its lint directives name the shared oxlint plugin, which the fork renames.
+      !(/^t3code\/[a-z-]+$/.test(o.token) && /lint-(?:disable|enable)/.test(o.line)) &&
+      (/^(?:\.task-cache\.json$|infra\/task-cache\/)/.test(o.path) ||
+        /T3_TASK_CACHE_/.test(o.token)),
+  },
+  {
     id: "upstream-linux-metainfo",
     class: "upstream-reference",
     reason: "Upstream's AppStream metainfo, which the fork does not ship.",
@@ -343,6 +353,13 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "false-positive",
     reason: "Lowercase t3 inside a word or number: uint32, project3, Object3D.",
     test: (o) => o.token[o.offset] === "t" && /[A-Za-z0-9]/.test(before(o)) && !afterEscape(o),
+  },
+  {
+    id: "fp-escape-letter",
+    class: "false-positive",
+    reason:
+      'A tab escape followed by digits in a string: in "\\t37" the t is the escape\'s letter.',
+    test: (o) => o.token[o.offset] === "t" && isEscapeLetter(o),
   },
   {
     id: "fp-uppercase-word",
@@ -916,7 +933,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "MCP server name (t3-code) and tool names (t3_*) agents call. Renamed to lathe and lathe_*; the old names stay recognised permanently, since stored tool calls and provider transcripts hold them.",
     token:
-      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*|^mcp_servers\.t3-code$/,
+      /mcp__t3[-_]code__|(?:^|[^A-Za-z0-9])t3_(?:workflow|thread|preview|worktree|device|project|environment|pending|queue|attachment|html|orchestrator|scheduled|delegate|task|document|link|unwatch|watch|find|read|create|list|request|resolve|background)[a-z_]*|^["'`]?t3-code["'`:]?$|^t3-code-\*|^mcp_servers\.t3-code$/,
   },
   {
     id: "agent-mcp-matchers",
@@ -943,6 +960,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
 
   // identifiers: names that never leave the build
   {
+    id: "upstream-fixture-repo-search",
+    class: "upstream-reference",
+    reason:
+      "A test's search query for the t3code fixture project, which upstream-fixture-repo-names keeps.",
+    path: /(?:\.test\.[cm]?[jt]sx?)$/,
+    test: (o) =>
+      o.token === "t3" && /\bsearch\(\s*["'`]t3["'`]/.test(o.line) && /t3code/.test(o.line),
+  },
+  {
     id: "upstream-fixture-repo-names",
     class: "upstream-reference",
     reason:
@@ -967,8 +993,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "id-lint-plugin",
     class: "identifier",
-    reason: "The repo's oxlint plugin and rule names (t3code/no-*).",
-    token: /^t3code\/[a-z-]+$/,
+    reason:
+      "The repo's oxlint plugin and rule names (t3code/no-*), also where a rule matches its own name in a regex (t3code\\/rule\\s).",
+    token: /^t3code(?:\/|\\\/)[a-z-]+(?:\\s)?$/,
   },
   {
     id: "id-internal-env",
@@ -1045,7 +1072,21 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason: "Storage keys and events that are transient or caches: renaming only clears them.",
     token:
-      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list|recentDetails)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open|thread-find-query)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
+      /t3code:(?:open-command-palette|preview-action|focus-composer|local_storage_change|github-routing-changed|update-everything-result|snap-shot-setup-resume|chunk-load-reloaded|dev-compression|project-favicons)|t3\.pullRequests\.(?:detail|list|recentDetails)|t3-acp-registry-icons|t3:(?:paste-as-text|thread-find-open|thread-find-query|guest-awaiting-rows)|t3-thread-context-drop|\.\{t3,lathe,t3f\}/,
+  },
+  {
+    id: "id-guest-session-cookie",
+    class: "identifier",
+    reason:
+      "Guest share session cookies (t3_guest_<share id>). Cookies ignore the port, so the rename keeps Lathe and upstream on one host from sharing them; a lost cookie only makes a guest open the link again.",
+    token: /t3_guest_\$/,
+  },
+  {
+    id: "id-readable-syntax-theme",
+    class: "identifier",
+    reason:
+      "The name of the generated readable light syntax theme, passed to the diff workers; nothing stores it.",
+    token: /(?:^|[^A-Za-z0-9-])t3-light(?:$|[^A-Za-z0-9-])/,
   },
   {
     id: "id-effect-service-tags",

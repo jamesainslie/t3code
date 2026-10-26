@@ -12,7 +12,6 @@ import {
   SourceControlProviderError,
   type SourceControlProviderDiscoveryItem,
 } from "@lathe/contracts";
-import type {} from "@lathe/contracts";
 
 import * as BuiltInDrivers from "./builtInDrivers.ts";
 import * as GitHubAccountSelector from "./GitHubAccountSelector.ts";
@@ -74,11 +73,10 @@ export class SourceControlProviderRegistry extends Context.Service<
 function unsupportedProvider(
   kind: SourceControlProviderKind,
 ): SourceControlProvider.SourceControlProvider["Service"] {
+  // Binding context does not create a second provider-operation span.
   return SourceControlProvider.SourceControlProvider.of({
     kind,
-    // A remote on a host no provider recognizes (or no remote at all) has no change
-    // requests Lathe could know about. Answering with none keeps the status poller from
-    // failing, and warning, on every refresh of such a repository.
+    // Unknown hosts have no readable change requests; return none to avoid poll warnings on every refresh.
     listChangeRequests: (input) =>
       kind === "unknown"
         ? Effect.succeed([])
@@ -177,10 +175,7 @@ const withPin =
         : Effect.provideService(effect, GitHubRequestPolicy.PinnedGitHubCredential, credential),
     );
 
-/**
- * `cwd` is left out because it only matters when a probe fails there, and a failed probe
- * is not kept. Equality ignores `lookup`, so this is not a `Data.Class`.
- */
+// Failed probes are not cached, so cwd is irrelevant; equality ignores lookup, unlike Data.Class.
 class UnknownRemoteLookup {
   readonly key: string;
   readonly lookup: Effect.Effect<UnknownRemoteVerdict>;
@@ -222,54 +217,62 @@ function bindProviderContext(
 
   return SourceControlProvider.SourceControlProvider.of({
     ...provider,
-    listChangeRequests: (input) =>
-      pinned(
+    listChangeRequests: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.listChangeRequests({
           ...input,
           context: input.context ?? context,
         }),
-      ),
-    getChangeRequest: (input) =>
-      pinned(
+      );
+    }),
+    getChangeRequest: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.getChangeRequest({
           ...input,
           context: input.context ?? context,
         }),
-      ),
-    createChangeRequest: (input) =>
-      pinned(
+      );
+    }),
+    createChangeRequest: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.createChangeRequest({
           ...input,
           context: input.context ?? context,
         }),
-      ),
-    getRepositoryCloneUrls: (input) =>
-      pinned(
+      );
+    }),
+    getRepositoryCloneUrls: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.getRepositoryCloneUrls({
           ...input,
           context: input.context ?? context,
         }),
-      ),
+      );
+    }),
     // A new repository has no checkout to select an account for; it uses gh's active account.
-    createRepository: (input) => provider.createRepository(input),
-    getDefaultBranch: (input) =>
-      pinned(
+    createRepository: Effect.fnUntraced(function* (input) {
+      return yield* provider.createRepository(input);
+    }),
+    getDefaultBranch: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.getDefaultBranch({
           ...input,
           context: input.context ?? context,
         }),
-      ),
-    checkoutChangeRequest: (input) =>
-      pinned(
+      );
+    }),
+    checkoutChangeRequest: Effect.fnUntraced(function* (input) {
+      return yield* pinned(
         provider.checkoutChangeRequest({
           ...input,
           context: input.context ?? context,
         }),
-      ),
+      );
+    }),
   });
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWithProviders")(
   function* (registrations: ReadonlyArray<SourceControlProviderRegistration>) {
     const config = yield* ServerConfig.ServerConfig;
@@ -377,7 +380,9 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
       },
       get,
       resolveHandle,
-      resolve: (input) => resolveHandle(input).pipe(Effect.map((handle) => handle.provider)),
+      resolve: Effect.fn("SourceControlProviderRegistry.resolve")(function (input) {
+        return resolveHandle(input).pipe(Effect.map((handle) => handle.provider));
+      }),
       discover: Effect.forEach(
         discoverySpecs,
         (spec) =>

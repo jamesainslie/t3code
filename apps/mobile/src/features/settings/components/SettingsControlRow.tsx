@@ -1,4 +1,4 @@
-// Fork-only: upstream removed this row (#18511); the fork's server controls screen uses it.
+// Fork-only: upstream removed this row; the fork's server controls screen uses it.
 import type { ComponentProps, ReactNode } from "react";
 import { Platform, View } from "react-native";
 

@@ -90,11 +90,9 @@ export function applyThreadDependencySatisfied(
 }
 
 /**
- * True when linking `blockedThreadId` to `dependsOnThreadId` would let a
- * thread wait on itself, directly or through other unsatisfied links.
- * Satisfied links are history, not edges, so they never form a cycle.
- * Shared by the decider and the client pickers so both refuse the same
- * links.
+ * True when linking `blockedThreadId` to `dependsOnThreadId` would let a thread wait on itself,
+ * directly or through other unsatisfied links. Satisfied links are history, not edges. Shared by
+ * the decider and the client pickers so both refuse the same links.
  */
 export function threadDependencyWouldCycle(
   threads: ReadonlyArray<ThreadDependencyHolder & { readonly id: ThreadId }>,

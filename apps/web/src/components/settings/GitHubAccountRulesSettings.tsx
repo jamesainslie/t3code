@@ -85,10 +85,9 @@ function IconButton({
 const joinLabels = (labels: ReadonlyArray<string>) => labels.join(", ");
 
 /**
- * Environment-wide owner rules that pick a `gh` account per repository. Like every other
- * environment setting on the page, "All environments" edits every connected machine that
- * supports the rules and one selected machine edits only itself, which is how a machine gets
- * rules of its own. A project chooses its own account on the project row instead, so nothing
+ * Environment-wide owner rules that pick a `gh` account per repository. "All environments" edits
+ * every connected machine that supports them and one selected machine edits only itself, which is
+ * how a machine gets its own rules. Projects choose an account on the project row, so nothing
  * renders at project scope.
  */
 export function GitHubAccountRulesSettings({

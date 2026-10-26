@@ -113,11 +113,10 @@ function useNowSecond(): number {
 }
 
 /**
- * Holds the gateway's status stream open while the ledger shows in a visible
- * window. The server follows it and pushes each change through the server
- * config, so the ledger moves when the gateway does rather than on the
- * provider health interval. A hidden window lets go: every push reaches every
- * client, and nobody is reading this one.
+ * Holds the gateway's status stream open while the ledger shows in a visible window; the server
+ * pushes each change through the server config, so the ledger moves with the gateway rather than
+ * the provider health interval. A hidden window lets go: every push reaches every client, and
+ * nobody is reading this one.
  */
 function useLiveGateway(environmentId: EnvironmentId) {
   const [visible, setVisible] = useState(() => !document.hidden);
@@ -609,11 +608,10 @@ function pillLabel(pill: ProxyPillView): string {
 }
 
 /**
- * The gateway's serving account and headroom, at the size of the other
- * header controls. Two bars are its session and weekly windows against
- * the rotation threshold; the number is the session window; after the
- * rule is the fleet runway. Hover to peek at every pooled account; click
- * for the card under the thread details card, where logins happen.
+ * The gateway's serving account and headroom, at the size of the other header controls: two bars
+ * for its session and weekly windows against the rotation threshold, the session figure, then the
+ * fleet runway after the rule. Hover peeks at every pooled account; click opens the card under
+ * the thread details card, where logins happen.
  */
 export function ProxyUsagePill({
   environmentId: threadEnvironmentId,
@@ -628,15 +626,10 @@ export function ProxyUsagePill({
   const environmentId = (selected?.environmentId ?? threadEnvironmentId) as EnvironmentId;
   const threshold = snapshot?.proxy?.rotationThresholdPercent ?? 90;
   const pill = snapshot ? deriveProxyPill(snapshot, Date.parse(`${minute}:00Z`)) : null;
-  // Hovering peeks at the ledger; clicking opens the card under the thread
-  // details card, which stays until closed (a login in it sends the user to
-  // another window). The peek stands down while the card is open so the
-  // ledger is never shown twice.
-  //
-  // Like the details card, the card keeps its column only while there is
-  // room for it. Without room it steps aside, remembering it was open, and a
-  // click opens it over the chat until closed or the room comes back. A login
-  // in progress shows either way.
+  // Hovering peeks at the ledger; clicking opens the card under the thread details card, which
+  // stays until closed (a login sends the user to another window); the peek stands down meanwhile.
+  // Without room for its column the card steps aside, remembering it was open, and a click opens
+  // it over the chat until closed or room returns. A login in progress shows either way.
   const [hovered, setHovered] = useState(false);
   const loginFor = useAtomValue(proxyLoginPanelAtom);
   const setLoginFor = useAtomSet(proxyLoginPanelAtom);

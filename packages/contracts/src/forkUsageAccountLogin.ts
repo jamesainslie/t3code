@@ -1,11 +1,7 @@
 /**
- * Fork-only contracts for logging a modelproxy gateway's pooled account in
- * again from Lathe. The gateway runs the OAuth flow and keeps every
- * secret; Lathe relays the session view so the header pill can show the consent
- * link (Anthropic accounts paste back the code it shows) or the device code
- * (Codex accounts approve it on OpenAI's site).
- *
- * Upstream contracts reach this module through one field on the gateway
+ * Fork-only contracts for logging a modelproxy gateway's pooled account in again. The gateway
+ * runs the OAuth flow and keeps every secret; Lathe relays the session view so the pill shows the
+ * consent link or device code. Upstream reaches this module through one field on the gateway
  * status and one RPC, so upstream merges stay mechanical.
  */
 import * as Schema from "effect/Schema";

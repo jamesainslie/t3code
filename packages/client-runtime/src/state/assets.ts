@@ -7,7 +7,7 @@ import {
   type ProjectCloneSnapshot,
   WS_METHODS,
 } from "@lathe/contracts";
-import { mediaMimeTypeFromExtension } from "@lathe/shared/filePreview";
+import { mediaMimeTypeFromExtension } from "@lathe/shared/mediaPreview";
 import { isWindowsAbsolutePath } from "@lathe/shared/path";
 import {
   getProjectFaviconResourceKey,

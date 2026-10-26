@@ -1,4 +1,4 @@
-import { registerCustomTheme, resolveTheme } from "@pierre/diffs";
+import { registerCustomTheme, resolveTheme, type DiffsTheme } from "@pierre/diffs";
 import type { SyntaxTheme } from "@lathe/contracts";
 
 type Appearance = "light" | "dark";
@@ -44,93 +44,39 @@ type RoleStyle = string | { readonly color: string; readonly fontStyle: FontStyl
 const italic = (color: string): RoleStyle => ({ color, fontStyle: "italic" });
 const bold = (color: string): RoleStyle => ({ color, fontStyle: "bold" });
 
-/** TextMate scopes each palette role colors. Later, more specific selectors win by specificity. */
+/**
+ * Highlights token scopes each palette role colors. A token without its own entry takes its
+ * nearest listed parent scope, so `keyword` also colors `keyword.control`. Highlights does not
+ * tokenize type and variable definitions apart, so those roles list no scopes.
+ */
 const ROLE_SCOPES = {
-  comment: ["comment", "punctuation.definition.comment"],
-  keyword: [
-    "keyword",
-    "storage",
-    "storage.type",
-    "storage.modifier",
-    "keyword.control",
-    "keyword.operator.new",
-    "keyword.operator.expression",
-    "keyword.operator.ternary",
-  ],
-  operator: [
-    "keyword.operator",
-    "keyword.operator.assignment",
-    "keyword.operator.arithmetic",
-    "keyword.operator.relational",
-    "keyword.operator.comparison",
-    "keyword.operator.logical",
-    "keyword.operator.optional",
-    "keyword.operator.spread",
-  ],
-  punctuation: [
-    "punctuation",
-    "meta.brace",
-    "punctuation.separator",
-    "punctuation.terminator",
-    "punctuation.accessor",
-    "meta.delimiter",
-    "punctuation.definition.block",
-    "punctuation.definition.parameters",
-    "punctuation.definition.binding-pattern",
-  ],
-  templateExpr: ["punctuation.definition.template-expression", "punctuation.section.embedded"],
-  string: ["string", "punctuation.definition.string", "string.template", "string.quoted"],
-  escape: ["constant.character.escape"],
-  number: [
-    "constant.numeric",
-    "constant.language",
-    "constant.language.boolean",
-    "constant.language.null",
-    "constant.language.undefined",
-  ],
-  function: ["entity.name.function", "support.function", "meta.function-call entity.name.function"],
-  functionDef: [
-    "meta.definition.function entity.name.function",
-    "meta.definition.method entity.name.function",
-    "meta.definition.variable entity.name.function",
-  ],
-  type: [
-    "entity.name.type",
-    "support.type",
-    "support.type.primitive",
-    "entity.name.class",
-    "support.class",
-    "entity.other.inherited-class",
-  ],
-  typeDef: [
-    "meta.interface entity.name.type.interface",
-    "meta.type.declaration entity.name.type.alias",
-    "meta.class entity.name.type.class",
-  ],
-  property: [
-    "variable.other.property",
-    "variable.other.object.property",
-    "meta.object-literal.key",
-    "support.variable.property",
-    "variable.other.constant.property",
-  ],
-  variable: [
-    "variable",
-    "variable.other.readwrite",
-    "variable.other.object",
-    "meta.definition.variable",
-  ],
-  constant: ["variable.other.constant"],
-  varDef: [
-    "meta.definition.variable variable.other.constant",
-    "meta.definition.variable variable.other.readwrite",
-  ],
+  comment: ["comment", "comment.doc"],
+  keyword: ["keyword", "preproc"],
+  operator: ["keyword.operator", "operator"],
+  punctuation: ["punctuation"],
+  templateExpr: ["punctuation.special", "embedded"],
+  string: ["string", "string.special", "text.literal"],
+  escape: ["string.escape"],
+  number: ["number", "boolean", "constant.builtin"],
+  function: ["function", "function.method"],
+  functionDef: ["function.definition"],
+  type: ["type", "constructor", "enum"],
+  typeDef: [],
+  property: ["property"],
+  variable: ["variable"],
+  constant: ["constant", "string.special.symbol", "variant"],
+  varDef: [],
   param: ["variable.parameter"],
-  tag: ["entity.name.tag", "support.class.component"],
-  tagPunct: ["punctuation.definition.tag"],
-  attribute: ["entity.other.attribute-name"],
-  this: ["variable.language"],
-  regexp: ["string.regexp"],
+  tag: ["tag", "selector"],
+  tagPunct: [
+    "punctuation.bracket.html",
+    "punctuation.bracket.jsx",
+    "punctuation.delimiter.html",
+    "punctuation.delimiter.jsx",
+  ],
+  attribute: ["attribute"],
+  this: ["variable.special"],
+  regexp: ["string.regex"],
 } as const;
 
 type Role = keyof typeof ROLE_SCOPES;
@@ -262,7 +208,7 @@ const SYNTAX_THEMES: Record<CustomSyntaxTheme, SyntaxThemeDefinition> = {
   },
   "four-kinds": {
     label: "Four Kinds",
-    description: "Only strings, constants, comments and definitions.",
+    description: "Only strings, constants, comments, function definitions and types.",
     dark: {
       fg: gray(0.88),
       punctuation: gray(0.6),
@@ -270,10 +216,10 @@ const SYNTAX_THEMES: Record<CustomSyntaxTheme, SyntaxThemeDefinition> = {
       comment: oklch(0.84, 0.085, 100),
       string: oklch(0.8, 0.09, 145),
       number: oklch(0.76, 0.09, 330),
-      varDef: oklch(0.76, 0.09, 245),
       constant: gray(0.88),
       functionDef: oklch(0.76, 0.09, 245),
-      typeDef: oklch(0.76, 0.09, 245),
+      type: oklch(0.76, 0.09, 245),
+      tag: gray(0.88),
       templateExpr: gray(0.6),
     },
     light: {
@@ -283,10 +229,10 @@ const SYNTAX_THEMES: Record<CustomSyntaxTheme, SyntaxThemeDefinition> = {
       comment: oklch(0.52, 0.1, 80),
       string: oklch(0.48, 0.12, 145),
       number: oklch(0.5, 0.15, 330),
-      varDef: oklch(0.48, 0.14, 250),
       constant: gray(0.25),
       functionDef: oklch(0.48, 0.14, 250),
-      typeDef: oklch(0.48, 0.14, 250),
+      type: oklch(0.48, 0.14, 250),
+      tag: gray(0.25),
       templateExpr: gray(0.55),
     },
   },
@@ -819,36 +765,50 @@ export function syntaxThemeSwatches(
   }));
 }
 
-/** Builds the Shiki theme for one palette on top of Pierre's workbench colors (gutter, git, selection). */
+type ZedTheme = NonNullable<DiffsTheme["zed"]>;
+
+function zedSyntaxStyle({ color, fontStyle }: { color: string; fontStyle: string }) {
+  if (fontStyle === "italic") return { color, font_style: "italic" };
+  if (fontStyle === "bold") return { color, font_weight: 700 };
+  return { color };
+}
+
+/**
+ * Builds the Highlights theme for one palette on top of Pierre's editor colors (gutter, git,
+ * selection). Only Zed themes reach the Highlights tokenizer, so a TextMate theme would fail.
+ */
 export function buildSyntaxTheme(
   theme: CustomSyntaxTheme,
   appearance: Appearance,
-  workbenchColors: Readonly<Record<string, string>>,
-) {
+  editorStyle: ZedTheme["style"],
+): ZedTheme {
   const palette = SYNTAX_THEMES[theme][appearance];
   const foreground = roleStyle(palette, "fg").color;
+  const background = SYNTAX_THEME_CODE_BACKGROUNDS[appearance];
   return {
     name: `lathe-${theme}-${appearance}` satisfies SyntaxThemeName,
-    type: appearance,
-    colors: {
-      ...workbenchColors,
-      "editor.background": SYNTAX_THEME_CODE_BACKGROUNDS[appearance],
+    appearance,
+    style: {
+      ...editorStyle,
+      background,
+      "editor.background": background,
+      text: foreground,
       "editor.foreground": foreground,
+      syntax: Object.fromEntries(
+        (Object.keys(ROLE_SCOPES) as Role[]).flatMap((role) => {
+          const style = zedSyntaxStyle(roleStyle(palette, role));
+          const scopes: ReadonlyArray<string> = ROLE_SCOPES[role];
+          return scopes.map((scope) => [scope, style] as const);
+        }),
+      ),
     },
-    tokenColors: (Object.keys(ROLE_SCOPES) as Role[]).map((role) => {
-      const style = roleStyle(palette, role);
-      return {
-        scope: [...ROLE_SCOPES[role]],
-        settings: { foreground: style.color, fontStyle: style.fontStyle },
-      };
-    }),
   };
 }
 
 const registeredThemeNames = new Set<SyntaxThemeName>();
 
 /**
- * Names the Shiki theme for a syntax theme in the given appearance. Custom
+ * Names the Highlights theme for a syntax theme in the given appearance. Custom
  * themes register with Pierre on first use, so any name this returns can be
  * handed to a highlighter or worker pool.
  */
@@ -860,10 +820,16 @@ export function resolveSyntaxThemeName(
   const name: SyntaxThemeName = `lathe-${theme}-${appearance}`;
   if (!registeredThemeNames.has(name)) {
     registeredThemeNames.add(name);
-    registerCustomTheme(name, async () => {
-      const pierre = await resolveTheme(`pierre-${appearance}`);
-      return buildSyntaxTheme(theme, appearance, pierre.colors ?? {});
-    });
+    // Themes resolve on the main thread and reach the diff workers already resolved.
+    registerCustomTheme(
+      name,
+      async () => {
+        const pierre = await resolveTheme(`pierre-${appearance}`, "highlights");
+        if (!pierre.zed) throw new Error(`pierre-${appearance} has no Highlights palette`);
+        return buildSyntaxTheme(theme, appearance, pierre.zed.style);
+      },
+      "zed",
+    );
   }
   return name;
 }

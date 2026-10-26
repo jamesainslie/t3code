@@ -119,11 +119,10 @@ function DiagramCanvas({
 }
 
 /**
- * The expanded viewer owns its own theme. It opens in the app's, and the
- * toggle re-renders the same source in the other palette with a matching
- * canvas, so a diagram can be copied light for a document from a dark app
- * without changing the app. The previous picture stays up until the new
- * render lands, so the canvas never shows one palette on the other's ground.
+ * The expanded viewer owns its theme: it opens in the app's, and the toggle re-renders the source
+ * in the other palette with a matching canvas, so a diagram can be copied light from a dark app.
+ * The previous picture stays up until the new render lands, so the canvas never shows one palette
+ * on the other's ground.
  */
 export function ExpandedDiagram({
   source,
