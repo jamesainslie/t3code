@@ -34,6 +34,22 @@ vi.mock("../hooks/useHandleNewThread", () => ({
     handleNewThread: async () => undefined,
   }),
   useNewThreadHandler: () => async () => undefined,
+  // Fork: "Continue in new thread".
+  continueInNewThreadOptions: () => ({}),
+}));
+// Fork: roadmap. The add-project inputs under test do not need one, so the home serves none.
+vi.mock("./roadmap/useRoadmapThreadActions", () => ({
+  useRoadmapAvailability: () => ({
+    home: null,
+    supported: false,
+    homeConnected: false,
+    canChange: false,
+  }),
+}));
+vi.mock("./roadmap/RoadmapPaletteItems", () => ({
+  ROADMAP_ATTACH_VIEW: "roadmap-attach",
+  useRoadmapAttachPickerGroups: () => [],
+  useRoadmapPaletteActionItems: () => [],
 }));
 vi.mock("../hooks/useOpenPanelPullRequestUrl", () => ({ useOpenPanelPullRequestUrl: () => null }));
 vi.mock("../connection/useDesktopLocalBootstraps", () => ({ useDesktopLocalBootstraps: () => [] }));

@@ -59,6 +59,10 @@ vi.mock("../state/preview", () => ({ previewEnvironment: { open: {} } }));
 vi.mock("../editorPreferences", () => ({ useOpenInPreferredEditor: () => () => {} }));
 vi.mock("./preview/openTerminalLinkInPreview", () => ({ openTerminalLinkInPreview: () => {} }));
 vi.mock("~/localApi", () => ({ readLocalApi: () => null }));
+// Fork: the browser launch banner opens links through the whole app state.
+vi.mock("./terminal/TerminalBrowserLaunchBanner", () => ({
+  TerminalBrowserLaunchBanner: () => null,
+}));
 vi.mock("../hooks/useSettings", async () => {
   const { DEFAULT_CLIENT_SETTINGS } = await import("@lathe/contracts/settings");
   return {

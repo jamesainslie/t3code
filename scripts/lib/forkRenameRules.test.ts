@@ -42,6 +42,22 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["apps/server/src/process/agentScope.ts", 'const S = "app-t3code.slice";', "identifier"],
     [
+      "apps/server/src/cloud/serviceProtection.test.ts",
+      '        "/home/theo/.config/systemd/user.conf.d/90-t3code-protect.conf",',
+      "identifier",
+    ],
+    ["apps/server/src/process/agentScope.test.ts", '            "app-t3code.slice",', "identifier"],
+    [
+      "apps/server/src/orchestration-v2/ProviderTurnStartService.test.ts",
+      '            expect(yield* branchConfig("t3-merge-base")).toBe(expected.base);',
+      "kept",
+    ],
+    [
+      "apps/web/src/components/sidebar/updateEverythingRun.test.ts",
+      'const KEY = "t3code:update-everything-result:v1";',
+      "identifier",
+    ],
+    [
       "packages/shared/src/remote.ts",
       "  `t3code://pair?${new URLSearchParams([[PAIRING_APP_LINK_PARAM, pairingUrl]])}`;",
       "upstream-reference",

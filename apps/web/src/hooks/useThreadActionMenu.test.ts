@@ -35,6 +35,8 @@ function recordEffect(action: string) {
 }
 
 vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
+// Fork: the "Depends on" entry. The real bus loads the whole command palette.
+vi.mock("../commandPaletteBus", () => ({ openThreadDependencyPicker: vi.fn() }));
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),

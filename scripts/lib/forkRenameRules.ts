@@ -549,7 +549,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "branch.<name>.t3-merge-base keys in users' repos' git config; they describe the branch, so both apps share them.",
-    token: /\.t3-merge-base(?:-ref)?\b/,
+    token: /(?:^|[."'`])t3-merge-base(?:-ref)?\b/,
   },
   {
     id: "kept-vendored-binary-imports",
@@ -1011,8 +1011,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) =>
       /^t3(?:code|tools)$/i.test(stem(o)) &&
       // Values tests compare with renamed code: attribution, user agents, DISPLAY,
-      // lint rule names and command-line flags.
+      // lint rule names, command-line flags, systemd unit names and storage keys.
       !/attribution|user-?agent|userAgent|DISPLAY/i.test(o.line) &&
+      !/\.slice\b|-protect\.conf|:update-everything-result/.test(o.token) &&
       !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
       !o.token.startsWith("--") &&
       !/^oxlint-plugin-/.test(o.path),

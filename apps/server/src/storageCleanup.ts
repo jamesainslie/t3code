@@ -545,7 +545,13 @@ const make = Effect.gen(function* () {
         );
       if (result === null) return null;
       if (result.exitCode === 0 || result.exitCode === allowedExitCode) return result;
-      if (result.stderr.toLowerCase().includes("not a git repository")) return null;
+      // Git 2.5x reports a broken .git file as "gitfile does not point to a valid repository".
+      if (
+        /not a git repository|does not point to a valid repository/.test(
+          result.stderr.toLowerCase(),
+        )
+      )
+        return null;
       return yield* failure(
         result.stderr.trim().split(/\r?\n/)[0]?.slice(0, 1000) || "command failed",
       );

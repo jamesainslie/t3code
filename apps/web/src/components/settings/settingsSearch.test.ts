@@ -203,8 +203,8 @@ describe("searchSettings", () => {
   });
 
   it.each([
-    ["agent thread history", "agent-thread-history", "/settings/integrations"],
-    ["recent turns in full", "agent-thread-history-recent-turns", "/settings/integrations"],
+    ["agent thread history", "agent-thread-history", "/settings/browser"],
+    ["recent turns in full", "agent-thread-history-recent-turns", "/settings/browser"],
   ])("routes %s to its owning category", (query, id, to) => {
     expect(searchSettings(query)[0]).toMatchObject({ id, to });
   });
