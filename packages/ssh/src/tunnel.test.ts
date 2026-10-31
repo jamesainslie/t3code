@@ -728,7 +728,7 @@ describe("ssh environment output", () => {
         Effect.result(provide(manager.ensureEnvironment(target))),
       );
       yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.seconds(90));
+      yield* TestClock.adjust(Duration.seconds(210));
       const result = yield* Fiber.join(fiber);
 
       assert.isTrue(Result.isFailure(result));

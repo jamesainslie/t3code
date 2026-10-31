@@ -275,13 +275,15 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")(
     const decodeLaunchResult = Schema.decodeUnknownSync(Schema.fromJsonString(LaunchResult));
     const ServerEvent = Schema.Struct({
       pid: Schema.Number,
-      event: Schema.Literals(["listening", "request", "sigterm"]),
+      event: Schema.Literals(["started", "listening", "request", "sigterm"]),
       port: Schema.optional(Schema.Number),
     });
     const decodeServerEvent = Schema.decodeUnknownSync(Schema.fromJsonString(ServerEvent));
 
     // Serves 200 on `/`, writes the runtime file the real server writes under
     // its base dir, and logs every event so a test can see restarts and kills.
+    // The behavior file read at start makes it fail, stall until SIGUSR1, or
+    // ignore its first SIGTERM, like a server migrating or reconciling.
     const FAKE_SERVER = `import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
@@ -293,15 +295,28 @@ if (args[0] === "auth") {
   process.stdout.write(JSON.stringify({ credential: "fixture" }) + "\\n");
   process.exit(0);
 }
+const behavior = fs.existsSync(process.env.LATHE_TEST_BEHAVIOR)
+  ? JSON.parse(fs.readFileSync(process.env.LATHE_TEST_BEHAVIOR, "utf8"))
+  : {};
+log({ event: "started" });
+if (behavior.start === "exit") {
+  process.stderr.write("fixture server refused to start\\n");
+  process.exit(1);
+}
 const server = http.createServer((_request, response) => {
   log({ event: "request" });
   response.end("ok");
 });
+let ignoredSigterm = false;
 process.on("SIGTERM", () => {
   log({ event: "sigterm" });
+  if (behavior.stop === "ignore-first" && !ignoredSigterm) {
+    ignoredSigterm = true;
+    return;
+  }
   process.exit(0);
 });
-server.listen(Number(option("--port")), "127.0.0.1", () => {
+const listen = () => server.listen(Number(option("--port")), "127.0.0.1", () => {
   const port = server.address().port;
   const userdata = path.join(option("--base-dir"), "userdata");
   fs.mkdirSync(userdata, { recursive: true });
@@ -312,6 +327,16 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
   log({ event: "listening", port });
   process.stdout.write("listening\\n");
 });
+if (behavior.start === "hold") {
+  // Signal handlers alone do not keep the event loop alive.
+  const stall = setInterval(() => {}, 1 << 30);
+  process.once("SIGUSR2", () => {
+    clearInterval(stall);
+    listen();
+  });
+} else {
+  listen();
+}
 `;
 
     const freeLoopbackPort = Effect.callback<number, Error>((resume) => {
@@ -341,6 +366,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
       const bin = path.join(fixture, "bin");
       const cliPath = path.join(fixture, "fake server.mjs");
       const logPath = path.join(fixture, "events.log");
+      const behaviorPath = path.join(fixture, "behavior.json");
       const serverHome = path.join(fixture, "home", ".lathe");
       const stateDir = path.join(serverHome, "ssh-launch", "fixture");
       yield* fs.makeDirectory(bin);
@@ -352,6 +378,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
         HOME: path.join(fixture, "home"),
         PATH: `${bin}:/usr/bin:/bin`,
         LATHE_TEST_LOG: logPath,
+        LATHE_TEST_BEHAVIOR: behaviorPath,
         LATHE_TEST_STATE_DIR: stateDir,
         LATHE_TEST_SERVER_HOME: serverHome,
       };
@@ -367,7 +394,7 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
         events.pipe(
           Effect.map((entries) => {
             for (const entry of entries) {
-              if (entry.event === "listening" && isAlive(entry.pid)) {
+              if (entry.event === "started" && isAlive(entry.pid)) {
                 process.kill(entry.pid, "SIGKILL");
               }
             }
@@ -408,13 +435,28 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
         );
       }, Effect.scoped);
 
+      // Shortens the launch script's waits, which default to production values.
+      const launchScript = (timing: { readyTimeoutMs?: number; restartWaitSeconds?: number }) => {
+        let script = buildRemoteLaunchScript({ nodeScriptPath: cliPath });
+        for (const [name, value] of [
+          ["READY_TIMEOUT_MS", timing.readyTimeoutMs],
+          ["RESTART_WAIT_SECONDS", timing.restartWaitSeconds],
+        ] as const) {
+          if (value === undefined) continue;
+          script = script.replace(new RegExp(`^${name}=\\d+$`, "mu"), `${name}=${value}`);
+          assert.include(script, `\n${name}=${value}\n`);
+        }
+        return runScript(script, ["fixture"]);
+      };
+
       const launch = Effect.gen(function* () {
-        const result = yield* runScript(buildRemoteLaunchScript({ nodeScriptPath: cliPath }), [
-          "fixture",
-        ]);
+        const result = yield* launchScript({});
         assert.equal(result.exitCode, 0, result.stderr);
         return decodeLaunchResult(result.stdout.trim());
       });
+
+      const setBehavior = (behavior: { start?: "exit" | "hold"; stop?: "ignore-first" }) =>
+        fs.writeFileString(behaviorPath, JSON.stringify(behavior));
 
       const readState = (name: string) =>
         fs.readFileString(path.join(stateDir, name)).pipe(
@@ -451,6 +493,8 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
         stateDir,
         events,
         launch,
+        launchScript,
+        setBehavior,
         readState,
         runScript,
         startExternalServer,
@@ -571,6 +615,88 @@ server.listen(Number(option("--port")), "127.0.0.1", () => {
           [firstPid, secondPid],
         );
         assert.equal(second.remotePort, listening[1]?.port);
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    );
+
+    // A large database can take minutes to migrate. Killing it on the deadline
+    // threw that work away and left it holding the home for the next attempt.
+    it.live("leaves a slow-starting server running and reuses it on the next launch", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        yield* fixture.setBehavior({ start: "hold" });
+
+        const first = yield* fixture.launchScript({ readyTimeoutMs: 1_500 });
+
+        assert.equal(first.exitCode, 1);
+        assert.include(first.stderr, "still starting");
+        const pid = Number(yield* fixture.readState("pid"));
+        assert.isTrue(isAlive(pid));
+        assert.equal(yield* fixture.readState("managed"), "managed");
+        process.kill(pid, "SIGUSR2");
+
+        const second = yield* fixture.launch;
+
+        assert.equal(second.action, "reused");
+        assert.equal(yield* fixture.readState("pid"), String(pid));
+        const events = yield* fixture.events;
+        assert.isFalse(events.some((entry) => entry.event === "sigterm"));
+        assert.deepEqual(
+          events.filter((entry) => entry.event === "started").map((entry) => entry.pid),
+          [pid],
+        );
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    );
+
+    it.live("fails as soon as the started server exits instead of waiting out readiness", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        yield* fixture.setBehavior({ start: "exit" });
+
+        const result = yield* fixture.launchScript({});
+
+        assert.equal(result.exitCode, 1);
+        assert.include(result.stderr, "exited before it became ready");
+        assert.include(result.stderr, "fixture server refused to start");
+        assert.isNull(yield* fixture.readState("pid"));
+        assert.isNull(yield* fixture.readState("port"));
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    );
+
+    // The replacement would boot into the old server's ownership lock and exit.
+    it.live("starts no replacement while the old server is still stopping, and retries", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        yield* fixture.setBehavior({ stop: "ignore-first" });
+        yield* fixture.launch;
+        const oldPid = Number(yield* fixture.readState("pid"));
+        const runnerPath = fixture.path.join(fixture.stateDir, "run-lathe.sh");
+        yield* fixture.fs.writeFileString(
+          runnerPath,
+          `${yield* fixture.fs.readFileString(runnerPath)}\n# older runner\n`,
+        );
+
+        const blocked = yield* fixture.launchScript({ restartWaitSeconds: 1 });
+
+        assert.equal(blocked.exitCode, 1);
+        assert.include(blocked.stderr, "still shutting down");
+        assert.isTrue(isAlive(oldPid));
+        assert.equal(yield* fixture.readState("pid"), String(oldPid));
+        const startedBefore = (yield* fixture.events).filter((entry) => entry.event === "started");
+        assert.deepEqual(
+          startedBefore.map((entry) => entry.pid),
+          [oldPid],
+        );
+
+        const retried = yield* fixture.launch;
+
+        assert.equal(retried.action, "restarted-runner-changed");
+        assert.isFalse(isAlive(oldPid));
+        const newPid = Number(yield* fixture.readState("pid"));
+        assert.notEqual(newPid, oldPid);
+        assert.deepEqual(
+          (yield* fixture.events).filter((entry) => entry.event === "sigterm").map((e) => e.pid),
+          [oldPid, oldPid],
+        );
       }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
     );
 
