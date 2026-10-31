@@ -203,6 +203,59 @@ function connectionSummaryLogFields(summary: SshConnectionSummary, totalMs: numb
   };
 }
 
+const PHASE_LABELS: Record<SshPhase, string> = {
+  targetResolveMs: "resolving the host",
+  lockWaitMs: "waiting for another connect",
+  existingTunnelCheckMs: "checking the existing tunnel",
+  controlMasterMs: "control master",
+  launchMs: "launch",
+  tunnelStartMs: "tunnel start",
+  pairingMs: "pairing",
+  tunnelCloseMs: "tunnel close",
+  remoteStopMs: "remote stop",
+};
+const SLOW_PHASE_MS = 1_000;
+
+const TUNNEL_TEXT: Partial<Record<NonNullable<SshConnectionSummary["tunnel"]>, string>> = {
+  created: "opened a tunnel",
+  reused: "reused the tunnel",
+  "stale-replaced": "replaced a stale tunnel",
+  "pruned-exited": "reopened a tunnel that had exited",
+};
+
+/** The output panel's one-line account of an ensure, which is all a tunnel reuse reports. */
+function describeConnectionSummary(
+  summary: SshConnectionSummary,
+  succeeded: boolean,
+  totalMs: number,
+): string {
+  const seconds = (ms: number) => `${(ms / 1_000).toFixed(1)}s`;
+  const details: Array<string> = [];
+  const tunnel = summary.tunnel === null ? undefined : TUNNEL_TEXT[summary.tunnel];
+  if (tunnel !== undefined && summary.localPort !== null && summary.remotePort !== null) {
+    details.push(
+      `${tunnel} from local port ${summary.localPort} to remote port ${summary.remotePort}`,
+    );
+  }
+  if (summary.controlMaster !== "not-used" && summary.controlMaster !== "disabled") {
+    details.push(
+      `control master ${summary.controlMaster}${summary.controlMasterReason === null ? "" : `: ${summary.controlMasterReason}`}`,
+    );
+  }
+  const slow = (Object.entries(summary.phases) as Array<[SshPhase, number]>)
+    .filter(([, ms]) => ms >= SLOW_PHASE_MS)
+    .toSorted(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([phase, ms]) => `${PHASE_LABELS[phase]} ${seconds(ms)}`);
+  const head = succeeded ? `Connected in ${seconds(totalMs)}` : `Failed after ${seconds(totalMs)}`;
+  return [
+    details.length === 0 ? head : `${head}: ${details.join(", ")}`,
+    ...(slow.length === 0
+      ? []
+      : [`slowest step${slow.length === 1 ? "" : "s"}: ${slow.join(", ")}`]),
+  ].join("; ");
+}
+
 const MAX_SUMMARY_ERROR_LENGTH = 500;
 
 /** A short tag and message for a failed outcome; errors here never carry a credential. */
@@ -2245,6 +2298,16 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     });
     const summary = makeConnectionSummary();
     let issuedPairingToken = false;
+    const startedAt = yield* Clock.currentTimeMillis;
+    const observer = yield* SshOutputObserver;
+    const reportSummary = (succeeded: boolean) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        observer({
+          source: "tunnel",
+          stream: "stdout",
+          text: `${describeConnectionSummary(summary, succeeded, now - startedAt)}\n`,
+        }),
+      );
     return yield* withConnectionSummary({
       event: "ssh.environment.ensure",
       target,
@@ -2277,7 +2340,15 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           ...(entry.remoteServerKind ? { remoteServerKind: entry.remoteServerKind } : {}),
         };
       }),
-    });
+    }).pipe(
+      Effect.onExit((exit) =>
+        Exit.isSuccess(exit)
+          ? reportSummary(true)
+          : Cause.hasInterruptsOnly(exit.cause)
+            ? Effect.void
+            : reportSummary(false),
+      ),
+    );
   });
 
   const disconnectEnvironment = Effect.fn("ssh/tunnel.disconnectEnvironment")(function* (
