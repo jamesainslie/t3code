@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { NotificationSettings } from "./NotificationSettings";
+import { MenuBarSetting } from "./MenuBarSetting";
 import { CopyOnSelectSettings } from "./CopyOnSelectSettings";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { CheckIcon } from "lucide-react";
@@ -826,6 +827,7 @@ export function GeneralSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="notifications" title="Notifications">
         <NotificationSettings />
+        <MenuBarSetting />
         <SettingsRow
           {...searchableSetting("in-app-notifications")}
           description="Show a toast when another thread finishes, fails, or needs input or approval while this app has focus."

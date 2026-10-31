@@ -1167,6 +1167,9 @@ export interface DesktopBridge {
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
+  /** macOS menu-bar icon; other platforms ignore it. */
+  getMenuBarEnabled: () => Promise<boolean>;
+  setMenuBarEnabled: (enabled: boolean) => Promise<boolean>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
   pickProjectFavicon: (initialPath?: string) => Promise<string | null>;
   pickThemeFiles: () => Promise<readonly PickedThemeFile[] | null>;

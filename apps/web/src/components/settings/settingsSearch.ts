@@ -638,6 +638,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["notification sound alert completion input approval desktop"],
   },
   {
+    id: "menu-bar-icon",
+    title: "Menu bar icon",
+    to: "/settings/general",
+    searchTerms: ["menu bar tray status icon dot attention running threads background"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
     id: "copy-on-select",
     title: "Copy selected text",
     to: "/settings/general",
