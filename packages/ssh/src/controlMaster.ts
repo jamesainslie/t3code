@@ -71,9 +71,16 @@ function forgetSecretOf(
   environment: Record<string, string | undefined>,
 ) {
   const secretFile = environment[SshAuth.SSH_AUTH_SECRET_FILE_ENV];
-  return secretFile === undefined
-    ? Effect.void
-    : fs.remove(secretFile, { force: true }).pipe(Effect.ignore);
+  if (secretFile === undefined) return Effect.void;
+  // The secret sits alone in a private auth-secret-* directory, which goes with it.
+  return Path.Path.pipe(
+    Effect.flatMap((path) =>
+      path.basename(path.dirname(secretFile)).startsWith("auth-secret-")
+        ? fs.remove(path.dirname(secretFile), { recursive: true, force: true })
+        : fs.remove(secretFile, { force: true }),
+    ),
+    Effect.ignore,
+  );
 }
 
 function sunPathBytes(platform: NodeJS.Platform): number {
