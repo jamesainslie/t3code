@@ -36,6 +36,41 @@ describe("FORK_RENAME_RULES", () => {
     ["apps/server/src/cli/config.ts", 'Config.String("T3CODE_HOME")', "persisted"],
     ["scripts/build-desktop-artifact.ts", "process.env.T3CODE_DESKTOP_PLATFORM", "identifier"],
     [
+      "apps/server/scripts/dev-replay-agent.ts",
+      '          agentInfo: { name: "t3-dev-replay", version: "1" },',
+      "identifier",
+    ],
+    ["apps/server/src/process/agentScope.ts", 'const S = "app-t3code.slice";', "identifier"],
+    [
+      "packages/shared/src/remote.ts",
+      "  `t3code://pair?${new URLSearchParams([[PAIRING_APP_LINK_PARAM, pairingUrl]])}`;",
+      "upstream-reference",
+    ],
+    ["evals/mcp-tool-use/run.ts", "  const t3 = visibleT3Tools(options);", "identifier"],
+    ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
+    ["apps/server/src/mcp/McpInvocationContext.ts", 'const H = "t3-mode-limit";', "wire-peer"],
+    [
+      "packages/contracts/src/relay.ts",
+      'HttpApiEndpoint.get("getLink", "/v1/client/t3chat-link", {',
+      "wire-peer",
+    ],
+    [
+      "apps/web/src/components/cloud/TunnelUsage.tsx",
+      'export const T3CHAT_SUBSCRIPTION_URL = "https://t3.chat/settings/subscription";',
+      "wire-peer",
+    ],
+    ["scripts/build-npm-launcher.ts", "    t3code: { databaseMigration },", "kept"],
+    [
+      "scripts/build-npm-launcher.ts",
+      "/** `t3code` is read back by npmReleaseDatabaseMigration. */",
+      "kept",
+    ],
+    [
+      "evals/mcp-tool-use/run.ts",
+      '  if (content.includes("<t3_code_")) return [];',
+      "agent-facing",
+    ],
+    [
       "packages/shared/src/assistantCitations.ts",
       'const CITATION_PROTOCOL = "t3-citation:";',
       "persisted",
