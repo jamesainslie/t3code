@@ -1,4 +1,6 @@
 import {
+  ORCHESTRATION_V2_WS_METHODS,
+  type OrchestrationV2SubscribeShellInput,
   type ServerConfig,
   type ServerConfigStreamEvent,
   WsSubscribeServerConfigRpc,
@@ -500,3 +502,9 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
 });
 
 export const layer = (options: RpcSessionOptions) => Layer.effect(RpcSessionFactory, make(options));
+
+/** One session's shell stream, for hosts that follow an environment without the registry. */
+export const subscribeSessionShell = (
+  session: RpcSession,
+  input: OrchestrationV2SubscribeShellInput,
+) => session.client[ORCHESTRATION_V2_WS_METHODS.subscribeShell](input);

@@ -20,7 +20,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import * as DesktopSavedEnvironments from "../settings/DesktopSavedEnvironments.ts";
@@ -157,6 +159,8 @@ export class DesktopConnectionCatalogStore extends Context.Service<
       | DesktopConnectionCatalogStoreMigrationError
       | DesktopConnectionCatalogStoreProtectionError
     >;
+    /** Emits after each successful `set`. */
+    readonly changes: Stream.Stream<void>;
     readonly set: (
       catalog: string,
     ) => Effect.Effect<
@@ -384,6 +388,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const savedEnvironments = yield* DesktopSavedEnvironments.DesktopSavedEnvironments;
   const catalogPath = path.join(environment.stateDir, "connection-catalog.json");
+  const written = yield* PubSub.sliding<void>(1);
   const encryptionAvailable = safeStorage.isEncryptionAvailable.pipe(
     Effect.mapError(
       (cause) =>
@@ -500,8 +505,10 @@ export const make = Effect.gen(function* () {
         return false;
       }
       yield* writeCatalog(catalog);
+      yield* PubSub.publish(written, undefined);
       return true;
     }),
+    changes: Stream.fromPubSub(written),
   });
 });
 

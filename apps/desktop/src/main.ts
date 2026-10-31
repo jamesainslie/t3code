@@ -37,6 +37,7 @@ import * as ElectronWindow from "./electron/ElectronWindow.ts";
 import * as DesktopApp from "./app/DesktopApp.ts";
 import * as DesktopAppActivation from "./app/DesktopAppActivation.ts";
 import * as DesktopWebLinks from "./app/DesktopWebLinks.ts";
+import * as DesktopMenuBar from "./menuBar/DesktopMenuBar.ts";
 import * as DesktopAppIdentity from "./app/DesktopAppIdentity.ts";
 import * as DesktopConnectionCatalogStore from "./app/DesktopConnectionCatalogStore.ts";
 import * as DesktopClerk from "./app/DesktopClerk.ts";
@@ -213,7 +214,7 @@ const layerDesktopLocalEnvironmentAuth = DesktopLocalEnvironmentAuth.layer.pipe(
   Layer.provideMerge(layerDesktopBackend),
 );
 
-const layerDesktopApplication = Layer.mergeAll(
+const layerDesktopApplicationServices = Layer.mergeAll(
   DesktopLifecycle.layer,
   layerDesktopAppActivation,
   DesktopWebLinks.layer,
@@ -226,6 +227,11 @@ const layerDesktopApplication = Layer.mergeAll(
   Layer.provideMerge(DesktopUpdates.layer),
   Layer.provideMerge(layerDesktopWslBackend),
   Layer.provideMerge(layerDesktopLocalEnvironmentAuth),
+);
+
+// The menu bar opens threads through the app's one DesktopWebLinks queue, so it sits on top.
+const layerDesktopApplication = DesktopMenuBar.layer.pipe(
+  Layer.provideMerge(layerDesktopApplicationServices),
 );
 
 // Clerk resolves userData before Electron is ready, so it gets the synchronous FileSystem.

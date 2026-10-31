@@ -351,6 +351,10 @@
       "types": "./src/state/threads.ts",
       "default": "./src/state/threads.ts"
     },
+    "./state/thread-shell": {
+      "types": "./src/state/threadShell.ts",
+      "default": "./src/state/threadShell.ts"
+    },
     "./state/subagent-display": {
       "types": "./src/state/subagentDisplay.ts",
       "default": "./src/state/subagentDisplay.ts"
