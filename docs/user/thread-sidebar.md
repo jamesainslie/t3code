@@ -376,3 +376,17 @@ A waiting thread comes back on its own when every thread it waits on finishes a
 turn, hits an error, asks you a question, or is archived. It returns to the list
 with the same **Woke** indicator a snoozed thread gets. Choose **Wake thread**,
 send it a message, or drag it out of the section to bring it back sooner.
+
+## Watch threads from the menu bar
+
+On macOS, the desktop app puts a Lathe icon in the menu bar. A ring on the icon
+means agents are working, and a dot means a thread needs an approval or answer
+from you. Click the icon to see threads that need you, threads that are running,
+and finished threads you have not opened yet, across all your environments.
+Choose a thread to open it. The icon keeps watching while Lathe runs, even with
+every window closed.
+
+Environments reached through Lathe Connect do not appear yet. If an SSH or saved
+environment needs you to sign in again, the menu lists it as unavailable until
+you reconnect it from the window. Turn the icon off in **Settings → General →
+Menu bar icon**.
