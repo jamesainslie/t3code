@@ -30,6 +30,7 @@ export interface DesktopSettings {
   readonly linuxPasswordStore: LinuxPasswordStorePreference;
   readonly mainWindowBounds: DesktopWindowBounds | null;
   readonly mainWindowMaximized: boolean;
+  readonly menuBarEnabled: boolean;
   readonly serverExposureMode: DesktopServerExposureMode;
   readonly tailscaleServeEnabled: boolean;
   readonly tailscaleServePort: number;
@@ -68,6 +69,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   linuxPasswordStore: DEFAULT_LINUX_PASSWORD_STORE,
   mainWindowBounds: null,
   mainWindowMaximized: false,
+  menuBarEnabled: true,
   serverExposureMode: "local-only",
   tailscaleServeEnabled: false,
   tailscaleServePort: DEFAULT_TAILSCALE_SERVE_PORT,
@@ -90,6 +92,7 @@ const DesktopSettingsDocument = Schema.Struct({
   linuxPasswordStore: Schema.optionalKey(Schema.Unknown),
   mainWindowBounds: Schema.optionalKey(Schema.NullOr(DesktopWindowBoundsDocument)),
   mainWindowMaximized: Schema.optionalKey(Schema.Boolean),
+  menuBarEnabled: Schema.optionalKey(Schema.Boolean),
   serverExposureMode: Schema.optionalKey(DesktopServerExposureModeSchema),
   tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
   tailscaleServePort: Schema.optionalKey(Schema.Number),
@@ -149,6 +152,9 @@ export class DesktopAppSettings extends Context.Service<
     readonly setMainWindowBounds: (
       bounds: DesktopWindowBounds,
       isMaximized: boolean,
+    ) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
+    readonly setMenuBarEnabled: (
+      enabled: boolean,
     ) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
     readonly setServerExposureMode: (
       mode: DesktopServerExposureMode,
@@ -219,6 +225,7 @@ function normalizeDesktopSettingsDocument(
     linuxPasswordStore: normalizeLinuxPasswordStorePreference(parsed.linuxPasswordStore),
     mainWindowBounds,
     mainWindowMaximized: mainWindowBounds !== null && parsed.mainWindowMaximized === true,
+    menuBarEnabled: parsed.menuBarEnabled !== false,
     serverExposureMode:
       parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
     tailscaleServeEnabled: parsed.tailscaleServeEnabled === true,
@@ -251,6 +258,9 @@ function toDesktopSettingsDocument(
   }
   if (settings.mainWindowMaximized) {
     document.mainWindowMaximized = true;
+  }
+  if (settings.menuBarEnabled !== defaults.menuBarEnabled) {
+    document.menuBarEnabled = settings.menuBarEnabled;
   }
   if (settings.serverExposureMode !== defaults.serverExposureMode) {
     document.serverExposureMode = settings.serverExposureMode;
@@ -336,6 +346,10 @@ function setUpdateChannel(
         updateChannel: requestedChannel,
         updateChannelConfiguredByUser: true,
       };
+}
+
+function setMenuBarEnabled(settings: DesktopSettings, enabled: boolean): DesktopSettings {
+  return settings.menuBarEnabled === enabled ? settings : { ...settings, menuBarEnabled: enabled };
 }
 
 function setWslBackendEnabled(settings: DesktopSettings, enabled: boolean): DesktopSettings {
@@ -549,6 +563,11 @@ export const make = Effect.gen(function* () {
 
       return yield* persist((settings) => setUpdateChannel(settings, channel));
     }),
+    setMenuBarEnabled: Effect.fn("desktop.settings.setMenuBarEnabled")(function* (enabled) {
+      yield* Effect.annotateCurrentSpan({ enabled });
+
+      return yield* persist((settings) => setMenuBarEnabled(settings, enabled));
+    }),
     setWslBackendEnabled: Effect.fn("desktop.settings.setWslBackendEnabled")(function* (enabled) {
       yield* Effect.annotateCurrentSpan({ enabled });
 
@@ -617,6 +636,9 @@ export const layerTest = (initialSettings: DesktopSettings = DEFAULT_DESKTOP_SET
         }),
         setUpdateChannel: Effect.fn("DesktopAppSettings.setUpdateChannel")(function (channel) {
           return update((settings) => setUpdateChannel(settings, channel));
+        }),
+        setMenuBarEnabled: Effect.fn("DesktopAppSettings.setMenuBarEnabled")(function (enabled) {
+          return update((settings) => setMenuBarEnabled(settings, enabled));
         }),
         setWslBackendEnabled: Effect.fn("DesktopAppSettings.setWslBackendEnabled")(
           function (enabled) {
