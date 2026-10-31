@@ -249,6 +249,7 @@ function JavaScriptSourceFileSurface(props: SourceFileSurfaceProps) {
   ) : undefined;
 
   // Layout effect so a pending jump is cancelled in the commit that swaps the file.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- scrolls the FlatList to the target line and cancels a pending jump when the file changes
   useLayoutEffect(() => {
     if (targetIndex === null) {
       return;

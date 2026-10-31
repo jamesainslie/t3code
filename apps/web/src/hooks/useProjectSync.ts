@@ -46,6 +46,7 @@ export function useProjectSync(environmentId: EnvironmentId) {
   };
   // Stable, so the status request reruns only when the connection changes.
   const runStable = useStableCallback(run);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- requests sync status when the connection changes and invalidates responses from the old one
   useEffect(() => {
     generation.current += 1;
     if (prepared) void runStable({ operation: "status" }).catch(() => undefined);

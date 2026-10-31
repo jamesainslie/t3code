@@ -37,18 +37,34 @@ machine's setting. Every other provider setting stays per machine.
 
 On mobile, open **Settings** and use the filter in its header to choose connected environments
 and a project. The filter stays available in server-setting pages. With **All projects** selected,
-the **Server settings** categories and auto-settle controls in **Thread behavior** edit the
-selected environments' defaults. Choosing a project edits its overrides on the selected
+the server-setting pages, such as Threads, Source control and Worktrees, edit the selected
+environments' defaults. Choosing a project edits its overrides on the selected
 environments. Use **Use defaults** in a page to remove that page's project overrides.
-Open **Settings → Projects & threads → Overview** to rename the project across its selected
+Open **Settings → Projects** to rename the project across its selected
 connected checkouts and see where those checkouts live.
 Settings that are environment-wide stay read-only while a project is selected. When selected
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Pin and archive projects
+
+Pinned projects come first in the project pickers: the project picker on a new thread, the
+new-thread list, the command palette, the sidebar project filter, and mobile. In the boring sidebar, pinned projects get the top
+folders, even with no active threads. Pin or unpin a project from its row in any of those lists,
+or press the thread pin shortcut (`mod+shift+p` by default) on the highlighted row. **Pin
+project** in the command palette and **Settings → Projects** work too. A list keeps its order
+while it is open, so a new pin moves up the next time you open it.
+
+Archive a project you are done with in **Settings → Projects**. It leaves the project pickers.
+Its threads, settings, and files stay as they are, and archived projects still show in the
+Settings project list, marked **Archived**. Choose one there and select **Unarchive** to bring it
+back. On mobile, both are in **Settings → Projects → Organize**.
+
+A project on several machines must have every machine connected to pin or archive it.
+
 ## Worktree branch names
 
-In **Settings → Source control → Worktree branch naming**, choose a static prefix,
+In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,
 a model-selected semantic prefix such as `feat/` or `fix/`, or custom instructions
 for the complete name. The static prefix defaults to `lathe/`; a trailing slash is
 optional, and an empty prefix adds nothing. Invalid characters in a static prefix
@@ -138,7 +154,7 @@ requests and the prompt each one produced.
 If the environment is offline, the sender gets an error and nothing runs;
 redeliver from the sender, such as GitHub's **Recent Deliveries**, once it is
 back. To have T3 Connect keep requests instead, turn on **Hold webhooks while
-offline** in **Settings → Connections**. T3 Connect then stores requests to a
+offline** in **Settings → Sharing & access**. T3 Connect then stores requests to a
 T3 Connect URL for up to 24 hours and delivers them when the environment
 returns. Leave it off if you don't want request bodies stored outside your
 machine. To skip requests that waited too long, set **Skip requests older
@@ -146,15 +162,15 @@ than** on the task.
 
 ## Defaults and inheritance
 
-General contains the model and workspace for new threads. Integrations controls agent browser
-and thread history access. Source control contains automatic pull, the default pull request merge
+Threads contains the model and workspace for new threads. Browser controls agent browser and
+thread history access. Source control contains automatic pull, the default pull request merge
 method, the GitHub account and text generation. The same rows edit environment defaults or project
 overrides depending on the project crumb. The GitHub account row appears only while a project is
 selected and the environment's `gh` has more than one signed-in account; its environment-wide rules
 live under **GitHub accounts** on the Source control page. At **All environments** those rules edit
 every connected machine that supports them; choose one machine to give it rules of its own.
 
-The Project category, shown while a project is selected, holds the project's name, icon, actions,
+The Projects category, under Code, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
 on each selected environment, and reset returns to the environment's shared list. A project's
 `lathe.json` actions can be imported there.
@@ -165,7 +181,7 @@ built-in default. Leave a setting on **Inherit** to let the next tier decide.
 Browser access changes apply when an agent session next starts.
 
 New worktrees initialize git submodules recursively. If that step is slow because the repository
-declares many nested submodules, set **Submodules** in **Settings → General** (with the project
+declares many nested submodules, set **Submodules** in **Settings → Worktrees** under Advanced (with the project
 selected to override it there) to **Top level only** to stop at the ones the repository declares
 itself, or **Skip** to leave them for a setup script. It resolves in the same order as the
 workspace default: a `"worktreeSubmodules"` value in the `lathe.json` of the branch being checked out
@@ -175,8 +191,8 @@ applies when the project and environment are both on **Inherit**.
 
 Agents can read other threads to pick up earlier work, for example when you
 [continue a thread in a new one](./thread-sidebar.md#continue-work-in-a-new-thread). On web and
-desktop, open **Settings → Integrations** and find **Agent access**. On mobile, open
-**Settings → Agent behavior**. Select a project to override the environment's value.
+desktop, open **Settings → Browser** and find **Agent access**. On mobile, open
+**Settings → Threads**. Select a project to override the environment's value.
 
 **Agent thread history** sets which threads an agent can read:
 
@@ -197,13 +213,13 @@ specific ones in full.
 ## Worktree location
 
 New worktrees go in the `worktrees` folder of the Lathe home directory. To put them somewhere else,
-such as another drive, set **Settings → Storage → Worktree location** to an absolute path like
+such as another drive, set **Settings → Worktrees → Worktree location** to an absolute path like
 `D:\worktrees` or `~/worktrees`. The setting is per machine. Existing worktrees stay where they
 are, and cleanup covers both the default folder and the custom one.
 
 ## Storage cleanup
 
-Open **Settings → Storage** to enable automatic cleanup on one machine or all connected
+Open **Settings → Worktrees → Cleanup** to enable automatic cleanup on one machine or all connected
 environments. Policies are off by default and run on the server at startup, when changed, and
 hourly. Offline machines keep their existing policies.
 

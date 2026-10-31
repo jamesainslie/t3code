@@ -33,7 +33,10 @@ const config = {
 function harness() {
   const registry = AtomRegistry.make();
   const configs = Atom.make<ReadonlyMap<EnvironmentId, ServerConfig>>(new Map([[ID, config]]));
-  const list = createThreadListEnvironmentsAtom(configs);
+  const list = createThreadListEnvironmentsAtom(
+    configs,
+    Atom.make<ReadonlyArray<EnvironmentId>>([ID]),
+  );
   registry.subscribe(list, () => {});
   registry.get(list);
   return {

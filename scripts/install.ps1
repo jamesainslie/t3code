@@ -254,5 +254,5 @@ if ($interactive) { [Console]::Error.Write("`r$esc[2K") }
 if (($env:PATH -split ";") -notcontains $binDir) {
   Write-Host "  Add $binDir to your PATH, then run ${bold}lathe$reset.`n"
 } else {
-  Write-Host "  Run ${bold}lathe$reset to get started.`n"
+  Write-Host "  Run ${bold}lathe$reset to use Lathe here, or ${bold}lathe up$reset to use it from your other devices.`n"
 }

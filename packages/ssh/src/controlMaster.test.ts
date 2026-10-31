@@ -272,7 +272,7 @@ const makeHarness = (input: {
             .writeFileString(path, data, options)
             .pipe(
               Effect.andThen(
-                NodePath.basename(path) === "auth-secret"
+                NodePath.basename(NodePath.dirname(path)).startsWith("auth-secret-")
                   ? Effect.sync(() => secretFilesWritten.push(path)).pipe(
                       Effect.andThen(input.secretWritten?.pass ?? Effect.void),
                     )
@@ -560,6 +560,7 @@ describe("owned control master", () => {
       assert.equal(harness.count("master"), 1);
       assert.lengthOf(harness.secretFilesWritten, 1);
       assert.isFalse(NodeFS.existsSync(harness.secretFilesWritten[0] ?? ""));
+      assert.isFalse(NodeFS.existsSync(NodePath.dirname(harness.secretFilesWritten[0] ?? "")));
     }).pipe(Effect.provide(harness.layer()), Effect.scoped);
   });
 

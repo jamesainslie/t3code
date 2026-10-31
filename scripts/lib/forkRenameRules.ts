@@ -466,6 +466,31 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
         o.token,
       ),
   },
+  {
+    id: "wire-t3-chat-link",
+    class: "wire-peer",
+    reason:
+      "T3 Chat, upstream's sibling product, is never Lathe's: its account link names (routes, types, plan limits, labels), the t3.chat site and doc anchors. Lathe uses upstream's relay.",
+    token:
+      /T3CHAT_|t3chat|T3Chat|t3Chat|with-t3-chat|^t3\.chat[.,]?$|https:\/\/t3\.chat\/settings\//,
+  },
+  {
+    id: "wire-peer-links",
+    class: "wire-peer",
+    reason:
+      "Peer links between environments: the OAuth software id and redirect URI, the MCP client name and the T3-Mode-Limit header, which the server on the other end may be upstream's.",
+    test: (o) => /t3code-peer|t3-mode-limit/i.test(o.token),
+  },
+  {
+    id: "kept-npm-release-manifest-key",
+    class: "kept",
+    reason:
+      "The t3code field of the published npm launcher manifest, read by release checks; writer and reader must agree.",
+    path: /^scripts\/build-npm-launcher\.ts$|^packages\/shared\/src\/cliRelease\.ts$/,
+    test: (o) =>
+      /^\.?t3code:?$/.test(o.token.replace(/^["'`]|["'`,;)}]+$/g, "")) &&
+      /[dD]atabaseMigration|\.t3code\b|^\s*t3code:/.test(o.line),
+  },
 
   // kept: renaming would strand stored data or something the fork does not control
   {
@@ -524,7 +549,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "kept",
     reason:
       "branch.<name>.t3-merge-base keys in users' repos' git config; they describe the branch, so both apps share them.",
-    token: /\.t3-merge-base(?:-ref)?\b/,
+    token: /(?:^|[."'`])t3-merge-base(?:-ref)?\b/,
   },
   {
     id: "kept-vendored-binary-imports",
@@ -629,7 +654,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       (/^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-        ((/[Tt]heme/.test(o.path) || /[Tt]heme(?:Variables)?\(|\bpalettes?\b/.test(o.line)) &&
+        ((/[Tt]heme/.test(o.path) ||
+          /[Tt]heme(?:Variables)?\(|\bpalettes?\b|\b(?:themeIds?|requestedTheme)\b/.test(o.line)) &&
           /^t3-(?:code|chat|grove|ocean|ember|iris)(?:-(?:dark|light))?$/.test(o.token))),
   },
   {
@@ -820,6 +846,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /^t3code(?:-dev)?:\/\//,
   },
   {
+    id: "upstream-pairing-app-link",
+    class: "upstream-reference",
+    reason:
+      "Upstream's t3code://pair link; the fork builds and reads it from forkDesktopSchemes, as it does prompt links.",
+    path: /^packages\/shared\/src\/remote\.ts$/,
+    token: /^["'`]?t3code:\/\/pair\b/,
+  },
+  {
     id: "kept-upstream-identity-test",
     class: "kept",
     reason:
@@ -955,7 +989,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "agent-prompt-tags",
     class: "agent-facing",
     reason: "Prompt markup agents read (<t3_context>, t3_code_instructions).",
-    token: /t3_context|t3_code_[a-z_]+|(?:^|[^A-Za-z])t3_code(?:$|[^a-z_])/,
+    token: /t3_context|t3_code_[a-z_]*|(?:^|[^A-Za-z])t3_code(?:$|[^a-z_])/,
   },
 
   // identifiers: names that never leave the build
@@ -977,8 +1011,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     test: (o) =>
       /^t3(?:code|tools)$/i.test(stem(o)) &&
       // Values tests compare with renamed code: attribution, user agents, DISPLAY,
-      // lint rule names and command-line flags.
+      // lint rule names, command-line flags, systemd unit names and storage keys.
       !/attribution|user-?agent|userAgent|DISPLAY/i.test(o.line) &&
+      !/\.slice\b|-protect\.conf|:update-everything-result/.test(o.token) &&
       !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
       !o.token.startsWith("--") &&
       !/^oxlint-plugin-/.test(o.path),
@@ -1050,6 +1085,25 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
         o.token,
       ) ||
       (o.path.startsWith(".github/") && !/com\.t3tools/.test(o.token)),
+  },
+  {
+    id: "id-dev-and-host-names",
+    class: "identifier",
+    reason:
+      "Dev replay names (agentInfo, window.t3dev), test origins, secret separators, the agents' systemd slice and protection drop-in; Lathe names them for itself so it never shares them with upstream on one host.",
+    token:
+      /t3-dev-replay|(?:^|\.)t3dev\b|t3-boot\.test|__t3-secret-|app-t3code\.slice|90-t3code-protect\.conf/,
+  },
+  {
+    id: "id-eval-and-native-fixtures",
+    class: "identifier",
+    reason:
+      "Locals and prompt text in the MCP tool-use evals, and the Hyprland window event in the snap-shot helper's tests.",
+    test: (o) =>
+      (o.path === "evals/mcp-tool-use/run.ts" &&
+        /^(?:\.\.\.)?(?:base\.)?t3(?:\.map)?,?$/.test(o.token)) ||
+      (o.path === "evals/mcp-tool-use/devices.ts" && /^T3\\`?$/.test(o.token)) ||
+      (o.path.startsWith("native/hyprland-snap-shot/") && /openwindow>>/.test(o.line)),
   },
   {
     id: "id-desktop-internals",

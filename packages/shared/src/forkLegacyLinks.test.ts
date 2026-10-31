@@ -28,7 +28,10 @@ describe("latheLinkHref", () => {
 
 describe("links stored before the Lathe rename", () => {
   it("parses a thread link", () => {
-    expect(parseThreadLinkHref("t3-thread://v1/thread-1")).toBe("thread-1");
+    expect(parseThreadLinkHref("t3-thread://v1/thread-1")).toEqual({
+      environmentId: null,
+      threadId: "thread-1",
+    });
     expect(hasThreadLinks("See [it](t3-thread://v1/thread-1).")).toBe(true);
   });
 

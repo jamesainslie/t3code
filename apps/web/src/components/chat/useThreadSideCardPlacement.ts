@@ -90,6 +90,7 @@ export function useThreadSideCardPlacement(
   active: boolean,
 ): SideCardPlacement | null {
   const [placement, setPlacement] = useState<SideCardPlacement | null>(null);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- animation frame loop that measures the side card's DOM anchors while it is active
   useEffect(() => {
     if (!active) return;
     let frame = 0;

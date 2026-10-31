@@ -202,6 +202,7 @@ export function RoadmapOutline({
   })();
 
   const itemsRef = useRef(items);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- publishes the latest items to a ref the delete action reads, keeping row actions stable
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);

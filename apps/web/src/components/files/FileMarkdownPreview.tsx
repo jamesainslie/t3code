@@ -9,6 +9,7 @@ import {
   type MarkdownDocumentSection,
 } from "~/markdown-document";
 import { resolvePathLinkTarget } from "@lathe/shared/fileLinks";
+import { maskMarkdownFrontmatter } from "@lathe/shared/markdownFrontmatter";
 
 type TaskListChange = (input: { readonly markerOffset: number; readonly checked: boolean }) => void;
 
@@ -24,6 +25,7 @@ function useShownSections(
     sections.slice(0, 1),
   );
   const next = advanceDocumentSections(shown, sections);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- schedules the next section on a timer so a long file parses between frames
   useEffect(() => {
     if (next === shown) return;
     const timeout = setTimeout(() => setShown(next));
@@ -41,7 +43,8 @@ export function MarkdownDocument(props: {
   readonly workspaceMutationId?: string | null | undefined;
   readonly onTaskListChange?: TaskListChange | undefined;
 }) {
-  const sections = splitMarkdownDocument(props.text);
+  const text = maskMarkdownFrontmatter(props.text);
+  const sections = splitMarkdownDocument(text);
   const shownSections = useShownSections(sections);
   // Callers pass a fresh callback each render; a stable one keeps the
   // memoized markdown from re-parsing whenever the surface around it updates.
@@ -53,7 +56,7 @@ export function MarkdownDocument(props: {
   if (sections.length === 1) {
     return (
       <ChatMarkdown
-        text={props.text}
+        text={text}
         cwd={props.cwd}
         imageBaseDir={props.imageBaseDir}
         threadRef={props.threadRef}

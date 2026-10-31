@@ -1,5 +1,5 @@
 /**
- * Color overrides from Settings → Appearance → Chat colors, applied as CSS
+ * Color overrides from Settings → Appearance → Custom colors, applied as CSS
  * custom properties on the root element. Each override also toggles a data
  * flag so `index.css` can scope the override rule and leave the theme's own
  * cascade untouched while nothing is set.
@@ -10,6 +10,10 @@ import { isThemeColor } from "./themePalette";
 export interface AppearanceColorOverrides {
   /** Assistant and user text inside the chat timeline. */
   readonly chatText: string;
+  /** Text in rendered markdown file previews. */
+  readonly markdownPreviewText: string;
+  /** Default terminal text, plus the ANSI white and bright white it stands in for. */
+  readonly terminalText: string;
   /** The composer's text cursor. */
   readonly composerCaret: string;
   /** Resting background of thread cards in the sidebar. */
@@ -20,6 +24,8 @@ const OVERRIDES: ReadonlyArray<
   readonly [key: keyof AppearanceColorOverrides, variable: string, flag: string]
 > = [
   ["chatText", "--user-chat-text", "userChatText"],
+  ["markdownPreviewText", "--user-markdown-preview-text", "userMarkdownPreviewText"],
+  ["terminalText", "--user-terminal-text", "userTerminalText"],
   ["composerCaret", "--user-composer-caret", "userComposerCaret"],
   ["threadCard", "--user-thread-card", "userThreadCard"],
 ];

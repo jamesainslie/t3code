@@ -95,10 +95,6 @@ export const terminalSessionsTotal = Metric.counter("lathe_terminal_sessions_tot
   description: "Total terminal sessions started.",
 });
 
-export const terminalRestartsTotal = Metric.counter("lathe_terminal_restarts_total", {
-  description: "Total terminal restart requests handled.",
-});
-
 export const webhookDeliveriesTotal = Metric.counter("lathe_webhook_deliveries_total", {
   description: "Webhook requests handled, by outcome and source.",
 });

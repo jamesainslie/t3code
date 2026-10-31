@@ -100,17 +100,35 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
   const [executable, ...aliases] = forkCliExecutableNames(platform).map((name) =>
     path.join(contentDir, name),
   ) as [string, ...string[]];
+  const bundledLibatomic = path.join(contentDir, "lib/libatomic.so.1");
   for (const required of [
     executable,
     ...aliases,
     path.join(contentDir, "bin.mjs"),
     path.join(contentDir, "claude-history-worker.mjs"),
     path.join(contentDir, "client/index.html"),
+    ...(platform === "linux" ? [bundledLibatomic, `${bundledLibatomic}.LICENSE`] : []),
   ]) {
     if (!(yield* fs.exists(required))) {
       return yield* new CliArchiveSmokeError({
         step: "checking the archive layout",
         detail: `missing ${path.relative(contentDir, required)}`,
+      });
+    }
+  }
+
+  // The runner has libatomic installed; fresh Ubuntu servers do not.
+  if (platform === "linux") {
+    const ldd = yield* spawner.string(ChildProcess.make("ldd", [executable]));
+    // Older glibc prints the path as given, newer prints it resolved; compare both resolved.
+    const loaded = /libatomic\.so\.1 => (\/.*) \(0x[0-9a-f]+\)/.exec(ldd)?.[1];
+    if (
+      loaded === undefined ||
+      (yield* fs.realPath(loaded)) !== (yield* fs.realPath(bundledLibatomic))
+    ) {
+      return yield* new CliArchiveSmokeError({
+        step: "checking that t3 loads the bundled libatomic",
+        detail: ldd,
       });
     }
   }

@@ -1,11 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no createHmac or timingSafeEqual.
 import * as NodeCrypto from "node:crypto";
 
-import {
-  RelayAgentActivityAggregateState,
-  RelayAgentAwarenessPhase,
-  type RelayDeliveryKind,
-} from "@lathe/contracts/relay";
+import { RelayAgentActivityAggregateState, RelayAgentAwarenessPhase } from "@lathe/contracts/relay";
 import { stableStringify } from "@lathe/shared/relaySigning";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
@@ -13,23 +9,15 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 const MAX_JOB_AGE_MS = 10 * 60 * 1_000;
-export const APNS_DELIVERY_JOB_SIGNING_ALGORITHM = "hmac-sha256";
+const APNS_DELIVERY_JOB_SIGNING_ALGORITHM = "hmac-sha256";
 
 const ApnsDeliveryKindSchema = Schema.Literals([
-  "live_activity_start",
   "live_activity_update",
   "live_activity_end",
   "push_notification",
 ]);
-const LiveActivityStartOrUpdateKindSchema = Schema.Literals([
-  "live_activity_start",
-  "live_activity_update",
-]);
-const LiveActivityKindSchema = Schema.Literals([
-  "live_activity_start",
-  "live_activity_update",
-  "live_activity_end",
-]);
+const LiveActivityStartOrUpdateKindSchema = Schema.Literals(["live_activity_update"]);
+const LiveActivityKindSchema = Schema.Literals(["live_activity_update", "live_activity_end"]);
 
 const ApnsDeliveryJobContext = {
   jobId: Schema.String,
@@ -236,7 +224,7 @@ export type ApnsDeliveryJobVerificationError = typeof ApnsDeliveryJobVerificatio
 export const isApnsDeliveryJobVerificationError = Schema.is(ApnsDeliveryJobVerificationError);
 
 export function makeApnsDeliveryJobPayload(input: {
-  readonly kind: RelayDeliveryKind;
+  readonly kind: ApnsDeliveryJobPayload["kind"];
   readonly userId: string;
   readonly deviceId: string;
   readonly token: string;
@@ -275,7 +263,6 @@ export function expiresAtForJob(createdAtMs: number): string {
 
 function validatePayloadShape(payload: ApnsDeliveryJobPayload): ApnsDeliveryJobInvalid | null {
   switch (payload.kind) {
-    case "live_activity_start":
     case "live_activity_update":
       if (payload.aggregate === null) {
         return new ApnsDeliveryJobLiveActivityAggregateMissing({

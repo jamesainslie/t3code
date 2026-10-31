@@ -84,7 +84,6 @@ function createDiffWorkerPool(poolSize: number) {
     pool,
     unsubscribeTheme: (() => {
       const apply = () => applyDiffWorkerTheme(pool);
-      // The New design picks the light syntax palette, so a settings change can switch it too.
       const unsubscribes = [
         subscribeRenderedAppearance(apply),
         subscribeClientSettings(apply),
@@ -113,6 +112,7 @@ function DiffWorkerReady({ children }: { children?: ReactNode }) {
     ? readyPool === workerPool || workerPool.isInitialized() || !workerPool.isWorkingPool()
     : typeof window === "undefined";
 
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- initializes the diff worker pool and marks it ready when its async startup settles
   useEffect(() => {
     if (ready || !workerPool) return;
 

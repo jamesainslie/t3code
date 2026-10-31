@@ -9,6 +9,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { GraphQLClient, GraphQLClientError } from "effect/graphql";
 
+import { normalizeHost } from "@lathe/source-control-core/server/pullRequestUtils";
+
 import * as GitHubGraphQlClient from "./gitHubGraphQlClient.ts";
 import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
 import { type RoadmapIssueFields, RoadmapIssuesGraphQLGroup } from "./roadmapIssues.graphql.ts";
@@ -145,7 +147,7 @@ const make = Effect.gen(function* () {
           return found === null
             ? Effect.fail(
                 new GitHubRequestPolicy.GitHubApiNotFoundError({
-                  host: GitHubRequestPolicy.normalizeHost(input.host),
+                  host: normalizeHost(input.host),
                   operation: "roadmapIssue",
                 }),
               )

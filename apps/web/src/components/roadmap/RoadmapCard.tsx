@@ -57,6 +57,7 @@ function RoadmapCard({
 }) {
   // Only a popover takes Escape: inline, the card is part of the column and
   // Escape belongs to the chat (stopping a turn, closing other overlays).
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- window keydown listener that closes the popover card on Escape
   useEffect(() => {
     if (placement.mode !== "popover") return;
     const onKeyDown = (event: KeyboardEvent) => {

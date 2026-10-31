@@ -29,6 +29,7 @@ export function SyntaxThemeRow() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   // Leaving the page mid-browse must not strand a preview.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- clears the global syntax theme preview on unmount so leaving mid-browse does not strand it
   useEffect(() => () => previewSyntaxTheme(null), []);
   const selected =
     SYNTAX_THEME_OPTIONS.find((option) => option.id === settings.syntaxTheme) ??

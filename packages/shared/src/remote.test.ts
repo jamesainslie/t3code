@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildPairingAppLink,
+  readPairingAppLink,
   RemoteBackendUrlMissingError,
   RemotePairingTokenMissingError,
   RemotePairingUrlInvalidError,
@@ -140,5 +142,22 @@ describe("remote", () => {
         host: "remote.example.com",
       }),
     );
+  });
+
+  it("round-trips pairing urls through app links on every channel scheme", () => {
+    const pairingUrl = "https://vps.example.com/pair#token=ABC123";
+    const appLink = buildPairingAppLink(pairingUrl);
+    expect(appLink.startsWith("lathe://pair?")).toBe(true);
+    expect(readPairingAppLink(appLink)).toBe(pairingUrl);
+    expect(readPairingAppLink(appLink.replace("lathe:", "lathe-dev:"))).toBe(pairingUrl);
+    expect(readPairingAppLink(appLink.replace("lathe://", "t3code://"))).toBeNull();
+    expect(readPairingAppLink("lathe://pair")).toBeNull();
+    expect(readPairingAppLink(appLink.replace("//pair?", "//pair/other?"))).toBeNull();
+    expect(
+      readPairingAppLink(`lathe://threads?pairingUrl=${encodeURIComponent(pairingUrl)}`),
+    ).toBeNull();
+    expect(
+      readPairingAppLink(`https://pair?pairingUrl=${encodeURIComponent(pairingUrl)}`),
+    ).toBeNull();
   });
 });

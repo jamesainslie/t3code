@@ -6,8 +6,13 @@ import {
   TurnItemId,
   type OrchestrationV2ThreadProjection,
 } from "@lathe/contracts";
-import { useLayoutEffect, useRef, type ComponentProps } from "react";
+import {
+  derivePendingThreadRequests,
+  makeThreadRequestsResolvedAnnouncer,
+} from "@lathe/client-runtime/state/thread-requests";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 vi.mock(import("../ChatMarkdown"), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -35,7 +40,6 @@ vi.mock(import("../../state/threads"), async (importOriginal) => {
 });
 
 import { RegistryContext } from "@effect/atom-react";
-import { derivePendingThreadRequests } from "@lathe/client-runtime/state/thread-requests";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { act, fakeTimers, render } from "../../../test/render";
 import { makeThreadProjectionFixture } from "../../test-fixtures";
@@ -102,32 +106,18 @@ function questionProjection(threadId: ThreadId, requestIds = ["first", "second"]
   } satisfies OrchestrationV2ThreadProjection;
 }
 
-let requests: ReturnType<typeof usePendingThreadRequests>;
-
-function probeElement(props: ComponentProps<typeof PendingRequestsProbe>) {
-  registry.set(projectionAtom, props.projection);
-  return (
-    <RegistryContext.Provider value={registry}>
-      <PendingRequestsProbe {...props} />
-    </RegistryContext.Provider>
-  );
-}
-
-function PendingRequestsProbe({
-  environmentId,
-  projection,
-  loading = false,
-}: {
+interface ProbeProps {
   environmentId: EnvironmentId;
   projection: OrchestrationV2ThreadProjection;
   loading?: boolean;
-}) {
+}
+
+function useProbeRequests({ environmentId, projection, loading = false }: ProbeProps) {
   const promptRef = useRef("");
   const composerRef = useRef(null);
-  const state = usePendingThreadRequests({
+  return usePendingThreadRequests({
     environmentId,
     activeThreadId: projection.thread.id,
-    activeThread: projection.thread,
     serverProjection: loading ? null : projection,
     supportsQuestionAttachments: false,
     composerDraftTarget: { environmentId, threadId: projection.thread.id },
@@ -136,10 +126,25 @@ function PendingRequestsProbe({
     composerRef,
     setThreadError: () => {},
   });
+}
+
+let requests: ReturnType<typeof usePendingThreadRequests>;
+
+function PendingRequestsProbe(props: ProbeProps) {
+  const state = useProbeRequests(props);
   useLayoutEffect(() => {
     requests = state;
   });
   return null;
+}
+
+function withProjection(projection: OrchestrationV2ThreadProjection, element: ReactNode) {
+  registry.set(projectionAtom, projection);
+  return <RegistryContext.Provider value={registry}>{element}</RegistryContext.Provider>;
+}
+
+function probeElement(props: ProbeProps) {
+  return withProjection(props.projection, <PendingRequestsProbe {...props} />);
 }
 
 it("retains answers, selections and question position after leaving chat, including while the projection reloads", async () => {
@@ -175,6 +180,44 @@ it("retains answers, selections and question position after leaving chat, includ
   expect(requests).toMatchObject(expected);
 });
 
+function QuestionPositionProbe(props: ProbeProps) {
+  const state = useProbeRequests(props);
+  return (
+    <>
+      <output>Question {state.activePendingQuestionIndex + 1}</output>
+      <button
+        type="button"
+        onClick={() => state.onSelectActivePendingUserInputOption("question-0", "Incremental")}
+      >
+        Choose Incremental
+      </button>
+      <button type="button" onClick={() => state.onAdvanceActivePendingUserInput()}>
+        Submit
+      </button>
+    </>
+  );
+}
+
+it("stays on an unanswered question when the composer submits", async () => {
+  const projection = questionProjection(threadRef.threadId);
+  await using screen = await render(
+    withProjection(
+      projection,
+      <QuestionPositionProbe
+        environmentId={EnvironmentId.make("unanswered-environment")}
+        projection={projection}
+      />,
+    ),
+  );
+  const submit = screen.getByRole("button", { name: "Submit" });
+  await userEvent.click(submit);
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Question 1");
+
+  await userEvent.click(screen.getByRole("button", { name: "Choose Incremental" }));
+  await userEvent.click(submit);
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Question 2");
+});
+
 it("isolates drafts by environment, thread and request and discards only resolved requests", async () => {
   using _timers = fakeTimers();
   const environmentId = EnvironmentId.make("scope-environment");
@@ -186,8 +229,7 @@ it("isolates drafts by environment, thread and request and discards only resolve
     { environmentId, projection: questionProjection(threadRef.threadId, ["second", "first"]) },
   ];
   await using screen = await render(null);
-  const show = (scope: ComponentProps<typeof PendingRequestsProbe>) =>
-    screen.rerender(probeElement(scope));
+  const show = (scope: ProbeProps) => screen.rerender(probeElement(scope));
   for (const [index, scope] of scopes.entries()) {
     await show(scope);
     expect(requests.activePendingQuestionIndex).toBe(0);
@@ -198,6 +240,7 @@ it("isolates drafts by environment, thread and request and discards only resolve
     await act(() => requests.onAdvanceActivePendingUserInput());
   }
 
+  // "first" was answered on another device.
   await show({
     environmentId,
     projection: {
@@ -210,6 +253,12 @@ it("isolates drafts by environment, thread and request and discards only resolve
     },
   });
   expect(requests.activePendingUserInput?.requestId).toBe("second");
+  await act(() =>
+    makeThreadRequestsResolvedAnnouncer(
+      environmentId,
+      threadRef.threadId,
+    )([RuntimeRequestId.make("second")]),
+  );
   for (const [index, scope] of scopes.entries()) {
     await show(scope);
     expect(requests.activePendingQuestionIndex).toBe(index === 0 ? 0 : 1);

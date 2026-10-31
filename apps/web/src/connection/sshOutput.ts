@@ -23,6 +23,7 @@ export function useSshEnvironmentOutput(
     readonly key: string | null;
     readonly entries: ReadonlyArray<DesktopSshOutputEntry>;
   }>({ key: null, entries: NO_OUTPUT });
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- subscribes to the desktop bridge's SSH output stream for this target
   useEffect(() => {
     const subscribe = window.desktopBridge?.onSshEnvironmentOutput;
     if (alias === null || hostname === null || subscribe === undefined) return;

@@ -6,6 +6,7 @@ import {
 import type {
   ComposerContextId,
   ComposerContextRecord,
+  EnvironmentContextRecord,
   EnvironmentId,
   FileContextRecord,
   ImageContextRecord,
@@ -15,7 +16,6 @@ import type {
   PreviewAnnotationContextRecord,
   PreviewAnnotationPayload,
   ReviewCommentContextRecord,
-  ScopedThreadRef,
   TerminalContextRecord,
   ThreadContextRecord,
   ThreadId,
@@ -150,24 +150,27 @@ export function previewAnnotationContextReference(
   };
 }
 
-function threadContextId(threadId: ThreadId): ComposerContextId {
-  return toKindScopedComposerContextId("thread", threadId);
-}
-
 export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
   return { kind: "thread", contextId: record.contextId, label: record.label };
 }
 
-export function threadContextRecord(ref: ScopedThreadRef, title: string): ThreadContextRecord {
-  const label = sanitizeComposerContextLabel(title, "thread");
+/** One record per machine: mentioning the same machine twice reuses the chip. */
+export function environmentContextReference(
+  record: EnvironmentContextRecord,
+): ComposerContextReference {
+  return { kind: "environment", contextId: record.contextId, label: record.label };
+}
+
+export function environmentContextRecord(
+  environmentId: EnvironmentId,
+  label: string,
+): EnvironmentContextRecord {
   return {
     version: 1,
-    kind: "thread",
-    contextId: threadContextId(ref.threadId),
-    label,
-    environmentId: ref.environmentId,
-    threadId: ref.threadId,
-    title: label,
+    kind: "environment",
+    contextId: toKindScopedComposerContextId("environment", environmentId),
+    label: sanitizeComposerContextLabel(label, "environment"),
+    environmentId,
   };
 }
 
@@ -311,6 +314,7 @@ export function buildMessageContext(input: {
   reviewComments: ReadonlyArray<ReviewCommentContext>;
   previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
+  environmentContexts?: ReadonlyArray<EnvironmentContextRecord>;
   attachments?: ReadonlyArray<BoundComposerAttachment>;
 }): OrchestrationMessageContext | undefined {
   const screenshotAttachmentIds = new Set(
@@ -322,6 +326,7 @@ export function buildMessageContext(input: {
     ...input.terminalContexts.map(terminalContextRecord),
     ...input.reviewComments.map(reviewCommentContextRecord),
     ...(input.threadContexts ?? []),
+    ...(input.environmentContexts ?? []),
     ...input.previewAnnotations.map((annotation) =>
       previewAnnotationContextRecord(annotation, {
         screenshotContextId: screenshotAttachmentIds.has(annotation.id) ? annotation.id : undefined,
@@ -336,7 +341,7 @@ export function asKnownContextRecord(
   record: ComposerContextRecord | undefined,
 ): KnownComposerContextRecord | undefined {
   if (!record || "payload" in record) return undefined;
-  return record as KnownComposerContextRecord;
+  return record;
 }
 
 export function composerContextImportLookupIds(

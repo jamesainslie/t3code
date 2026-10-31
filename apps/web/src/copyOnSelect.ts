@@ -52,6 +52,7 @@ const SELECTION_ENDING_KEYS = new Set(["Shift", "Meta", "Control"]);
  * that finished the selection, which the clipboard requires.
  */
 export function useCopyOnSelect(enabled: boolean) {
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- document pointerup and keyup listeners that copy a finished selection
   useEffect(() => {
     if (!enabled) return;
     const shouldCopy = createSelectionCopier();

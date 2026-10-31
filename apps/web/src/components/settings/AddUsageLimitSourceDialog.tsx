@@ -1,4 +1,4 @@
-import { type EnvironmentId, UsageLimitSourceId } from "@lathe/contracts";
+import { type EnvironmentId, type UnifiedSettings, UsageLimitSourceId } from "@lathe/contracts";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
@@ -13,27 +13,11 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
+import { sourceIdFromUrl } from "./AddUsageLimitSourceDialog.logic";
 import { SecretInput } from "./SecretInput";
 import { Label } from "../ui/label";
 
 type SourceKind = "cliproxy" | "modelproxy";
-
-/**
- * Stable per source and readable in settings.json. Dots and dashes in the
- * host are kept so `foo-bar.com` and `foo.bar.com` do not collide; anything
- * else (a port's colon, a path) is folded to a dash.
- */
-function sourceIdFromUrl(kind: SourceKind, url: string): UsageLimitSourceId {
-  let host = url;
-  try {
-    host = new URL(url).host;
-  } catch {}
-  const slug = host
-    .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return UsageLimitSourceId.make(`${kind}-${slug || (kind === "cliproxy" ? "hub" : "gateway")}`);
-}
 
 const KIND_COPY: Record<SourceKind, { title: string; description: string; action: string }> = {
   cliproxy: {
@@ -55,11 +39,13 @@ export function AddUsageLimitSourceDialog({
   onOpenChange,
   environmentId,
   environmentLabel,
+  sources,
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
+  readonly sources: UnifiedSettings["usageLimitSources"];
 }) {
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const [kind, setKind] = useState<SourceKind>("cliproxy");
@@ -85,7 +71,12 @@ export function AddUsageLimitSourceDialog({
 
   const save = () => {
     if (!canSave) return;
-    const id = sourceIdFromUrl(kind, trimmedUrl);
+    const hubId = sourceIdFromUrl(trimmedUrl, sources);
+    // Fork: a gateway takes its own prefix; a saved URL keeps the ID it already has.
+    const id =
+      kind === "cliproxy"
+        ? hubId
+        : UsageLimitSourceId.make(hubId.replace(/^cliproxy-/, "modelproxy-"));
     const common = {
       ...(label.trim() ? { label: label.trim() } : {}),
       url: trimmedUrl,

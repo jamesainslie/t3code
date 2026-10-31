@@ -4,7 +4,7 @@ import { cn } from "~/lib/utils";
 import { type TimestampFormat } from "@lathe/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { ChatEventTimestamp } from "./ChatEventTimestamp";
-import { TimelineRowCtx } from "./timelineRowContext";
+import { TimelineRowCtx, type TimelineRowSharedState } from "./timelineRowContext";
 
 export const MESSAGE_HEADING_LEVEL = 3;
 
@@ -31,7 +31,8 @@ export function TimelineRowTimestamp({
   className?: string;
   alwaysVisible?: boolean;
 }) {
-  const { eventTimestamps } = use(TimelineRowCtx);
+  // Fork: event timestamps. Rows outside a timeline, like queued messages, have no context.
+  const eventTimestamps = (use(TimelineRowCtx) as TimelineRowSharedState | null)?.eventTimestamps;
   if (eventTimestamps) {
     return (
       <ChatEventTimestamp

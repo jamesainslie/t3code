@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { create } from "zustand";
 import { SNOOZE_REMINDER_MAX_CHARS } from "@lathe/contracts";
 import {
@@ -14,7 +15,7 @@ import {
 } from "./CustomSnoozeDialog.logic";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Settings2Icon } from "lucide-react";
 import { Calendar } from "./ui/calendar";
 import { weekStartsOn } from "../timestampFormat";
 import { useNowMinute } from "../hooks/useNowMinute";
@@ -71,6 +72,7 @@ function startOfLocalDay(ms: number) {
 
 export function CustomSnoozeDialogHost() {
   const request = useRequest((state) => state.request);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- resolves any pending snooze request promise with null when the dialog host unmounts
   useEffect(() => () => finish(null), []);
   // Keyed per request so a replacing request starts from its own options.
   return request ? <CustomSnoozeDialog key={request.id} options={request.options} /> : null;
@@ -78,6 +80,7 @@ export function CustomSnoozeDialogHost() {
 
 function CustomSnoozeDialog({ options }: { options: CustomSnoozeOptions }) {
   const id = useId();
+  const navigate = useNavigate();
   const initialSnoozedUntil = options.snoozedUntil ?? null;
   const initialReminder = options.reminder?.initial ?? null;
   const [initial] = useState(() =>
@@ -280,6 +283,21 @@ function CustomSnoozeDialog({ options }: { options: CustomSnoozeOptions }) {
             )}
           </DialogPanel>
           <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost-muted"
+              className="sm:mr-auto"
+              onClick={() => {
+                finish(null);
+                void navigate({
+                  to: "/settings/threads",
+                  hash: "snooze-options",
+                });
+              }}
+            >
+              <Settings2Icon />
+              Edit snooze options
+            </Button>
             <Button type="button" variant="outline" onClick={() => finish(null)}>
               Cancel
             </Button>

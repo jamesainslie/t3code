@@ -18,6 +18,7 @@ export function useEscapeToGoBack(onEscape?: () => void) {
   const navigateBack = useNavigateBack();
   const handleEscape = onEscape ?? navigateBack;
 
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- window keydown listener that goes back on Escape
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.isComposing || event.key !== "Escape")
