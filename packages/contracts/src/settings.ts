@@ -574,6 +574,8 @@ export const ClientSettingsSchema = Schema.Struct({
   fontFamilySans: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilyTerminal: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   chatTextColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  markdownPreviewTextColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  terminalTextColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   composerCaretColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   threadCardColor: ColorPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   threadHighlightPalette: ThreadHighlightPalette.pipe(
@@ -2063,6 +2065,8 @@ export const ClientSettingsPatch = Schema.Struct({
   fontFamilySans: Schema.optionalKey(FontFamilyPreference),
   fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
   chatTextColor: Schema.optionalKey(ColorPreference),
+  markdownPreviewTextColor: Schema.optionalKey(ColorPreference),
+  terminalTextColor: Schema.optionalKey(ColorPreference),
   composerCaretColor: Schema.optionalKey(ColorPreference),
   threadCardColor: Schema.optionalKey(ColorPreference),
   threadHighlightPalette: Schema.optionalKey(ThreadHighlightPalette),

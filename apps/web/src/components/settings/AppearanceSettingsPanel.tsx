@@ -121,7 +121,7 @@ export function AppearanceSettingsPanel() {
 
       <EditionSettingsSection />
 
-      <SettingsSection id="appearance-chat-colors" title="Chat colors">
+      <SettingsSection id="appearance-custom-colors" title="Custom colors">
         <ColorSettingsRow
           {...searchableSetting("chat-text-color")}
           title="Chat text"
@@ -129,6 +129,28 @@ export function AppearanceSettingsPanel() {
           value={settings.chatTextColor}
           onValueChange={(chatTextColor) => updateSettings({ chatTextColor })}
           onReset={() => updateSettings({ chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor })}
+        />
+        <ColorSettingsRow
+          {...searchableSetting("markdown-preview-text-color")}
+          title="Markdown preview text"
+          description="Text in rendered markdown files. Leave unset to use the theme's color."
+          value={settings.markdownPreviewTextColor}
+          onValueChange={(markdownPreviewTextColor) => updateSettings({ markdownPreviewTextColor })}
+          onReset={() =>
+            updateSettings({
+              markdownPreviewTextColor: DEFAULT_UNIFIED_SETTINGS.markdownPreviewTextColor,
+            })
+          }
+        />
+        <ColorSettingsRow
+          {...searchableSetting("terminal-text-color")}
+          title="Terminal text"
+          description="Default terminal text. Programs that print white or bright white get this color too."
+          value={settings.terminalTextColor}
+          onValueChange={(terminalTextColor) => updateSettings({ terminalTextColor })}
+          onReset={() =>
+            updateSettings({ terminalTextColor: DEFAULT_UNIFIED_SETTINGS.terminalTextColor })
+          }
         />
         <ColorSettingsRow
           {...searchableSetting("composer-caret-color")}

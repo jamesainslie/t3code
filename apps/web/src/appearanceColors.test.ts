@@ -36,11 +36,17 @@ describe("applyAppearanceColorOverrides", () => {
     const { root, properties, dataset } = makeRoot();
     applyAppearanceColorOverrides(root, {
       chatText: "#d4d4d8",
+      markdownPreviewText: "",
+      terminalText: "#a1a1aa",
       composerCaret: "",
       threadCard: "garbage",
     });
     expect(properties.get("--user-chat-text")).toBe("#d4d4d8");
     expect(dataset.userChatText).toBe("");
+    expect(properties.has("--user-markdown-preview-text")).toBe(false);
+    expect("userMarkdownPreviewText" in dataset).toBe(false);
+    expect(properties.get("--user-terminal-text")).toBe("#a1a1aa");
+    expect(dataset.userTerminalText).toBe("");
     expect(properties.has("--user-composer-caret")).toBe(false);
     expect("userComposerCaret" in dataset).toBe(false);
     expect(properties.has("--user-thread-card")).toBe(false);
@@ -51,11 +57,19 @@ describe("applyAppearanceColorOverrides", () => {
     const { root, properties, dataset } = makeRoot();
     applyAppearanceColorOverrides(root, {
       chatText: "#d4d4d8",
+      markdownPreviewText: "#c4c4c8",
+      terminalText: "#a1a1aa",
       composerCaret: "#ff9900",
       threadCard: "#18181b",
     });
-    expect(properties.size).toBe(3);
-    applyAppearanceColorOverrides(root, { chatText: "", composerCaret: "", threadCard: "" });
+    expect(properties.size).toBe(5);
+    applyAppearanceColorOverrides(root, {
+      chatText: "",
+      markdownPreviewText: "",
+      terminalText: "",
+      composerCaret: "",
+      threadCard: "",
+    });
     expect(properties.size).toBe(0);
     expect(Object.keys(dataset)).toEqual([]);
   });

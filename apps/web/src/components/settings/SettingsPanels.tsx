@@ -429,10 +429,12 @@ export function useSettingsRestore(onRestored?: () => void) {
       : []),
     ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
     ...(settings.chatTextColor !== DEFAULT_UNIFIED_SETTINGS.chatTextColor ||
+    settings.markdownPreviewTextColor !== DEFAULT_UNIFIED_SETTINGS.markdownPreviewTextColor ||
+    settings.terminalTextColor !== DEFAULT_UNIFIED_SETTINGS.terminalTextColor ||
     settings.composerCaretColor !== DEFAULT_UNIFIED_SETTINGS.composerCaretColor ||
     settings.threadCardColor !== DEFAULT_UNIFIED_SETTINGS.threadCardColor ||
     !isDefaultThreadHighlightPalette(settings.threadHighlightPalette)
-      ? ["Chat colors"]
+      ? ["Custom colors"]
       : []),
     ...(settings.syntaxTheme !== DEFAULT_UNIFIED_SETTINGS.syntaxTheme ? ["Syntax theme"] : []),
     ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
@@ -672,6 +674,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       editionAccent: DEFAULT_UNIFIED_SETTINGS.editionAccent,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       chatTextColor: DEFAULT_UNIFIED_SETTINGS.chatTextColor,
+      markdownPreviewTextColor: DEFAULT_UNIFIED_SETTINGS.markdownPreviewTextColor,
+      terminalTextColor: DEFAULT_UNIFIED_SETTINGS.terminalTextColor,
       composerCaretColor: DEFAULT_UNIFIED_SETTINGS.composerCaretColor,
       threadCardColor: DEFAULT_UNIFIED_SETTINGS.threadCardColor,
       threadHighlightPalette: DEFAULT_UNIFIED_SETTINGS.threadHighlightPalette,

@@ -241,6 +241,10 @@ function CopyOnSelectSync() {
 
 function ColorAppearanceSync() {
   const chatTextColor = useClientSettings((settings) => settings.chatTextColor);
+  const markdownPreviewTextColor = useClientSettings(
+    (settings) => settings.markdownPreviewTextColor,
+  );
+  const terminalTextColor = useClientSettings((settings) => settings.terminalTextColor);
   const composerCaretColor = useClientSettings((settings) => settings.composerCaretColor);
   const threadCardColor = useClientSettings((settings) => settings.threadCardColor);
 
@@ -248,10 +252,18 @@ function ColorAppearanceSync() {
   useEffect(() => {
     applyAppearanceColorOverrides(document.documentElement, {
       chatText: chatTextColor,
+      markdownPreviewText: markdownPreviewTextColor,
+      terminalText: terminalTextColor,
       composerCaret: composerCaretColor,
       threadCard: threadCardColor,
     });
-  }, [chatTextColor, composerCaretColor, threadCardColor]);
+  }, [
+    chatTextColor,
+    markdownPreviewTextColor,
+    terminalTextColor,
+    composerCaretColor,
+    threadCardColor,
+  ]);
 
   return null;
 }

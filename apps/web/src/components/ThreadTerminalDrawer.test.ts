@@ -12,6 +12,7 @@ import {
   shouldHandleTerminalExit,
   synchronizeTerminalOutput,
   synchronizeTerminalSession,
+  terminalPalette,
 } from "./ThreadTerminalDrawer";
 
 describe("terminal selection actions", () => {
@@ -114,4 +115,23 @@ it("reports an attach failure that leaves the output unchanged", () => {
   expect(terminal.getSelection).not.toHaveBeenCalled();
   expect(terminal.getSelectionCellCount).not.toHaveBeenCalled();
   expect(terminal.clearSelection).not.toHaveBeenCalled();
+});
+
+describe("terminal palette", () => {
+  it("replaces ANSI white and bright white with the terminal text color", () => {
+    const white = { r: 161, g: 161, b: 170 };
+    const base = terminalPalette(true, null);
+    const palette = terminalPalette(true, white);
+    expect(palette).toHaveLength(16);
+    expect(palette[7]).toEqual(white);
+    expect(palette[15]).toEqual(white);
+    expect(palette.filter((_, index) => index !== 7 && index !== 15)).toEqual(
+      base.filter((_, index) => index !== 7 && index !== 15),
+    );
+  });
+
+  it("keeps the theme's whites while no terminal text color is set", () => {
+    expect(terminalPalette(false, null)[15]).toEqual({ r: 165, g: 165, b: 165 });
+    expect(terminalPalette(true, null)[15]).toEqual({ r: 229, g: 229, b: 229 });
+  });
 });

@@ -460,6 +460,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["colors message font foreground white stark assistant response"],
   },
   {
+    id: "markdown-preview-text-color",
+    title: "Markdown preview text color",
+    to: "/settings/appearance",
+    searchTerms: ["colors file document readme font foreground white stark"],
+  },
+  {
+    id: "terminal-text-color",
+    title: "Terminal text color",
+    to: "/settings/appearance",
+    searchTerms: ["colors shell output font foreground white stark ansi palette"],
+  },
+  {
     id: "composer-caret-color",
     title: "Prompt cursor color",
     to: "/settings/appearance",

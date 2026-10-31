@@ -2596,7 +2596,7 @@ code {
   position: relative;
 }
 
-/* Settings → Appearance → Chat colors. `applyAppearanceColorOverrides` writes
+/* Settings → Appearance → Custom colors. `applyAppearanceColorOverrides` writes
    one root variable plus one data flag per override; the flag keeps the
    theme's own cascade untouched while nothing is set. Chat text replaces the
    contrast-adjusted foregrounds inside the timeline only, so the rest of the
@@ -2605,6 +2605,17 @@ code {
 html[data-user-chat-text] [data-timeline-root] {
   --contrast-foreground: var(--user-chat-text);
   --contrast-message-foreground: var(--user-chat-text);
+}
+
+html[data-user-markdown-preview-text] .chat-markdown-document {
+  --contrast-foreground: var(--user-markdown-preview-text);
+  color: var(--user-markdown-preview-text);
+}
+
+/* `terminalThemeFromApp` reads these when it builds the Ghostty theme. */
+html[data-user-terminal-text] [data-thread-terminal-drawer] {
+  --terminal-foreground: var(--user-terminal-text);
+  --terminal-palette-white: var(--user-terminal-text);
 }
 
 html[data-user-composer-caret] .composer-tiptap {

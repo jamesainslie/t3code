@@ -278,6 +278,20 @@ const TERMINAL_PALETTES = {
   ].map(hexToGhosttyColor),
 };
 
+const ANSI_WHITE = 7;
+const ANSI_BRIGHT_WHITE = 15;
+
+export function terminalPalette(
+  isDark: boolean,
+  white: GhosttyColor | null,
+): readonly GhosttyColor[] {
+  const palette = TERMINAL_PALETTES[isDark ? "dark" : "light"];
+  if (white === null) return palette;
+  return palette.map((color, index) =>
+    index === ANSI_WHITE || index === ANSI_BRIGHT_WHITE ? white : color,
+  );
+}
+
 // Read visibility when WASM finishes loading, not when setup starts.
 function withLiveVisibility(
   visibleRef: { readonly current: boolean },
@@ -368,20 +382,25 @@ export function terminalThemeFromApp(mountElement?: HTMLElement | null): Ghostty
     "--terminal-selection-background",
     isDark ? "rgba(180, 203, 255, 0.25)" : "rgba(37, 63, 99, 0.2)",
   );
+  const paletteWhite = readThemeColor(themeStyles, "--terminal-palette-white", "");
+  const foregroundColor = parseTerminalColor(
+    terminalForeground,
+    isDark ? { r: 237, g: 241, b: 247 } : { r: 28, g: 33, b: 41 },
+  );
   return {
     background: parseTerminalColor(
       terminalBackground,
       isDark ? { r: 14, g: 18, b: 24 } : { r: 255, g: 255, b: 255 },
     ),
-    foreground: parseTerminalColor(
-      terminalForeground,
-      isDark ? { r: 237, g: 241, b: 247 } : { r: 28, g: 33, b: 41 },
-    ),
+    foreground: foregroundColor,
     cursor: parseTerminalColor(
       terminalCursor,
       isDark ? { r: 180, g: 203, b: 255 } : { r: 38, g: 56, b: 78 },
     ),
-    palette: TERMINAL_PALETTES[isDark ? "dark" : "light"],
+    palette: terminalPalette(
+      isDark,
+      paletteWhite === "" ? null : parseTerminalColor(paletteWhite, foregroundColor),
+    ),
     selectionBackground: terminalSelection,
   };
 }
