@@ -126,15 +126,23 @@ jobs:
       - name: Install Chromium for web browser tests
         run: node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
 
-      # Upstream runs these on 8 vCPU runners. Here the document previews in
-      # AttachmentFilePreview time out while other browser files share the
-      # runner (#115), so that file runs after the rest, on its own.
+      # Upstream runs these on 8 vCPU runners. Here the heaviest browser files
+      # (document previews, a full app render, a very long timeline) time out
+      # while other browser files share the runner (#115), so they run after the rest.
       - name: Test
-        run: vp run --filter @lathe/web test --exclude "**/AttachmentFilePreview.browser.test.tsx"
+        run: >-
+          vp run --filter @lathe/web test
+          --exclude "**/AttachmentFilePreview.browser.test.tsx"
+          --exclude "**/ChatView.browser.test.tsx"
+          --exclude "**/MessagesTimeline.browser.test.tsx"
 
-      - name: Test file previews
+      - name: Test heavy browser files
         working-directory: apps/web
-        run: vp test run --project browser src/components/files/AttachmentFilePreview.browser.test.tsx
+        run: >-
+          vp test run --project browser --no-file-parallelism
+          src/components/files/AttachmentFilePreview.browser.test.tsx
+          src/components/ChatView.browser.test.tsx
+          src/components/chat/MessagesTimeline.browser.test.tsx
 
   # apps/server runs its files one at a time (fileParallelism: false), so shards
   # spread them over runners. Files split by recorded duration
