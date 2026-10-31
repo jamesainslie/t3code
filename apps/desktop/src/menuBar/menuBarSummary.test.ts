@@ -120,7 +120,10 @@ describe("summarizeMenuBar", () => {
       },
     ]);
     expect(ids(summary.running)).toEqual(["busy"]);
-    expect(summary.running[0]).toMatchObject({ kind: "working", since: "2026-10-31T11:30:00.000Z" });
+    expect(summary.running[0]).toMatchObject({
+      kind: "working",
+      since: "2026-10-31T11:30:00.000Z",
+    });
   });
 
   it("is working when a turn runs and nothing waits on the user", () => {
@@ -200,7 +203,11 @@ describe("summarizeMenuBar", () => {
           status: "unavailable",
           reason: "Relay environments are not supported in the menu bar yet.",
         },
-        { environmentId: EnvironmentId.make("env-wait"), label: "hephaestus", status: "connecting" },
+        {
+          environmentId: EnvironmentId.make("env-wait"),
+          label: "hephaestus",
+          status: "connecting",
+        },
       ],
       now,
     );

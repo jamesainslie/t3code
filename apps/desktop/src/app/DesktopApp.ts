@@ -38,6 +38,7 @@ import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
+import * as DesktopMenuBar from "../menuBar/DesktopMenuBar.ts";
 import * as HostProcess from "@lathe/shared/HostProcess";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = FORK_IDENTITY.defaultPort;
@@ -334,6 +335,9 @@ const startup = Effect.gen(function* () {
   yield* DesktopStartupRecovery.listen;
   yield* linuxUrlHandler.register;
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
+  yield* (yield* DesktopMenuBar.DesktopMenuBar).initialize.pipe(
+    Effect.catchCause((cause) => Effect.logWarning("menu bar unavailable", cause)),
+  );
 }).pipe(Effect.withSpan("desktop.startup"));
 
 const scopedProgram = Effect.scoped(

@@ -5,7 +5,10 @@ import {
   type OrchestrationV2ThreadShell,
   type ThreadId,
 } from "@lathe/contracts";
-import { presentThreadShell, type EnvironmentThreadShell } from "@lathe/client-runtime/state/models";
+import {
+  presentThreadShell,
+  type EnvironmentThreadShell,
+} from "@lathe/client-runtime/state/models";
 import { effectiveSnoozed } from "@lathe/client-runtime/state/thread-settled";
 import { pendingSubagentRequestsByThread } from "@lathe/client-runtime/state/thread-shell";
 import * as DateTime from "effect/DateTime";
@@ -23,7 +26,14 @@ export type MenuBarEnvironment = {
   | { readonly status: "unavailable"; readonly reason: string }
 );
 
-export type MenuBarThreadKind = "approval" | "input" | "request" | "working" | "waiting" | "done" | "failed";
+export type MenuBarThreadKind =
+  | "approval"
+  | "input"
+  | "request"
+  | "working"
+  | "waiting"
+  | "done"
+  | "failed";
 
 export interface MenuBarThreadItem {
   readonly environmentId: EnvironmentId;
@@ -103,10 +113,16 @@ export function summarizeMenuBar(
       continue;
     }
     if (environment.status !== "live") continue;
-    const projectTitles = new Map(environment.projects.map((project) => [project.id, project.title]));
+    const projectTitles = new Map(
+      environment.projects.map((project) => [project.id, project.title]),
+    );
     const subagentRequests = pendingSubagentRequestsByThread(environment.threads);
     for (const raw of environment.threads) {
-      if (!isListedThreadLineage(raw.lineage) || raw.archivedAt !== null || raw.deletedAt !== null) {
+      if (
+        !isListedThreadLineage(raw.lineage) ||
+        raw.archivedAt !== null ||
+        raw.deletedAt !== null
+      ) {
         continue;
       }
       const thread = presentThreadShell(
