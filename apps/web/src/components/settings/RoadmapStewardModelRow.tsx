@@ -7,11 +7,7 @@ import {
   resolveAppModelSelectionState,
   selectsPlanAgent,
 } from "../../modelSelection";
-import {
-  applyProviderInstanceSettings,
-  deriveProviderInstanceEntries,
-  sortProviderInstanceEntries,
-} from "../../providerInstances";
+import { providerInstanceEntriesFor } from "../../providerInstances";
 import { useEnvironmentProviders } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
@@ -53,9 +49,7 @@ export function RoadmapStewardModelRow() {
       ? providersByEnvironment.get(environment.environmentId)
       : undefined) ?? EMPTY_SERVER_PROVIDERS
   ).filter((provider) => provider.supportsTextGeneration !== false);
-  const instanceEntries = sortProviderInstanceEntries(
-    applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings, null),
-  );
+  const instanceEntries = providerInstanceEntriesFor(providers, settings, null);
   const usesStewardModel = settings.roadmap.stewardModelSelection !== null;
   const fallback = resolveAppModelSelectionState(settings, providers);
   const selection = resolveAppModelSelectionState(

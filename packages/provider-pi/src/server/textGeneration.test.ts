@@ -159,3 +159,70 @@ it.effect("records the assistant usage Pi streams, since --no-session keeps no t
     ]);
   }),
 );
+
+const failedTurnWith = (errorMessage: string) => ({
+  type: "message_end",
+  message: { role: "assistant", stopReason: "error", errorMessage },
+});
+
+const failedTurn = failedTurnWith(
+  '401: {"error":{"message":"Incorrect API key provided: sk-test-SECRET123"}}',
+);
+
+const generateCommitMessage = (turnEvents: ReadonlyArray<Record<string, unknown>>, reply = "") =>
+  Effect.gen(function* () {
+    const pi = yield* makeFakePi(reply, undefined, turnEvents);
+    const textGeneration = yield* makePiTextGeneration(
+      { enabled: true, binaryPath: "pi", launchArgs: "", customModels: [] },
+      {},
+    ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, pi.spawner));
+    return yield* textGeneration.generateCommitMessage({
+      cwd: process.cwd(),
+      branch: "main",
+      stagedSummary: "M README.md",
+      stagedPatch: "diff --git a/README.md b/README.md",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "default"),
+    });
+  });
+
+it.effect("reports Pi's turn error when the reply is empty", () =>
+  Effect.gen(function* () {
+    const error = yield* generateCommitMessage([failedTurn]).pipe(Effect.flip);
+
+    assert.equal(error._tag, "TextGenerationError");
+    assert.equal(error.detail, "Pi could not generate text: the model provider returned HTTP 401.");
+  }),
+);
+
+it.effect("keeps Pi's raw error text out of the error", () =>
+  Effect.gen(function* () {
+    const error = yield* generateCommitMessage([
+      failedTurnWith("Invalid API key sk-test-SECRET123"),
+    ]).pipe(Effect.flip);
+
+    assert.equal(error.detail, "Pi could not generate text: the model provider reported an error.");
+    assert.notInclude(error.message, "SECRET123");
+  }),
+);
+
+it.effect("keeps the reply when Pi answers after a failed attempt", () =>
+  Effect.gen(function* () {
+    const result = yield* generateCommitMessage(
+      [failedTurn, { type: "message_end", message: { role: "assistant", stopReason: "stop" } }],
+      JSON.stringify({ subject: "Update README", body: "" }),
+    );
+
+    assert.equal(result.subject, "Update README");
+  }),
+);
+
+it.effect("drops an earlier error once a later attempt succeeds", () =>
+  Effect.gen(function* () {
+    const error = yield* generateCommitMessage([
+      failedTurn,
+      { type: "message_end", message: { role: "assistant", stopReason: "stop" } },
+    ]).pipe(Effect.flip);
+
+    assert.equal(error.detail, "Pi returned empty output.");
+  }),
+);

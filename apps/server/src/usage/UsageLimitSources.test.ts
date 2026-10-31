@@ -114,8 +114,7 @@ function harness(
         }),
         Layer.mock(BackgroundPolicy.BackgroundPolicy)({
           shouldRunScopeWork: () => Effect.sync(() => demand.active),
-          // Only the arrival matters to the source list, not the snapshot.
-          streamChanges: (options.wake ? Stream.fromQueue(options.wake) : Stream.empty) as never,
+          activityChanges: options.wake ? Stream.fromQueue(options.wake) : Stream.empty,
         }),
       ),
     ),

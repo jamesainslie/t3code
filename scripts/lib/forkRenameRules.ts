@@ -470,10 +470,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     id: "wire-t3-chat-link",
     class: "wire-peer",
     reason:
-      "T3 Chat, upstream's sibling product: the relay's T3 Chat account link (routes, plan limits, labels) and t3.chat pages. Lathe uses upstream's relay.",
-    test: (o) =>
-      /T3CHAT_|t3chat-link|unlink-t3chat|https:\/\/t3\.chat\/settings\//.test(o.token) ||
-      (/^t3\.chat\.?$/.test(o.token) && /confirm the link on t3\.chat/.test(o.line)),
+      "T3 Chat, upstream's sibling product, is never Lathe's: its account link names (routes, types, plan limits, labels), the t3.chat site and doc anchors. Lathe uses upstream's relay.",
+    token:
+      /T3CHAT_|t3chat|T3Chat|t3Chat|with-t3-chat|^t3\.chat[.,]?$|https:\/\/t3\.chat\/settings\//,
   },
   {
     id: "wire-peer-links",
@@ -655,7 +654,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       (/^["'`]?t3-(?:chat|grove|ocean|ember|iris)(?:-(?:dark|light))?["'`]?[,;:)]?$|T3_CHAT_THEME|LEGACY_T3_CHAT/.test(
         o.token,
       ) ||
-        ((/[Tt]heme/.test(o.path) || /[Tt]heme(?:Variables)?\(|\bpalettes?\b/.test(o.line)) &&
+        ((/[Tt]heme/.test(o.path) ||
+          /[Tt]heme(?:Variables)?\(|\bpalettes?\b|\b(?:themeIds?|requestedTheme)\b/.test(o.line)) &&
           /^t3-(?:code|chat|grove|ocean|ember|iris)(?:-(?:dark|light))?$/.test(o.token))),
   },
   {

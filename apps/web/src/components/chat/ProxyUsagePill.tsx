@@ -4,10 +4,11 @@ import type {
   ProxyLedgerSummaryStyle,
   UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { useNowMinute } from "~/hooks/useNowMinute";
+import { getDocumentActivity, subscribeDocumentActivity } from "~/lib/documentActivity";
 import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
 import { useEnvironmentQuery } from "../../state/query";
 import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
@@ -105,6 +106,7 @@ function IrisGauge({
 /** The wall clock to the second, for a ledger that only exists while it is open. */
 function useNowSecond(): number {
   const [now, setNow] = useState(() => Date.now());
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- interval that ticks the clock every second while the ledger is open
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
@@ -119,12 +121,10 @@ function useNowSecond(): number {
  * nobody is reading this one.
  */
 function useLiveGateway(environmentId: EnvironmentId) {
-  const [visible, setVisible] = useState(() => !document.hidden);
-  useEffect(() => {
-    const update = () => setVisible(!document.hidden);
-    document.addEventListener("visibilitychange", update);
-    return () => document.removeEventListener("visibilitychange", update);
-  }, []);
+  const visible = useSyncExternalStore(
+    subscribeDocumentActivity,
+    () => getDocumentActivity().visible,
+  );
   useEnvironmentQuery(
     visible ? serverEnvironment.usageLimitSourceWatch({ environmentId, input: {} }) : null,
   );

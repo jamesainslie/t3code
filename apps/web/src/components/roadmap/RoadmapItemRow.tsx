@@ -135,6 +135,7 @@ export const RoadmapItemRow = memo(function RoadmapItemRow({
   const canRename = canEdit && item.source?.writable !== false;
   const progress = criteriaProgress(item.criteria);
 
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- scrolls the row element into view when it becomes selected
   useEffect(() => {
     if (selected) rowRef.current?.scrollIntoView({ block: "nearest" });
   }, [selected]);

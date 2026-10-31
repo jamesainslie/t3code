@@ -11,6 +11,7 @@ import { createModelSelection } from "@lathe/shared/model";
 
 import type { ProviderInstance } from "@lathe/provider-core/server/driver";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as TextGeneration from "./TextGeneration.ts";
 
@@ -41,7 +42,9 @@ const makeStubInstance = (
     },
     displayName: undefined,
     enabled: true,
-    snapshot: {} as ProviderInstance["snapshot"],
+    snapshot: {
+      getSnapshot: Effect.succeed({ instanceId }),
+    } as unknown as ProviderInstance["snapshot"],
     orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
     textGeneration,
   }) satisfies ProviderInstance;
@@ -82,9 +85,12 @@ describe("TextGeneration.make structured generation", () => {
           makeStubRegistry([instance]),
         ),
         Effect.provide(
-          Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
-            resolveLink: () => Effect.die("No link lookup expected"),
-          }),
+          Layer.mergeAll(
+            ServerSettings.layerTest(),
+            Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+              resolveLink: () => Effect.die("No link lookup expected"),
+            }),
+          ),
         ),
       );
 

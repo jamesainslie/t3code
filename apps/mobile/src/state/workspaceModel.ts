@@ -8,7 +8,6 @@ import {
 
 import type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@lathe/client-runtime/state/presentation";
 
-export { projectEnvironmentConnectionSummary as projectWorkspaceEnvironment } from "@lathe/client-runtime/state/presentation";
 export type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@lathe/client-runtime/state/presentation";
 
 export interface WorkspaceConnectionState {

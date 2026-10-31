@@ -3,6 +3,7 @@ import * as NodeOS from "node:os";
 
 import { isPrivateNetworkHost, isSharedAddressSpaceHost } from "@lathe/shared/hostClassification";
 import { QrCode } from "@lathe/shared/qrCode";
+import { buildPairingAppLink } from "@lathe/shared/remote";
 import * as Effect from "effect/Effect";
 import { HttpServer } from "effect/http";
 import * as NetAddress from "effect/net/NetAddress";
@@ -186,6 +187,7 @@ export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): 
     `Connection string: ${accessInfo.connectionString}`,
     `Token: ${accessInfo.token}`,
     `Pairing URL: ${accessInfo.pairingUrl}`,
+    `App link: ${buildPairingAppLink(accessInfo.pairingUrl)}`,
     "",
     renderTerminalQrCode(accessInfo.pairingUrl),
     "",

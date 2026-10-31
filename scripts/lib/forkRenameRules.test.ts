@@ -47,6 +47,16 @@ describe("FORK_RENAME_RULES", () => {
       "upstream-reference",
     ],
     ["evals/mcp-tool-use/run.ts", "  const t3 = visibleT3Tools(options);", "identifier"],
+    [
+      "apps/mobile/src/components/ui/x.ts",
+      '  if (dark && (!card || themeId === "t3-code")) {',
+      "kept",
+    ],
+    [
+      "apps/mobile/src/features/x.test.ts",
+      '    const themeIds = { light: "t3-code", dark: "t3-code" } as const;',
+      "kept",
+    ],
     ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
     ["apps/server/src/mcp/McpInvocationContext.ts", 'const H = "t3-mode-limit";', "wire-peer"],
     [
@@ -57,6 +67,18 @@ describe("FORK_RENAME_RULES", () => {
     [
       "apps/web/src/components/cloud/TunnelUsage.tsx",
       'export const T3CHAT_SUBSCRIPTION_URL = "https://t3.chat/settings/subscription";',
+      "wire-peer",
+    ],
+    [
+      "packages/contracts/src/relay.ts",
+      "export class RelayT3ChatLink extends Schema.Class<RelayT3ChatLink>(",
+      "wire-peer",
+    ],
+    ["apps/web/src/components/clerk/x.tsx", "                        t3.chat", "wire-peer"],
+    ["docs/user/faq.md", "[More](./remote-access.md#more-machines-with-t3-chat)", "wire-peer"],
+    [
+      "apps/web/src/components/clerk/useT3ChatLink.ts",
+      "export function useT3ChatLink() {",
       "wire-peer",
     ],
     ["scripts/build-npm-launcher.ts", "    t3code: { databaseMigration },", "kept"],

@@ -10,7 +10,7 @@ import { useId, useState } from "react";
 import { resolveOfficialAcpRegistryIconUrl } from "@lathe/contracts";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { AppText as Text } from "./ui/AppText";
-import { getProviderClient } from "../lib/providerClients";
+import { getProviderClient } from "@lathe/client-runtime/provider-clients";
 
 type ProviderIconProps = {
   readonly provider: string | null | undefined;

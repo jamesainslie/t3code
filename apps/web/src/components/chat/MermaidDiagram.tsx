@@ -38,6 +38,7 @@ function DiagramCanvas({
   const image = useRef<HTMLImageElement>(null);
   const controls = useRef<ReturnType<typeof mountDiagramViewport> | null>(null);
   const [scale, setScale] = useState(1);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- mounts the pan and zoom controller on the canvas and image elements and focuses the canvas
   useEffect(() => {
     if (!canvas.current || !image.current) return;
     const controller = mountDiagramViewport(canvas.current, image.current, svg, setScale);
@@ -136,6 +137,7 @@ export function ExpandedDiagram({
   const [viewerTheme, setViewerTheme] = useState<DiagramTheme>(appTheme);
   const [rendered, setRendered] = useState<{ theme: DiagramTheme; svg: string } | null>(null);
   const [failed, setFailed] = useState(false);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- renders the diagram through Mermaid in the viewer theme and drops stale results
   useEffect(() => {
     if (viewerTheme === appTheme) return;
     let cancelled = false;
@@ -202,6 +204,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   const copied = copiedSource === source;
   const [copyError, setCopyError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- renders the diagram through Mermaid asynchronously and drops results for a stale source
   useEffect(() => {
     if (pending) return;
     let cancelled = false;

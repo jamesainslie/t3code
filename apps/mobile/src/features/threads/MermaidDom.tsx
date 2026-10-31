@@ -52,6 +52,7 @@ export default function MermaidDom({
     [svg],
   );
   const error = current?.error;
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- renders the diagram through Mermaid asynchronously and drops results for a stale source
   useEffect(() => {
     let cancelled = false;
     void renderMermaid(source, theme).then(
@@ -72,6 +73,7 @@ export default function MermaidDom({
       cancelled = true;
     };
   }, [source, theme, attempt]);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- mounts the pan and zoom controller on the canvas and image elements while expanded
   useEffect(() => {
     if (!expanded || !svg || showSource || !canvas.current || !image.current) return;
     const controller = mountDiagramViewport(canvas.current, image.current, svg, setScale);

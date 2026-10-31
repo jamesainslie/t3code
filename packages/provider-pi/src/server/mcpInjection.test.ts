@@ -80,7 +80,6 @@ describe("pi Lathe MCP injection", () => {
       "--extension",
       "/tmp/cache/pi-lathe-mcp-extension.ts",
     ]);
-    assert.isFalse(permissionOnly.hasLatheMcp);
     assert.isUndefined(permissionOnly.env[LATHE_MCP_URL_ENV]);
     assert.isUndefined(permissionOnly.env[LATHE_MCP_BEARER_ENV]);
     assert.equal(permissionOnly.env[LATHE_PI_RUNTIME_MODE_ENV], "auto-accept-edits");
@@ -118,7 +117,6 @@ describe("pi Lathe MCP injection", () => {
       "--no-extensions",
       "--no-tools",
     ]);
-    assert.isFalse(launch.hasLatheMcp);
     assert.deepInclude(resolvePiLaunchArgs("--mode text"), {
       ok: false,
       message: "Pi launch argument '--mode' is controlled by Lathe and cannot be overridden.",

@@ -101,12 +101,13 @@ export function DocumentCommentsMargin({
   });
 
   // Async content (Shiki, KaTeX, Mermaid, images) and pane resizes move passages.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- observes the container and source elements' size to re-measure passages
   useEffect(() => {
     if (!container || !source) return;
     return observeResize([container, source], relayout);
   }, [container, source]);
 
-  // Measuring the rendered passages is the external system this syncs with.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- measures the rendered passages' DOM ranges before paint to place comment cards
   useLayoutEffect(() => {
     if (!container || !source) return;
     const origin = container.getBoundingClientRect().top;
@@ -139,6 +140,7 @@ export function DocumentCommentsMargin({
   ]);
 
   // Cards size to their text, so push-down needs their measured heights.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- measures the card elements' heights before paint for push-down layout
   useLayoutEffect(() => {
     const measured = new Map<string, number>();
     for (const [id, element] of cardElements.current) measured.set(id, element.offsetHeight);
@@ -149,6 +151,7 @@ export function DocumentCommentsMargin({
     if (changed) setHeights(measured);
   });
 
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- paints the comment ranges into CSS custom highlights and clears them on cleanup
   useEffect(() => {
     const open = comments
       .filter((comment) => comment.status === "open" && comment.id !== activeId)
@@ -164,6 +167,7 @@ export function DocumentCommentsMargin({
   }, [activeId, comments, draft, layout]);
 
   // Clicking highlighted text opens its comment.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- click listener on the source element that opens the comment under the caret
   useEffect(() => {
     if (!source) return;
     const onClick = (event: MouseEvent) => {
@@ -458,6 +462,7 @@ export function DocumentCommentEditor({
   const [body, setBody] = useState(initialBody);
   const trimmed = body.trim();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- focuses the textarea element on mount without scrolling
   useLayoutEffect(() => {
     textarea.current?.focus({ preventScroll: true });
   }, []);

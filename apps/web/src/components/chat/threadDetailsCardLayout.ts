@@ -34,7 +34,7 @@ export function resolveThreadDetailsCardLayout({
   overlapsDetailsCard?: boolean;
   topInset?: number;
   /** The column width the user chose. */
-  width?: number;
+  width?: number | undefined;
 }) {
   const gap = THREAD_DETAILS_CARD_GAP;
   // A readable chat lane outranks the chosen width: the card narrows to keep

@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 
 import type { ServerInstallation } from "@lathe/contracts";
 import * as HostProcess from "@lathe/shared/HostProcess";
-import { isCommandAvailable } from "@lathe/shared/shell";
+import { resolveCommandPath } from "@lathe/shared/shell";
 import { FORK_IDENTITY, forkPackageSpec } from "@lathe/shared/forkIdentity";
 import { FORK_NPM_LAUNCHER_SCRIPT } from "@lathe/shared/forkCliArtifacts";
 
@@ -152,7 +152,7 @@ const resolveInstallLauncher = Effect.gen(function* () {
 });
 
 /**
- * Uses `lathe` on PATH, the originating package runner, or this install's absolute launcher path.
+ * Uses this install's `lathe` on PATH, the originating runner, or its absolute launcher path.
  * Arguments are quoted for POSIX shells or PowerShell on Windows.
  */
 export const resolveHostCliCommand = Effect.fn("invocation.resolveHostCliCommand")(function* (
@@ -165,8 +165,16 @@ export const resolveHostCliCommand = Effect.fn("invocation.resolveHostCliCommand
   const command = yield* resolveCliCommand(subcommand);
   if (command !== `${FORK_IDENTITY.cliBin} ${subcommand}`)
     return { command: withArgs(command), launcher: false };
-  if (yield* isCommandAvailable(FORK_IDENTITY.cliBin))
-    return { command: withArgs(command), launcher: false };
+  const onPath = yield* resolveCommandPath(FORK_IDENTITY.cliBin);
+  if (onPath !== null) {
+    const shim = (yield* HostProcess.Environment).LATHE_CLI_PATH?.trim();
+    const fs = yield* FileSystem.FileSystem;
+    const real = (file: string) => fs.realPath(file).pipe(Effect.orElseSucceed(() => null));
+    const shimReal = shim ? yield* real(shim) : null;
+    if (shimReal === null || shimReal === (yield* real(onPath))) {
+      return { command: withArgs(command), launcher: false };
+    }
+  }
   const launcher = yield* resolveInstallLauncher;
   if (Option.isNone(launcher)) return { command: withArgs(command), launcher: false };
   // PowerShell runs a quoted path only through the call operator.
@@ -183,8 +191,9 @@ export const resolveHostCliCommand = Effect.fn("invocation.resolveHostCliCommand
  */
 export const resolveRootCliCommand = Effect.fn("invocation.resolveRootCliCommand")(function* (
   subcommand: string,
+  args: ReadonlyArray<string> = [],
 ) {
-  const { command, launcher } = yield* resolveHostCliCommand(subcommand);
+  const { command, launcher } = yield* resolveHostCliCommand(subcommand, args);
   if (launcher) return `sudo ${command}`;
   const executablePath = yield* HostProcess.ExecutablePath;
   const systemNode = ROOT_PATH_DIRECTORIES.some((directory) =>

@@ -1,6 +1,7 @@
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 
 import packageJson from "../../package.json" with { type: "json" };
+import { BUILD_MIGRATION_HEAD, recordedMigrations } from "../persistence/databaseMigrationHead.ts";
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
 
 export type ServicePreflightResult =
@@ -36,7 +37,32 @@ export function runServicePreflight(input: {
     };
   }
 
+  const newer = newerRecordedMigrations(input.databasePath);
+  if (newer === null) {
+    return {
+      status: "blocked",
+      version,
+      reason: `Could not read this database to confirm @jamesainslie/lathe@${version} supports it.`,
+    };
+  }
+  if (newer.length > 0) {
+    return {
+      status: "blocked",
+      version,
+      reason: `This database has migrations that @jamesainslie/lathe@${version} does not know: ${newer.join(", ")}. A newer build wrote them, and running @jamesainslie/lathe@${version} on this database is not safe. Stay on the newer release, or wait for a release that includes these migrations.`,
+    };
+  }
+
   return { status: "ready", version, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL };
+}
+
+/** Migrations a newer build recorded, or null when the database exists but cannot be read.
+ * Startup already handles renamed ids this build knows. */
+function newerRecordedMigrations(databasePath: string): ReadonlyArray<string> | null {
+  const recorded = recordedMigrations(databasePath);
+  return recorded === null
+    ? null
+    : recorded.filter(({ id }) => id > BUILD_MIGRATION_HEAD).map(({ id, name }) => `${id}_${name}`);
 }
 
 export function decodeServicePreflightResult(value: unknown): ServicePreflightResult | undefined {

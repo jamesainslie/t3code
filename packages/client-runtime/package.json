@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./assembly-highlighting": {
+      "types": "./src/assemblyHighlighting.ts",
+      "default": "./src/assemblyHighlighting.ts"
+    },
     "./mermaid": {
       "types": "./src/mermaid.ts",
       "default": "./src/mermaid.ts"
@@ -18,6 +22,14 @@
     "./state/project-sync": {
       "types": "./src/state/projectSync.ts",
       "default": "./src/state/projectSync.ts"
+    },
+    "./zip/bounded-zip": {
+      "types": "./src/zip/boundedZip.ts",
+      "default": "./src/zip/boundedZip.ts"
+    },
+    "./zip/directory": {
+      "types": "./src/zip/zipDirectory.ts",
+      "default": "./src/zip/zipDirectory.ts"
     },
     "./workspace-basename-lookup": {
       "types": "./src/workspaceBasenameLookup.ts",
@@ -70,6 +82,10 @@
     "./secret-request": {
       "types": "./src/secretRequest.ts",
       "default": "./src/secretRequest.ts"
+    },
+    "./link-request": {
+      "types": "./src/linkRequest.ts",
+      "default": "./src/linkRequest.ts"
     },
     "./scheduled-task-webhook": {
       "types": "./src/scheduledTaskWebhook.ts",
@@ -207,6 +223,10 @@
       "types": "./src/state/orchestration.ts",
       "default": "./src/state/orchestration.ts"
     },
+    "./state/thread-history-merge": {
+      "types": "./src/state/threadHistoryMerge.ts",
+      "default": "./src/state/threadHistoryMerge.ts"
+    },
     "./state/orchestration-v2-projection": {
       "types": "./src/state/orchestrationV2Projection.ts",
       "default": "./src/state/orchestrationV2Projection.ts"
@@ -222,6 +242,14 @@
     "./state/deviceHubAccess": {
       "types": "./src/state/deviceHubAccess.ts",
       "default": "./src/state/deviceHubAccess.ts"
+    },
+    "./state/peerLinks": {
+      "types": "./src/state/peerLinks.ts",
+      "default": "./src/state/peerLinks.ts"
+    },
+    "./state/peerPairingCode": {
+      "types": "./src/state/peerPairingCode.ts",
+      "default": "./src/state/peerPairingCode.ts"
     },
     "./state/preview": {
       "types": "./src/state/preview.ts",
@@ -351,6 +379,10 @@
       "types": "./src/state/threadExecution.ts",
       "default": "./src/state/threadExecution.ts"
     },
+    "./state/pending-user-input": {
+      "types": "./src/state/pendingUserInput.ts",
+      "default": "./src/state/pendingUserInput.ts"
+    },
     "./state/thread-requests": {
       "types": "./src/state/threadRequests.ts",
       "default": "./src/state/threadRequests.ts"
@@ -439,6 +471,10 @@
       "types": "./src/threadReference.ts",
       "default": "./src/threadReference.ts"
     },
+    "./pull-request-project-filter": {
+      "types": "./src/pullRequestProjectFilter.ts",
+      "default": "./src/pullRequestProjectFilter.ts"
+    },
     "./thread-pull-request-compatibility": {
       "types": "./src/threadPullRequestCompatibility.ts",
       "default": "./src/threadPullRequestCompatibility.ts"
@@ -526,6 +562,10 @@
     "./model-traits": {
       "types": "./src/modelTraits.ts",
       "default": "./src/modelTraits.ts"
+    },
+    "./provider-clients": {
+      "types": "./src/providerClients.ts",
+      "default": "./src/providerClients.ts"
     }
   },
   "scripts": {
@@ -534,15 +574,24 @@
   },
   "dependencies": {
     "@lathe/contracts": "workspace:*",
+    "@lathe/provider-acp-registry": "workspace:*",
+    "@lathe/provider-core": "workspace:*",
+    "@lathe/provider-cursor": "workspace:*",
+    "@lathe/provider-fx": "workspace:*",
+    "@lathe/provider-grok": "workspace:*",
+    "@lathe/provider-muse": "workspace:*",
+    "@lathe/provider-opencode": "workspace:*",
+    "@lathe/provider-pi": "workspace:*",
     "@lathe/shared": "workspace:*",
     "@lathe/source-control-core": "workspace:*",
     "@lathe/source-control-definitions": "workspace:*",
     "@pierre/diffs": "catalog:",
     "effect": "catalog:",
+    "jszip": "3.10.1",
     "mermaid": "11.17.2",
-    "remark-parse": "^11.0.0",
+    "remark-parse": "catalog:",
     "three": "0.180.0",
-    "unified": "^11.0.5"
+    "unified": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

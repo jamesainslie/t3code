@@ -34,6 +34,7 @@ export function ProxyLoginAlertCoordinator() {
 
   // Runs on every published snapshot; loginAlerts reports only what changed,
   // so a re-publish with the same flags is no news.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- raises toasts and desktop notifications when the gateway newly flags accounts for login
   useEffect(() => {
     // An unread or signed-out gateway says nothing about its accounts.
     if (flagged === null) return;

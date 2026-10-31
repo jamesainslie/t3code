@@ -577,7 +577,7 @@ export const make = Effect.gen(function* () {
     );
     if (stale) yield* refresh;
   });
-  yield* backgroundPolicy.streamChanges.pipe(
+  yield* backgroundPolicy.activityChanges.pipe(
     Stream.mapEffect(() => backgroundPolicy.shouldRunScopeWork({ type: "provider-status" })),
     Stream.changes,
     Stream.filter((shouldRun) => shouldRun),

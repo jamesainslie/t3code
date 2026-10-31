@@ -20,6 +20,7 @@ export function EditionSettingsSection() {
   const updateSettings = useUpdateScopedSettings();
   const hasDesktopBridge = typeof window !== "undefined" && Boolean(window.desktopBridge);
   // Leaving the page mid-browse must not strand a preview.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- clears the global edition preview on unmount so leaving mid-hover does not strand it
   useEffect(() => () => previewEdition(null), []);
 
   return (

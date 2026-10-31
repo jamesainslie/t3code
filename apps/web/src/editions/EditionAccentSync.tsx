@@ -10,6 +10,7 @@ export function EditionAccentSync() {
   const accentEnabled = useClientSettings((settings) => settings.editionAccent);
   const accent = resolveEditionAccent({ artworkEdition, accentEnabled });
 
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- applies the edition accent to the document root element
   useEffect(() => {
     applyEditionAccent(document.documentElement, accent);
   }, [accent]);

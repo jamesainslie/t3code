@@ -79,8 +79,9 @@ export function ThreadDetailsColumnResizeHandle({
   const { refresh: _refresh, ...handlers } = useResizeDrag<HTMLDivElement>(() => ({
     width,
     edge: "left",
+    bounds: { min: THREAD_DETAILS_CARD_WIDTH.min, max: maxWidth },
     resize(value) {
-      const next = Math.round(Math.max(THREAD_DETAILS_CARD_WIDTH.min, Math.min(maxWidth, value)));
+      const next = Math.round(value);
       dragWidth = next;
       applyWidthProperty(next);
       return next;

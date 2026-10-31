@@ -53,6 +53,7 @@ function DetailsLog({
   const ref = useRef<HTMLPreElement>(null);
   const atBottom = useRef(true);
   // After every render, which here means new lines: cheap, and never a smooth scroll.
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- keeps the log element scrolled to the bottom after new lines unless the user scrolled up
   useLayoutEffect(() => {
     const element = ref.current;
     if (element && atBottom.current) element.scrollTop = element.scrollHeight;

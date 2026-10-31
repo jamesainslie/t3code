@@ -20,6 +20,7 @@ export function ProxyStatusCard({
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- window keydown listener that closes the card on Escape
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();

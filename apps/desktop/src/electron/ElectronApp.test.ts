@@ -1,94 +1,78 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as HostProcess from "@lathe/shared/HostProcess";
 import * as Effect from "effect/Effect";
-import { vi } from "vite-plus/test";
+import { beforeEach, vi } from "vite-plus/test";
 
-const {
-  appendSwitchMock,
-  autoUpdaterOnMock,
-  autoUpdaterRemoveListenerMock,
-  exitMock,
-  getAppPathMock,
-  getSystemLocaleMock,
-  getVersionMock,
-  onMock,
-  quitMock,
-  relaunchMock,
-  removeListenerMock,
-  removeSwitchMock,
-  setAboutPanelOptionsMock,
-  setAppUserModelIdMock,
-  setAsDefaultProtocolClientMock,
-  setDesktopNameMock,
-  setDockIconMock,
-  emptyImage,
-  setNameMock,
-  setPathMock,
-  whenReadyMock,
-} = vi.hoisted(() => ({
-  appendSwitchMock: vi.fn(),
-  autoUpdaterOnMock: vi.fn(),
-  autoUpdaterRemoveListenerMock: vi.fn(),
-  exitMock: vi.fn(),
-  getAppPathMock: vi.fn(() => "/app"),
-  getSystemLocaleMock: vi.fn(() => "en-GB"),
-  getVersionMock: vi.fn(() => "1.2.3"),
-  onMock: vi.fn(),
-  quitMock: vi.fn(),
-  relaunchMock: vi.fn(),
-  removeListenerMock: vi.fn(),
-  removeSwitchMock: vi.fn(),
-  setAboutPanelOptionsMock: vi.fn(),
-  setAppUserModelIdMock: vi.fn(),
-  setAsDefaultProtocolClientMock: vi.fn(() => true),
-  setDesktopNameMock: vi.fn(),
-  setDockIconMock: vi.fn(),
+const { emptyImage, getSystemLocaleMock, getUserDefaultMock, setDockIconMock } = vi.hoisted(() => ({
   emptyImage: { isEmpty: () => true },
-  setNameMock: vi.fn(),
-  setPathMock: vi.fn(),
-  whenReadyMock: vi.fn(() => Promise.resolve()),
+  getSystemLocaleMock: vi.fn(() => "en-GB"),
+  getUserDefaultMock: vi.fn((_key: string) => false),
+  setDockIconMock: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   nativeImage: {
     createEmpty: () => emptyImage,
   },
-  autoUpdater: {
-    on: autoUpdaterOnMock,
-    removeListener: autoUpdaterRemoveListenerMock,
-  },
   app: {
-    commandLine: {
-      appendSwitch: appendSwitchMock,
-      removeSwitch: removeSwitchMock,
-    },
     dock: {
       setIcon: setDockIconMock,
     },
-    getAppPath: getAppPathMock,
     getSystemLocale: getSystemLocaleMock,
-    getVersion: getVersionMock,
-    isPackaged: true,
-    name: "Lathe",
-    on: onMock,
-    quit: quitMock,
-    relaunch: relaunchMock,
-    removeListener: removeListenerMock,
-    runningUnderARM64Translation: false,
-    setAboutPanelOptions: setAboutPanelOptionsMock,
-    setAsDefaultProtocolClient: setAsDefaultProtocolClientMock,
-    setAppUserModelId: setAppUserModelIdMock,
-    setDesktopName: setDesktopNameMock,
-    setName: setNameMock,
-    setPath: setPathMock,
-    whenReady: whenReadyMock,
-    exit: exitMock,
+  },
+  systemPreferences: {
+    getUserDefault: getUserDefaultMock,
   },
 }));
 
 import * as ElectronApp from "./ElectronApp.ts";
 
-// Fork: the stage artwork edition resets the dock icon.
 describe("ElectronApp", () => {
+  beforeEach(() => {
+    getSystemLocaleMock.mockReset();
+    getUserDefaultMock.mockReset();
+  });
+
+  it("keeps the macOS region override and hour cycle in the locale tag", () => {
+    assert.strictEqual(ElectronApp.toSystemLocaleTag("en_GB"), "en-GB");
+    assert.strictEqual(ElectronApp.toSystemLocaleTag("en-US@rg=nlzzzz", "h12"), "en-NL-u-hc-h12");
+    assert.strictEqual(ElectronApp.toSystemLocaleTag("en_US@rg=nlzzzz"), "en-NL");
+    assert.strictEqual(ElectronApp.toSystemLocaleTag("en-GB", "h23"), "en-GB-u-hc-h23");
+  });
+
+  it("drops ICU keywords Intl cannot read instead of losing the whole locale", () => {
+    assert.strictEqual(ElectronApp.toSystemLocaleTag("de_DE@calendar=buddhist"), "de-DE");
+  });
+
+  it.effect("follows LC_TIME on Linux when it differs from the language", () =>
+    Effect.gen(function* () {
+      const electronApp = yield* ElectronApp.ElectronApp;
+      const systemLocale = yield* electronApp.systemLocale.pipe(
+        Effect.provideService(HostProcess.Platform, "linux"),
+        Effect.provideService(HostProcess.Environment, {
+          LANG: "en_US.UTF-8",
+          LC_TIME: "de_DE.UTF-8",
+        }),
+      );
+
+      assert.strictEqual(systemLocale, "de-DE");
+    }).pipe(Effect.provide(ElectronApp.layer)),
+  );
+
+  it.effect("falls back to Chromium's locale on Linux when the time locale is C", () =>
+    Effect.gen(function* () {
+      getSystemLocaleMock.mockImplementationOnce(() => "fr-FR");
+      const electronApp = yield* ElectronApp.ElectronApp;
+      const systemLocale = yield* electronApp.systemLocale.pipe(
+        Effect.provideService(HostProcess.Platform, "linux"),
+        Effect.provideService(HostProcess.Environment, { LANG: "C.UTF-8" }),
+      );
+
+      assert.strictEqual(systemLocale, "fr-FR");
+    }).pipe(Effect.provide(ElectronApp.layer)),
+  );
+
+  // Fork: the stage artwork edition resets the dock icon.
   it.effect("resets the dock icon with an empty image", () =>
     Effect.gen(function* () {
       setDockIconMock.mockClear();
@@ -99,3 +83,26 @@ describe("ElectronApp", () => {
     }).pipe(Effect.provide(ElectronApp.layer)),
   );
 });
+
+it.effect("reads both macOS hour preferences without overriding explicit formats", () =>
+  Effect.gen(function* () {
+    for (const [preference, expected] of [
+      ["AppleICUForce12HourTime", "en-NL-u-hc-h12"],
+      ["AppleICUForce24HourTime", "en-NL-u-hc-h23"],
+      ["", "en-NL"],
+    ]) {
+      getSystemLocaleMock.mockReturnValue("en_US@rg=nlzzzz");
+      getUserDefaultMock.mockImplementation((key) => key === preference);
+      const locale = yield* ElectronApp.make.systemLocale.pipe(
+        Effect.provideService(HostProcess.Platform, "darwin"),
+      );
+      assert.strictEqual(locale, expected);
+      for (const hour12 of [true, false]) {
+        assert.strictEqual(
+          new Intl.DateTimeFormat(locale, { hour: "numeric", hour12 }).resolvedOptions().hour12,
+          hour12,
+        );
+      }
+    }
+  }),
+);

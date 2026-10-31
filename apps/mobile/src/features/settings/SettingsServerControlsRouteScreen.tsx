@@ -29,10 +29,11 @@ import {
 } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
 import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
-import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
+import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
 import { SettingsControlRow } from "./components/SettingsControlRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { SourceControlSignInSection } from "./components/SourceControlSignInSection";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { useSettingsWriter } from "./useSettingsWriter";
@@ -45,32 +46,36 @@ import {
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
+import { AutoSettleSettingsRows } from "./ThreadSettingsSections";
+import { supportsSharedSettingsSync } from "@lathe/client-runtime/state/shared-settings";
 
-type SettingsPage = "new-threads" | "source-control" | "agent-behavior" | "maintenance";
+type SettingsPage = "threads" | "source-control" | "worktrees" | "maintenance";
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
-  "new-threads": "New threads",
+  threads: "Threads",
   "source-control": "Source control",
-  "agent-behavior": "Agent behavior",
+  worktrees: "Worktrees",
   maintenance: "Maintenance",
 };
 
 const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettingKey[]> = {
-  "new-threads": ["defaultThreadEnvMode", "worktreeSubmodules", "defaultRuntimeMode"],
-  "source-control": [
-    "defaultAutoPull",
-    "removeAgentCreditsOnMerge",
+  threads: [
+    "defaultThreadEnvMode",
+    "defaultRuntimeMode",
+    "responseStreamingMode",
+    "enableAgentBrowserAccess",
+    "sidebarAutoSettleOnMerge",
+    "sidebarAutoSettleAfterDays",
+    "agentThreadHistoryAccess",
+    "agentThreadHistoryRecentTurns",
+  ],
+  "source-control": ["defaultAutoPull", "removeAgentCreditsOnMerge", "gitHubAccount"],
+  worktrees: [
     "newWorktreesStartFromOrigin",
+    "worktreeSubmodules",
     "branchNamingMode",
     "branchNamePrefix",
     "branchNameInstructions",
-    "gitHubAccount",
-  ],
-  "agent-behavior": [
-    "responseStreamingMode",
-    "enableAgentBrowserAccess",
-    "agentThreadHistoryAccess",
-    "agentThreadHistoryRecentTurns",
   ],
   maintenance: ["continueThreadsAfterServerUpdate"],
 };
@@ -156,16 +161,42 @@ const THREAD_HISTORY_CHOICES: ReadonlyArray<{
   },
 ];
 
-export function SettingsEnvironmentNewThreadsRouteScreen() {
-  return <ServerSettingsDetail page="new-threads" />;
+// Only servers with thread auto-settlement store these, so other targets get the rest of a patch.
+const AUTO_SETTLE_SETTING_KEYS: ReadonlySet<string> = new Set([
+  "sidebarAutoSettleOnMerge",
+  "sidebarAutoSettleAfterDays",
+  "autoResumeLimitedThreads",
+  "snoozeLimitedThreads",
+]);
+
+function planServerSettingsWrites(
+  targets: readonly ScopedMobileSettingsTarget[],
+  projectSelected: boolean,
+  patch: MobileScopedSettingsPatch,
+) {
+  const capable = targets.filter((target) => supportsSharedSettingsSync(target.environment));
+  const others = targets.filter((target) => !supportsSharedSettingsSync(target.environment));
+  const othersPatch = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => !AUTO_SETTLE_SETTING_KEYS.has(key)),
+  ) as MobileScopedSettingsPatch;
+  return [
+    ...planMobileScopedSettingsPatch(capable, projectSelected, patch),
+    ...(Object.keys(othersPatch).length > 0
+      ? planMobileScopedSettingsPatch(others, projectSelected, othersPatch)
+      : []),
+  ];
+}
+
+export function SettingsThreadsRouteScreen() {
+  return <ServerSettingsDetail page="threads" />;
 }
 
 export function SettingsEnvironmentSourceControlRouteScreen() {
   return <ServerSettingsDetail page="source-control" />;
 }
 
-export function SettingsEnvironmentAgentBehaviorRouteScreen() {
-  return <ServerSettingsDetail page="agent-behavior" />;
+export function SettingsWorktreesRouteScreen() {
+  return <ServerSettingsDetail page="worktrees" />;
 }
 
 export function SettingsEnvironmentMaintenanceRouteScreen() {
@@ -256,7 +287,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       )
     )
       return;
-    const writes = planMobileScopedSettingsPatch(targets, projectSelected, patch);
+    const writes = planServerSettingsWrites(targets, projectSelected, patch);
     if (writes.length === 0) return;
     writeInFlight.current = true;
     setPendingTargets(targets);
@@ -295,19 +326,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       setPendingWrites((count) => count - 1);
     });
   };
-  const supportsProjectOverrides = targets.every(
-    (target) =>
-      target.environment.serverConfig.environment.capabilities.projectSettingsOverrides === true,
-  );
-  const disabled =
-    !canWriteSettings ||
-    pendingWrites > 0 ||
-    !hasConnectedSelection ||
-    (projectSelected && !supportsProjectOverrides);
-  const supportsContinuation = targets.every(
-    (target) =>
-      target.environment.serverConfig.environment.capabilities.threadRestartContinuation === true,
-  );
+  const disabled = !canWriteSettings || pendingWrites > 0 || !hasConnectedSelection;
   const disabledFor = (key: string) =>
     disabled ||
     (projectSelected &&
@@ -343,13 +362,12 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                   hasOverrides={targets.some((target) =>
                     PAGE_PROJECT_KEYS[props.page].some((key) => target.sources[key] === "project"),
                   )}
-                  supportsOverrides={supportsProjectOverrides}
                   pending={pendingWrites > 0}
                   disabled={!canWriteSettings}
                   onClear={() => clearProjectOverrides()}
                 />
               ) : null}
-              {props.page === "new-threads" ? (
+              {props.page === "threads" ? (
                 <>
                   <SettingsSection
                     title="Default workspace"
@@ -377,31 +395,6 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     ))}
                   </SettingsSection>
                   <SettingsSection
-                    title="Worktree submodules"
-                    trailing={
-                      pendingWrites === 0 && isMixed("worktreeSubmodules") ? (
-                        <MixedValuesLabel projectSelected={projectSelected} />
-                      ) : null
-                    }
-                  >
-                    {SUBMODULE_CHOICES.filter(
-                      (choice) => choice.mode !== null || !projectSelected,
-                    ).map((choice, index) => (
-                      <SettingsChoiceRow
-                        key={choice.mode ?? "inherit"}
-                        label={choice.label}
-                        description={choice.description}
-                        selected={
-                          !isMixed("worktreeSubmodules") &&
-                          uniform("worktreeSubmodules") === choice.mode
-                        }
-                        separated={index > 0}
-                        disabled={disabledFor("worktreeSubmodules")}
-                        onPress={() => write({ worktreeSubmodules: choice.mode })}
-                      />
-                    ))}
-                  </SettingsSection>
-                  <SettingsSection
                     title="Default permissions"
                     trailing={
                       pendingWrites === 0 && uniform("defaultRuntimeMode") === null ? (
@@ -421,19 +414,80 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       />
                     ))}
                   </SettingsSection>
+                  <SettingsSection
+                    title="Response streaming"
+                    trailing={
+                      pendingWrites === 0 && uniform("responseStreamingMode") === null ? (
+                        <MixedValuesLabel projectSelected={projectSelected} />
+                      ) : null
+                    }
+                  >
+                    {STREAMING_CHOICES.map((choice, index) => (
+                      <SettingsChoiceRow
+                        key={choice.mode}
+                        label={choice.label}
+                        description={choice.description}
+                        selected={uniform("responseStreamingMode") === choice.mode}
+                        separated={index > 0}
+                        disabled={disabledFor("responseStreamingMode")}
+                        onPress={() => write({ responseStreamingMode: choice.mode })}
+                      />
+                    ))}
+                  </SettingsSection>
+                  <SettingsSection title="Preview browser">
+                    <SettingsSwitchRow
+                      icon="globe"
+                      label="Agent browser access"
+                      subtitle="Allow agents to use the in-app preview browser."
+                      value={uniform("enableAgentBrowserAccess")}
+                      disabled={disabledFor("enableAgentBrowserAccess")}
+                      onValueChange={(value) => write({ enableAgentBrowserAccess: value })}
+                    />
+                  </SettingsSection>
+                  <SettingsSection
+                    title="Agent thread history"
+                    trailing={
+                      pendingWrites === 0 && uniform("agentThreadHistoryAccess") === null ? (
+                        <MixedValuesLabel projectSelected={projectSelected} />
+                      ) : null
+                    }
+                  >
+                    {THREAD_HISTORY_CHOICES.map((choice, index) => (
+                      <SettingsChoiceRow
+                        key={choice.mode}
+                        label={choice.label}
+                        description={choice.description}
+                        selected={uniform("agentThreadHistoryAccess") === choice.mode}
+                        separated={index > 0}
+                        disabled={disabledFor("agentThreadHistoryAccess")}
+                        onPress={() => write({ agentThreadHistoryAccess: choice.mode })}
+                      />
+                    ))}
+                    <Text className="px-4 pb-4 text-sm text-foreground-muted">
+                      Turning it on applies from a thread's next session.
+                    </Text>
+                  </SettingsSection>
+                  {/* The stepper shows mixed values itself, so the section has no Mixed label. */}
+                  <SettingsSection title="Recent turns in full">
+                    <RecentTurnsStepperRow
+                      projectSelected={projectSelected}
+                      value={uniform("agentThreadHistoryRecentTurns")}
+                      disabled={disabledFor("agentThreadHistoryRecentTurns")}
+                      onValueChange={(value) => write({ agentThreadHistoryRecentTurns: value })}
+                    />
+                  </SettingsSection>
+                  <AutoSettleSettingsRows write={write} pending={pendingWrites > 0} />
                 </>
               ) : null}
 
               {props.page === "source-control" ? (
                 <>
-                  <BranchNamingSettings
-                    key={targetsKey}
-                    mode={uniform("branchNamingMode")}
-                    prefix={uniform("branchNamePrefix")}
-                    instructions={uniform("branchNameInstructions")}
-                    disabled={disabledFor("branchNamingMode")}
-                    onChange={write}
-                  />
+                  {projectSelected ? null : (
+                    <SourceControlSignInSection
+                      environments={selectedTargets}
+                      canWrite={(environmentId) => writableEnvironments.has(environmentId)}
+                    />
+                  )}
                   <SettingsSection title="Pull requests">
                     <SettingsSwitchRow
                       icon={PullRequestGlyph.merged}
@@ -452,16 +506,6 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       value={uniform("defaultAutoPull")}
                       disabled={disabledFor("defaultAutoPull")}
                       onValueChange={(value) => write({ defaultAutoPull: value })}
-                    />
-                  </SettingsSection>
-                  <SettingsSection title="Worktrees">
-                    <SettingsSwitchRow
-                      icon="arrow.triangle.branch"
-                      label="Start from remote"
-                      subtitle="Uses the latest commit of the base branch’s tracked remote branch, even if its name differs. Otherwise uses the same-named branch on origin. Uses your local branch if that remote branch is missing."
-                      value={uniform("newWorktreesStartFromOrigin")}
-                      disabled={disabledFor("newWorktreesStartFromOrigin")}
-                      onValueChange={(value) => write({ newWorktreesStartFromOrigin: value })}
                     />
                   </SettingsSection>
                   {projectSelected && supportsGitHubAccounts && gitHubAccounts.length > 0 ? (
@@ -533,70 +577,51 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                 </>
               ) : null}
 
-              {props.page === "agent-behavior" ? (
+              {props.page === "worktrees" ? (
                 <>
-                  <SettingsSection
-                    title="Response streaming"
-                    trailing={
-                      pendingWrites === 0 && uniform("responseStreamingMode") === null ? (
-                        <MixedValuesLabel projectSelected={projectSelected} />
-                      ) : null
-                    }
-                  >
-                    {STREAMING_CHOICES.map((choice, index) => (
-                      <SettingsChoiceRow
-                        key={choice.mode}
-                        label={choice.label}
-                        description={choice.description}
-                        selected={uniform("responseStreamingMode") === choice.mode}
-                        separated={index > 0}
-                        disabled={disabledFor("responseStreamingMode")}
-                        onPress={() => write({ responseStreamingMode: choice.mode })}
-                      />
-                    ))}
-                  </SettingsSection>
-                  <SettingsSection title="Preview browser">
+                  <SettingsSection title="New worktrees">
                     <SettingsSwitchRow
-                      icon="globe"
-                      label="Agent browser access"
-                      subtitle="Allow agents to use the in-app preview browser."
-                      value={uniform("enableAgentBrowserAccess")}
-                      disabled={disabledFor("enableAgentBrowserAccess")}
-                      onValueChange={(value) => write({ enableAgentBrowserAccess: value })}
+                      icon="arrow.triangle.branch"
+                      label="Start from remote"
+                      subtitle="Uses the latest commit of the base branch’s tracked remote branch, even if its name differs. Otherwise uses the same-named branch on origin. Uses your local branch if that remote branch is missing."
+                      value={uniform("newWorktreesStartFromOrigin")}
+                      disabled={disabledFor("newWorktreesStartFromOrigin")}
+                      onValueChange={(value) => write({ newWorktreesStartFromOrigin: value })}
                     />
                   </SettingsSection>
                   <SettingsSection
-                    title="Agent thread history"
+                    title="Worktree submodules"
                     trailing={
-                      pendingWrites === 0 && uniform("agentThreadHistoryAccess") === null ? (
+                      pendingWrites === 0 && isMixed("worktreeSubmodules") ? (
                         <MixedValuesLabel projectSelected={projectSelected} />
                       ) : null
                     }
                   >
-                    {THREAD_HISTORY_CHOICES.map((choice, index) => (
+                    {SUBMODULE_CHOICES.filter(
+                      (choice) => choice.mode !== null || !projectSelected,
+                    ).map((choice, index) => (
                       <SettingsChoiceRow
-                        key={choice.mode}
+                        key={choice.mode ?? "inherit"}
                         label={choice.label}
                         description={choice.description}
-                        selected={uniform("agentThreadHistoryAccess") === choice.mode}
+                        selected={
+                          !isMixed("worktreeSubmodules") &&
+                          uniform("worktreeSubmodules") === choice.mode
+                        }
                         separated={index > 0}
-                        disabled={disabledFor("agentThreadHistoryAccess")}
-                        onPress={() => write({ agentThreadHistoryAccess: choice.mode })}
+                        disabled={disabledFor("worktreeSubmodules")}
+                        onPress={() => write({ worktreeSubmodules: choice.mode })}
                       />
                     ))}
-                    <Text className="px-4 pb-4 text-sm text-foreground-muted">
-                      Turning it on applies from a thread's next session.
-                    </Text>
                   </SettingsSection>
-                  {/* The stepper shows mixed values itself, so the section has no Mixed label. */}
-                  <SettingsSection title="Recent turns in full">
-                    <RecentTurnsStepperRow
-                      projectSelected={projectSelected}
-                      value={uniform("agentThreadHistoryRecentTurns")}
-                      disabled={disabledFor("agentThreadHistoryRecentTurns")}
-                      onValueChange={(value) => write({ agentThreadHistoryRecentTurns: value })}
-                    />
-                  </SettingsSection>
+                  <BranchNamingSettings
+                    key={targetsKey}
+                    mode={uniform("branchNamingMode")}
+                    prefix={uniform("branchNamePrefix")}
+                    instructions={uniform("branchNameInstructions")}
+                    disabled={disabledFor("branchNamingMode")}
+                    onChange={write}
+                  />
                 </>
               ) : null}
 
@@ -644,15 +669,9 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       <SettingsSwitchRow
                         icon="arrow.uturn.forward"
                         label="Continue after restart"
-                        subtitle={
-                          supportsContinuation
-                            ? "Resume interrupted threads after an update or restart."
-                            : "Update older servers to control restart continuation."
-                        }
+                        subtitle="Resume interrupted threads after an update or restart."
                         value={uniform("continueThreadsAfterServerUpdate")}
-                        disabled={
-                          disabledFor("continueThreadsAfterServerUpdate") || !supportsContinuation
-                        }
+                        disabled={disabledFor("continueThreadsAfterServerUpdate")}
                         onValueChange={(value) =>
                           write({ continueThreadsAfterServerUpdate: value })
                         }

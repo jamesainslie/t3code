@@ -90,6 +90,7 @@ export function RoadmapItemEditor({ home, items, sprints, mode, onClose }: Roadm
 
   // Opening an item an agent created counts as reviewing it.
   const reviewItemId = editing?.needsReview === true ? editing.id : null;
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- tells the server an agent-created item was reviewed when the editor opens it
   useEffect(() => {
     if (reviewItemId === null) return;
     void dispatch({

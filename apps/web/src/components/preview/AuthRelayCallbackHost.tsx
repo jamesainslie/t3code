@@ -17,6 +17,7 @@ export function AuthRelayCallbackHost() {
     reportFailure: true,
     reportDefect: false,
   });
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- subscribes to desktop auth relay callbacks and completes the sign-in
   useEffect(() => {
     if (!previewBridge?.onAuthRelayCallback) return;
     return previewBridge.onAuthRelayCallback((event) => {

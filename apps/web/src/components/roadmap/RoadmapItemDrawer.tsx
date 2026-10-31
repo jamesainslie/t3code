@@ -48,6 +48,7 @@ export function RoadmapItemDrawer({
 
   // Opening an item an agent created counts as reviewing it, as the editor does.
   const reviewItemId = item.needsReview ? item.id : null;
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- tells the server an agent-created item was reviewed when the drawer shows it
   useEffect(() => {
     if (reviewItemId === null) return;
     void dispatch({

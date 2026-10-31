@@ -15,6 +15,7 @@ export function usePendingTerminalBrowserLaunches<T extends { readonly expiresAt
 ): ReadonlyArray<T> {
   const [now, setNow] = useState(() => Date.now());
   const pending = useMemo(() => pendingTerminalBrowserLaunches(launches, now), [launches, now]);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- timer that drops the banner when the soonest launch expires
   useEffect(() => {
     const delay = nextTerminalBrowserLaunchExpiry(pending, Date.now());
     if (delay === null) return;

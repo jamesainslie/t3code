@@ -110,6 +110,7 @@ export function useRoadmapThreadActions() {
   // rather than rendering them, keeps roadmap edits from re-rendering hosts
   // as large as the sidebar.
   const itemsRef = useRef<ReadonlyArray<RoadmapWorkItem> | null>(null);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- subscribes to the live roadmap atom so menus read current items without re-rendering hosts
   useEffect(() => {
     itemsRef.current = null;
     if (home === null || !supported) return;

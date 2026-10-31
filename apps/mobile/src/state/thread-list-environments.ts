@@ -14,13 +14,7 @@ export type ThreadListProvider = Pick<
 >;
 
 const capabilityKeys = [
-  "threadSettlement",
-  "threadSnooze",
-  "threadPinning",
   "threadAutoSettleOptOut",
-  "threadPinReorder",
-  "threadActiveReorder",
-  "threadTitleRegeneration",
   // Fork: snooze reminders, dependencies, highlights, continuation.
   "threadSnoozeReminder",
   "threadDependencies",
@@ -28,8 +22,9 @@ const capabilityKeys = [
   "threadContinuation",
 ] as const;
 
-function selectEnvironment(config: ServerConfig) {
+function selectEnvironment(config: ServerConfig, isConnected: boolean) {
   return {
+    isConnected,
     providers: config.providers.map(
       ({ instanceId, driver, enabled, displayName, accentColor, iconUrl }) => ({
         instanceId,
@@ -42,6 +37,7 @@ function selectEnvironment(config: ServerConfig) {
     ),
     machineKind: resolveEnvironmentMachineKind(config),
     capabilities: config.environment.capabilities,
+    snoozePresets: config.settings.snoozePresets,
     // Fork: "Continue in new thread" reads the project's thread history
     // access, so the list keeps what `canContinueThread` needs. Only the
     // access values decide whether the list republishes.
@@ -90,13 +86,11 @@ function sameProviders(
 function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnvironment>) {
   const providersByEnvironmentId = new Map<EnvironmentId, ReadonlyArray<ThreadListProvider>>();
   const machineByEnvironmentId = new Map<EnvironmentId, EnvironmentMachineKind>();
-  const settlementEnvironmentIds = new Set<EnvironmentId>();
-  const snoozeEnvironmentIds = new Set<EnvironmentId>();
-  const pinningEnvironmentIds = new Set<EnvironmentId>();
+  // Every protocol-2 server supports these thread actions; they only wait for its config.
+  const loadedEnvironmentIds = new Set<EnvironmentId>();
   const autoSettleOptOutEnvironmentIds = new Set<EnvironmentId>();
-  const pinReorderEnvironmentIds = new Set<EnvironmentId>();
-  const activeReorderEnvironmentIds = new Set<EnvironmentId>();
-  const titleRegenerationEnvironmentIds = new Set<EnvironmentId>();
+  const reorderableEnvironmentIds = new Set<EnvironmentId>();
+  const snoozePresetsByEnvironmentId = new Map<EnvironmentId, ListEnvironment["snoozePresets"]>();
   // Fork capability sets.
   const snoozeReminderEnvironmentIds = new Set<EnvironmentId>();
   const dependencyEnvironmentIds = new Set<EnvironmentId>();
@@ -105,16 +99,16 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
     EnvironmentId,
     ListEnvironment["continuation"]
   >();
-  for (const [id, { providers, machineKind, capabilities, continuation }] of environments) {
+  for (const [
+    id,
+    { providers, machineKind, capabilities, isConnected, snoozePresets, continuation },
+  ] of environments) {
     providersByEnvironmentId.set(id, providers);
+    snoozePresetsByEnvironmentId.set(id, snoozePresets);
     machineByEnvironmentId.set(id, machineKind);
-    if (capabilities.threadSettlement === true) settlementEnvironmentIds.add(id);
-    if (capabilities.threadSnooze === true) snoozeEnvironmentIds.add(id);
+    loadedEnvironmentIds.add(id);
     if (capabilities.threadAutoSettleOptOut === true) autoSettleOptOutEnvironmentIds.add(id);
-    if (capabilities.threadPinning === true) pinningEnvironmentIds.add(id);
-    if (capabilities.threadPinReorder === true) pinReorderEnvironmentIds.add(id);
-    if (capabilities.threadActiveReorder === true) activeReorderEnvironmentIds.add(id);
-    if (capabilities.threadTitleRegeneration === true) titleRegenerationEnvironmentIds.add(id);
+    if (isConnected) reorderableEnvironmentIds.add(id);
     if (supportsSnoozeReminder(capabilities)) snoozeReminderEnvironmentIds.add(id);
     if (capabilities.threadDependencies === true) dependencyEnvironmentIds.add(id);
     if (capabilities.threadHighlight === true) highlightEnvironmentIds.add(id);
@@ -123,13 +117,14 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
   return {
     providersByEnvironmentId,
     machineByEnvironmentId,
-    settlementEnvironmentIds,
-    snoozeEnvironmentIds,
-    pinningEnvironmentIds,
+    settlementEnvironmentIds: loadedEnvironmentIds,
+    snoozeEnvironmentIds: loadedEnvironmentIds,
+    pinningEnvironmentIds: loadedEnvironmentIds,
     autoSettleOptOutEnvironmentIds,
-    pinReorderEnvironmentIds,
-    activeReorderEnvironmentIds,
-    titleRegenerationEnvironmentIds,
+    pinReorderEnvironmentIds: reorderableEnvironmentIds,
+    activeReorderEnvironmentIds: reorderableEnvironmentIds,
+    titleRegenerationEnvironmentIds: loadedEnvironmentIds,
+    snoozePresetsByEnvironmentId,
     snoozeReminderEnvironmentIds,
     dependencyEnvironmentIds,
     highlightEnvironmentIds,
@@ -140,23 +135,30 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
 
 export function createThreadListEnvironmentsAtom(
   configsAtom: Atom.Atom<ReadonlyMap<EnvironmentId, ServerConfig>>,
+  connectedEnvironmentIdsAtom: Atom.Atom<ReadonlyArray<EnvironmentId>>,
 ) {
   let previous = new Map<EnvironmentId, ListEnvironment>();
   let result = collectEnvironments(previous);
   return Atom.make((get) => {
     const configs = get(configsAtom);
+    const connectedEnvironmentIds = new Set(get(connectedEnvironmentIdsAtom));
     const next = new Map<EnvironmentId, ListEnvironment>();
     let changed = configs.size !== previous.size;
     for (const [id, config] of configs) {
-      const selected = selectEnvironment(config);
+      const selected = selectEnvironment(config, connectedEnvironmentIds.has(id));
       const prior = previous.get(id);
       if (prior && sameProviders(prior.providers, selected.providers)) {
         selected.providers = prior.providers;
+      }
+      if (prior && JSON.stringify(prior.snoozePresets) === JSON.stringify(selected.snoozePresets)) {
+        selected.snoozePresets = prior.snoozePresets;
       }
       const unchanged =
         prior &&
         prior.providers === selected.providers &&
         prior.machineKind === selected.machineKind &&
+        prior.isConnected === selected.isConnected &&
+        prior.snoozePresets === selected.snoozePresets &&
         prior.continuationKey === selected.continuationKey &&
         capabilityKeys.every(
           (key) => (prior.capabilities[key] === true) === (selected.capabilities[key] === true),

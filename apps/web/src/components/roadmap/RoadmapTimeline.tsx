@@ -114,6 +114,7 @@ export function RoadmapTimeline({
   const todayX = layout.todayOffset === null ? null : timelineTodayX(layout.todayOffset);
   const hasRows = layout.rows.length > 0;
   const currentSprint = timelineCurrentSprint(layout.sprintBands, layout.todayOffset);
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- scrolls the timeline element to today once its first dated row mounts
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     // The scroller mounts with the first dated row, which may arrive after the first render.

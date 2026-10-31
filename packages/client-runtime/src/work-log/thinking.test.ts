@@ -128,6 +128,7 @@ describe("questionLeadIn", () => {
         status: "live" as const,
         error: Option.none(),
         history: EMPTY_THREAD_HISTORY_META,
+        sequence: 0,
       }),
     );
     const details = createEnvironmentThreadDetailAtoms(() => source);

@@ -26,6 +26,7 @@ interface HostedAuthRelayInput {
  */
 export function useHostedAuthRelay(input: HostedAuthRelayInput): boolean | null {
   const { environmentId, threadId, terminalId, captureId, redirectUri, expiresAt } = input;
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- asks the desktop to hold the capture's loopback port for the pending sign-in
   useEffect(() => {
     hostAuthRelay({ environmentId, threadId, terminalId, captureId }, { redirectUri, expiresAt });
   }, [captureId, environmentId, expiresAt, redirectUri, terminalId, threadId]);
@@ -42,6 +43,7 @@ export function useReleaseSettledAuthRelayHosts(
   launches: ReadonlyArray<{ readonly captureId: string }>,
 ): void {
   const previous = useRef<ReadonlySet<string>>(new Set());
+  // oxlint-disable-next-line lathe/no-unreasoned-state-sync -- releases desktop-held loopback ports for captures that left the pending list
   useEffect(() => {
     const current = new Set(launches.map((launch) => launch.captureId));
     for (const captureId of previous.current) {

@@ -226,7 +226,7 @@ function normalizeSshErrorMessage(input: {
   return cleanedStdout.length > 0 ? cleanedStdout : input.fallbackMessage;
 }
 
-function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
+export function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
   return {
     alias: target.alias,
     hostname: target.hostname,
@@ -269,6 +269,11 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
       batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
       ...(input.multiplex === undefined ? {} : { multiplex: input.multiplex }),
     }),
+    // Cold installs need a long command budget; a lost connection must fail sooner.
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=3",
     ...(input.preHostArgs ?? []),
     "--",
     hostSpec,

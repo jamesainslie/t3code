@@ -5,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import { HttpClient, HttpClientResponse, type HttpClientRequest } from "effect/http";
 import * as SourceControlRateLimit from "@lathe/source-control-core/server/SourceControlRateLimit";
 
+import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
 import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubIssueApi from "./GitHubIssueApi.ts";
 import * as GitHubQuota from "./GitHubQuota.ts";
@@ -28,6 +29,13 @@ function harness(respond: (body: SentQuery) => unknown) {
           source: "gh" as const,
           fingerprint: `${host}:active`,
         }),
+      saved: () => Effect.succeedNone,
+      fingerprint: (host, token) => Effect.succeed(`${host}:${token}`),
+      invalidate: () => Effect.void,
+    }),
+    Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({
+      enabled: false,
+      token: () => Effect.succeedNone,
       invalidate: () => Effect.void,
     }),
     Layer.succeed(
