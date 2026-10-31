@@ -4,7 +4,8 @@ import { EnvironmentId } from "@lathe/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 
-import { projectWorkspaceEnvironment, projectWorkspaceState } from "./workspaceModel";
+import { projectWorkspaceState } from "./workspaceModel";
+import { projectEnvironmentConnectionSummary as projectWorkspaceEnvironment } from "@lathe/client-runtime/state/presentation";
 import type { EnvironmentPresentation } from "./environments";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
@@ -47,8 +48,6 @@ function environment(
 const EMPTY_SHELL_SUMMARY: EnvironmentShellSummary = {
   hasSnapshot: false,
   hasSynchronizingShell: false,
-  hasCachedShell: false,
-  hasLiveShell: false,
   firstError: null,
 };
 
@@ -56,7 +55,6 @@ const CACHED_SHELL_SUMMARY: EnvironmentShellSummary = {
   ...EMPTY_SHELL_SUMMARY,
   hasSnapshot: true,
   hasSynchronizingShell: true,
-  hasCachedShell: true,
 };
 
 describe("mobile workspace projection", () => {

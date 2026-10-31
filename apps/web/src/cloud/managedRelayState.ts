@@ -1,16 +1,24 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   createManagedRelayQueryManager,
+  createManagedRelayLatheChatLinkRequest,
   deregisterManagedRelayEnvironment,
   ManagedRelay,
   managedRelaySessionAtom,
   readManagedRelaySnapshotState,
+  unlinkManagedRelayLatheChat,
 } from "@lathe/client-runtime/relay";
 import {
   createAtomCommandScheduler,
   createRuntimeCommand,
 } from "@lathe/client-runtime/state/runtime";
-import type { RelayClientDeviceRecord, RelayClientEnvironmentRecord } from "@lathe/contracts/relay";
+import {
+  DEFAULT_MANAGED_TUNNEL_LIMIT,
+  T3CHAT_PLAN_TUNNEL_LIMITS,
+  type RelayClientDeviceRecord,
+  type RelayClientEnvironmentRecord,
+  type RelayLatheChatLinkResponse,
+} from "@lathe/contracts/relay";
 import type { EnvironmentId } from "@lathe/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -46,6 +54,50 @@ export const deregisterManagedRelayEnvironmentCommand = createRuntimeCommand(
     execute: (input, registry) => deregisterManagedRelayEnvironment(registry, input),
   },
 );
+
+const accountSerial = {
+  mode: "serial",
+  key: (input: { readonly accountId: string }) => input.accountId,
+} as const;
+
+export const createManagedRelayT3ChatLinkRequestCommand = createRuntimeCommand(
+  managedRelayAtomRuntime,
+  {
+    label: "web:managed-relay:create-t3chat-link-request",
+    scheduler: managedRelayMutationScheduler,
+    concurrency: accountSerial,
+    execute: (input: { readonly accountId: string }, registry) =>
+      createManagedRelayLatheChatLinkRequest(registry, input),
+  },
+);
+
+export const unlinkManagedRelayLatheChatCommand = createRuntimeCommand(managedRelayAtomRuntime, {
+  label: "web:managed-relay:unlink-t3chat",
+  scheduler: managedRelayMutationScheduler,
+  concurrency: accountSerial,
+  execute: (input: { readonly accountId: string }, registry) =>
+    unlinkManagedRelayLatheChat(registry, input),
+});
+
+const EMPTY_T3CHAT_LINK_ATOM = Atom.make(
+  AsyncResult.success<RelayLatheChatLinkResponse>({ available: false, link: null }),
+).pipe(Atom.keepAlive, Atom.withLabel("managed-relay:web:t3chat-link:null"));
+
+export function useManagedRelayLatheChatLink() {
+  const session = useAtomValue(managedRelaySessionAtom);
+  const accountId = session?.accountId ?? null;
+  const atom = accountId
+    ? managedRelayQueryManager.latheChatLinkAtom(accountId)
+    : EMPTY_T3CHAT_LINK_ATOM;
+  const snapshot = readManagedRelaySnapshotState(useAtomValue(atom));
+  const refresh = () => {
+    if (accountId) {
+      managedRelayQueryManager.refreshLatheChatLink(appAtomRegistry, accountId);
+    }
+  };
+
+  return { ...snapshot, accountId, refresh };
+}
 
 const EMPTY_ENVIRONMENTS_ATOM = Atom.make(
   AsyncResult.success<ReadonlyArray<RelayClientEnvironmentRecord>>([]),
@@ -92,5 +144,57 @@ export function useManagedRelayDevices() {
     ...snapshot,
     accountId,
     refresh,
+  };
+}
+
+/** How this account can raise its tunnel cap: link T3 Chat, or upgrade the linked plan. */
+export type ManagedTunnelUpgrade = "link" | "pro" | "premier" | null;
+
+// Mirrors the relay's cap: a manual override is exact, otherwise the T3 Chat plan raises the default.
+function managedTunnelCap(latheChat: RelayLatheChatLinkResponse): {
+  readonly limit: number;
+  readonly upgrade: ManagedTunnelUpgrade;
+} {
+  if (latheChat.maxTunnelsOverride !== undefined) {
+    return { limit: latheChat.maxTunnelsOverride, upgrade: null };
+  }
+  if (!latheChat.available) return { limit: DEFAULT_MANAGED_TUNNEL_LIMIT, upgrade: null };
+  switch (latheChat.link?.plan) {
+    case "premier":
+      return { limit: T3CHAT_PLAN_TUNNEL_LIMITS.premier, upgrade: null };
+    case "pro":
+      return { limit: T3CHAT_PLAN_TUNNEL_LIMITS.pro, upgrade: "premier" };
+    case "free":
+      return { limit: DEFAULT_MANAGED_TUNNEL_LIMIT, upgrade: "pro" };
+    case undefined:
+      return { limit: DEFAULT_MANAGED_TUNNEL_LIMIT, upgrade: "link" };
+  }
+}
+
+/** Refetches the account's environments and T3 Chat plan after a tunnel changes. */
+export function refreshManagedTunnelUsage() {
+  const accountId = appAtomRegistry.get(managedRelaySessionAtom)?.accountId;
+  if (!accountId) return;
+  managedRelayQueryManager.refreshEnvironments(appAtomRegistry, accountId);
+  managedRelayQueryManager.refreshLatheChatLink(appAtomRegistry, accountId);
+}
+
+/** Managed tunnels on this account and its cap. Null fields are still loading or failed. */
+export function useManagedTunnelUsage() {
+  const environments = useManagedRelayEnvironments();
+  const latheChat = useManagedRelayLatheChatLink();
+  const used =
+    environments.accountId === null
+      ? null
+      : (environments.data?.filter(
+          (environment) => environment.endpoint.providerKind === "cloudflare_tunnel",
+        ).length ?? null);
+  const cap =
+    latheChat.accountId !== null && latheChat.data ? managedTunnelCap(latheChat.data) : null;
+  return {
+    used,
+    limit: cap?.limit ?? null,
+    upgrade: cap?.upgrade ?? null,
+    refresh: refreshManagedTunnelUsage,
   };
 }

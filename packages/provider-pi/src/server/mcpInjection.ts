@@ -250,7 +250,6 @@ export function buildPiRpcLaunch(input: {
 }): {
   readonly args: ReadonlyArray<string>;
   readonly env: NodeJS.ProcessEnv;
-  readonly hasLatheMcp: boolean;
 } {
   const hasLatheExtension = input.disableExtensions !== true && input.extensionPath !== undefined;
   const hasLatheMcp = hasLatheExtension && input.mcpSession !== undefined;
@@ -308,6 +307,5 @@ export function buildPiRpcLaunch(input: {
           }
         : {}),
     },
-    hasLatheMcp,
   };
 }

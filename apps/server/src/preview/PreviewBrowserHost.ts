@@ -73,7 +73,7 @@ export class PreviewBrowserRootError extends Schema.TaggedError<PreviewBrowserRo
   {},
 ) {
   override get message(): string {
-    return "Chrome will not start its sandbox as root, so Lathe's browser cannot run while the Lathe server runs as root. Run the server as a nonroot user (for example `User=` in its systemd service), or set `LATHE_SERVER_BROWSER_SANDBOX=0` to run the browser unsandboxed as root.";
+    return "Lathe server is running as root; Chrome's sandbox cannot start. Run Lathe as a nonroot user. Otherwise set `LATHE_SERVER_BROWSER_SANDBOX=0` in the Lathe server's environment and restart the server; this disables Chrome's sandbox. Manual: `LATHE_SERVER_BROWSER_SANDBOX=0 lathe serve`. Systemd: add `Environment=LATHE_SERVER_BROWSER_SANDBOX=0` under `[Service]`, reload systemd, then restart the service. `lathe browser setup` cannot fix root sandboxing.";
   }
 }
 

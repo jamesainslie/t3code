@@ -4,11 +4,7 @@ import { nextTerminalId, resolveTerminalSessionLabel } from "@lathe/shared/termi
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
-export {
-  getTerminalLabel,
-  nextTerminalId,
-  resolveTerminalSessionLabel,
-} from "@lathe/shared/terminalLabels";
+export { resolveTerminalSessionLabel } from "@lathe/shared/terminalLabels";
 
 export interface TerminalMenuSession {
   readonly terminalId: string;

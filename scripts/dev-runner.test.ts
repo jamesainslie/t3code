@@ -412,6 +412,37 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
+    it.effect("expands a home-relative Lathe home the way the server does", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const homeFor = (latheHome: string) =>
+          createDevRunnerEnv({
+            mode: "dev",
+            baseEnv: {},
+            serverOffset: 0,
+            webOffset: 0,
+            latheHome,
+            browser: undefined,
+            autoBootstrapProjectFromCwd: undefined,
+            logWebSocketEvents: undefined,
+            host: undefined,
+            port: undefined,
+            devUrl: undefined,
+          }).pipe(
+            Effect.provideService(HostProcess.HomeDirectory, "/home/dev"),
+            Effect.map((env) => env.LATHE_HOME),
+          );
+
+        assert.equal(yield* homeFor("~/lathe-dev"), path.join("/home/dev", "lathe-dev"));
+        assert.equal(yield* homeFor("~"), "/home/dev");
+        assert.equal(yield* homeFor("~\\lathe-dev"), path.join("/home/dev", "lathe-dev"));
+        assert.equal(yield* homeFor("  ~/lathe-dev  "), path.join("/home/dev", "lathe-dev"));
+        assert.equal(yield* homeFor("~someone/lathe-dev"), path.resolve("~someone/lathe-dev"));
+        assert.equal(yield* homeFor("relative/lathe-dev"), path.resolve("relative/lathe-dev"));
+        assert.equal(yield* homeFor("/tmp/lathe-dev"), path.resolve("/tmp/lathe-dev"));
+      }),
+    );
+
     it.effect("rejects a specific non-loopback --host for browser dev modes", () => {
       const spawnerLayer = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,

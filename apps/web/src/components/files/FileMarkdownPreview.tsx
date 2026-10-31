@@ -2,6 +2,7 @@ import type { ScopedThreadRef } from "@lathe/contracts";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { resolvePathLinkTarget } from "@lathe/shared/fileLinks";
+import { maskMarkdownFrontmatter } from "@lathe/shared/markdownFrontmatter";
 
 export function FileMarkdownPreview(props: {
   readonly cwd: string;
@@ -24,7 +25,7 @@ export function FileMarkdownPreview(props: {
 
   return (
     <ChatMarkdown
-      text={props.text}
+      text={maskMarkdownFrontmatter(props.text)}
       cwd={props.cwd}
       imageBaseDir={imageBaseDir}
       threadRef={props.threadRef}
