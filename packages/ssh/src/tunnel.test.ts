@@ -728,7 +728,7 @@ describe("ssh environment output", () => {
         Effect.result(provide(manager.ensureEnvironment(target))),
       );
       yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.seconds(90));
+      yield* TestClock.adjust(Duration.seconds(210));
       const result = yield* Fiber.join(fiber);
 
       assert.isTrue(Result.isFailure(result));
@@ -737,9 +737,44 @@ describe("ssh environment output", () => {
         stream: "stdout",
         text: `${REMOTE_LOG}{"credential":"LCL4R2TPHDKQ"}\n`,
       });
+      assert.deepInclude(chunks, {
+        source: "tunnel",
+        stream: "stdout",
+        text: "Failed after 210.0s; slowest step: launch 210.0s\n",
+      });
     }).pipe(
       Effect.provide(
         managerLayer({ launch: () => makeRunningProcess(() => {}), runner: NODE_SCRIPT }),
+      ),
+    );
+  });
+
+  // A reconnect over a live tunnel runs no launch, so this line is all it reports.
+  it.effect("summarizes each connect, including one that reuses its tunnel", () => {
+    const { chunks, provide } = observed();
+    return Effect.gen(function* () {
+      const manager = yield* SshTunnel.SshEnvironmentManager;
+      yield* provide(manager.ensureEnvironment(target));
+      const first = chunks.splice(0);
+      yield* provide(manager.ensureEnvironment(target));
+
+      assert.deepInclude(first, {
+        source: "tunnel",
+        stream: "stdout",
+        text: "Connected in 0.0s: opened a tunnel from local port 41773 to remote port 3773\n",
+      });
+      assert.deepEqual(chunks, [
+        {
+          source: "tunnel",
+          stream: "stdout",
+          text: "Connected in 0.0s: reused the tunnel from local port 41773 to remote port 3773\n",
+        },
+      ]);
+    }).pipe(
+      Effect.provide(
+        managerLayer({
+          launch: () => makeExitedProcess({ stdout: '{"remotePort":3773}\n' }),
+        }),
       ),
     );
   });
@@ -817,7 +852,7 @@ describe("ssh environment output", () => {
       yield* provide(manager.ensureEnvironment(target));
 
       assert.deepEqual(
-        chunks.map((chunk) => chunk.text),
+        chunks.filter((chunk) => chunk.source === "launch").map((chunk) => chunk.text),
         ['{"remotePort":3773}\n'],
       );
       const [ready] = logs.named("ssh.remoteServer.launch.ready");

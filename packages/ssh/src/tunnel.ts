@@ -59,7 +59,8 @@ const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
-const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
+// Covers a restart's wait for the old server plus readiness of the new one.
+const REMOTE_LAUNCH_TIMEOUT_MS = 210_000;
 // Cold archive launches download and extract ~70 MB and may wait on an install lock.
 // Lock waits must outlast both downloads and extraction; SSH must outlast install or wait plus readiness.
 // Leave slack for verification and extraction, which have no timeout.
@@ -68,10 +69,13 @@ const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
 const REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS = 900_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
-// A stopping server reconciles its state before it exits, which took 5-11s in
-// every observed restart. Launch and stop both wait this long so a replacement
-// never boots over a server that is still shutting down.
+// A stopping server reconciles its state before it exits, usually in 5-11s.
 const REMOTE_SERVER_STOP_WAIT_SECONDS = 15;
+// An update restart waits longer, since a replacement started over a server
+// still shutting down exits on its ownership lock. Busy hosts took ~60s.
+const REMOTE_SERVER_RESTART_WAIT_SECONDS = 120;
+// Readiness is probed in slices so a server that exits early fails at once.
+const REMOTE_READY_SLICE_MS = 2_000;
 
 export interface RemoteLatheRunnerOptions {
   readonly nodeScriptPath?: string | null;
@@ -197,6 +201,59 @@ function connectionSummaryLogFields(summary: SshConnectionSummary, totalMs: numb
     remotePort: summary.remotePort,
     localPort: summary.localPort,
   };
+}
+
+const PHASE_LABELS: Record<SshPhase, string> = {
+  targetResolveMs: "resolving the host",
+  lockWaitMs: "waiting for another connect",
+  existingTunnelCheckMs: "checking the existing tunnel",
+  controlMasterMs: "control master",
+  launchMs: "launch",
+  tunnelStartMs: "tunnel start",
+  pairingMs: "pairing",
+  tunnelCloseMs: "tunnel close",
+  remoteStopMs: "remote stop",
+};
+const SLOW_PHASE_MS = 1_000;
+
+const TUNNEL_TEXT: Partial<Record<NonNullable<SshConnectionSummary["tunnel"]>, string>> = {
+  created: "opened a tunnel",
+  reused: "reused the tunnel",
+  "stale-replaced": "replaced a stale tunnel",
+  "pruned-exited": "reopened a tunnel that had exited",
+};
+
+/** The output panel's one-line account of an ensure, which is all a tunnel reuse reports. */
+function describeConnectionSummary(
+  summary: SshConnectionSummary,
+  succeeded: boolean,
+  totalMs: number,
+): string {
+  const seconds = (ms: number) => `${(ms / 1_000).toFixed(1)}s`;
+  const details: Array<string> = [];
+  const tunnel = summary.tunnel === null ? undefined : TUNNEL_TEXT[summary.tunnel];
+  if (tunnel !== undefined && summary.localPort !== null && summary.remotePort !== null) {
+    details.push(
+      `${tunnel} from local port ${summary.localPort} to remote port ${summary.remotePort}`,
+    );
+  }
+  if (summary.controlMaster !== "not-used" && summary.controlMaster !== "disabled") {
+    details.push(
+      `control master ${summary.controlMaster}${summary.controlMasterReason === null ? "" : `: ${summary.controlMasterReason}`}`,
+    );
+  }
+  const slow = (Object.entries(summary.phases) as Array<[SshPhase, number]>)
+    .filter(([, ms]) => ms >= SLOW_PHASE_MS)
+    .toSorted(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([phase, ms]) => `${PHASE_LABELS[phase]} ${seconds(ms)}`);
+  const head = succeeded ? `Connected in ${seconds(totalMs)}` : `Failed after ${seconds(totalMs)}`;
+  return [
+    details.length === 0 ? head : `${head}: ${details.join(", ")}`,
+    ...(slow.length === 0
+      ? []
+      : [`slowest step${slow.length === 1 ? "" : "s"}: ${slow.join(", ")}`]),
+  ].join("; ");
 }
 
 const MAX_SUMMARY_ERROR_LENGTH = 500;
@@ -693,6 +750,8 @@ exec "${forkCliExecutableShell("$LATHE_RUNTIME_DIR")}" "$@"
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
 @@LATHE_NODE_ENV_SCRIPT@@
+READY_TIMEOUT_MS=@@LATHE_READY_TIMEOUT_MS@@
+RESTART_WAIT_SECONDS=@@LATHE_SERVER_RESTART_WAIT_SECONDS@@
 STATE_KEY="$1"
 STATE_DIR="${FORK_HOME_SHELL}/ssh-launch/$STATE_KEY"
 DEFAULT_SERVER_HOME="${FORK_HOME_SHELL}"
@@ -745,10 +804,25 @@ wait_ready() {
 @@LATHE_WAIT_READY_SCRIPT@@
 NODE
 }
+# 0 once the server answers, 1 while it is alive but not ready by the
+# deadline, 2 as soon as it has exited.
+wait_server_ready() {
+  READY_PID="$1"
+  READY_LEFT_MS="$2"
+  while [ "$READY_LEFT_MS" -gt 0 ]; do
+    READY_SLICE_MS=@@LATHE_READY_SLICE_MS@@
+    [ "$READY_LEFT_MS" -lt "$READY_SLICE_MS" ] && READY_SLICE_MS="$READY_LEFT_MS"
+    wait_ready "$READY_SLICE_MS" && return 0
+    server_running "$READY_PID" || return 2
+    READY_LEFT_MS=$((READY_LEFT_MS - READY_SLICE_MS))
+  done
+  return 1
+}
 wait_for_pid_exit() {
   PID_TO_WAIT="$1"
+  WAIT_SECONDS="\${2:-@@LATHE_SERVER_STOP_WAIT_SECONDS@@}"
   WAIT_COUNT=0
-  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt $((@@LATHE_SERVER_STOP_WAIT_SECONDS@@ * 10)) ]; do
+  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt $((WAIT_SECONDS * 10)) ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
@@ -870,16 +944,30 @@ elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && server_running "$REMOTE_PI
   # server. A changed runner is the update path and still replaces it.
   if [ "$RUNNER_CHANGED" -eq 1 ]; then
     kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
+    wait_for_pid_exit "$REMOTE_PID" "$RESTART_WAIT_SECONDS"
+    if server_running "$REMOTE_PID"; then
+      # A missing runner reads as changed, so the next launch retries the restart.
+      rm -f "$RUNNER_FILE"
+      printf 'The previous Lathe server (PID %s) is still shutting down, so no replacement was started. Retry the connection once it exits.\\n' "$REMOTE_PID" >&2
+      exit 1
+    fi
     LAUNCH_ACTION="restarted-runner-changed"
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
-  elif ! wait_ready "@@LATHE_READY_TIMEOUT_MS@@"; then
-    printf 'Remote Lathe server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
-    exit 1
   else
-    LAUNCH_ACTION="reused"
+    READY_STATUS=0
+    wait_server_ready "$REMOTE_PID" "$READY_TIMEOUT_MS" || READY_STATUS=$?
+    if [ "$READY_STATUS" -eq 0 ]; then
+      LAUNCH_ACTION="reused"
+    elif [ "$READY_STATUS" -eq 1 ]; then
+      printf 'Remote Lathe server is still starting on 127.0.0.1:%s. A large database can take minutes to migrate. Retry the connection; the server was left running.\\n' "$REMOTE_PORT" >&2
+      exit 1
+    else
+      REMOTE_PID=""
+      REMOTE_PORT=""
+      REMOTE_MANAGED=""
+    fi
   fi
 else
   REMOTE_PID=""
@@ -901,15 +989,21 @@ if [ -z "$REMOTE_PORT" ]; then
   printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
-  if ! wait_ready "@@LATHE_READY_TIMEOUT_MS@@"; then
-    printf 'Remote Lathe server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+  READY_STATUS=0
+  wait_server_ready "$REMOTE_PID" "$READY_TIMEOUT_MS" || READY_STATUS=$?
+  if [ "$READY_STATUS" -eq 1 ]; then
+    # Killing it would discard a migration in progress and leave the home
+    # locked for the next attempt; the next launch waits for it instead.
+    printf 'Remote Lathe server is still starting on 127.0.0.1:%s. A large database can take minutes to migrate. Retry the connection; the server was left running.\\n' "$REMOTE_PORT" >&2
+    tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+    exit 1
+  elif [ "$READY_STATUS" -eq 2 ]; then
+    printf 'Remote Lathe server exited before it became ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
       printf 'It wrote nothing to %s, so it exited before producing any output.\\n' "$LOG_FILE" >&2
     fi
-    kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
     rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"
     exit 1
   fi
@@ -1045,6 +1139,8 @@ export function buildRemoteLaunchScript(input?: RemoteLatheRunnerOptions): strin
     LATHE_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     LATHE_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
     LATHE_SERVER_STOP_WAIT_SECONDS: String(REMOTE_SERVER_STOP_WAIT_SECONDS),
+    LATHE_SERVER_RESTART_WAIT_SECONDS: String(REMOTE_SERVER_RESTART_WAIT_SECONDS),
+    LATHE_READY_SLICE_MS: String(REMOTE_READY_SLICE_MS),
   });
 }
 
@@ -2202,6 +2298,16 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     });
     const summary = makeConnectionSummary();
     let issuedPairingToken = false;
+    const startedAt = yield* Clock.currentTimeMillis;
+    const observer = yield* SshOutputObserver;
+    const reportSummary = (succeeded: boolean) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        observer({
+          source: "tunnel",
+          stream: "stdout",
+          text: `${describeConnectionSummary(summary, succeeded, now - startedAt)}\n`,
+        }),
+      );
     return yield* withConnectionSummary({
       event: "ssh.environment.ensure",
       target,
@@ -2234,7 +2340,15 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           ...(entry.remoteServerKind ? { remoteServerKind: entry.remoteServerKind } : {}),
         };
       }),
-    });
+    }).pipe(
+      Effect.onExit((exit) =>
+        Exit.isSuccess(exit)
+          ? reportSummary(true)
+          : Cause.hasInterruptsOnly(exit.cause)
+            ? Effect.void
+            : reportSummary(false),
+      ),
+    );
   });
 
   const disconnectEnvironment = Effect.fn("ssh/tunnel.disconnectEnvironment")(function* (
