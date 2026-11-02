@@ -190,10 +190,7 @@ it("tells the user when an option click moves their typed answer into the hidden
   const draftPrompt = () => useComposerDraftStore.getState().getComposerDraft(draftTarget)?.prompt;
   using toast = vi.spyOn(toastManager, "add");
   await using _screen = await render(
-    <PendingRequestsProbe
-      environmentId={environmentId}
-      projection={questionProjection(threadRef.threadId)}
-    />,
+    probeElement({ environmentId, projection: questionProjection(threadRef.threadId) }),
   );
 
   await act(() => requests.onSelectActivePendingUserInputOption("question-0", "Incremental"));
