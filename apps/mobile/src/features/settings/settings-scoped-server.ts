@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  isManagedSettingPath,
   isNullableProjectSettingsOverride,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type EnvironmentId,
@@ -32,6 +33,20 @@ export interface ScopedMobileSettingsTarget {
   readonly projectId: ProjectId | null;
   readonly settings: ServerSettings;
   readonly sources: ReturnType<typeof resolveProjectSettings>["sources"];
+}
+
+/**
+ * "Managed by <organization>." when any target's policy locks `path`: the server refuses the
+ * whole write then, so the control is managed for the selection.
+ */
+export function managedSettingReason(
+  targets: readonly ScopedMobileSettingsTarget[],
+  ...paths: readonly string[]
+): string | undefined {
+  const policy = targets
+    .map((target) => target.environment.serverConfig.managedPolicy)
+    .find((candidate) => paths.some((path) => isManagedSettingPath(candidate, path)));
+  return policy === undefined ? undefined : `Managed by ${policy.organization}.`;
 }
 
 export function resolveMobileSettingsTargets(

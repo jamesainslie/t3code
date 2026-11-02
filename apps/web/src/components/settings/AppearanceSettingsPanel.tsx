@@ -20,6 +20,7 @@ import {
   useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
+import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { useTheme } from "../../hooks/useTheme";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -78,6 +79,17 @@ export function AppearanceSettingsPanel() {
   const environmentStageLabel = useEnvironmentStageLabel();
   // Edition artwork shows on every build; the version pill only names Dev and Nightly.
   const pillAvailable = resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+  const effectiveEnvironmentIdentificationMode = useEnvironmentIdentificationMode();
+  const themeHidesEnvironmentArtwork =
+    effectiveEnvironmentIdentificationMode === "pill" &&
+    settings.environmentIdentificationMode === "artwork";
+  const environmentIdentificationDescription = themeHidesEnvironmentArtwork
+    ? pillAvailable
+      ? "Only built-in themes show artwork, so this theme shows the version pill."
+      : "Only built-in themes show artwork."
+    : pillAvailable
+      ? "Show the edition artwork in the sidebar header, a version pill, or nothing."
+      : "Show the edition artwork in the sidebar header, or nothing.";
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -424,11 +436,7 @@ export function AppearanceSettingsPanel() {
           />
           <SettingsRow
             {...searchableSetting("environment-identification")}
-            description={
-              pillAvailable
-                ? "Show the edition artwork in the sidebar header, a version pill, or nothing."
-                : "Show the edition artwork in the sidebar header, or nothing."
-            }
+            description={environmentIdentificationDescription}
             resetAction={
               settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
                 <SettingResetButton

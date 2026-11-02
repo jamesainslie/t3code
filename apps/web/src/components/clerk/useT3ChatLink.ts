@@ -37,9 +37,7 @@ export function useT3ChatLink() {
   const createLinkRequest = useAtomCommand(createManagedRelayT3ChatLinkRequestCommand, {
     reportFailure: false,
   });
-  const unlinkCommand = useAtomCommand(unlinkManagedRelayT3ChatCommand, {
-    reportFailure: false,
-  });
+  const unlinkCommand = useAtomCommand(unlinkManagedRelayT3ChatCommand, { reportFailure: false });
   const [pending, setPending] = useState<"link" | "unlink" | null>(null);
   // Kept so a blocked popup still leaves the user a link to open.
   const [linkUrl, setLinkUrl] = useState<string | null>(null);

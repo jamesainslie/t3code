@@ -303,6 +303,19 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /-t3\.\d+/,
   },
   {
+    id: "id-managed-policy-paths",
+    class: "identifier",
+    reason:
+      "Where an administrator deploys the managed policy; Lathe reads its own, so a T3 Code policy on the same machine never governs it.",
+    token: /^["'`]?\/etc\/t3code\/policy\.json|Support\/T3Code\/policy\.json/,
+  },
+  {
+    id: "id-renamed-doc-paths",
+    class: "identifier",
+    reason: "Repo paths of user docs, which display-docs-prose renames along with the file.",
+    token: /^["'`]?docs\/user\/t3-[a-z-]+\.md/,
+  },
+  {
     id: "upstream-connect-doc",
     class: "upstream-reference",
     reason: "The internal doc about upstream's T3 Connect service.",
@@ -425,7 +438,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Names in telemetry sent to upstream's PostHog and relay trace datasets (off by default).",
     test: (o) =>
-      /(?:^|\.)t3CodeVersion:?$|t3\.client\.|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
+      /(?:^|\.)t3CodeVersion:?$|t3\.client\.|^t3_child$|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
         o.token,
       ) || /service\.namespace|service\.runtime|serviceName:/.test(o.line),
   },
@@ -640,9 +653,12 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "kept-connection-profile",
     class: "kept",
-    reason: 'The "t3-connect" authorization literal stored in saved connection catalogs.',
-    path: /client-runtime\/src\/connection\//,
-    token: /^t3-connect$/,
+    reason:
+      'The "t3-connect" authorization literal stored in saved connection catalogs, and code that compares a profile against it.',
+    test: (o) =>
+      o.token === "t3-connect" &&
+      (/client-runtime\/src\/connection\//.test(o.path) ||
+        /\bauthorization\b|bearerProfile\(/.test(o.line)),
   },
   {
     id: "kept-theme-ids",
@@ -929,6 +945,32 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
 
   // agent-facing: names agents see and address
   {
+    id: "agent-mcp-alias-list-widening",
+    class: "agent-facing",
+    reason:
+      "The first entry of a multi-line MCP server alias list gains lathe before it; the pre-Lathe spellings stay for stored tool names.",
+    test: (o) =>
+      /_SERVER_ALIASES = new Set\(\[$/.test(o.previousLine) && /^\s*"t3-code",$/.test(o.line),
+    rewrite: () => ({ length: "t3-code".length, text: 'lathe",\n  "t3-code' }),
+  },
+  {
+    id: "kept-mcp-alias-list",
+    class: "kept",
+    reason:
+      "Pre-Lathe spellings in a multi-line MCP server alias list, which stored tool names use.",
+    test: (o) =>
+      /^\s*"t3(?:-code|_code|code)",$/.test(o.line) &&
+      /_SERVER_ALIASES = new Set\(\[$|^\s*"(?:lathe|t3-code|t3_code)",$/.test(o.previousLine),
+  },
+  {
+    id: "agent-mcp-direct-matcher",
+    class: "agent-facing",
+    reason:
+      "The matcher for Codex's direct-only MCP server, which the fork registers as lathe-direct; no stored name uses the old spelling.",
+    test: (o) => o.line.slice(o.column).startsWith("t3[-_]code[-_]direct"),
+    rewrite: () => ({ length: "t3[-_]code[-_]direct".length, text: "lathe[-_]direct" }),
+  },
+  {
     id: "agent-mcp-matcher-widening",
     class: "agent-facing",
     reason:
@@ -1003,6 +1045,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       o.token === "t3" && /\bsearch\(\s*["'`]t3["'`]/.test(o.line) && /t3code/.test(o.line),
   },
   {
+    id: "id-desktop-relaunch-app-links",
+    class: "identifier",
+    reason:
+      "App links the relaunch test expects stripped; they must use the app's own scheme, which the fork renames.",
+    path: /^apps\/desktop\/src\/app\/DesktopLifecycle\.test\.ts$/,
+    token: /^t3code:\/\//i,
+  },
+  {
     id: "upstream-fixture-repo-names",
     class: "upstream-reference",
     reason:
@@ -1013,7 +1063,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       // Values tests compare with renamed code: attribution, user agents, DISPLAY,
       // lint rule names, command-line flags, systemd unit names and storage keys.
       !/attribution|user-?agent|userAgent|DISPLAY/i.test(o.line) &&
-      !/\.slice\b|-protect\.conf|:update-everything-result/.test(o.token) &&
+      !/\.slice\b|-protect\.conf|:update-everything-result|t3code\/compile-cache/.test(o.token) &&
       !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
       !o.token.startsWith("--") &&
       !/^oxlint-plugin-/.test(o.path),
@@ -1119,7 +1169,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "The desktop compile cache directory, a throwaway cache (shared with upstream, so the old one is not deleted).",
-    test: (o) => o.token === "t3code" && /compile-cache/.test(o.line),
+    test: (o) =>
+      (o.token === "t3code" && /compile-cache/.test(o.line)) ||
+      /(?:^|\/)t3code\/compile-cache/.test(o.token),
   },
   {
     id: "id-transient-storage",
@@ -1170,7 +1222,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Runtime ids, temp and socket prefixes, log tags, MIME types, CSS transition names, asset files and test identities; nothing reads them across versions.",
     test: (o) =>
-      /t3(?:code)?-\$|t3_\$|t3-(?:cli|token)-\$|^t3-claude$|t3code-startup-warmup|t3-(?:host|mermaid|term|orchestrator-v2|preview|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin)|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
+      /t3(?:code)?-\$|t3_\$|t3-(?:cli|token)-\$|^t3-claude$|t3code-startup-warmup|t3-(?:host|mermaid|term|orchestrator-v2|preview|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin|advapi32)|__t3codeStartupModuleProfiler|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
         o.token,
       ) ||
       (/^t3[.:]?$/.test(o.token) &&

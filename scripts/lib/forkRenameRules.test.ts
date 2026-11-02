@@ -74,6 +74,57 @@ describe("FORK_RENAME_RULES", () => {
       "kept",
     ],
     ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
+    [
+      "apps/desktop/src/app/DesktopLifecycle.test.ts",
+      '          "T3CODE://pair?token=spent",',
+      "identifier",
+    ],
+    [
+      "packages/shared/src/t3McpToolPresentation.ts",
+      "    /^(?<server>t3[-_]code[-_]direct|t3-code)(?:[.:/])(?<tool>.+)$/i.exec(",
+      "agent-facing",
+    ],
+    [
+      "apps/server/src/cliCompileCache.test.ts",
+      '      `CACHE=${root}/cache/t3code/compile-cache`.replaceAll("\\\\", "/"),',
+      "identifier",
+    ],
+    [
+      "apps/desktop/src/menuBar/menuBarSources.ts",
+      '  if (profile?._tag === "BearerConnectionProfile" && profile.authorization === "t3-connect") {',
+      "kept",
+    ],
+    [
+      "apps/desktop/src/menuBar/menuBarSources.test.ts",
+      '          bearerProfile("t3-connect"),',
+      "kept",
+    ],
+    [
+      "packages/shared/src/managedPolicyFile.ts",
+      '      return "/etc/t3code/policy.json";',
+      "identifier",
+    ],
+    [
+      "packages/shared/src/managedPolicyFile.ts",
+      '      return "/Library/Application Support/T3Code/policy.json";',
+      "identifier",
+    ],
+    ["packages/shared/src/managedPolicyFile.ts", 'open({ library: "t3-advapi32" });', "identifier"],
+    [
+      "scripts/check-changed.ts",
+      '  files.includes("docs/user/t3-connect-troubleshooting.md")',
+      "identifier",
+    ],
+    [
+      "scripts/profile-startup-modules.mjs",
+      'const key = "__t3codeStartupModuleProfiler";',
+      "identifier",
+    ],
+    [
+      "apps/server/src/telemetry/ProviderUsageAnalytics.ts",
+      '  if (origin.subagent) return "t3_child";',
+      "wire-peer",
+    ],
     ["apps/server/src/mcp/McpInvocationContext.ts", 'const H = "t3-mode-limit";', "wire-peer"],
     [
       "packages/contracts/src/relay.ts",

@@ -34,6 +34,7 @@ import { observeAssistantCitationCommentSource } from "./AssistantCitationSource
 import { composerFloatingLayerProps } from "./composerEventScope";
 import { useRightPanelStore } from "../../rightPanelStore";
 import { observeResize } from "~/lib/observeResize";
+import { textDirection } from "~/textDirection";
 
 export function AssistantCitationChip({
   citation,
@@ -146,7 +147,9 @@ export function AssistantCitationChip({
   const composerSourceContent = (
     <>
       <SourceIcon aria-hidden="true" />
-      <ContextChipLabel className="max-w-[16em]">{label}</ContextChipLabel>
+      <ContextChipLabel className="max-w-[16em]" dir={textDirection(label)}>
+        {label}
+      </ContextChipLabel>
     </>
   );
   const composerSourceLinkClassName =
@@ -317,10 +320,13 @@ function AssistantCitationQuote({ citation }: { citation: Citation }) {
         getVirtualizedScrollFadeClassName(fade),
       )}
     >
-      <blockquote className="border-l-2 border-border pl-3 text-muted-foreground">
+      <blockquote
+        className="border-l-2 border-border pl-3 text-muted-foreground"
+        dir={textDirection(citation.text)}
+      >
         {citation.text}
       </blockquote>
-      {citation.comment ? <p>{citation.comment}</p> : null}
+      {citation.comment ? <p dir={textDirection(citation.comment)}>{citation.comment}</p> : null}
     </div>
   );
 }
