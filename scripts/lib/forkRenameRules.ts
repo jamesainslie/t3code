@@ -653,9 +653,12 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
   {
     id: "kept-connection-profile",
     class: "kept",
-    reason: 'The "t3-connect" authorization literal stored in saved connection catalogs.',
-    path: /client-runtime\/src\/connection\//,
-    token: /^t3-connect$/,
+    reason:
+      'The "t3-connect" authorization literal stored in saved connection catalogs, and code that compares a profile against it.',
+    test: (o) =>
+      o.token === "t3-connect" &&
+      (/client-runtime\/src\/connection\//.test(o.path) ||
+        /\bauthorization\b|bearerProfile\(/.test(o.line)),
   },
   {
     id: "kept-theme-ids",

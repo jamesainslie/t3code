@@ -75,6 +75,16 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
     [
+      "apps/desktop/src/menuBar/menuBarSources.ts",
+      '  if (profile?._tag === "BearerConnectionProfile" && profile.authorization === "t3-connect") {',
+      "kept",
+    ],
+    [
+      "apps/desktop/src/menuBar/menuBarSources.test.ts",
+      '          bearerProfile("t3-connect"),',
+      "kept",
+    ],
+    [
       "packages/shared/src/managedPolicyFile.ts",
       '      return "/etc/t3code/policy.json";',
       "identifier",
