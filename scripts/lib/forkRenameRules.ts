@@ -1029,7 +1029,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       // Values tests compare with renamed code: attribution, user agents, DISPLAY,
       // lint rule names, command-line flags, systemd unit names and storage keys.
       !/attribution|user-?agent|userAgent|DISPLAY/i.test(o.line) &&
-      !/\.slice\b|-protect\.conf|:update-everything-result/.test(o.token) &&
+      !/\.slice\b|-protect\.conf|:update-everything-result|t3code\/compile-cache/.test(o.token) &&
       !/^t3code\/no-/.test(o.token.slice(o.offset)) &&
       !o.token.startsWith("--") &&
       !/^oxlint-plugin-/.test(o.path),
@@ -1135,7 +1135,9 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "The desktop compile cache directory, a throwaway cache (shared with upstream, so the old one is not deleted).",
-    test: (o) => o.token === "t3code" && /compile-cache/.test(o.line),
+    test: (o) =>
+      (o.token === "t3code" && /compile-cache/.test(o.line)) ||
+      /(?:^|\/)t3code\/compile-cache/.test(o.token),
   },
   {
     id: "id-transient-storage",
