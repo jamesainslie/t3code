@@ -303,6 +303,19 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     token: /-t3\.\d+/,
   },
   {
+    id: "id-managed-policy-paths",
+    class: "identifier",
+    reason:
+      "Where an administrator deploys the managed policy; Lathe reads its own, so a T3 Code policy on the same machine never governs it.",
+    token: /^["'`]?\/etc\/t3code\/policy\.json|Support\/T3Code\/policy\.json/,
+  },
+  {
+    id: "id-renamed-doc-paths",
+    class: "identifier",
+    reason: "Repo paths of user docs, which display-docs-prose renames along with the file.",
+    token: /^["'`]?docs\/user\/t3-[a-z-]+\.md/,
+  },
+  {
     id: "upstream-connect-doc",
     class: "upstream-reference",
     reason: "The internal doc about upstream's T3 Connect service.",
@@ -425,7 +438,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Names in telemetry sent to upstream's PostHog and relay trace datasets (off by default).",
     test: (o) =>
-      /(?:^|\.)t3CodeVersion:?$|t3\.client\.|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
+      /(?:^|\.)t3CodeVersion:?$|t3\.client\.|^t3_child$|^["'`]?t3code-(?:server|desktop|web)["'`]?,?$|service\.namespace/.test(
         o.token,
       ) || /service\.namespace|service\.runtime|serviceName:/.test(o.line),
   },
@@ -1170,7 +1183,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     reason:
       "Runtime ids, temp and socket prefixes, log tags, MIME types, CSS transition names, asset files and test identities; nothing reads them across versions.",
     test: (o) =>
-      /t3(?:code)?-\$|t3_\$|t3-(?:cli|token)-\$|^t3-claude$|t3code-startup-warmup|t3-(?:host|mermaid|term|orchestrator-v2|preview|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin)|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
+      /t3(?:code)?-\$|t3_\$|t3-(?:cli|token)-\$|^t3-claude$|t3code-startup-warmup|t3-(?:host|mermaid|term|orchestrator-v2|preview|ghostty-input|permission-check|acp-cli|acp-mock|collab-mock|pi-mcp|markdown-inline-prefix|mobile-|draft-hero|snap-shot|agent|black-|iris|checkpoint-index|kde-bus|browser-launch|darwin|advapi32)|__t3codeStartupModuleProfiler|t3code-(?:desktop|git-trace2|review-index|ssh-askpass|pierre)|\.t3-(?:capture|icon-export)|t3_capture_|t3ssh-|\/tmp\/t3-|x-t3code-|t3continue-|t3-xai-prompt-|msg_t3_|refs\/t3code\/|\.cache\/t3code\/|^t3\.export\.|^\[t3-|^t3:jsonrpc|\$t3:|t3code_no_provider|t3_dev_session_|noreply@t3\.codes|t3code@users\.noreply|t3code-test@|-t3\.\d+|dist-exe\/t3|npm-launcher\/t3\.mjs|release\/t3-|\/t3\.tgz|^\/t3\/$|\.\{t3,lathe,t3f\}|\\\.t3\b|t3\/[a-z0-9-]+\/[A-Z]|^\/?t3-connect$|^\[t3-|^["'`]t3\/orchestration-v2\/|t3-page\.localhost|t3-sqlite-state|not-a-t3-server|app-t3code-agents/.test(
         o.token,
       ) ||
       (/^t3[.:]?$/.test(o.token) &&

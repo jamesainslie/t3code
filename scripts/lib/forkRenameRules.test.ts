@@ -74,6 +74,32 @@ describe("FORK_RENAME_RULES", () => {
       "kept",
     ],
     ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
+    [
+      "packages/shared/src/managedPolicyFile.ts",
+      '      return "/etc/t3code/policy.json";',
+      "identifier",
+    ],
+    [
+      "packages/shared/src/managedPolicyFile.ts",
+      '      return "/Library/Application Support/T3Code/policy.json";',
+      "identifier",
+    ],
+    ["packages/shared/src/managedPolicyFile.ts", 'open({ library: "t3-advapi32" });', "identifier"],
+    [
+      "scripts/check-changed.ts",
+      '  files.includes("docs/user/t3-connect-troubleshooting.md")',
+      "identifier",
+    ],
+    [
+      "scripts/profile-startup-modules.mjs",
+      'const key = "__t3codeStartupModuleProfiler";',
+      "identifier",
+    ],
+    [
+      "apps/server/src/telemetry/ProviderUsageAnalytics.ts",
+      '  if (origin.subagent) return "t3_child";',
+      "wire-peer",
+    ],
     ["apps/server/src/mcp/McpInvocationContext.ts", 'const H = "t3-mode-limit";', "wire-peer"],
     [
       "packages/contracts/src/relay.ts",
