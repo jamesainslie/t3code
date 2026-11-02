@@ -136,13 +136,13 @@ jobs:
           --exclude "**/ChatView.browser.test.tsx"
           --exclude "**/MessagesTimeline.browser.test.tsx"
 
+      # MessagesTimeline gets its own run: after ChatView in the same run, upstream's
+      # "keeps the worked-for heading in place" test lands 104px off.
       - name: Test heavy browser files
         working-directory: apps/web
-        run: >-
-          vp test run --project browser --no-file-parallelism
-          src/components/files/AttachmentFilePreview.browser.test.tsx
-          src/components/ChatView.browser.test.tsx
-          src/components/chat/MessagesTimeline.browser.test.tsx
+        run: |
+          vp test run --project browser --no-file-parallelism src/components/files/AttachmentFilePreview.browser.test.tsx src/components/ChatView.browser.test.tsx
+          vp test run --project browser src/components/chat/MessagesTimeline.browser.test.tsx
 
   # apps/server runs its files one at a time (fileParallelism: false), so shards
   # spread them over runners. Files split by recorded duration
