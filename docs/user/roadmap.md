@@ -13,6 +13,10 @@ thread. The Roadmap comes back with the view and filters you left it on. Web bro
 `ctrl+tab` for switching browser tabs, so in a browser bind `roadmap.toggle` to another key in
 **Settings → Keybindings**.
 
+To keep the Roadmap beside your work, right-click **Roadmap** in the sidebar and choose **Open in
+New Window**, or run **Open roadmap in new window** from the command palette. On desktop it opens a
+second app window. In a browser it opens a new browser window.
+
 ## Create work items
 
 Choose **New** on the Roadmap to add a top-level item, and add children from an item's menu. An
