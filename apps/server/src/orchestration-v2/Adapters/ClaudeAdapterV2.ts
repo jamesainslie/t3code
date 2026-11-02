@@ -6901,6 +6901,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           readonly toolName: string;
           readonly toolInput: ClaudeNativeToolInput;
           readonly parentToolUseId: string | null;
+          readonly subagent?: ActiveClaudeSubagent | undefined;
           readonly presentation?: ClaudeToolPresentation | undefined;
         }) {
           const existing = findToolCall(input.context, input.nativeItemId);
@@ -6934,9 +6935,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return presented;
           }
           const subagent =
-            input.parentToolUseId === null
+            input.subagent ??
+            (input.parentToolUseId === null
               ? undefined
-              : yield* resolveSubagentByToolUseId(input.context, input.parentToolUseId);
+              : yield* resolveSubagentByToolUseId(input.context, input.parentToolUseId));
           const call = {
             nativeItemId: input.nativeItemId,
             toolName: input.toolName,
@@ -7186,6 +7188,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           readonly nativeItemId: string;
           readonly nativeRequestId: string;
           readonly parentNodeId?: OrchestrationV2ExecutionNode["id"];
+          readonly subagent?: ActiveClaudeSubagent | undefined;
           readonly requestKind: OrchestrationV2RuntimeRequest["kind"];
           readonly prompt?: string;
           readonly appName?: string;
@@ -7208,10 +7211,25 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               detail: `Provider thread ${input.context.input.providerThread.id} is missing a provider session id.`,
             });
           }
-          const ordinal = yield* resolveItemOrdinal(
-            input.context,
-            `${input.nativeItemId}:approval:${input.nativeRequestId}`,
-          );
+          // A subagent's request belongs to its child thread, where its tool call lives.
+          const owner =
+            input.subagent === undefined
+              ? {
+                  threadId: input.context.input.threadId,
+                  runId: input.context.input.runId,
+                  rootNodeId: input.context.input.rootNodeId,
+                  ordinal: yield* resolveItemOrdinal(
+                    input.context,
+                    `${input.nativeItemId}:approval:${input.nativeRequestId}`,
+                  ),
+                }
+              : {
+                  threadId: input.subagent.childThreadId,
+                  runId: null,
+                  rootNodeId: input.subagent.childRootNodeId,
+                  ordinal: subagentProjectionTarget(input.subagent).nextOrdinal(),
+                };
+          const ordinal = owner.ordinal;
           const nativeItemRef = {
             driver: CLAUDE_PROVIDER,
             nativeId: input.nativeRequestId,
@@ -7219,15 +7237,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           };
           const node: OrchestrationV2ExecutionNode = {
             id: nodeId,
-            threadId: input.context.input.threadId,
-            runId: input.context.input.runId,
+            threadId: owner.threadId,
+            runId: owner.runId,
             parentNodeId:
               input.parentNodeId ??
               idAllocator.derive.nodeFromProviderItem({
                 driver: CLAUDE_PROVIDER,
                 nativeItemId: input.nativeItemId,
               }),
-            rootNodeId: input.context.input.rootNodeId,
+            rootNodeId: owner.rootNodeId,
             kind: input.questions === undefined ? "approval_request" : "user_input_request",
             status: "waiting",
             countsForRun: false,
@@ -7262,8 +7280,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           };
           const turnItem: OrchestrationV2TurnItem = {
             id: idAllocator.derive.approvalTurnItem({ requestId }),
-            threadId: input.context.input.threadId,
-            runId: input.context.input.runId,
+            threadId: owner.threadId,
+            runId: owner.runId,
             nodeId,
             providerThreadId: input.context.input.providerThread.id,
             providerTurnId: input.context.providerTurnId,
@@ -7306,6 +7324,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               emitProviderEvent({
                 type: "runtime_request.updated",
                 driver: CLAUDE_PROVIDER,
+                threadId: artifacts.node.threadId,
                 runtimeRequest: { ...artifacts.request, status: "cancelled", resolvedAt: now },
               }),
               emitProviderEvent({
@@ -9729,6 +9748,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const nativeToolInput = claudeNativeToolInputFromRecord(toolInput);
           const heldForEcho = context.heldRootFrames.length > 0;
           const startToolCall = toolName !== "Agent" && options?.startToolCall !== false;
+          // Questions stay on the parent; only it renders an answer form.
+          const subagent =
+            callbackOptions.agentID === undefined || toolName === "AskUserQuestion"
+              ? undefined
+              : ((yield* Ref.get(sessionSubagentsByTaskId)).get(callbackOptions.agentID) ??
+                context.subagentsByTaskId.get(callbackOptions.agentID));
           if (toolName === "Agent") {
             rememberClaudeSubagentLaunch(
               subagentModelCatalog,
@@ -9745,6 +9770,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               toolName,
               toolInput: nativeToolInput,
               parentToolUseId: null,
+              subagent,
             });
           }
 
@@ -9762,6 +9788,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 toolName,
                 toolInput: nativeToolInput,
                 parentToolUseId: null,
+                subagent,
               });
             }
           }
@@ -9798,6 +9825,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 emitProviderEvent({
                   type: "runtime_request.updated",
                   driver: CLAUDE_PROVIDER,
+                  threadId: artifacts.node.threadId,
                   runtimeRequest: artifacts.request,
                 }),
                 emitProviderEvent({
@@ -9910,6 +9938,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context,
             nativeItemId: nativeRequestId,
             nativeRequestId,
+            subagent,
             requestKind,
             prompt,
             presentation: claudeApprovalPresentation({
@@ -9938,6 +9967,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               emitProviderEvent({
                 type: "runtime_request.updated",
                 driver: CLAUDE_PROVIDER,
+                threadId: artifacts.node.threadId,
                 runtimeRequest: artifacts.request,
               }),
               emitProviderEvent({
@@ -10035,6 +10065,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               emitProviderEvent({
                 type: "runtime_request.updated",
                 driver: CLAUDE_PROVIDER,
+                threadId: artifacts.node.threadId,
                 runtimeRequest: artifacts.request,
               }),
               emitProviderEvent({
@@ -10080,6 +10111,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             yield* emitProviderEvent({
               type: "runtime_request.updated",
               driver: CLAUDE_PROVIDER,
+              threadId: artifacts.node.threadId,
               runtimeRequest: { ...artifacts.request, status: "cancelled", resolvedAt: now },
             });
           }
