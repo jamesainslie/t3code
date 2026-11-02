@@ -25,6 +25,7 @@ import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../../policy/ManagedPolicy.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import * as RoadmapHttp from "./http.ts";
 import * as RoadmapLink from "./RoadmapLink.ts";
@@ -87,7 +88,10 @@ export const makeInProcessHome = Effect.fn("makeInProcessHome")(function* (
 ) {
   const services = yield* Layer.build(
     Layer.mergeAll(
-      EnvironmentAuth.layer.pipe(Layer.provide(ServerEnvironment.layerIdentity)),
+      EnvironmentAuth.layer.pipe(
+        Layer.provide(ServerEnvironment.layerIdentity),
+        Layer.provide(ManagedPolicy.layerTest()),
+      ),
       RoadmapService.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
