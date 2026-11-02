@@ -77,16 +77,16 @@ export function TunnelUsageMeter({
 /** Shown when the relay refuses a new tunnel because the account is at its cap. */
 export function TunnelLimitAlert({
   upgrade,
-  onLinkLatheChat,
+  onLinkT3Chat,
   onManageTunnels,
 }: {
   readonly upgrade: ManagedTunnelUpgrade;
-  readonly onLinkLatheChat: (() => void) | null;
+  readonly onLinkT3Chat: (() => void) | null;
   readonly onManageTunnels: (() => void) | null;
 }) {
   const action =
-    upgrade === "link" && onLinkLatheChat ? (
-      <Button size="sm" onClick={onLinkLatheChat}>
+    upgrade === "link" && onLinkT3Chat ? (
+      <Button size="sm" onClick={onLinkT3Chat}>
         Link T3 Chat
       </Button>
     ) : upgrade === "pro" || upgrade === "premier" ? (

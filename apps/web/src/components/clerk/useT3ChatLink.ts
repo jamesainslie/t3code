@@ -7,8 +7,8 @@ import { useState } from "react";
 
 import {
   createManagedRelayT3ChatLinkRequestCommand,
-  unlinkManagedRelayLatheChatCommand,
-  useManagedRelayLatheChatLink,
+  unlinkManagedRelayT3ChatCommand,
+  useManagedRelayT3ChatLink,
 } from "../../cloud/managedRelayState";
 import { readLocalApi } from "../../localApi";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -32,14 +32,12 @@ function reportFailure(title: string, cause: unknown) {
 }
 
 /** Starts and removes the T3 Chat link that raises the T3 Connect tunnel cap. */
-export function useLatheChatLink() {
-  const linkState = useManagedRelayLatheChatLink();
+export function useT3ChatLink() {
+  const linkState = useManagedRelayT3ChatLink();
   const createLinkRequest = useAtomCommand(createManagedRelayT3ChatLinkRequestCommand, {
     reportFailure: false,
   });
-  const unlinkCommand = useAtomCommand(unlinkManagedRelayLatheChatCommand, {
-    reportFailure: false,
-  });
+  const unlinkCommand = useAtomCommand(unlinkManagedRelayT3ChatCommand, { reportFailure: false });
   const [pending, setPending] = useState<"link" | "unlink" | null>(null);
   // Kept so a blocked popup still leaves the user a link to open.
   const [linkUrl, setLinkUrl] = useState<string | null>(null);

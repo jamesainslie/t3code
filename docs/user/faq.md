@@ -29,7 +29,7 @@ Nothing. There's no way to pay us to use Lathe. You bring your own sub. It is fr
 
 ## Can I connect more than 3 machines with T3 Connect?
 
-Yes. Link your T3 Chat account and Lathe Connect raises your limit: up to 10 machines with T3 Chat Pro, or 100 with Premier. Open your account menu in Lathe, go to **T3 Chat**, and select **Link T3 Chat**. Sign in to T3 Chat and approve. The free T3 Chat plan keeps the normal limit of 3. [More machines with T3 Chat](./remote-access.md#more-machines-with-lathe-chat)
+Yes. Link your T3 Chat account and Lathe Connect raises your limit: up to 10 machines with T3 Chat Pro, or 100 with Premier. Open your account menu in Lathe, go to **T3 Chat**, and select **Link T3 Chat**. Sign in to T3 Chat and approve. The free T3 Chat plan keeps the normal limit of 3. [More machines with T3 Chat](./remote-access.md#more-machines-with-t3-chat)
 
 ## Why is my Claude 5-hour limit draining so fast?
 

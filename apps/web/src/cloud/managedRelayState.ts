@@ -1,12 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   createManagedRelayQueryManager,
-  createManagedRelayLatheChatLinkRequest,
+  createManagedRelayT3ChatLinkRequest,
   deregisterManagedRelayEnvironment,
   ManagedRelay,
   managedRelaySessionAtom,
   readManagedRelaySnapshotState,
-  unlinkManagedRelayLatheChat,
+  unlinkManagedRelayT3Chat,
 } from "@lathe/client-runtime/relay";
 import {
   createAtomCommandScheduler,
@@ -17,7 +17,7 @@ import {
   T3CHAT_PLAN_TUNNEL_LIMITS,
   type RelayClientDeviceRecord,
   type RelayClientEnvironmentRecord,
-  type RelayLatheChatLinkResponse,
+  type RelayT3ChatLinkResponse,
 } from "@lathe/contracts/relay";
 import type { EnvironmentId } from "@lathe/contracts";
 import * as Context from "effect/Context";
@@ -67,32 +67,32 @@ export const createManagedRelayT3ChatLinkRequestCommand = createRuntimeCommand(
     scheduler: managedRelayMutationScheduler,
     concurrency: accountSerial,
     execute: (input: { readonly accountId: string }, registry) =>
-      createManagedRelayLatheChatLinkRequest(registry, input),
+      createManagedRelayT3ChatLinkRequest(registry, input),
   },
 );
 
-export const unlinkManagedRelayLatheChatCommand = createRuntimeCommand(managedRelayAtomRuntime, {
+export const unlinkManagedRelayT3ChatCommand = createRuntimeCommand(managedRelayAtomRuntime, {
   label: "web:managed-relay:unlink-t3chat",
   scheduler: managedRelayMutationScheduler,
   concurrency: accountSerial,
   execute: (input: { readonly accountId: string }, registry) =>
-    unlinkManagedRelayLatheChat(registry, input),
+    unlinkManagedRelayT3Chat(registry, input),
 });
 
 const EMPTY_T3CHAT_LINK_ATOM = Atom.make(
-  AsyncResult.success<RelayLatheChatLinkResponse>({ available: false, link: null }),
+  AsyncResult.success<RelayT3ChatLinkResponse>({ available: false, link: null }),
 ).pipe(Atom.keepAlive, Atom.withLabel("managed-relay:web:t3chat-link:null"));
 
-export function useManagedRelayLatheChatLink() {
+export function useManagedRelayT3ChatLink() {
   const session = useAtomValue(managedRelaySessionAtom);
   const accountId = session?.accountId ?? null;
   const atom = accountId
-    ? managedRelayQueryManager.latheChatLinkAtom(accountId)
+    ? managedRelayQueryManager.t3ChatLinkAtom(accountId)
     : EMPTY_T3CHAT_LINK_ATOM;
   const snapshot = readManagedRelaySnapshotState(useAtomValue(atom));
   const refresh = () => {
     if (accountId) {
-      managedRelayQueryManager.refreshLatheChatLink(appAtomRegistry, accountId);
+      managedRelayQueryManager.refreshT3ChatLink(appAtomRegistry, accountId);
     }
   };
 
@@ -151,15 +151,15 @@ export function useManagedRelayDevices() {
 export type ManagedTunnelUpgrade = "link" | "pro" | "premier" | null;
 
 // Mirrors the relay's cap: a manual override is exact, otherwise the T3 Chat plan raises the default.
-function managedTunnelCap(latheChat: RelayLatheChatLinkResponse): {
+function managedTunnelCap(t3Chat: RelayT3ChatLinkResponse): {
   readonly limit: number;
   readonly upgrade: ManagedTunnelUpgrade;
 } {
-  if (latheChat.maxTunnelsOverride !== undefined) {
-    return { limit: latheChat.maxTunnelsOverride, upgrade: null };
+  if (t3Chat.maxTunnelsOverride !== undefined) {
+    return { limit: t3Chat.maxTunnelsOverride, upgrade: null };
   }
-  if (!latheChat.available) return { limit: DEFAULT_MANAGED_TUNNEL_LIMIT, upgrade: null };
-  switch (latheChat.link?.plan) {
+  if (!t3Chat.available) return { limit: DEFAULT_MANAGED_TUNNEL_LIMIT, upgrade: null };
+  switch (t3Chat.link?.plan) {
     case "premier":
       return { limit: T3CHAT_PLAN_TUNNEL_LIMITS.premier, upgrade: null };
     case "pro":
@@ -176,21 +176,20 @@ export function refreshManagedTunnelUsage() {
   const accountId = appAtomRegistry.get(managedRelaySessionAtom)?.accountId;
   if (!accountId) return;
   managedRelayQueryManager.refreshEnvironments(appAtomRegistry, accountId);
-  managedRelayQueryManager.refreshLatheChatLink(appAtomRegistry, accountId);
+  managedRelayQueryManager.refreshT3ChatLink(appAtomRegistry, accountId);
 }
 
 /** Managed tunnels on this account and its cap. Null fields are still loading or failed. */
 export function useManagedTunnelUsage() {
   const environments = useManagedRelayEnvironments();
-  const latheChat = useManagedRelayLatheChatLink();
+  const t3Chat = useManagedRelayT3ChatLink();
   const used =
     environments.accountId === null
       ? null
       : (environments.data?.filter(
           (environment) => environment.endpoint.providerKind === "cloudflare_tunnel",
         ).length ?? null);
-  const cap =
-    latheChat.accountId !== null && latheChat.data ? managedTunnelCap(latheChat.data) : null;
+  const cap = t3Chat.accountId !== null && t3Chat.data ? managedTunnelCap(t3Chat.data) : null;
   return {
     used,
     limit: cap?.limit ?? null,

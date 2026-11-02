@@ -1,4 +1,4 @@
-import { T3CHAT_PLAN_TUNNEL_LIMITS, type RelayLatheChatLink } from "@lathe/contracts/relay";
+import { T3CHAT_PLAN_TUNNEL_LIMITS, type RelayT3ChatLink } from "@lathe/contracts/relay";
 import { MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -10,7 +10,7 @@ import {
   ClerkUserProfileRefreshButton,
   ClerkUserProfileRow,
 } from "./ClerkUserProfilePage";
-import { useLatheChatLink } from "./useLatheChatLink";
+import { useT3ChatLink } from "./useT3ChatLink";
 
 const upgradeLink = (
   <a className="underline" href={T3CHAT_SUBSCRIPTION_URL} target="_blank" rel="noopener noreferrer">
@@ -18,7 +18,7 @@ const upgradeLink = (
   </a>
 );
 
-function planLabel(link: RelayLatheChatLink): ReactNode {
+function planLabel(link: RelayT3ChatLink): ReactNode {
   switch (link.plan) {
     case "premier":
       return `Premier · up to ${T3CHAT_PLAN_TUNNEL_LIMITS.premier} tunnels`;
@@ -35,14 +35,8 @@ function planLabel(link: RelayLatheChatLink): ReactNode {
 }
 
 /** Links a T3 Chat account so paid subscribers get more tunnels. */
-export function LatheChatUserProfilePage() {
-  const {
-    linkState,
-    pending,
-    linkUrl,
-    link: handleLink,
-    unlink: handleUnlink,
-  } = useLatheChatLink();
+export function T3ChatUserProfilePage() {
+  const { linkState, pending, linkUrl, link: handleLink, unlink: handleUnlink } = useT3ChatLink();
   const usage = useManagedTunnelUsage();
 
   const data = linkState.data;
@@ -89,7 +83,7 @@ export function LatheChatUserProfilePage() {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        lathe.chat
+                        t3.chat
                       </a>
                       , then select Refresh.
                     </>

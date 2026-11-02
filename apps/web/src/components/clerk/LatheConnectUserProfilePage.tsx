@@ -25,7 +25,7 @@ import {
   ClerkUserProfileRefreshButton,
   ClerkUserProfileRow,
 } from "./ClerkUserProfilePage";
-import { useLatheChatLink } from "./useLatheChatLink";
+import { useT3ChatLink } from "./useT3ChatLink";
 
 const linkedAtFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
@@ -116,23 +116,23 @@ function LatheConnectEnvironmentRow(props: {
 
 function LatheConnectTunnelUsage() {
   const usage = useManagedTunnelUsage();
-  const latheChat = useLatheChatLink();
+  const t3Chat = useT3ChatLink();
   if (usage.used === null || usage.limit === null) return null;
   return (
     <div className="border-t py-4">
       <TunnelUsageMeter used={usage.used} limit={usage.limit} />
       {usage.upgrade ? (
         <p className="mt-2 text-xs leading-4.5 text-muted-foreground">
-          {usage.upgrade === "link" && latheChat.linkUrl ? (
+          {usage.upgrade === "link" && t3Chat.linkUrl ? (
             <>
               Confirm on{" "}
               <a
                 className="underline"
-                href={latheChat.linkUrl}
+                href={t3Chat.linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                lathe.chat
+                t3.chat
               </a>
               , then select Refresh.
             </>
@@ -140,11 +140,8 @@ function LatheConnectTunnelUsage() {
             <>
               {tunnelUpgradeCopy(usage.upgrade)}{" "}
               {usage.upgrade === "link" ? (
-                <InlineButton
-                  disabled={latheChat.pending !== null}
-                  onClick={() => void latheChat.link()}
-                >
-                  {latheChat.pending === "link" ? "Opening…" : "Link T3 Chat"}
+                <InlineButton disabled={t3Chat.pending !== null} onClick={() => void t3Chat.link()}>
+                  {t3Chat.pending === "link" ? "Opening…" : "Link T3 Chat"}
                 </InlineButton>
               ) : (
                 <a

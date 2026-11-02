@@ -963,33 +963,33 @@ export const RelayOkResponse = Schema.Struct({
 });
 export type RelayOkResponse = typeof RelayOkResponse.Type;
 
-export const RelayLatheChatPlan = Schema.Literals(["free", "pro", "premier"]);
-export type RelayLatheChatPlan = typeof RelayLatheChatPlan.Type;
+export const RelayT3ChatPlan = Schema.Literals(["free", "pro", "premier"]);
+export type RelayT3ChatPlan = typeof RelayT3ChatPlan.Type;
 
 export const DEFAULT_MANAGED_TUNNEL_LIMIT = 3;
 
 // A linked paid T3 Chat plan raises the default managed tunnel cap.
 export const T3CHAT_PLAN_TUNNEL_LIMITS = { pro: 10, premier: 100 } as const;
 
-export const RelayLatheChatLink = Schema.Struct({
+export const RelayT3ChatLink = Schema.Struct({
   email: Schema.String,
-  plan: RelayLatheChatPlan,
+  plan: RelayT3ChatPlan,
 });
-export type RelayLatheChatLink = typeof RelayLatheChatLink.Type;
+export type RelayT3ChatLink = typeof RelayT3ChatLink.Type;
 
-export const RelayLatheChatLinkResponse = Schema.Struct({
+export const RelayT3ChatLinkResponse = Schema.Struct({
   // False when this relay has no T3 Chat secret, so clients hide the feature.
   available: Schema.Boolean,
-  link: Schema.NullOr(RelayLatheChatLink),
+  link: Schema.NullOr(RelayT3ChatLink),
   // A manual cap that replaces the plan's; T3 Chat upgrades do not raise it.
   maxTunnelsOverride: Schema.optionalKey(Schema.Number),
 });
-export type RelayLatheChatLinkResponse = typeof RelayLatheChatLinkResponse.Type;
+export type RelayT3ChatLinkResponse = typeof RelayT3ChatLinkResponse.Type;
 
-export const RelayLatheChatLinkRequestResponse = Schema.Struct({
+export const RelayT3ChatLinkRequestResponse = Schema.Struct({
   url: TrimmedNonEmptyString,
 });
-export type RelayLatheChatLinkRequestResponse = typeof RelayLatheChatLinkRequestResponse.Type;
+export type RelayT3ChatLinkRequestResponse = typeof RelayT3ChatLinkRequestResponse.Type;
 
 export const RelayPublishResponse = Schema.Struct({
   ok: Schema.Boolean,
@@ -1135,17 +1135,17 @@ const RelayClientGroup = HttpApiGroup.make("client")
         OpenApi.Description,
         "Deletes the provisioned Cloudflare tunnel while keeping the environment link and its hostname reservation, so a later link re-provisions the tunnel under the same URL. Environments call this when they shut down; Cloudflare bills per provisioned tunnel, so idle tunnels should not outlive their environment.",
       ),
-    HttpApiEndpoint.get("getLatheChatLink", "/v1/client/t3chat-link", {
+    HttpApiEndpoint.get("getT3ChatLink", "/v1/client/t3chat-link", {
       headers: RelayBearerRequestHeaders,
-      success: RelayLatheChatLinkResponse,
+      success: RelayT3ChatLinkResponse,
       error: RelayAuthAndInternalErrors,
     }).annotate(OpenApi.Summary, "Get the linked T3 Chat account"),
-    HttpApiEndpoint.post("createLatheChatLinkRequest", "/v1/client/t3chat-link-requests", {
+    HttpApiEndpoint.post("createT3ChatLinkRequest", "/v1/client/t3chat-link-requests", {
       headers: RelayBearerRequestHeaders,
-      success: RelayLatheChatLinkRequestResponse,
+      success: RelayT3ChatLinkRequestResponse,
       error: RelayAuthAndInternalErrors,
     }).annotate(OpenApi.Summary, "Start linking a T3 Chat account"),
-    HttpApiEndpoint.delete("unlinkLatheChat", "/v1/client/t3chat-link", {
+    HttpApiEndpoint.delete("unlinkT3Chat", "/v1/client/t3chat-link", {
       headers: RelayBearerRequestHeaders,
       success: RelayOkResponse,
       error: RelayAuthAndInternalErrors,

@@ -4,7 +4,7 @@ import { type ReactNode, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
-import { LatheChatUserProfilePage } from "./LatheChatUserProfilePage";
+import { T3ChatUserProfilePage } from "./T3ChatUserProfilePage";
 import { LatheConnectUserProfilePage } from "./LatheConnectUserProfilePage";
 
 export const LATHE_CONNECT_ACCOUNT_PAGES = [
@@ -24,7 +24,7 @@ export const LATHE_CONNECT_ACCOUNT_PAGES = [
     label: "T3 Chat",
     url: "t3-chat",
     icon: <MessageSquareIcon className="size-4" />,
-    content: <LatheChatUserProfilePage />,
+    content: <T3ChatUserProfilePage />,
   },
 ] as const;
 

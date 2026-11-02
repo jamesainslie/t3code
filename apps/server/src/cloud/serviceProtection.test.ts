@@ -38,7 +38,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("renderPrivileg
         "[Service]\nMemoryLow=2G\nOOMScoreAdjust=-900\n",
       );
       expect(theo.managerDefaults.path).toBe(
-        "/home/theo/.config/systemd/user.conf.d/90-t3code-protect.conf",
+        "/home/theo/.config/systemd/user.conf.d/90-lathe-protect.conf",
       );
       expect(theo.oomUnits).toEqual(["user@1000.service", "tailscaled.service", "ssh.service"]);
 
@@ -79,7 +79,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("renderPrivileg
         expect(result.status).toBe(0);
       };
       const exists = (unit: string) =>
-        NodeFS.existsSync(NodePath.join(systemUnitDir, `${unit}.d`, "90-t3code-protect.conf"));
+        NodeFS.existsSync(NodePath.join(systemUnitDir, `${unit}.d`, "90-lathe-protect.conf"));
 
       runScript(theo, "apply");
       runScript(plan(1001, []), "apply");

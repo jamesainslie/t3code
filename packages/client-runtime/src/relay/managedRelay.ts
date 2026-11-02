@@ -22,8 +22,8 @@ import {
   RelayMobileRegistrationScope,
   type RelayOkResponse,
   type RelayPublicClientId,
-  type RelayLatheChatLinkRequestResponse,
-  type RelayLatheChatLinkResponse,
+  type RelayT3ChatLinkRequestResponse,
+  type RelayT3ChatLinkResponse,
   RelayRegisterDeviceEndpoint,
   RelayAgentActivitySnapshotEndpoint,
   RelayRegisterLiveActivityEndpoint,
@@ -280,13 +280,13 @@ export class ManagedRelayClient extends Context.Service<
       readonly clerkToken: string;
       readonly environmentId: RelayClientEnvironmentRecord["environmentId"];
     }) => Effect.Effect<RelayOkResponse, ManagedRelayClientError>;
-    readonly getLatheChatLink: (input: {
+    readonly getT3ChatLink: (input: {
       readonly clerkToken: string;
-    }) => Effect.Effect<RelayLatheChatLinkResponse, ManagedRelayClientError>;
-    readonly createLatheChatLinkRequest: (input: {
+    }) => Effect.Effect<RelayT3ChatLinkResponse, ManagedRelayClientError>;
+    readonly createT3ChatLinkRequest: (input: {
       readonly clerkToken: string;
-    }) => Effect.Effect<RelayLatheChatLinkRequestResponse, ManagedRelayClientError>;
-    readonly unlinkLatheChat: (input: {
+    }) => Effect.Effect<RelayT3ChatLinkRequestResponse, ManagedRelayClientError>;
+    readonly unlinkT3Chat: (input: {
       readonly clerkToken: string;
     }) => Effect.Effect<RelayOkResponse, ManagedRelayClientError>;
     readonly getEnvironmentStatus: (input: {
@@ -443,11 +443,9 @@ function disabledManagedRelayClient(relayUrl: string): ManagedRelayClient["Servi
     ),
     linkEnvironment: unavailable("clientRuntime.managedRelay.linkEnvironment"),
     unlinkEnvironment: unavailable("clientRuntime.managedRelay.unlinkEnvironment"),
-    getLatheChatLink: unavailable("clientRuntime.managedRelay.getLatheChatLink"),
-    createLatheChatLinkRequest: unavailable(
-      "clientRuntime.managedRelay.createLatheChatLinkRequest",
-    ),
-    unlinkLatheChat: unavailable("clientRuntime.managedRelay.unlinkLatheChat"),
+    getT3ChatLink: unavailable("clientRuntime.managedRelay.getT3ChatLink"),
+    createT3ChatLinkRequest: unavailable("clientRuntime.managedRelay.createT3ChatLinkRequest"),
+    unlinkT3Chat: unavailable("clientRuntime.managedRelay.unlinkT3Chat"),
     getEnvironmentStatus: unavailable("clientRuntime.managedRelay.getEnvironmentStatus"),
     connectEnvironment: unavailable("clientRuntime.managedRelay.connectEnvironment"),
     registerDevice: unavailable("clientRuntime.managedRelay.registerDevice"),
@@ -813,40 +811,40 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
       Effect.withSpan("clientRuntime.managedRelay.unlinkEnvironment"),
       withRelayClientTracing,
     ),
-    getLatheChatLink: Effect.fnUntraced(
+    getT3ChatLink: Effect.fnUntraced(
       function* (input) {
         return yield* client.client
-          .getLatheChatLink({ headers: bearerHeaders(input.clerkToken) })
+          .getT3ChatLink({ headers: bearerHeaders(input.clerkToken) })
           .pipe(
             Effect.mapError(relayRequestError("read linked T3 Chat account")),
             timeoutRelayRequest("Relay T3 Chat link lookup"),
           );
       },
-      Effect.withSpan("clientRuntime.managedRelay.getLatheChatLink"),
+      Effect.withSpan("clientRuntime.managedRelay.getT3ChatLink"),
       withRelayClientTracing,
     ),
-    createLatheChatLinkRequest: Effect.fnUntraced(
+    createT3ChatLinkRequest: Effect.fnUntraced(
       function* (input) {
         return yield* client.client
-          .createLatheChatLinkRequest({ headers: bearerHeaders(input.clerkToken) })
+          .createT3ChatLinkRequest({ headers: bearerHeaders(input.clerkToken) })
           .pipe(
             Effect.mapError(relayRequestError("start T3 Chat linking")),
             timeoutRelayRequest("Relay T3 Chat link request"),
           );
       },
-      Effect.withSpan("clientRuntime.managedRelay.createLatheChatLinkRequest"),
+      Effect.withSpan("clientRuntime.managedRelay.createT3ChatLinkRequest"),
       withRelayClientTracing,
     ),
-    unlinkLatheChat: Effect.fnUntraced(
+    unlinkT3Chat: Effect.fnUntraced(
       function* (input) {
         return yield* client.client
-          .unlinkLatheChat({ headers: bearerHeaders(input.clerkToken) })
+          .unlinkT3Chat({ headers: bearerHeaders(input.clerkToken) })
           .pipe(
             Effect.mapError(relayRequestError("unlink T3 Chat account")),
             timeoutRelayRequest("Relay T3 Chat unlinking"),
           );
       },
-      Effect.withSpan("clientRuntime.managedRelay.unlinkLatheChat"),
+      Effect.withSpan("clientRuntime.managedRelay.unlinkT3Chat"),
       withRelayClientTracing,
     ),
     getEnvironmentStatus: Effect.fnUntraced(

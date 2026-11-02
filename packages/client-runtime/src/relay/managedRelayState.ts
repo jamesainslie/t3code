@@ -207,25 +207,25 @@ export const deregisterManagedRelayEnvironment = Effect.fn(
 });
 
 /** Returns the T3 Chat page URL where the signed-in user confirms the link. */
-export const createManagedRelayLatheChatLinkRequest = Effect.fn(
-  "clientRuntime.managedRelaySession.createLatheChatLinkRequest",
+export const createManagedRelayT3ChatLinkRequest = Effect.fn(
+  "clientRuntime.managedRelaySession.createT3ChatLinkRequest",
 )(function* (registry: AtomRegistry.AtomRegistry, input: { readonly accountId: string }) {
   const clerkToken = yield* requireSessionClerkToken(registry, input.accountId, "linking T3 Chat");
   const relay = yield* ManagedRelay.ManagedRelayClient;
-  return (yield* relay.createLatheChatLinkRequest({ clerkToken })).url;
+  return (yield* relay.createT3ChatLinkRequest({ clerkToken })).url;
 });
 
-export const unlinkManagedRelayLatheChat = Effect.fn(
-  "clientRuntime.managedRelaySession.unlinkLatheChat",
-)(function* (registry: AtomRegistry.AtomRegistry, input: { readonly accountId: string }) {
-  const clerkToken = yield* requireSessionClerkToken(
-    registry,
-    input.accountId,
-    "unlinking T3 Chat",
-  );
-  const relay = yield* ManagedRelay.ManagedRelayClient;
-  yield* relay.unlinkLatheChat({ clerkToken });
-});
+export const unlinkManagedRelayT3Chat = Effect.fn("clientRuntime.managedRelaySession.unlinkT3Chat")(
+  function* (registry: AtomRegistry.AtomRegistry, input: { readonly accountId: string }) {
+    const clerkToken = yield* requireSessionClerkToken(
+      registry,
+      input.accountId,
+      "unlinking T3 Chat",
+    );
+    const relay = yield* ManagedRelay.ManagedRelayClient;
+    yield* relay.unlinkT3Chat({ clerkToken });
+  },
+);
 
 function requireClerkToken(
   get: Atom.AtomContext,
@@ -365,7 +365,7 @@ export function createManagedRelayQueryManager(
       ),
   );
 
-  const latheChatLinkAtom = Atom.family((accountId: string) =>
+  const t3ChatLinkAtom = Atom.family((accountId: string) =>
     runtime
       .atom((get) =>
         Effect.gen(function* () {
@@ -377,7 +377,7 @@ export function createManagedRelayQueryManager(
           const relay = yield* ManagedRelay.ManagedRelayClient;
           return yield* observe(
             { ...base, stage: "relay-request" },
-            relay.getLatheChatLink({ clerkToken }),
+            relay.getT3ChatLink({ clerkToken }),
           );
         }),
       )
@@ -391,15 +391,15 @@ export function createManagedRelayQueryManager(
   return {
     environmentsAtom,
     devicesAtom,
-    latheChatLinkAtom,
+    t3ChatLinkAtom,
     refreshEnvironments(registry: AtomRegistry.AtomRegistry, accountId: string): void {
       registry.refresh(environmentsAtom(accountId));
     },
     refreshDevices(registry: AtomRegistry.AtomRegistry, accountId: string): void {
       registry.refresh(devicesAtom(accountId));
     },
-    refreshLatheChatLink(registry: AtomRegistry.AtomRegistry, accountId: string): void {
-      registry.refresh(latheChatLinkAtom(accountId));
+    refreshT3ChatLink(registry: AtomRegistry.AtomRegistry, accountId: string): void {
+      registry.refresh(t3ChatLinkAtom(accountId));
     },
   };
 }

@@ -1,6 +1,11 @@
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
-import { AuthRelayReadScope, AuthRelayWriteScope, type AuthSessionState } from "@lathe/contracts";
+import {
+  AuthRelayReadScope,
+  AuthRelayWriteScope,
+  type AuthSessionState,
+  managedCapabilityDenial,
+} from "@lathe/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useState } from "react";
 
@@ -19,6 +24,7 @@ import {
   usePrimaryEnvironment,
   usePrimaryEnvironmentId,
 } from "~/state/environments";
+import { usePrimaryManagedPolicy } from "~/state/managedPolicy";
 import { environmentSession, readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import {
   type LatheConnectAccountPageUrl,
@@ -64,7 +70,10 @@ function ConfiguredConnectOnboardingDialog() {
   );
   const canReadRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope);
   const canWriteRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope);
-  const canManageRelay = canReadRelay && canWriteRelay;
+  // A policy that turns Connect off leaves nothing to publish; reaching other devices still works.
+  const connectAllowed =
+    managedCapabilityDenial(usePrimaryManagedPolicy(), "connect") === undefined;
+  const canManageRelay = canReadRelay && canWriteRelay && connectAllowed;
   const sessionScopesKnown =
     primaryEnvironmentId === null ? environmentsReady : primarySessionState._tag !== "Initial";
 
@@ -357,7 +366,7 @@ function OnboardingTunnelLimitAlert({
   return (
     <TunnelLimitAlert
       upgrade={upgrade}
-      onLinkLatheChat={onOpenAccountPage ? () => onOpenAccountPage("t3-chat") : null}
+      onLinkT3Chat={onOpenAccountPage ? () => onOpenAccountPage("t3-chat") : null}
       onManageTunnels={onOpenAccountPage ? () => onOpenAccountPage("lathe-connect") : null}
     />
   );

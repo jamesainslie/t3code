@@ -222,10 +222,10 @@
             "t3-ember": "ember",
             "t3-iris": "iris",
           };
-          const isLegacyLatheChatDark = storedTheme === "t3-chat-dark";
+          const isLegacyT3ChatDark = storedTheme === "t3-chat-dark";
           const themeId =
             storedTheme === null ? "" : (LEGACY_THEME_IDS[storedTheme] ?? storedTheme);
-          const legacyMode = isLegacyLatheChatDark ? "dark" : null;
+          const legacyMode = isLegacyT3ChatDark ? "dark" : null;
           const builtInModes = BUILT_IN_THEME_MODES[themeId] ?? null;
           const customTheme = builtInModes ? null : findCustomTheme(themeId);
           const themeModes =

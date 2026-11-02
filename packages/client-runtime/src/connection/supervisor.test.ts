@@ -1187,9 +1187,9 @@ describe("EnvironmentSupervisor", () => {
         createEnvironmentLinkChallenge: unused,
         linkEnvironment: unused,
         unlinkEnvironment: unused,
-        getLatheChatLink: unused,
-        createLatheChatLinkRequest: unused,
-        unlinkLatheChat: unused,
+        getT3ChatLink: unused,
+        createT3ChatLinkRequest: unused,
+        unlinkT3Chat: unused,
         getEnvironmentStatus: unused,
         connectEnvironment: Effect.fn("TestConnectionHttp.connectEnvironment")(function* () {
           yield* Ref.update(bootstrapCalls, (count) => count + 1);
