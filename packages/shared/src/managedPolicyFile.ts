@@ -10,6 +10,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
+import { FORK_IDENTITY } from "./forkIdentity.ts";
 import * as HostProcess from "./HostProcess.ts";
 
 export class ManagedPolicyFileError extends Schema.TaggedError<ManagedPolicyFileError>()(
@@ -88,8 +89,7 @@ export const readManagedPolicyFile = Effect.fn("readManagedPolicyFile")(function
 });
 
 /** Where a configuration profile's managed preferences land on macOS. */
-export const MACOS_MANAGED_PREFERENCES_PATH =
-  "/Library/Managed Preferences/com.t3tools.t3code.plist";
+export const MACOS_MANAGED_PREFERENCES_PATH = `/Library/Managed Preferences/${FORK_IDENTITY.appId}.plist`;
 const WINDOWS_POLICY_SUBKEY = "SOFTWARE\\Policies\\LatheTools\\Lathe";
 /** The registry key Group Policy and Intune write to on Windows; `Policy` holds the JSON. */
 export const WINDOWS_POLICY_KEY = `HKLM\\${WINDOWS_POLICY_SUBKEY}`;

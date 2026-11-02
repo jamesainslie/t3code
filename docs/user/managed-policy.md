@@ -48,7 +48,7 @@ Use one of these per machine:
 
 | OS      | Native policy                                                         | Policy file                                      |
 | ------- | --------------------------------------------------------------------- | ------------------------------------------------ |
-| macOS   | Configuration profile for `com.lathetools.lathe`                      | `/Library/Application Support/Lathe/policy.json` |
+| macOS   | Configuration profile for `us.ainslies.t3code`                        | `/Library/Application Support/Lathe/policy.json` |
 | Windows | `Policy` string value under `HKLM\SOFTWARE\Policies\LatheTools\Lathe` | `C:\Program Files\Lathe\policy.json`             |
 | Linux   |                                                                       | `/etc/lathe/policy.json`                         |
 
@@ -59,10 +59,10 @@ refuses to start until you remove one.
 administrators.
 
 **macOS configuration profile.** Add a custom settings payload for the preference domain
-`com.lathetools.lathe`. The payload's keys are the policy's top-level keys (`schemaVersion`,
+`us.ainslies.t3code`. The payload's keys are the policy's top-level keys (`schemaVersion`,
 `organization`, `supportUrl`, `settings`, `limits`); JSON objects become dictionaries and lists
 become arrays. To make the payload from a policy file you checked, run
-`plutil -convert xml1 -o com.lathetools.lathe.plist policy.json` and upload the result. Install it as
+`plutil -convert xml1 -o us.ainslies.t3code.plist policy.json` and upload the result. Install it as
 a device profile, since Lathe ignores user profiles, and deploy only one profile for this domain.
 A profile cannot hold `null`, so use a policy file if a setting's value must be `null`.
 
