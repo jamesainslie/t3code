@@ -49,6 +49,11 @@ describe("renameForkText", () => {
     ],
     ["apps/server/src/x.ts", '"mcp__t3-code__t3_thread_list",', '"mcp__lathe__lathe_thread_list",'],
     [
+      "packages/shared/src/t3McpToolPresentation.ts",
+      'const T3_MCP_SERVER_ALIASES = new Set([\n  "t3-code",\n  "t3_code",\n  "t3code",\n]);',
+      'const LATHE_MCP_SERVER_ALIASES = new Set([\n  "lathe",\n  "t3-code",\n  "t3_code",\n  "t3code",\n]);',
+    ],
+    [
       "packages/shared/src/assistantCitations.ts",
       'const CITATION_PROTOCOL = "t3-citation:";',
       'const CITATION_PROTOCOL = "lathe-citation:";',

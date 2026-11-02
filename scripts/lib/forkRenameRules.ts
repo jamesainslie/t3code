@@ -945,6 +945,24 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
 
   // agent-facing: names agents see and address
   {
+    id: "agent-mcp-alias-list-widening",
+    class: "agent-facing",
+    reason:
+      "The first entry of a multi-line MCP server alias list gains lathe before it; the pre-Lathe spellings stay for stored tool names.",
+    test: (o) =>
+      /_SERVER_ALIASES = new Set\(\[$/.test(o.previousLine) && /^\s*"t3-code",$/.test(o.line),
+    rewrite: () => ({ length: "t3-code".length, text: 'lathe",\n  "t3-code' }),
+  },
+  {
+    id: "kept-mcp-alias-list",
+    class: "kept",
+    reason:
+      "Pre-Lathe spellings in a multi-line MCP server alias list, which stored tool names use.",
+    test: (o) =>
+      /^\s*"t3(?:-code|_code|code)",$/.test(o.line) &&
+      /_SERVER_ALIASES = new Set\(\[$|^\s*"(?:lathe|t3-code|t3_code)",$/.test(o.previousLine),
+  },
+  {
     id: "agent-mcp-direct-matcher",
     class: "agent-facing",
     reason:

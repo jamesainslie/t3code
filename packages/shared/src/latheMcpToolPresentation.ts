@@ -99,7 +99,8 @@ function tool(
 // Codex registers "lathe-direct" for Lathe tools kept out of Code Mode.
 const LATHE_MCP_SERVER_ALIASES = new Set([
   "lathe",
-  "lathe",
+  "t3-code",
+  "t3_code",
   "t3code",
   "lathe-direct",
   "lathe_direct",
