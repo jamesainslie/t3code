@@ -262,8 +262,8 @@ describe("DesktopLifecycle", () => {
         Effect.provideService(HostProcess.Arguments, [
           "/opt/Lathe/t3code",
           "--no-sandbox",
-          "T3CODE://pair?token=spent",
-          "t3code://new?prompt=hello",
+          "LATHE://pair?token=spent",
+          "lathe://new?prompt=hello",
         ]),
       );
 

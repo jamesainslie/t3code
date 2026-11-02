@@ -483,7 +483,7 @@ function resolveLatheMcpToolName(value: string): string | null {
   }
 
   const namespaceMatch =
-    /^(?<server>lathe[-_]code[-_]direct|lathe|t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
+    /^(?<server>lathe[-_]direct|lathe|t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
       label,
     );
   if (namespaceMatch?.groups) {

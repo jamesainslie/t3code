@@ -75,6 +75,16 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["packages/contracts/src/auth.ts", 'export const ID = "t3code-peer-link";', "wire-peer"],
     [
+      "apps/desktop/src/app/DesktopLifecycle.test.ts",
+      '          "T3CODE://pair?token=spent",',
+      "identifier",
+    ],
+    [
+      "packages/shared/src/t3McpToolPresentation.ts",
+      "    /^(?<server>t3[-_]code[-_]direct|t3-code)(?:[.:/])(?<tool>.+)$/i.exec(",
+      "agent-facing",
+    ],
+    [
       "apps/server/src/cliCompileCache.test.ts",
       '      `CACHE=${root}/cache/t3code/compile-cache`.replaceAll("\\\\", "/"),',
       "identifier",

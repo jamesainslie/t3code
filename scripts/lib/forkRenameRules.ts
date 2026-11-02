@@ -945,6 +945,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
 
   // agent-facing: names agents see and address
   {
+    id: "agent-mcp-direct-matcher",
+    class: "agent-facing",
+    reason:
+      "The matcher for Codex's direct-only MCP server, which the fork registers as lathe-direct; no stored name uses the old spelling.",
+    test: (o) => o.line.slice(o.column).startsWith("t3[-_]code[-_]direct"),
+    rewrite: () => ({ length: "t3[-_]code[-_]direct".length, text: "lathe[-_]direct" }),
+  },
+  {
     id: "agent-mcp-matcher-widening",
     class: "agent-facing",
     reason:
@@ -1017,6 +1025,14 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /(?:\.test\.[cm]?[jt]sx?)$/,
     test: (o) =>
       o.token === "t3" && /\bsearch\(\s*["'`]t3["'`]/.test(o.line) && /t3code/.test(o.line),
+  },
+  {
+    id: "id-desktop-relaunch-app-links",
+    class: "identifier",
+    reason:
+      "App links the relaunch test expects stripped; they must use the app's own scheme, which the fork renames.",
+    path: /^apps\/desktop\/src\/app\/DesktopLifecycle\.test\.ts$/,
+    token: /^t3code:\/\//i,
   },
   {
     id: "upstream-fixture-repo-names",
