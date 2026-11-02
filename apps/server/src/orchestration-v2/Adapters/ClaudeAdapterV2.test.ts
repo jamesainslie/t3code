@@ -4447,6 +4447,25 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           );
           assert.equal(parentPermission.first.type, "request");
           if (parentPermission.first.type !== "request") return;
+          assert.equal(parentPermission.first.event.threadId ?? turn.threadId, turn.threadId);
+          yield* Queue.offer(
+            turn.sdkMessages,
+            claudeSdkFrame({
+              type: "system",
+              subtype: "task_started",
+              task_id: "child-worker",
+              tool_use_id: "child-launch",
+              description: "Expand T2",
+              subagent_type: "general-purpose",
+              is_backgrounded: false,
+              task_type: "local_agent",
+              prompt: "Expand task T2.",
+              uuid: "00000000-0000-4000-8000-000000004401",
+              session_id: WAKE_NATIVE_SESSION,
+            }),
+          );
+          const childThreadId = (yield* Queue.take(turn.subagentReceipts)).subagent.childThreadId;
+          assert.isNotNull(childThreadId);
           const permission = yield* requestWrite(
             turn,
             "Bash",
@@ -4455,6 +4474,16 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           );
           assert.equal(permission.first.type, "request");
           if (permission.first.type !== "request") return;
+          // The parent shows a child's approval as "Approval needed from <child>", so it must land there.
+          assert.equal(permission.first.event.threadId, childThreadId);
+          const childItems = turn.events.flatMap((event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.nativeItemRef?.nativeId === "child-command"
+              ? [event.turnItem]
+              : [],
+          );
+          assert.isNotEmpty(childItems);
+          assert.isTrue(childItems.every((item) => item.threadId === childThreadId));
           const request = permission.first.event.runtimeRequest;
           assert.equal(request.responseCapability.type, "live");
           assert.isTrue(
