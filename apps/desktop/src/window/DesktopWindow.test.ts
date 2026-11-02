@@ -111,7 +111,7 @@ function makeFakeBrowserWindow() {
     isMaximized: vi.fn(() => false),
     isMinimized: vi.fn(() => false),
     isVisible: vi.fn(() => true),
-    loadURL: vi.fn(() => Promise.resolve()),
+    loadURL: vi.fn((_url: string) => Promise.resolve()),
     maximize: vi.fn(),
     on: vi.fn((eventName: string, listener: (...args: readonly unknown[]) => void) => {
       windowListeners.set(eventName, listener);
@@ -147,6 +147,7 @@ function makeFakeBrowserWindow() {
     toggleDevTools: webContents.toggleDevTools,
     navigationHistory: webContents.navigationHistory,
     send: webContents.send,
+    setWindowOpenHandler: webContents.setWindowOpenHandler,
     setZoomLevel: webContents.setZoomLevel,
     setWindowButtonPosition: window.setWindowButtonPosition,
     setBackgroundThrottling: webContents.setBackgroundThrottling,
@@ -228,6 +229,7 @@ function layerTest(input: {
   readonly createCount: Ref.Ref<number>;
   readonly mainWindow: Ref.Ref<Option.Option<Electron.BrowserWindow>>;
   readonly createdWindowOptions?: Electron.BrowserWindowConstructorOptions[];
+  readonly createdWindowAuxiliary?: boolean[];
   readonly desktopSettings?: DesktopAppSettings.DesktopSettings;
   readonly mainWindowBoundsUpdates?: DesktopAppSettings.DesktopWindowBounds[];
   readonly mainWindowMaximizedUpdates?: boolean[];
@@ -281,9 +283,10 @@ function layerTest(input: {
   } satisfies DesktopAppSettings.DesktopAppSettings["Service"]);
 
   const layerElectronWindow = Layer.succeed(ElectronWindow.ElectronWindow, {
-    create: (options) =>
+    create: (options, behavior) =>
       Effect.sync(() => {
         input.createdWindowOptions?.push(options);
+        input.createdWindowAuxiliary?.push(behavior?.auxiliary === true);
       }).pipe(
         Effect.andThen(Ref.update(input.createCount, (count) => count + 1)),
         Effect.andThen(input.onWindowCreate ?? Effect.void),
@@ -1159,6 +1162,65 @@ describe("DesktopWindow", () => {
 
         assert.isTrue(prevented);
         assert.deepEqual(openedExternalUrls, ["https://accounts.microsoft.com/oauth"]);
+      }).pipe(Effect.provide(layer));
+    }),
+  );
+
+  it.effect("opens same-origin window.open requests as a secondary app window", () =>
+    Effect.gen(function* () {
+      const fakeWindow = makeFakeBrowserWindow();
+      const createCount = yield* Ref.make(0);
+      const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+      const createdWindowOptions: Electron.BrowserWindowConstructorOptions[] = [];
+      const createdWindowAuxiliary: boolean[] = [];
+      const openedExternalUrls: unknown[] = [];
+      const previewMainWindows: Electron.BrowserWindow[] = [];
+      const roadmapUrl = `${FORK_IDENTITY.desktop.development.scheme}://app/#/roadmap`;
+      const secondaryLoaded = Promise.withResolvers<void>();
+      fakeWindow.loadURL.mockImplementation((url: string) => {
+        if (url === roadmapUrl) secondaryLoaded.resolve();
+        return Promise.resolve();
+      });
+      const layer = layerTest({
+        window: fakeWindow.window,
+        createCount,
+        mainWindow,
+        createdWindowOptions,
+        createdWindowAuxiliary,
+        openedExternalUrls,
+        desktopSettings: {
+          ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
+          mainWindowBounds: { x: 40, y: 40, width: 1300, height: 900 },
+        },
+        setPreviewMainWindow: (window) => Effect.sync(() => previewMainWindows.push(window)),
+      });
+
+      yield* Effect.gen(function* () {
+        const desktopWindow = yield* DesktopWindow.DesktopWindow;
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+
+        const openHandler = fakeWindow.setWindowOpenHandler.mock.calls[0]?.[0];
+        if (!openHandler) {
+          return yield* Effect.die("window open handler was not registered");
+        }
+        assert.deepEqual(openHandler({ url: roadmapUrl } as Electron.HandlerDetails), {
+          action: "deny",
+        });
+        yield* Effect.promise(() => secondaryLoaded.promise);
+
+        assert.equal(yield* Ref.get(createCount), 2);
+        assert.deepEqual(createdWindowAuxiliary, [false, true]);
+        assert.include(createdWindowOptions[0], { x: 40, y: 40, width: 1300, height: 900 });
+        assert.include(createdWindowOptions[1], DesktopAppSettings.DEFAULT_MAIN_WINDOW_SIZE);
+        assert.notProperty(createdWindowOptions[1], "x");
+        assert.equal(previewMainWindows.length, 1);
+        assert.deepEqual(openedExternalUrls, []);
+
+        assert.deepEqual(
+          openHandler({ url: "https://example.com/docs" } as Electron.HandlerDetails),
+          { action: "deny" },
+        );
+        assert.equal(yield* Ref.get(createCount), 2);
       }).pipe(Effect.provide(layer));
     }),
   );

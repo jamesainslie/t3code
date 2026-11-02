@@ -5,8 +5,17 @@
 import type { ScopedThreadRef } from "@lathe/contracts";
 import { attachedItemFor } from "@lathe/client-runtime/roadmap/tree";
 import { useRouter } from "@tanstack/react-router";
-import { CircleDotIcon, LinkIcon, MapIcon, PlusIcon, SunIcon, UnlinkIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  CircleDotIcon,
+  LinkIcon,
+  MapIcon,
+  PlusIcon,
+  SunIcon,
+  UnlinkIcon,
+} from "lucide-react";
 
+import { openAppWindow } from "../../lib/openAppWindow";
 import { useRoadmapLive } from "../../state/roadmap";
 import {
   ITEM_ICON_CLASS,
@@ -119,6 +128,16 @@ export function useRoadmapPaletteActionItems(input: {
       icon: <MapIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
         await router.navigate({ href: roadmapHref({ view: "outline" }) });
+      },
+    },
+    {
+      kind: "action",
+      value: "action:roadmap-new-window",
+      searchTerms: ["roadmap", "new window", "separate window", "side by side", "pop out"],
+      title: "Open roadmap in new window",
+      icon: <AppWindowIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openAppWindow(router, "/roadmap");
       },
     },
   ];

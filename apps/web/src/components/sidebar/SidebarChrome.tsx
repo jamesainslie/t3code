@@ -5,9 +5,9 @@ import {
   MapIcon,
   SettingsIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { memo } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
@@ -19,6 +19,9 @@ import {
 } from "../../navigationHistory";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
+import { readLocalApi } from "../../localApi";
+// Fork: roadmap.
+import { openAppWindow } from "../../lib/openAppWindow";
 import { usePullRequestsSupported } from "../../state/environments";
 // Fork: roadmap.
 import { useRoadmapHome, useRoadmapSupported } from "../../state/roadmap";
@@ -199,17 +202,24 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  onContextMenu,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  onContextMenu?: (event: MouseEvent) => void;
 }) {
   return (
     <SidebarMenuItem className="shrink-0">
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+            <SidebarMenuButton
+              aria-label={label}
+              onClick={onClick}
+              onContextMenu={onContextMenu}
+              size="icon"
+            >
               {icon}
             </SidebarMenuButton>
           }
@@ -222,6 +232,7 @@ function SidebarUtilityItem({
 
 const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();
+  const router = useRouter();
   const navigateToMainApp = useNavigateToMainApp();
   const { isMobile, setOpenMobile } = useSidebar();
   const isOnUtilityPage = useLocation({
@@ -259,6 +270,21 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     closeMobileSidebar();
     void navigate({ to: "/roadmap" });
   };
+  const handleRoadmapContextMenu = (event: MouseEvent) => {
+    const api = readLocalApi();
+    if (!api) return;
+    event.preventDefault();
+    void api.contextMenu
+      .show([{ id: "open-in-new-window", label: "Open in New Window" }], {
+        x: event.clientX,
+        y: event.clientY,
+      })
+      .then((action) => {
+        if (action !== "open-in-new-window") return;
+        closeMobileSidebar();
+        openAppWindow(router, "/roadmap");
+      });
+  };
 
   const handleBackClick = () => {
     closeMobileSidebar();
@@ -295,7 +321,12 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           />
           {/* Fork: roadmap. */}
           {roadmapSupported ? (
-            <SidebarUtilityItem icon={<MapIcon />} label="Roadmap" onClick={handleRoadmapClick} />
+            <SidebarUtilityItem
+              icon={<MapIcon />}
+              label="Roadmap"
+              onClick={handleRoadmapClick}
+              onContextMenu={handleRoadmapContextMenu}
+            />
           ) : null}
         </>
       )}

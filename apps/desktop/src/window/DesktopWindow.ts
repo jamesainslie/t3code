@@ -359,18 +359,19 @@ export const make = Effect.gen(function* () {
     yield* previewManager.reapplyZoom();
   });
 
-  const createWindow = Effect.fn("desktop.window.createWindow")(function* (): Effect.fn.Return<
-    Option.Option<Electron.BrowserWindow>,
-    DesktopWindowError
-  > {
+  /** Without a `secondaryUrl` this builds the main window; with one, an extra app window at that URL. */
+  const createWindow = Effect.fn("desktop.window.createWindow")(function* (
+    secondaryUrl?: string,
+  ): Effect.fn.Return<Option.Option<Electron.BrowserWindow>, DesktopWindowError> {
     if (yield* Ref.get(desktopState.quitting)) return Option.none();
+    const isMain = secondaryUrl === undefined;
     yield* previewManager.getBrowserSession();
     const applicationUrl = getDesktopUrl(environment.isDevelopment);
     const iconPaths = yield* assets.iconPaths;
     const iconOption = getIconOption(iconPaths, yield* editionIcon.iconPath, environment.platform);
     const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;
     const persistedSettings = yield* desktopSettings.get;
-    const persistedBounds = persistedSettings.mainWindowBounds;
+    const persistedBounds = isMain ? persistedSettings.mainWindowBounds : null;
     const displayBoundsResult = yield* Effect.sync(() => {
       try {
         return {
@@ -393,36 +394,39 @@ export const make = Effect.gen(function* () {
       yield* logWindowWarning("saved main window bounds could not be restored; using defaults");
     }
     if (yield* Ref.get(desktopState.quitting)) return Option.none();
-    const window = yield* electronWindow.create({
-      ...initialBounds,
-      minWidth: 840,
-      minHeight: 620,
-      show: false,
-      autoHideMenuBar: true,
-      ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
-      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
-      ...iconOption,
-      title: environment.displayName,
-      ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),
-      webPreferences: {
-        preload: environment.preloadPath,
-        // Hidden-renderer throttling stalls first paint; re-enable it after the first reveal.
-        backgroundThrottling: false,
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        webviewTag: true,
-        // Guest fullscreen propagates to the embedder; both must opt out to keep it inside the webview.
-        disableHtmlFullscreenWindowResize: true,
+    const window = yield* electronWindow.create(
+      {
+        ...initialBounds,
+        minWidth: 840,
+        minHeight: 620,
+        show: false,
+        autoHideMenuBar: true,
+        ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
+        backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+        ...iconOption,
+        title: environment.displayName,
+        ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),
+        webPreferences: {
+          preload: environment.preloadPath,
+          // Hidden-renderer throttling stalls first paint; re-enable it after the first reveal.
+          backgroundThrottling: false,
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webviewTag: true,
+          // Guest fullscreen propagates to the embedder; both must opt out to keep it inside the webview.
+          disableHtmlFullscreenWindowResize: true,
+        },
       },
-    });
+      { auxiliary: !isMain },
+    );
     if (yield* Ref.get(desktopState.quitting)) {
       yield* electronWindow.destroyAll;
       return Option.none();
     }
 
     pendingMainReveals.set(window, Effect.void);
-    yield* rendererHistory.register(window.webContents, { surface: "main" });
+    yield* rendererHistory.register(window.webContents, { surface: isMain ? "main" : "secondary" });
     if (environment.platform === "darwin") {
       window.setAutoHideCursor(false);
     }
@@ -511,12 +515,13 @@ export const make = Effect.gen(function* () {
         fiber === undefined ? Effect.void : Fiber.join(fiber).pipe(Effect.asVoid),
       ),
     );
-    flushMainWindowBounds = flushBoundsPersist;
-
-    yield* previewManager.setMainWindow(window);
-    if (yield* Ref.get(desktopState.quitting)) {
-      yield* electronWindow.destroyAll;
-      return Option.none();
+    if (isMain) {
+      flushMainWindowBounds = flushBoundsPersist;
+      yield* previewManager.setMainWindow(window);
+      if (yield* Ref.get(desktopState.quitting)) {
+        yield* electronWindow.destroyAll;
+        return Option.none();
+      }
     }
     window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
       if (
@@ -621,7 +626,15 @@ export const make = Effect.gen(function* () {
     });
 
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (Option.isSome(ElectronShell.parseSafeExternalUrl(url))) {
+      if (isSameOriginRendererNavigation({ applicationUrl, navigationUrl: url })) {
+        runFork(
+          createWindow(url).pipe(
+            Effect.catch((error) =>
+              logWindowWarning("failed to open app window", { message: error.message }),
+            ),
+          ),
+        );
+      } else if (Option.isSome(ElectronShell.parseSafeExternalUrl(url))) {
         void runPromise(electronShell.openExternal(url));
       }
       return { action: "deny" };
@@ -691,13 +704,15 @@ export const make = Effect.gen(function* () {
       event.preventDefault();
       window.setTitle(environment.displayName);
     });
-    window.on("resize", scheduleBoundsPersist);
-    window.on("move", scheduleBoundsPersist);
-    window.on("maximize", scheduleBoundsPersist);
-    window.on("unmaximize", scheduleBoundsPersist);
-    window.on("close", () => {
-      runFork(flushBoundsPersist);
-    });
+    if (isMain) {
+      window.on("resize", scheduleBoundsPersist);
+      window.on("move", scheduleBoundsPersist);
+      window.on("maximize", scheduleBoundsPersist);
+      window.on("unmaximize", scheduleBoundsPersist);
+      window.on("close", () => {
+        runFork(flushBoundsPersist);
+      });
+    }
 
     if (environment.platform === "darwin") {
       // Mouse drivers can deliver Back/Forward as macOS swipe gestures instead of buttons.
@@ -730,7 +745,7 @@ export const make = Effect.gen(function* () {
       if (window.isDestroyed()) {
         return;
       }
-      void window.loadURL(applicationUrl).catch(() => undefined);
+      void window.loadURL(secondaryUrl ?? applicationUrl).catch(() => undefined);
     };
     const scheduleDevelopmentLoadRetry = () => {
       if (developmentLoadRetryFiber !== undefined || window.isDestroyed()) {
@@ -850,7 +865,7 @@ export const make = Effect.gen(function* () {
       firstRevealComplete = true;
       pendingMainReveals.delete(window);
       window.webContents.setBackgroundThrottling(true);
-      if (persistedSettings.mainWindowMaximized) window.maximize();
+      if (isMain && persistedSettings.mainWindowMaximized) window.maximize();
       yield* electronWindow.reveal(window);
       yield* dismissConnectingSplash;
     });
@@ -861,7 +876,7 @@ export const make = Effect.gen(function* () {
     });
 
     loadApplication();
-    if (environment.isDevelopment) {
+    if (isMain && environment.isDevelopment) {
       window.webContents.openDevTools({ mode: "detach" });
     }
 
