@@ -9,10 +9,15 @@ To count how many installations one person uses, the server also sends hashed ac
 your T3 Connect account, your OpenAI and Claude accounts when you are signed in, and a random
 identifier for each device that connects. The endpoint keeps a copy of each event and forwards
 events to PostHog. Events include the provider, model, reasoning effort, permission mode, turn
-result, duration, release channel, and main-agent token totals when available.
+and request results, duration, release channel, and token counts when available. Child-agent token
+counts are reported separately from the main agent's. Model names are sent only when they appear
+in a provider's public model list.
 
 Events do not include prompts, responses, file contents, authentication tokens, conversation IDs,
-raw provider events, or child-agent output. Child-agent token use is excluded from the totals.
+raw provider events, or child-agent output.
+
+An administrator can keep product events off for every user on a machine with a
+[managed policy](./managed-policy.md#other-capabilities).
 
 The desktop app reads `LATHE_TELEMETRY_ENABLED` from your shell profile (for example `~/.zshrc`) on macOS and
 Linux, so export it there and restart the app. On Windows, set it as a user environment variable.

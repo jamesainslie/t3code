@@ -1,6 +1,8 @@
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
 import packageJson from "../package.json" with { type: "json" };
 
+import { enableCliCompileCache } from "./cliCompileCache.ts";
+
 /**
  * Routes CLI arguments before the full CLI module graph (seconds of evaluation) loads, for hot
  * paths other processes spawn repeatedly: `acp-mcp-bridge`, `acp-mcp-call`, `--version` and
@@ -24,11 +26,17 @@ export interface CliEntryLoaders {
 
 export const cliEntryLoaders: CliEntryLoaders = {
   fullCli: async () => {
+    enableCliCompileCache();
     // Before anything reads stdin: the desktop app's Windows launcher starts
     // the CLI without one. Never for the fast paths, whose stdin is a pipe.
     const { attachConsoleStdin } = await import("./cli/consoleStdin.ts");
     attachConsoleStdin();
-    return import("./binCli.ts");
+    const importStart = performance.now();
+    const { runCli } = await import("./binCli.ts");
+    if (process.env.LATHE_STARTUP_PROFILE_DIR) {
+      performance.measure("server.import.binCli", { start: importStart });
+    }
+    return { runCli };
   },
   acpMcp: () => import("./mcp/AcpMcpStdioBridge.ts"),
   sshHelper: () => import("./cli/sshHelperFastPath.ts"),
