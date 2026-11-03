@@ -77,10 +77,8 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         { name: "CLAUDE_EFFORT", value: "low", sensitive: false },
       ];
 
-      expect(yield* mergeClaudeProcessEnvironment({ homePath }, undefined, host)).toEqual({
-        CLAUDE_CODE_ENTRYPOINT: "lathe",
-        KEEP: "1",
-      });
+      const merged = yield* mergeClaudeProcessEnvironment({ homePath }, undefined, host);
+      expect(merged).toEqual({ CLAUDE_CODE_ENTRYPOINT: "lathe", KEEP: "1" });
       expect(yield* mergeClaudeProcessEnvironment({ homePath }, instance, host)).toEqual({
         CLAUDE_CODE_ENTRYPOINT: "instance",
         CLAUDE_EFFORT: "low",
@@ -91,9 +89,17 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         path.join(homePath, "settings.json"),
         JSON.stringify({ env: { CLAUDE_CODE_ENTRYPOINT: "custom" } }),
       );
-      expect(
-        (yield* mergeClaudeProcessEnvironment({ homePath }, instance, host)).CLAUDE_CODE_ENTRYPOINT,
-      ).toBe("custom");
+      const customized = yield* mergeClaudeProcessEnvironment({ homePath }, instance, host);
+      expect(customized.CLAUDE_CODE_ENTRYPOINT).toBe("custom");
+
+      // Desktop shell discovery fills in PATH after the driver merged its environment.
+      Object.assign(host, { PATH: "/opt/homebrew/bin" });
+      expect({ ...merged }).toEqual({
+        CLAUDE_CODE_ENTRYPOINT: "lathe",
+        KEEP: "1",
+        PATH: "/opt/homebrew/bin",
+      });
+      expect(customized.PATH).toBe("/opt/homebrew/bin");
     }),
   );
 });

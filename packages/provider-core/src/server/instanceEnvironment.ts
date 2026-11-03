@@ -4,6 +4,43 @@ import * as Effect from "effect/Effect";
 
 import { expandHomePath } from "./pathExpansion.ts";
 
+/**
+ * A view of `base` with `overrides` on top; an `undefined` override hides the inherited name.
+ * Desktop shell discovery patches process.env after drivers start, so the view must not copy it.
+ */
+export function overlayEnvironment(
+  base: NodeJS.ProcessEnv,
+  overrides: Record<string, string | undefined>,
+): NodeJS.ProcessEnv {
+  const local = { ...overrides };
+  const read = (key: string) => (Object.hasOwn(local, key) ? local[key] : base[key]);
+  return new Proxy<NodeJS.ProcessEnv>(
+    {},
+    {
+      get: (_, key) => (typeof key === "string" ? read(key) : undefined),
+      has: (_, key) => typeof key === "string" && read(key) !== undefined,
+      set: (_, key, value) => {
+        if (typeof key === "string") local[key] = value === undefined ? undefined : String(value);
+        return true;
+      },
+      deleteProperty: (_, key) => {
+        if (typeof key === "string") local[key] = undefined;
+        return true;
+      },
+      ownKeys: () =>
+        [...new Set([...Object.keys(base), ...Object.keys(local)])].filter(
+          (key) => read(key) !== undefined,
+        ),
+      getOwnPropertyDescriptor: (_, key) => {
+        const value = typeof key === "string" ? read(key) : undefined;
+        return value === undefined
+          ? undefined
+          : { value, writable: true, enumerable: true, configurable: true };
+      },
+    },
+  );
+}
+
 export const mergeProviderInstanceEnvironment = Effect.fn(function* (
   environment: ProviderInstanceEnvironment | undefined,
   baseEnv: NodeJS.ProcessEnv = process.env,
@@ -14,7 +51,7 @@ export const mergeProviderInstanceEnvironment = Effect.fn(function* (
 
   const home = yield* HostProcess.HomeDirectory;
   const windows = (yield* HostProcess.Platform) === "win32";
-  const next: NodeJS.ProcessEnv = { ...baseEnv };
+  const overrides: Record<string, string | undefined> = {};
   for (const variable of environment) {
     // An unresolved secret reference carries no value; the registry resolves it for the provider.
     if (typeof variable.value !== "string") continue;
@@ -23,14 +60,14 @@ export const mergeProviderInstanceEnvironment = Effect.fn(function* (
     // parent environment back in.
     const name = windows ? variable.name.toUpperCase() : variable.name;
     if (windows) {
-      for (const inherited of Object.keys(next)) {
-        if (inherited.toUpperCase() === name) delete next[inherited];
+      for (const inherited of Object.keys(baseEnv)) {
+        if (inherited.toUpperCase() === name) overrides[inherited] = undefined;
       }
     }
-    next[name] =
+    overrides[name] =
       name === "CODEX_HOME" || name === "CLAUDE_CONFIG_DIR"
         ? expandHomePath(variable.value, home)
         : variable.value;
   }
-  return next;
+  return overlayEnvironment(baseEnv, overrides);
 });

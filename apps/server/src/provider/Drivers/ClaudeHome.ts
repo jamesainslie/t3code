@@ -4,7 +4,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { mergeProviderInstanceEnvironment } from "@lathe/provider-core/server/instanceEnvironment";
+import {
+  mergeProviderInstanceEnvironment,
+  overlayEnvironment,
+} from "@lathe/provider-core/server/instanceEnvironment";
 import { expandHomePath } from "@lathe/provider-core/server/pathExpansion";
 import * as HostProcess from "@lathe/shared/HostProcess";
 
@@ -71,16 +74,15 @@ export const mergeClaudeProcessEnvironment = Effect.fn("mergeClaudeProcessEnviro
   instanceEnvironment: ProviderInstanceEnvironment | undefined,
   hostEnvironment: NodeJS.ProcessEnv,
 ) {
-  const baseEnvironment: NodeJS.ProcessEnv = {
-    ...hostEnvironment,
+  const baseEnvironment = overlayEnvironment(hostEnvironment, {
+    ...Object.fromEntries(CLAUDE_HOST_SESSION_VARIABLES.map((name) => [name, undefined])),
     CLAUDE_CODE_ENTRYPOINT: "lathe",
-  };
-  for (const name of CLAUDE_HOST_SESSION_VARIABLES) delete baseEnvironment[name];
+  });
   const environment = yield* mergeProviderInstanceEnvironment(instanceEnvironment, baseEnvironment);
   const settingsEntrypoint = (yield* readClaudeSettingsEnv(config, undefined, environment))
     .CLAUDE_CODE_ENTRYPOINT;
   return settingsEntrypoint
-    ? { ...environment, CLAUDE_CODE_ENTRYPOINT: settingsEntrypoint }
+    ? overlayEnvironment(environment, { CLAUDE_CODE_ENTRYPOINT: settingsEntrypoint })
     : environment;
 });
 

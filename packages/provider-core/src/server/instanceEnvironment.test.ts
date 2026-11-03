@@ -82,6 +82,25 @@ describe("mergeProviderInstanceEnvironment", () => {
     }),
   );
 
+  it.effect("reads inherited values that change after the merge", () =>
+    Effect.gen(function* () {
+      const baseEnv: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
+      const environment = yield* mergeProviderInstanceEnvironment(
+        [{ name: "CUSTOM_VALUE", value: "1", sensitive: false }],
+        baseEnv,
+      );
+
+      baseEnv.PATH = "/usr/bin:/opt/homebrew/bin";
+      baseEnv.HOMEBREW_PREFIX = "/opt/homebrew";
+
+      expect({ ...environment }).toEqual({
+        PATH: "/usr/bin:/opt/homebrew/bin",
+        HOMEBREW_PREFIX: "/opt/homebrew",
+        CUSTOM_VALUE: "1",
+      });
+    }),
+  );
+
   it.effect("replaces every inherited spelling of a name on Windows, and only there", () =>
     Effect.gen(function* () {
       const merge = (platform: NodeJS.Platform) =>
