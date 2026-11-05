@@ -113,6 +113,7 @@ const browserTestProject = {
       "@betteroffice/pptx",
       "@betteroffice/xlsx",
       "@betteroffice/xlsx/headless",
+      "canvas-confetti",
       "fast-xml-parser",
       "entities",
       "dompurify",
