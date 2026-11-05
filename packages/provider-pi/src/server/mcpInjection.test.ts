@@ -105,6 +105,7 @@ describe("pi Lathe MCP injection", () => {
       extensionPath: "/tmp/cache/pi-lathe-mcp-extension.ts",
       sessionPath: "/fake/persisted.jsonl",
       ephemeral: true,
+      shortLived: true,
       disableExtensions: true,
       disableTools: true,
     });
@@ -114,9 +115,19 @@ describe("pi Lathe MCP injection", () => {
       "--no-session",
       "--provider",
       "anthropic",
+      "--offline",
       "--no-extensions",
       "--no-tools",
     ]);
+    const alreadyOffline = buildPiRpcLaunch({
+      launchArgs: ["--offline"],
+      environment: {},
+      mcpSession: undefined,
+      extensionPath: undefined,
+      ephemeral: true,
+      shortLived: true,
+    });
+    assert.deepEqual(alreadyOffline.args, ["--mode", "rpc", "--no-session", "--offline"]);
     assert.deepInclude(resolvePiLaunchArgs("--mode text"), {
       ok: false,
       message: "Pi launch argument '--mode' is controlled by Lathe and cannot be overridden.",

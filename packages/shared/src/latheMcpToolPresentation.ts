@@ -89,7 +89,8 @@ function tool(
 // Codex registers "lathe-direct" for Lathe tools kept out of Code Mode.
 const LATHE_MCP_SERVER_ALIASES = new Set([
   "lathe",
-  "lathe",
+  "t3-code",
+  "t3_code",
   "t3code",
   "lathe-direct",
   "lathe_direct",
@@ -407,8 +408,24 @@ function normalizeLatheMcpToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
-// ACP tool prefixes vary; match loosely but require a known display-name entry.
+// Timelines resolve every work row's tool name on each update; names repeat across updates.
+// ACP titles can carry whole commands, so long labels are parsed but not kept.
+const toolNameCache = new Map<string, string | null>();
+const TOOL_NAME_CACHE_LIMIT = 10_000;
+const TOOL_NAME_CACHE_MAX_KEY_LENGTH = 256;
+
 function resolveLatheMcpToolName(value: string): string | null {
+  if (value.length > TOOL_NAME_CACHE_MAX_KEY_LENGTH) return parseLatheMcpToolName(value);
+  const cached = toolNameCache.get(value);
+  if (cached !== undefined) return cached;
+  const name = parseLatheMcpToolName(value);
+  if (toolNameCache.size >= TOOL_NAME_CACHE_LIMIT) toolNameCache.clear();
+  toolNameCache.set(value, name);
+  return name;
+}
+
+// ACP tool prefixes vary; match loosely but require a known display-name entry.
+function parseLatheMcpToolName(value: string): string | null {
   const label = normalizeLatheMcpToolLabel(value);
   const mcpMatch = /^mcp__(?<server>.+?)__(?<tool>.+)$/i.exec(label);
   if (mcpMatch?.groups) {
@@ -421,7 +438,7 @@ function resolveLatheMcpToolName(value: string): string | null {
   }
 
   const namespaceMatch =
-    /^(?<server>lathe[-_]code[-_]direct|lathe|t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
+    /^(?<server>lathe[-_]direct|lathe|t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
       label,
     );
   if (namespaceMatch?.groups) {

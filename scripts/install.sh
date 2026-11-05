@@ -20,6 +20,14 @@ set -eu
 repo="pingdotgg/t3code"
 base_url="${LATHE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
 lathe_home="${LATHE_HOME:-$HOME/.lathe}"
+case "$lathe_home" in
+  /*) ;;
+  *)
+    # Preserve cwd's trailing newlines; trim only pwd's newline and the sentinel.
+    lathe_cwd="$(pwd -P && printf .)"
+    lathe_home="${lathe_cwd%??}/$lathe_home"
+    ;;
+esac
 bin_dir="${LATHE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 
 fail() {

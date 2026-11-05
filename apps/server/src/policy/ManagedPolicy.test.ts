@@ -7,6 +7,7 @@ import * as Path from "effect/Path";
 import { DEFAULT_SERVER_SETTINGS, ProviderDriverKind, ProviderInstanceId } from "@lathe/contracts";
 import * as HostProcess from "@lathe/shared/HostProcess";
 
+import { BUILT_IN_DRIVERS } from "../provider/builtInDrivers.ts";
 import * as ManagedPolicy from "./ManagedPolicy.ts";
 import { disallowedDriverReason, providerHostEnvironment } from "./managedProviders.ts";
 
@@ -345,6 +346,20 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
 
   it.effect("tells clients which drivers run and which instance fields are locked", () =>
     Effect.gen(function* () {
+      // A provider the policy cannot name would also escape its launch-setting rules.
+      const everyDriver = BUILT_IN_DRIVERS.map((driver) => driver.driverKind);
+      const allowingAll = yield* loadFrom(
+        JSON.stringify({
+          schemaVersion: 1,
+          organization: "Example Corp",
+          limits: { providers: { allowedDrivers: everyDriver } },
+        }),
+      );
+      assert.deepEqual<unknown>(
+        allowingAll.summary?.limits?.providers?.allowedDrivers,
+        everyDriver,
+      );
+
       const policy = yield* loadFrom(
         JSON.stringify({
           schemaVersion: 1,

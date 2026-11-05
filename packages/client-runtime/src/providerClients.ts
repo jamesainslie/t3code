@@ -11,6 +11,7 @@ import { modelShortName } from "@lathe/provider-core/modelShortName";
 import { cursorClient } from "@lathe/provider-cursor/client";
 import { fxClient } from "@lathe/provider-fx/client";
 import { grokClient } from "@lathe/provider-grok/client";
+import { kiroClient } from "@lathe/provider-kiro/client";
 import { museClient } from "@lathe/provider-muse/client";
 import { openCodeClient } from "@lathe/provider-opencode/client";
 import { piClient } from "@lathe/provider-pi/client";
@@ -41,6 +42,7 @@ export const providerClients = makeProviderClientRegistry([
     acpRegistryAgentIds: ["antigravity-acp"],
     settingsSchema: AntigravitySettings,
   },
+  kiroClient,
   museClient,
   piClient,
   acpRegistryClient,

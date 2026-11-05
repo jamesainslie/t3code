@@ -1366,6 +1366,20 @@ describe("extractMcpToolCallIdentity", () => {
     }
   });
 
+  it("recovers Lathe identity from Kiro's @-scoped titles", () => {
+    for (const tool of ["html_render", "lathe_thread_read", "delegate_task"]) {
+      const toolCall = toolCallFromUpdate({
+        sessionUpdate: "tool_call",
+        toolCallId: "kiro-1",
+        kind: "other",
+        title: `@lathe/${tool}`,
+        status: "pending",
+        rawInput: { tool_id: `lathe::${tool}`, arguments: { threadId: "thread-1" } },
+      });
+      expect(extractMcpToolCallIdentity(toolCall), tool).toEqual({ server: "lathe", tool });
+    }
+  });
+
   it("does not claim an agent's own tool that shares a Lathe tool name", () => {
     const toolCall = toolCallFromUpdate({
       sessionUpdate: "tool_call",

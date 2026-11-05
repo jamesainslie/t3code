@@ -9,7 +9,7 @@ import type {
 import { mediaFileReference } from "@lathe/client-runtime/media-reference";
 import { type AtomCommandResult, mapAtomCommandResult } from "@lathe/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
+import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 
 import { resolveAssetUrl } from "~/assets/assetUrls";
@@ -32,19 +32,21 @@ import { resolveBrowserDefaults } from "./browserDefaults";
 export const isBrowserPreviewFile = (path: string): boolean =>
   /\.(?:html?|pdf)$/i.test(path.split(/[?#]/, 1)[0] ?? "");
 
-export class BrowserPreviewUnavailableError extends Data.TaggedError(
+export class BrowserPreviewUnavailableError extends Schema.TaggedError<BrowserPreviewUnavailableError>()(
   "BrowserPreviewUnavailableError",
-)<{
-  readonly message: string;
-}> {}
+  { message: Schema.String },
+) {}
 
-export class BrowserSettingsReadError extends Data.TaggedError("BrowserSettingsReadError")<{
-  readonly cause: unknown;
-}> {
+export class BrowserSettingsReadError extends Schema.TaggedError<BrowserSettingsReadError>()(
+  "BrowserSettingsReadError",
+  { cause: Schema.Defect() },
+) {
   override get message(): string {
     return "Saved browser settings could not be loaded.";
   }
 }
+
+export const isBrowserSettingsReadError = Schema.is(BrowserSettingsReadError);
 
 export type OpenPreviewMutation<E = unknown> = (input: {
   readonly environmentId: EnvironmentId;
@@ -63,7 +65,7 @@ export async function openUrlInPreview<E>(input: {
   const defaults = await resolveBrowserDefaults().catch(
     (cause: unknown) => new BrowserSettingsReadError({ cause }),
   );
-  if (defaults instanceof BrowserSettingsReadError) {
+  if (isBrowserSettingsReadError(defaults)) {
     return AsyncResult.failure(Cause.fail(defaults));
   }
   const runtime = previewRuntimeFor(threadRef.environmentId);
