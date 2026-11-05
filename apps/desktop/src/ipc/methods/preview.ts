@@ -13,6 +13,7 @@ import {
   DesktopPreviewHostAuthRelayInputSchema,
   DesktopPreviewHostAuthRelayResultSchema,
   DesktopPreviewReleaseAuthRelayHostInputSchema,
+  DesktopPreviewSetShownInputSchema,
   DesktopPreviewSetColorSchemeInputSchema,
   DesktopPreviewSetZoomFactorInputSchema,
   BrowserImportResult,
@@ -241,6 +242,15 @@ export const releaseAuthRelayHost = DesktopIpc.makeIpcMethod({
   }),
 });
 
+const setShown = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SET_SHOWN_CHANNEL,
+  payload: DesktopPreviewSetShownInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.setShown")(function* ({ tabId, shown }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.setShown(tabId, shown);
+  }),
+});
 const openDevTools = tabMethod(
   IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL,
   "desktop.ipc.preview.openDevTools",
@@ -481,6 +491,7 @@ export const methods = [
   setZoomFactor,
   setAudioMuted,
   setAuthRelay,
+  setShown,
   openDevTools,
   clearCookies,
   clearCache,

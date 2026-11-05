@@ -1,6 +1,6 @@
 import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
@@ -103,7 +103,7 @@ const readStdoutUrls = (text: string): ReadonlyArray<string> =>
  */
 export const makeClaudeAuth = Effect.fn("makeClaudeAuth")(function* (
   options: ClaudeAuthOptions,
-): Effect.fn.Return<AuthRelayFlow, never, Crypto.Crypto | Scope.Scope> {
+): Effect.fn.Return<AuthRelayFlow, never, SecureRandom.SecureRandom | Scope.Scope> {
   const setupError = (name: string, detail: string) =>
     new ProviderSetupError({ instanceId: options.instanceId, operation: name, detail });
   let activeLogin: ClaudeLoginProcess | undefined;

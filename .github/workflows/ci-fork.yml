@@ -100,7 +100,14 @@ jobs:
         run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/main-ci-verdict.test.cjs
 
       - name: Test
-        run: vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test
+        run: |
+          set -o pipefail
+          # The runner's trace writer can crash on surrogate pairs in test output.
+          vp run --parallel --concurrency-limit 4 --filter '!lathe' --filter '!@lathe/monorepo' --filter '!@lathe/web' test 2>&1 | python3 -u -c '
+          import sys
+          for line in sys.stdin:
+              sys.stdout.write(line.encode("ascii", "backslashreplace").decode("ascii"))
+          '
 
   test_web:
     name: Test Web

@@ -1,6 +1,6 @@
 import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -19,8 +19,10 @@ import type * as AcpSessionRuntime from "@lathe/provider-acp/server/AcpSessionRu
 import { parseAntigravityAuthorizationUrl } from "./antigravityAuthSupport.ts";
 import { validateAntigravityCallbackUrl } from "./antigravityCallback.ts";
 
-// A healthy agent shows the Google link or finishes within seconds. Its bundled Python has no
-// IPv4 fallback race, so a host with broken IPv6 waits about two minutes per Google request.
+// Once initialized, a healthy agent shows the Google link or finishes within seconds. Its bundled
+// Python has no IPv4 fallback race, so a host with broken IPv6 waits about two minutes per Google
+// request. The hint is timed from initialize, not spawn: the one-file runtime unpacks itself on
+// every launch, which can take about a minute on Windows before it answers at all.
 const NO_RESPONSE_HINT_MS = 30_000;
 const NO_RESPONSE_MESSAGE =
   "Antigravity has not reached Google after 30 seconds. Check this machine's network connection. Broken IPv6 is a common cause.";
@@ -88,7 +90,7 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
   Runtime extends AntigravityAuthRuntime,
 >(
   options: AntigravityAuthOptions<Runtime>,
-): Effect.fn.Return<AntigravityAuth, never, Crypto.Crypto | Scope.Scope> {
+): Effect.fn.Return<AntigravityAuth, never, SecureRandom.SecureRandom | Scope.Scope> {
   const usesBrowser = options.usesBrowser ?? true;
   const setupError = (name: string, detail: string) =>
     new ProviderSetupError({ instanceId: options.instanceId, operation: name, detail });
@@ -109,7 +111,7 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
       signOutTimedOut: "Antigravity sign-out timed out.",
       busy: "Antigravity setup is already in progress.",
       processBusy: "Antigravity sign-in or sign-out is in progress. Try again after it finishes.",
-      noResponse: { afterMs: NO_RESPONSE_HINT_MS, message: NO_RESPONSE_MESSAGE },
+      noResponse: { afterMs: NO_RESPONSE_HINT_MS, message: NO_RESPONSE_MESSAGE, fromReady: true },
       unreachable: UNREACHABLE_MESSAGE,
       describeFailure: (cause) => safeAuthFailure(cause, usesBrowser),
     },
@@ -142,6 +144,9 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
               ),
             ),
       });
+      // `start` reuses this memoized handshake.
+      yield* runtime.initialize();
+      yield* handle.ready;
       const started = yield* runtime.start();
       yield* handle.verifying("Checking Antigravity access and models.");
       yield* options.onAuthenticated(started, runtime);

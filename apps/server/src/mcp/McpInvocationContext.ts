@@ -12,7 +12,8 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { formatThreadLink } from "@lathe/shared/threadLinks";
+import { LATHE_COPIES_HOSTED_THREAD_LINKS } from "@lathe/shared/forkThreadLinks";
+import { formatThreadLink, hostedThreadLink } from "@lathe/shared/threadLinks";
 
 const ALL_MCP_CAPABILITIES = [
   "preview",
@@ -51,7 +52,9 @@ export interface McpClientCaller {
    * another environment passing on the limits of the agent it calls for.
    */
   readonly narrowedTo?: ClientModes | undefined;
-  /** The origin an outside client reached; its thread links open the web app there. */
+  /** An outside client's thread links go through this hosted app, as Copy thread's do. */
+  readonly hostedAppUrl?: string | undefined;
+  /** The origin an outside client reached; its thread links open there while Lathe has no hosted app. */
   readonly webOrigin?: string | undefined;
 }
 
@@ -141,16 +144,21 @@ export interface McpInvocationScope {
 
 /**
  * Lathe renders `lathe-thread://` links as thread chips. Other MCP clients cannot open them, so
- * they get a web URL on the origin they reached instead.
+ * they get a web URL on the origin they reached.
  */
 export const threadLinkFor = (
   scope: Pick<McpInvocationScope, "environmentId" | "client">,
   threadId: ThreadId,
 ): string => {
-  const origin = scope.client?.webOrigin;
-  return origin === undefined
-    ? formatThreadLink({ environmentId: scope.environmentId, threadId })
-    : `${origin}/${encodeURIComponent(scope.environmentId)}/${encodeURIComponent(threadId)}`;
+  const hostedAppUrl = scope.client?.hostedAppUrl;
+  const webOrigin = scope.client?.webOrigin;
+  const ref = { environmentId: scope.environmentId, threadId };
+  if (LATHE_COPIES_HOSTED_THREAD_LINKS && hostedAppUrl !== undefined) {
+    return hostedThreadLink(ref, hostedAppUrl);
+  }
+  return webOrigin === undefined
+    ? formatThreadLink(ref)
+    : `${webOrigin}/${encodeURIComponent(scope.environmentId)}/${encodeURIComponent(threadId)}`;
 };
 
 export class McpInvocationContext extends Context.Service<

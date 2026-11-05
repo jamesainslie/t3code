@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - the fake ssh child acts synchronously inside the spawner.
 import { assert, describe, it } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@lathe/shared/HostProcess";
 import * as NetService from "@lathe/shared/Net";
@@ -14,7 +15,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
+import { ChildProcessSpawner, CommandLine } from "effect/process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -114,7 +115,7 @@ const makeHarness = (input: {
   const spawned: Array<{
     readonly kind: string;
     readonly args: ReadonlyArray<string>;
-    readonly env: Record<string, string | undefined>;
+    readonly env: Record<string, CommandLine.Word | undefined>;
   }> = [];
   const secretFilesSeen: Array<{ readonly path: string; readonly contents: string }> = [];
   const secretFilesWritten: Array<string> = [];
@@ -190,7 +191,7 @@ const makeHarness = (input: {
 
   const spawner = ChildProcessSpawner.make((command) =>
     Effect.gen(function* () {
-      const args = command._tag === "StandardCommand" ? command.args : [];
+      const args = command._tag === "StandardCommand" ? command.args.map(String) : [];
       const env = command._tag === "StandardCommand" ? (command.options.env ?? {}) : {};
       const kind = kindOf(args);
       spawned.push({ kind, args, env });
@@ -208,7 +209,7 @@ const makeHarness = (input: {
           if (behavior._tag === "ready" && socket !== undefined) {
             pendingSockets.set(socket, () => {
               const secretFile = env.LATHE_SSH_AUTH_SECRET_FILE;
-              if (secretFile !== undefined && NodeFS.existsSync(secretFile)) {
+              if (typeof secretFile === "string" && NodeFS.existsSync(secretFile)) {
                 secretFilesSeen.push({
                   path: secretFile,
                   contents: NodeFS.readFileSync(secretFile, "utf8"),
@@ -288,6 +289,7 @@ const makeHarness = (input: {
   const layer = (options: { readonly directory?: string | null } = {}) =>
     Layer.mergeAll(
       NodeServices.layer,
+      NodeCrypto.layer,
       fileSystem,
       Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Layer.succeed(

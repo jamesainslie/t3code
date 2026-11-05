@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
 import { useState } from "react";
 
@@ -8,8 +9,16 @@ import { Switch } from "../ui/switch";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
+class MenuBarEnabledLoadError extends Schema.TaggedError<MenuBarEnabledLoadError>()(
+  "MenuBarEnabledLoadError",
+  { cause: Schema.Defect() },
+) {}
+
 const menuBarEnabledAtom = Atom.make(
-  Effect.tryPromise(() => window.desktopBridge?.getMenuBarEnabled() ?? Promise.resolve(false)),
+  Effect.tryPromise({
+    try: () => window.desktopBridge?.getMenuBarEnabled() ?? Promise.resolve(false),
+    catch: (cause) => new MenuBarEnabledLoadError({ cause }),
+  }),
 ).pipe(Atom.withLabel("desktop:menu-bar-enabled"));
 
 export function MenuBarSetting() {

@@ -1,6 +1,8 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -34,7 +36,7 @@ it("reads the loopback target and state only when the URL advertises a loopback 
   );
 });
 
-it.layer(NodeServices.layer)("terminal browser launches", (it) => {
+it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer))("terminal browser launches", (it) => {
   const makeHarness = Effect.fn("makeHarness")(function* (
     options: { readonly fail?: boolean } = {},
   ) {

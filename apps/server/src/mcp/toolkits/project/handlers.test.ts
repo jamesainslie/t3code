@@ -14,6 +14,7 @@ import {
 } from "@lathe/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { LATHE_COPIES_HOSTED_THREAD_LINKS } from "@lathe/shared/forkThreadLinks";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -50,6 +51,7 @@ const clientLaunchHarness = (input: {
   readonly launched: Array<ThreadLaunch.ThreadLaunchInput>;
   readonly workspaceRoot?: string;
   readonly checkWorktreeBase?: ThreadLaunch.ThreadLaunchService["Service"]["checkWorktreeBase"];
+  readonly hostedAppUrl?: string;
   readonly webOrigin?: string;
   /** The orchestrator refuses the new thread's mode, as under a managed ceiling. */
   readonly refusedByCeiling?: true;
@@ -81,7 +83,6 @@ const clientLaunchHarness = (input: {
             },
           }),
     }),
-    NodeCrypto.layer,
     Layer.succeed(McpInvocationContext.McpInvocationContext, {
       environmentId: EnvironmentId.make("environment"),
       requestNamespace: "client:session-1",
@@ -90,6 +91,7 @@ const clientLaunchHarness = (input: {
         sessionId: "session-1",
         label: "Claude Code",
         access: input.runtimeModeCeiling,
+        hostedAppUrl: input.hostedAppUrl,
         webOrigin: input.webOrigin,
       },
       issuedAt: 0,
@@ -170,7 +172,7 @@ const clientLaunchHarness = (input: {
         Layer.provide(NodeServices.layer),
       ),
     ),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
   return { projectId, modelSelection, projectDefaults, dependencies: layerDependencies };
 };
@@ -188,17 +190,20 @@ it.effect(
           readonly runtimeMode?: RuntimeMode;
           readonly targeted?: false;
           readonly overrideModel?: ModelSelection;
+          readonly hostedAppUrl?: string;
           readonly webOrigin?: string;
           readonly refusedByCeiling?: true;
         },
       ) {
-        const { targeted, overrideModel, webOrigin, refusedByCeiling, ...input } = params;
+        const { targeted, overrideModel, hostedAppUrl, webOrigin, refusedByCeiling, ...input } =
+          params;
         const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
         const { projectId, modelSelection, dependencies } = clientLaunchHarness({
           runtimeModeCeiling,
           defaultRuntimeMode,
           launched,
           ...(overrideModel === undefined ? {} : { overrideModel }),
+          ...(hostedAppUrl === undefined ? {} : { hostedAppUrl }),
           ...(webOrigin === undefined ? {} : { webOrigin }),
           ...(refusedByCeiling === undefined ? {} : { refusedByCeiling }),
         });
@@ -229,11 +234,15 @@ it.effect(
 
       const aboveCeiling = yield* launchWith("auto-accept-edits", "full-access", {
         title: "Fix",
+        hostedAppUrl: "https://lathe.example.com",
         webOrigin: "https://box.example.ts.net",
       });
       expect(aboveCeiling.launched[0]?.runtimeMode).toBe("auto-accept-edits");
+      const aboveCeilingThreadId = aboveCeiling.launched[0]?.threadId ?? "";
       expect(aboveCeiling.result).toMatchObject({
-        link: `https://box.example.ts.net/environment/${encodeURIComponent(aboveCeiling.launched[0]?.threadId ?? "")}`,
+        link: LATHE_COPIES_HOSTED_THREAD_LINKS
+          ? `https://lathe.example.com/threads/environment/${encodeURIComponent(aboveCeilingThreadId)}`
+          : `https://box.example.ts.net/environment/${encodeURIComponent(aboveCeilingThreadId)}`,
       });
 
       const requested = yield* launchWith("full-access", "approval-required", {

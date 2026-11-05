@@ -5,7 +5,7 @@ import {
   type TerminalBrowserLaunchEvent,
 } from "@lathe/contracts";
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
@@ -80,8 +80,8 @@ function toCapture(launch: PendingBrowserLaunch): TerminalBrowserLaunchCapture {
 
 export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunches")(function* (
   options: { readonly forward?: LoopbackCallbackForwarder } = {},
-): Effect.fn.Return<TerminalBrowserLaunches, never, Crypto.Crypto> {
-  const crypto = yield* Crypto.Crypto;
+): Effect.fn.Return<TerminalBrowserLaunches, never, SecureRandom.SecureRandom> {
+  const crypto = yield* SecureRandom.SecureRandom;
   const forward = options.forward ?? forwardLoopbackCallback;
   const byTerminal = new Map<string, Map<string, PendingBrowserLaunch>>();
 
@@ -98,10 +98,10 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
   return {
     capture: Effect.fn("terminalBrowserLaunches.capture")(function* (terminal, url) {
       if (url.length > BROWSER_LAUNCH_URL_MAX_LENGTH) return null;
-      const parsed = yield* Effect.try(() => new URL(url)).pipe(Effect.orElseSucceed(() => null));
+      const parsed = URL.canParse(url) ? new URL(url) : null;
       if (parsed === null) return null;
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-      const captureId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+      const captureId = yield* crypto.uuidV4().pipe(Effect.orDie);
       const now = yield* Clock.currentTimeMillis;
       const expiresAtMillis = now + AUTH_RELAY_TIMEOUT_MS;
       const launch: PendingBrowserLaunch = {
@@ -185,9 +185,7 @@ export const makeTerminalBrowserLaunches = Effect.fn("makeTerminalBrowserLaunche
 const validateUnadvertisedLoopbackCallbackUrl = Effect.fn(
   "validateUnadvertisedLoopbackCallbackUrl",
 )(function* (callbackUrl: string): Effect.fn.Return<URL, AuthRelayError> {
-  const callback = yield* Effect.try(() => new URL(callbackUrl)).pipe(
-    Effect.orElseSucceed(() => null),
-  );
+  const callback = URL.canParse(callbackUrl) ? new URL(callbackUrl) : null;
   const origin = callback ? parseLoopbackRedirectUri(`${callback.origin}/`) : null;
   if (
     callback === null ||

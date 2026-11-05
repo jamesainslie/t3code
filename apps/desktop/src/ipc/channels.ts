@@ -99,6 +99,7 @@ export const PREVIEW_SET_AUDIO_MUTED_CHANNEL = "desktop:preview-set-audio-muted"
 export const PREVIEW_SET_AUTH_RELAY_CHANNEL = "desktop:preview-set-auth-relay";
 export const PREVIEW_HOST_AUTH_RELAY_CHANNEL = "desktop:preview-host-auth-relay";
 export const PREVIEW_RELEASE_AUTH_RELAY_HOST_CHANNEL = "desktop:preview-release-auth-relay-host";
+export const PREVIEW_SET_SHOWN_CHANNEL = "desktop:preview-set-shown";
 export const PREVIEW_OPEN_DEVTOOLS_CHANNEL = "desktop:preview-open-devtools";
 export const PREVIEW_CLEAR_COOKIES_CHANNEL = "desktop:preview-clear-cookies";
 export const PREVIEW_CLEAR_CACHE_CHANNEL = "desktop:preview-clear-cache";

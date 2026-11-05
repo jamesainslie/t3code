@@ -4,6 +4,8 @@
  * class is left exactly as it is. The same transform runs over upstream's tree for the
  * upstream-lathe mirror, so both sides of a sync agree on every renamed line.
  */
+import * as Schema from "effect/Schema";
+
 import {
   classifyRenameOccurrence,
   findRenameOccurrences,
@@ -80,16 +82,25 @@ const brandEdit = (text: string, occurrence: RenameOccurrence): Edit => {
   return { start: at, end: at + 2, text: "lathe" };
 };
 
-export class ForkRenameUnclassifiedOccurrenceError extends Error {
-  readonly occurrences: ReadonlyArray<RenameOccurrence>;
-  constructor(occurrences: ReadonlyArray<RenameOccurrence>) {
-    super(
-      `${occurrences.length} t3 occurrence(s) match no rule, so the rename refuses to run: ${occurrences
-        .slice(0, 5)
-        .map((occurrence) => `${occurrence.path}: ${occurrence.token}`)
-        .join(", ")}`,
-    );
-    this.occurrences = occurrences;
+const RenameOccurrenceSchema = Schema.Struct({
+  path: Schema.String,
+  token: Schema.String,
+  offset: Schema.Number,
+  line: Schema.String,
+  index: Schema.Number,
+  column: Schema.Number,
+  previousLine: Schema.String,
+});
+
+export class ForkRenameUnclassifiedOccurrenceError extends Schema.TaggedError<ForkRenameUnclassifiedOccurrenceError>()(
+  "ForkRenameUnclassifiedOccurrenceError",
+  { occurrences: Schema.Array(RenameOccurrenceSchema) },
+) {
+  override get message(): string {
+    return `${this.occurrences.length} t3 occurrence(s) match no rule, so the rename refuses to run: ${this.occurrences
+      .slice(0, 5)
+      .map((occurrence) => `${occurrence.path}: ${occurrence.token}`)
+      .join(", ")}`;
   }
 }
 
@@ -119,7 +130,8 @@ const renameOccurrences = (
     if (previous && edit.start < previous.end) continue;
     edits.push(edit);
   }
-  if (unclassified.length > 0) throw new ForkRenameUnclassifiedOccurrenceError(unclassified);
+  if (unclassified.length > 0)
+    throw new ForkRenameUnclassifiedOccurrenceError({ occurrences: unclassified });
   let output = "";
   let cursor = 0;
   for (const edit of edits) {

@@ -1,6 +1,6 @@
 import { ProviderSetupError, type ProviderInstanceId } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -52,7 +52,7 @@ function describeFailure(cause: Cause.Cause<CodexAuthFailure>): string {
  */
 export const makeCodexAuth = Effect.fn("makeCodexAuth")(function* (
   options: CodexAuthOptions,
-): Effect.fn.Return<AuthRelayFlow, never, Crypto.Crypto | Scope.Scope> {
+): Effect.fn.Return<AuthRelayFlow, never, SecureRandom.SecureRandom | Scope.Scope> {
   const setupError = (name: string, detail: string) =>
     new ProviderSetupError({ instanceId: options.instanceId, operation: name, detail });
 

@@ -1,7 +1,7 @@
 import { spawnAndCollect } from "@lathe/provider-core/server/snapshotProbe";
 import { defineSecretProviderDriver } from "@lathe/secret-provider-core/server/driver";
 import { resolveSpawnCommand } from "@lathe/shared/shell";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -51,7 +51,7 @@ const readTogether = Effect.fn("OnePasswordDriver.readTogether")(function* (
   references: ReadonlyArray<string>,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
-  const separator = `__lathe-secret-${yield* (yield* Crypto.Crypto).randomUUIDv4()}__`;
+  const separator = `__lathe-secret-${yield* (yield* SecureRandom.SecureRandom).uuidV4()}__`;
   const templatePath = yield* fileSystem.makeTempFileScoped({ prefix: "lathe-op-inject-" });
   yield* fileSystem.writeFileString(
     templatePath,

@@ -1,6 +1,6 @@
 import type { DesktopSshEnvironmentTarget } from "@lathe/contracts";
 import * as HostProcess from "@lathe/shared/HostProcess";
-import type * as Crypto from "effect/Crypto";
+import type * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -8,6 +8,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -34,6 +35,7 @@ const MAX_MASTER_STDERR_LENGTH = 4_000;
 const OPENSSH_BIND_SUFFIX_BYTES = 17;
 
 const encoder = new TextEncoder();
+const isSshCommandError = Schema.is(SshCommandError);
 
 /**
  * stderr that means a command went through a master that no longer serves it.
@@ -52,14 +54,14 @@ const MULTIPLEXING_UNSUPPORTED_PATTERN =
 
 function isMultiplexingUnsupported(error: unknown): boolean {
   return (
-    error instanceof SshCommandError &&
+    isSshCommandError(error) &&
     MULTIPLEXING_UNSUPPORTED_PATTERN.test(`${error.stderr}\n${error.message}`)
   );
 }
 
 export function isMuxFailure(error: unknown): boolean {
   return (
-    error instanceof SshCommandError &&
+    isSshCommandError(error) &&
     !error.timedOut &&
     MUX_FAILURE_PATTERN.test(`${error.stderr}\n${error.message}`)
   );
@@ -107,7 +109,7 @@ export function controlSocketPath(input: {
 
 type ControlMasterContext =
   | ChildProcessSpawner.ChildProcessSpawner
-  | Crypto.Crypto
+  | Digest.Digest
   | FileSystem.FileSystem
   | Path.Path;
 

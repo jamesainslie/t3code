@@ -87,7 +87,7 @@ const make = Effect.gen(function* () {
             },
           })
           .pipe(
-            Effect.map(() => true),
+            Effect.as(true),
             // The only rejection here is an unknown id: the user deleted it meanwhile.
             Effect.catchTags({ ThreadDocumentCommentsError: () => Effect.succeed(false) }),
           );

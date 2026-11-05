@@ -1,7 +1,9 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { ProviderInstanceId, type ProviderAuthState } from "@lathe/contracts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -89,7 +91,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (
   };
 });
 
-it.layer(NodeServices.layer)("CodexAuth", (it) => {
+it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer))("CodexAuth", (it) => {
   it.effect("prefers device code and finishes only on the login-completed notification", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ deviceCode: true });

@@ -387,6 +387,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_HOST_AUTH_RELAY_CHANNEL, input),
     releaseAuthRelayHost: (hostId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_RELEASE_AUTH_RELAY_HOST_CHANNEL, { hostId }),
+    setShown: (tabId, shown) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_SET_SHOWN_CHANNEL, { tabId, shown }),
     openDevTools: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL, { tabId }),
     listBrowserImportSources: () => ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_SOURCES_CHANNEL),

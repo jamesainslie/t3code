@@ -76,6 +76,9 @@ export const mergeClaudeProcessEnvironment = Effect.fn("mergeClaudeProcessEnviro
 ) {
   const baseEnvironment = overlayEnvironment(hostEnvironment, {
     ...Object.fromEntries(CLAUDE_HOST_SESSION_VARIABLES.map((name) => [name, undefined])),
+    // The desktop runs the server as Node through Electron. Commands Claude runs inherit its env, so
+    // an Electron app they start (Lathe itself, VS Code) would run as Node and exit.
+    ELECTRON_RUN_AS_NODE: undefined,
     CLAUDE_CODE_ENTRYPOINT: "lathe",
   });
   const environment = yield* mergeProviderInstanceEnvironment(instanceEnvironment, baseEnvironment);

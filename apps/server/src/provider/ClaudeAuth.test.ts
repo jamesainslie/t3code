@@ -1,9 +1,11 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { ProviderInstanceId, ProviderSetupError, type ProviderAuthState } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
@@ -95,7 +97,7 @@ const makeHarness = Effect.fn("makeHarness")(function* () {
   };
 });
 
-it.layer(NodeServices.layer)("ClaudeAuth", (it) => {
+it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer))("ClaudeAuth", (it) => {
   it.effect("captures the hosted sign-in URL from stdout and hands the pasted code to stdin", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
