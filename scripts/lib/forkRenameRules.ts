@@ -1151,7 +1151,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "Locals and prompt text in the MCP tool-use evals, and the Hyprland window event in the snap-shot helper's tests.",
     test: (o) =>
       (o.path === "evals/mcp-tool-use/run.ts" &&
-        /^(?:\.\.\.)?(?:base\.)?t3(?:\.map)?,?$/.test(o.token)) ||
+        /^(?:\.\.\.)?(?:base\.)?t3(?:\.map|\.filter)?,?$/.test(o.token)) ||
+      (o.path === "evals/mcp-tool-use/secret-grading.ts" && /^`?T3SECRET`?$/.test(o.token)) ||
       (o.path === "evals/mcp-tool-use/devices.ts" && /^T3\\`?$/.test(o.token)) ||
       (o.path.startsWith("native/hyprland-snap-shot/") && /openwindow>>/.test(o.line)),
   },
@@ -1207,7 +1208,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "Shell and script helper functions (t3_home, t3_runtime_ready) inside generated scripts.",
-    token: /^t3_(?:home|runtime_ready|fetch)$/,
+    token: /^\/?\$?t3_(?:home|runtime_ready|fetch|cwd)$/,
   },
   {
     id: "id-metric-names",
