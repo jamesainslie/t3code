@@ -1,13 +1,17 @@
+import { EnvironmentId, ThreadId } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { FORK_IDENTITY } from "./forkIdentity.ts";
 import {
   buildNewThreadLink,
   parseNewThreadLink,
   parseThreadLinkPrompt,
   promptLinkAppPath,
+  promptLinkDeepLink,
   sanitizeLinkedPrompt,
   withoutPromptLinkParams,
 } from "./promptLinks.ts";
+import { hostedThreadLink } from "./threadLinks.ts";
 
 describe("sanitizeLinkedPrompt", () => {
   it("removes characters a reader cannot see and counts them", () => {
@@ -105,6 +109,18 @@ describe("link round trips", () => {
     );
   });
 
+  it("opens a copied thread link in the app at that thread", () => {
+    const link = hostedThreadLink({
+      environmentId: EnvironmentId.make("env-1"),
+      threadId: ThreadId.make("mcp:1"),
+    });
+    const path = promptLinkAppPath(link);
+    expect(path).toBe("/env-1/mcp%3A1");
+    const deepLink = promptLinkDeepLink(path!);
+    expect(deepLink).toBe(`${FORK_IDENTITY.desktop.production.scheme}://threads/env-1/mcp%3A1`);
+    expect(promptLinkAppPath(deepLink)).toBe(path);
+  });
+
   it("maps app scheme and hosted links to in-app paths, and nothing else", () => {
     // Fork: the fork desktop registers the lathe schemes, not upstream's t3code.
     expect(promptLinkAppPath("lathe://new?prompt=hi")).toBe("/new?prompt=hi");
@@ -113,6 +129,15 @@ describe("link round trips", () => {
     expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1?prompt=go")).toBe(
       "/env-1/thread-1?prompt=go",
     );
+    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1")).toBe(
+      "/env-1/thread-1",
+    );
+    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1?prompt=go")).toBe(
+      "/env-1/thread-1?prompt=go",
+    );
+    // The web app's own thread route, reloaded, is no link.
+    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1")).toBeNull();
+    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1")).toBeNull();
     expect(promptLinkAppPath("https://app.t3.codes/settings/general")).toBeNull();
     expect(promptLinkAppPath("https://evil.test/new?prompt=hi")).toBeNull();
     expect(promptLinkAppPath("lathe://app/index.html")).toBeNull();

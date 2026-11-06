@@ -3,7 +3,12 @@ import {
   decodeComposerContextFragment,
   encodeComposerContextFragment,
 } from "@lathe/shared/composerContextClipboard";
-import { collectComposerContextReferences } from "@lathe/shared/composerContextReferences";
+import {
+  collectComposerContextReferences,
+  formatComposerContextReference,
+  threadContextRecord,
+} from "@lathe/shared/composerContextReferences";
+import { LATHE_COPIES_HOSTED_THREAD_LINKS } from "@lathe/shared/forkThreadLinks";
 import { describe, expect, it } from "vite-plus/test";
 
 import { resolveThreadReferenceCopyTarget } from "./threadReference.ts";
@@ -98,13 +103,23 @@ describe("resolveThreadReferenceCopyTarget", () => {
         }),
       ],
     });
-    // A paste keeps only the records its plain text references.
+    // Fork: the plain text is Lathe's own chip reference, never an app.t3.codes link (#71).
+    expect(target!.value).toBe(
+      `[Fix the login flow](lathe-context://v1/thread/${pasted!.records[0]!.contextId})`,
+    );
     expect(collectComposerContextReferences(target!.value)).toEqual([
-      expect.objectContaining({
-        kind: "thread",
-        contextId: pasted!.records[0]!.contextId,
-        label: "Fix the login flow",
-      }),
+      expect.objectContaining({ kind: "thread", contextId: pasted!.records[0]!.contextId }),
     ]);
+  });
+
+  it("links through the build's hosted app", () => {
+    expect(
+      resolveThreadReferenceCopyTarget({ ...thread, hostedAppUrl: "https://preview.t3.codes" })
+        ?.value,
+    ).toBe(
+      LATHE_COPIES_HOSTED_THREAD_LINKS
+        ? "https://preview.t3.codes/threads/env-1/thread-1"
+        : formatComposerContextReference(threadContextRecord(thread.threadRef, thread.title)),
+    );
   });
 });

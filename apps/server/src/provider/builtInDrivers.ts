@@ -9,6 +9,7 @@ import { OpenCodeDriver, type OpenCodeDriverEnv } from "@lathe/provider-opencode
 import { MuseDriver, type MuseDriverEnv } from "@lathe/provider-muse/server";
 import { PiDriver, type PiDriverEnv } from "@lathe/provider-pi/server";
 import type { AnyProviderDriver, ProviderUsageReaderEnv } from "@lathe/provider-core/server/driver";
+import { KiroDriver, type KiroDriverEnv } from "@lathe/provider-kiro/server";
 
 export type BuiltInDriversEnv =
   | AcpRegistryDriverEnv
@@ -18,6 +19,7 @@ export type BuiltInDriversEnv =
   | CursorDriverEnv
   | FxDriverEnv
   | GrokDriverEnv
+  | KiroDriverEnv
   | OpenCodeDriverEnv
   | PiDriverEnv
   | MuseDriverEnv;
@@ -30,6 +32,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   FxDriver,
   OpenCodeDriver,
   AntigravityDriver,
+  KiroDriver,
   PiDriver,
   MuseDriver,
   AcpRegistryDriver,

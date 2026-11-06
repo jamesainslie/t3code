@@ -1068,6 +1068,11 @@ export interface DesktopPreviewAuthRelayCallback {
   readonly body: string | null;
 }
 
+export const DesktopPreviewSetShownInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  shown: Schema.Boolean,
+});
+
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
   theme: DesktopPreviewAnnotationThemeSchema,
 });
@@ -1267,6 +1272,8 @@ export interface DesktopPreviewBridge {
   ) => Promise<DesktopPreviewHostAuthRelayResult>;
   /** Stop standing in for a listener; a no-op for an unknown or already released host. */
   releaseAuthRelayHost: (hostId: string) => Promise<void>;
+  /** Tells the tab's server whether its webview is on screen. */
+  setShown: (tabId: string, shown: boolean) => Promise<void>;
   openDevTools: (tabId: string) => Promise<void>;
   clearCookies: (environmentId: EnvironmentId, profileId?: string) => Promise<void>;
   clearCache: (environmentId: EnvironmentId, profileId?: string) => Promise<void>;

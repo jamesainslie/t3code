@@ -11,7 +11,7 @@ import {
 } from "@lathe/contracts";
 import { sourceControlDefinitions } from "../../../sourceControl/sourceControlDefinitions.ts";
 import { effectiveArea, effectivePriority } from "@lathe/shared/roadmap";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -60,7 +60,7 @@ function parentsOf(item: RoadmapWorkItem, byId: ReadonlyMap<RoadmapItemId, Roadm
 const make = Effect.gen(function* () {
   const roadmap = yield* RoadmapService.RoadmapService;
   const threads = yield* ThreadManagementService.ThreadManagementService;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
 
   const fromService = <A>(effect: Effect.Effect<A, RoadmapError>) =>
     effect.pipe(Effect.mapError(toolFailure));
@@ -147,7 +147,7 @@ const make = Effect.gen(function* () {
     tool: string,
     clientRequestId: string | undefined,
   ) {
-    const requestKey = clientRequestId ?? (yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+    const requestKey = clientRequestId ?? (yield* crypto.uuidV4().pipe(Effect.orDie));
     return CommandId.make(
       ["command", "mcp", scope.requestNamespace, "roadmap", tool, requestKey]
         .map(encodeURIComponent)
@@ -285,7 +285,7 @@ const make = Effect.gen(function* () {
           yield* refuseDoneWithOpenCriteria(input.criteria ?? []);
         }
         const { type, title, criteria, attachCaller, clientRequestId, ...fields } = input;
-        const itemId = RoadmapItemId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+        const itemId = RoadmapItemId.make(yield* crypto.uuidV4().pipe(Effect.orDie));
         return yield* dispatch(scope, "create", clientRequestId, (commandId) => ({
           type: "roadmap.item.create",
           commandId,

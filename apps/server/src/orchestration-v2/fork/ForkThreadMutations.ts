@@ -19,9 +19,9 @@ import {
   applyThreadDependencySatisfied,
   unsatisfiedThreadDependencies,
 } from "@lathe/contracts";
-import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 export type ForkThreadCommand = ForkThreadUpdateCommand | ForkThreadInternalUpdateCommand;
 
@@ -41,9 +41,10 @@ export interface ForkMutationOutcome {
 }
 
 /** Why a fork mutation was refused; the orchestrator raises it as a dispatch error. */
-export class ForkMutationRejected extends Data.TaggedError("ForkMutationRejected")<{
-  readonly reason: string;
-}> {}
+export class ForkMutationRejected extends Schema.TaggedError<ForkMutationRejected>()(
+  "ForkMutationRejected",
+  { reason: Schema.String },
+) {}
 
 const reject = (reason: string) => Effect.fail(new ForkMutationRejected({ reason }));
 

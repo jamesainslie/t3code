@@ -64,6 +64,30 @@ describe("FORK_RENAME_RULES", () => {
     ],
     ["evals/mcp-tool-use/run.ts", "  const t3 = visibleT3Tools(options);", "identifier"],
     [
+      "evals/mcp-tool-use/run.ts",
+      "    ...t3.filter((tool) => !alwaysLoaded.has(tool.name)).map((tool) => tool.name),",
+      "identifier",
+    ],
+    ["evals/mcp-tool-use/secret-grading.ts", 'const SECRET = "T3SECRET";', "identifier"],
+    ["scripts/install.sh", '    t3_cwd="$(pwd -P && printf .)"', "identifier"],
+    ["scripts/install.sh", 'case "$t3_home" in', "identifier"],
+    [
+      "packages/shared/src/threadLinks.test.ts",
+      "      /^https:\\/\\/preview\\.t3\\.codes\\/threads\\//,",
+      "wire-peer",
+    ],
+    [
+      "packages/shared/src/composerContextReferences.test.ts",
+      '        reference("env-2", "t3", "Written"),',
+      "kept",
+    ],
+    [
+      "packages/shared/src/composerContextReferences.test.ts",
+      '        "[Written](https://app.t3.codes/threads/env-2/t3)",',
+      "wire-peer",
+    ],
+    ["scripts/install.sh", '    t3_home="${t3_cwd%??}/$t3_home"', "identifier"],
+    [
       "apps/mobile/src/components/ui/x.ts",
       '  if (dark && (!card || themeId === "t3-code")) {',
       "kept",

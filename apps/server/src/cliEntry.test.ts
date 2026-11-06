@@ -3,6 +3,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@lathe/shared/Net";
 import * as Effect from "effect/Effect";
@@ -53,6 +54,7 @@ describe("runCliEntry", () => {
         Effect.provide(
           Layer.mergeAll(
             NodeServices.layer,
+            NodeCrypto.layer,
             NetService.layer,
             TestConsole.layer,
             // effect/cli only colors a TTY stdout; the launch script captures it.
@@ -111,7 +113,14 @@ describe("runCliEntry", () => {
       );
       const runFull = (args: ReadonlyArray<string>) =>
         Command.runWith(cli, { version: packageJson.version })(args).pipe(
-          Effect.provide(Layer.mergeAll(NodeServices.layer, NetService.layer, TestConsole.layer)),
+          Effect.provide(
+            Layer.mergeAll(
+              NodeServices.layer,
+              NodeCrypto.layer,
+              NetService.layer,
+              TestConsole.layer,
+            ),
+          ),
         );
 
       for (const file of [runtimeFile, NodePath.join(dir, "absent.json")]) {

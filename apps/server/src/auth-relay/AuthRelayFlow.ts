@@ -5,7 +5,7 @@ import {
 } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -59,6 +59,8 @@ export interface AuthRelaySignInHandle {
   }) => Effect.Effect<void>;
   /** The tool took the response and is finishing on its own; hide the URL. */
   readonly verifying: (message: string) => Effect.Effect<void>;
+  /** The tool is up and starting sign-in; starts a `noResponse.fromReady` clock. */
+  readonly ready: Effect.Effect<void>;
 }
 
 export interface AuthRelayCopy<E> {
@@ -75,8 +77,15 @@ export interface AuthRelayCopy<E> {
   readonly signOutTimedOut: string;
   readonly busy: string;
   readonly processBusy: string;
-  /** Replaces the starting message when the tool shows no sign-in step by `afterMs`. */
-  readonly noResponse?: { readonly afterMs: number; readonly message: string };
+  /**
+   * Replaces the starting message when the tool shows no sign-in step by `afterMs`, counted from
+   * sign-in start, or from `handle.ready` with `fromReady` for a tool that is slow to come up.
+   */
+  readonly noResponse?: {
+    readonly afterMs: number;
+    readonly message: string;
+    readonly fromReady?: boolean;
+  };
   /** Replaces `expired` when the deadline passes before the tool showed any sign-in step. */
   readonly unreachable?: string;
   /**
@@ -201,8 +210,8 @@ export function visibleAuthState(
 
 export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
   driver: AuthRelayDriver<E>,
-): Effect.fn.Return<AuthRelayFlow, never, Crypto.Crypto | Scope.Scope> {
-  const crypto = yield* Crypto.Crypto;
+): Effect.fn.Return<AuthRelayFlow, never, SecureRandom.SecureRandom | Scope.Scope> {
+  const crypto = yield* SecureRandom.SecureRandom;
   const instanceScope = yield* Scope.Scope;
   const copy = driver.copy;
   const lock = yield* Semaphore.make(1);
@@ -276,7 +285,7 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
         );
         // Propagate interruption after the exit wait so concurrent stop waiters stay attached.
         return yield* restore(Fiber.await(fiber)).pipe(
-          Effect.flatMap((result) => result),
+          Effect.flatten,
           Effect.ensuring(Fiber.interrupt(fiber)),
           Effect.ensuring(
             Effect.sync(() => {
@@ -305,7 +314,8 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
       }),
     );
 
-  const makeHandle = (flow: ActiveFlow): AuthRelaySignInHandle => ({
+  const makeHandle = (flow: ActiveFlow, ready: Effect.Effect<void>): AuthRelaySignInHandle => ({
+    ready,
     receiveAuthorizationUrl: (url) =>
       driver.parseAuthorizationUrl(url).pipe(
         Effect.flatMap((authorization) =>
@@ -366,21 +376,27 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
   const runSignIn = Effect.fn("AuthRelayFlow.runSignIn")(
     function* (flow: ActiveFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) {
       yield* stopSessions.pipe(Effect.ensuring(stopOwnedProcesses));
+      const scope = yield* Scope.Scope;
       const noResponse = copy.noResponse;
-      if (noResponse !== undefined) {
-        yield* Effect.sleep(noResponse.afterMs).pipe(
-          Effect.andThen(
-            lock.withPermits(1)(
-              Effect.gen(function* () {
-                if (activeFlow !== flow || flow.state.phase !== "starting") return;
-                yield* publishFlow(flow, { ...flow.state, message: noResponse.message });
-              }),
-            ),
-          ),
-          Effect.forkScoped,
-        );
-      }
-      yield* driver.signIn(makeHandle(flow));
+      const armNoResponse =
+        noResponse === undefined
+          ? Effect.void
+          : Effect.sleep(noResponse.afterMs).pipe(
+              Effect.andThen(
+                lock.withPermits(1)(
+                  Effect.gen(function* () {
+                    if (activeFlow !== flow || flow.state.phase !== "starting") return;
+                    yield* publishFlow(flow, { ...flow.state, message: noResponse.message });
+                  }),
+                ),
+              ),
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            );
+      const fromReady = noResponse?.fromReady === true;
+      if (!fromReady) yield* armNoResponse;
+      const ready = fromReady ? yield* Effect.cached(armNoResponse) : Effect.void;
+      yield* driver.signIn(makeHandle(flow, ready));
     },
     (effect, flow) =>
       effect.pipe(
@@ -464,7 +480,7 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
               return yield* setupError("start", copy.busy);
             }
             const flowId = yield* crypto
-              .randomUUIDv4()
+              .uuidV4()
               .pipe(
                 Effect.mapError(() => setupError("start", "Could not start sign-in. Try again.")),
               );
@@ -632,7 +648,7 @@ export const makeAuthRelayFlow = Effect.fn("makeAuthRelayFlow")(function* <E>(
         }),
       );
       const worker = yield* task.pipe(Effect.forkIn(instanceScope));
-      return yield* Fiber.await(worker).pipe(Effect.flatMap((result) => result));
+      return yield* Fiber.await(worker).pipe(Effect.flatten);
     }),
     subscribe: (ownerSessionId) =>
       SubscriptionRef.changes(snapshot).pipe(

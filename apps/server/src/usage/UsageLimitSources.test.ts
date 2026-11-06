@@ -2,10 +2,12 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
+  SecretProviderId,
   ServerConfigStreamEvent,
   UsageLimitSourceId,
   type UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
+import * as SecretResolver from "@lathe/secret-provider-core/server/SecretResolver";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -24,6 +26,10 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as UsageLimitSources from "./UsageLimitSources.ts";
 
 const encodeConfigEvent = Schema.encodeSync(ServerConfigStreamEvent);
+const noSecrets = Layer.succeed(SecretResolver.SecretResolver, {
+  read: (references) => Effect.succeed(references.map(() => undefined)),
+  invalidate: () => Effect.void,
+});
 const sourceId = UsageLimitSourceId.make("modelproxy-iris");
 const kimi = { kind: "model", from: "kimi-k3", to: "moonshotai/kimi-k3", provider: "openrouter" };
 
@@ -81,9 +87,10 @@ function harness(
       return HttpClientResponse.fromWeb(request, (options.gateway ?? statusReply)(request));
     }),
   );
-  const layer = UsageLimitSources.layer.pipe(
+  const layer = Layer.effect(UsageLimitSources.UsageLimitSources, UsageLimitSources.make).pipe(
     Layer.provide(
       Layer.mergeAll(
+        noSecrets,
         NodeCrypto.layer,
         Layer.succeed(HttpClient.HttpClient, http),
         Layer.succeed(
@@ -485,6 +492,7 @@ describe("UsageLimitSources", () => {
       );
     }).pipe(
       Effect.provide([
+        noSecrets,
         ServerSettings.layerTest({
           usageLimitSources: {
             [UsageLimitSourceId.make("local-hub")]: {
@@ -535,4 +543,73 @@ describe("UsageLimitSources", () => {
       Effect.scoped,
     ),
   );
+
+  it.effect("reads a management key from its secret provider", () => {
+    const authorizations: Array<string | undefined> = [];
+    const keySource = (reference: string) => ({
+      provider: SecretProviderId.make("homelab"),
+      reference,
+    });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.make;
+      const snapshots = yield* sources.streamChanges.pipe(
+        Stream.filter((next) => next.length > 0),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+      expect(snapshots.map(({ id, error }) => ({ id, error }))).toEqual([
+        { id: "resolved-hub", error: undefined },
+        {
+          id: "unresolved-hub",
+          error: "Could not read the management key from its secret provider.",
+        },
+      ]);
+      expect(authorizations).toEqual(["Bearer resolved-key"]);
+    }).pipe(
+      Effect.provide([
+        ServerSettings.layerTest({
+          usageLimitSources: {
+            [UsageLimitSourceId.make("resolved-hub")]: {
+              kind: "cliproxy",
+              url: "https://resolved.test",
+              managementKey: keySource("cliproxy#key"),
+              enabled: true,
+            },
+            [UsageLimitSourceId.make("unresolved-hub")]: {
+              kind: "cliproxy",
+              url: "https://unresolved.test",
+              managementKey: keySource("missing#key"),
+              enabled: true,
+            },
+          },
+        }),
+        Layer.mock(BackgroundPolicy.BackgroundPolicy)({
+          shouldRunScopeWork: () => Effect.succeed(false),
+        }),
+        Layer.succeed(SecretResolver.SecretResolver, {
+          read: (references) =>
+            Effect.succeed(
+              references.map((reference) =>
+                reference.reference === "cliproxy#key" ? "resolved-key" : undefined,
+              ),
+            ),
+          invalidate: () => Effect.void,
+        }),
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.sync(() => {
+              authorizations.push(request.headers.authorization);
+              return HttpClientResponse.fromWeb(request, Response.json({ files: [] }));
+            }),
+          ),
+        ),
+        Layer.mock(ServerSecretStore.ServerSecretStore)({
+          get: () => Effect.succeedNone,
+        }),
+        NodeCrypto.layer,
+      ]),
+      Effect.scoped,
+    );
+  });
 });

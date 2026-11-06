@@ -27,6 +27,7 @@ import {
   type OrchestrationV2ShellStreamItem,
 } from "@lathe/contracts";
 import * as Context from "effect/Context";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -453,9 +454,13 @@ it.live("reports V2 thread HTTP and WebSocket transfer budgets", () =>
     }
     const fs = yield* FileSystem.FileSystem;
     const report = formatTransferBudgetReport(runs);
+    const outputPaths = yield* Config.all({
+      report: Config.String("LATHE_TRANSFER_BUDGET_REPORT_PATH").pipe(Config.withDefault("")),
+      result: Config.String("LATHE_TRANSFER_BUDGET_RESULT_PATH").pipe(Config.withDefault("")),
+    });
     for (const [path, contents] of [
-      [process.env.LATHE_TRANSFER_BUDGET_REPORT_PATH, report],
-      [process.env.LATHE_TRANSFER_BUDGET_RESULT_PATH, formatTransferBudgetResult(runs)],
+      [outputPaths.report, report],
+      [outputPaths.result, formatTransferBudgetResult(runs)],
     ])
       if (path && contents) yield* fs.writeFileString(path, contents);
     yield* Effect.log(report);

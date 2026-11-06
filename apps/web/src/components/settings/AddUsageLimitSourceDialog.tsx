@@ -1,4 +1,9 @@
-import { type EnvironmentId, type UnifiedSettings, UsageLimitSourceId } from "@lathe/contracts";
+import {
+  type EnvironmentId,
+  type SecretReference,
+  type UnifiedSettings,
+  UsageLimitSourceId,
+} from "@lathe/contracts";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
@@ -15,6 +20,7 @@ import {
 import { Input } from "../ui/input";
 import { sourceIdFromUrl } from "./AddUsageLimitSourceDialog.logic";
 import { SecretInput } from "./SecretInput";
+import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
 import { Label } from "../ui/label";
 
 type SourceKind = "cliproxy" | "modelproxy";
@@ -51,19 +57,26 @@ export function AddUsageLimitSourceDialog({
   const [kind, setKind] = useState<SourceKind>("cliproxy");
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const secretSources = useSecretSources(environmentId);
+  const [keyDraft, setKeyDraft] = useState<string | SecretReference>("");
+  const [keyValid, setKeyValid] = useState(true);
+  const managementKey = typeof keyDraft === "string" ? keyDraft.trim() : keyDraft;
   const [secret, setSecret] = useState("");
   const [issuer, setIssuer] = useState("");
   const [clientId, setClientId] = useState("");
   const trimmedUrl = url.trim();
   const canSave =
     trimmedUrl.length > 0 &&
-    secret.trim().length > 0 &&
-    (kind === "cliproxy" || (issuer.trim().length > 0 && clientId.trim().length > 0));
+    (kind === "cliproxy"
+      ? keyValid && managementKey !== ""
+      : secret.trim().length > 0 && issuer.trim().length > 0 && clientId.trim().length > 0);
 
   const reset = () => {
     setKind("cliproxy");
     setLabel("");
     setUrl("");
+    setKeyDraft("");
+    setKeyValid(true);
     setSecret("");
     setIssuer("");
     setClientId("");
@@ -87,7 +100,7 @@ export function AddUsageLimitSourceDialog({
       usageLimitSources: {
         [id]:
           kind === "cliproxy"
-            ? { kind, ...common, managementKey: secret.trim() }
+            ? { kind, ...common, managementKey }
             : {
                 kind,
                 ...common,
@@ -186,11 +199,23 @@ export function AddUsageLimitSourceDialog({
               <Label htmlFor="usage-source-key">
                 {kind === "cliproxy" ? "Management key" : "Client secret"}
               </Label>
-              <SecretInput
-                id="usage-source-key"
-                value={secret}
-                onChange={(event) => setSecret(event.target.value)}
-              />
+              {kind === "cliproxy" ? (
+                <SecretSourceInput
+                  id="usage-source-key"
+                  aria-label="Management key"
+                  value={keyDraft}
+                  sources={secretSources}
+                  onChange={(event) => setKeyDraft(event.target.value)}
+                  onSecretChange={(reference) => setKeyDraft(reference ?? "")}
+                  onValidityChange={setKeyValid}
+                />
+              ) : (
+                <SecretInput
+                  id="usage-source-key"
+                  value={secret}
+                  onChange={(event) => setSecret(event.target.value)}
+                />
+              )}
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="usage-source-label">Label (optional)</Label>

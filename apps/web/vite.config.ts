@@ -113,6 +113,7 @@ const browserTestProject = {
       "@betteroffice/pptx",
       "@betteroffice/xlsx",
       "@betteroffice/xlsx/headless",
+      "canvas-confetti",
       "fast-xml-parser",
       "entities",
       "dompurify",
@@ -257,9 +258,9 @@ export default defineConfig(() => {
   return {
     run: {
       tasks: {
-        // tsc (tsc-rs) rewrites the tsbuildinfo it reads, which keeps a task out of the cache.
+        // A local tsbuildinfo is leftover build state, not a typecheck input.
         typecheck: {
-          command: "tsc --noEmit",
+          command: "effect-tsgo tsrs --noEmit",
           cache: { input: [{ auto: true }, "!*.tsbuildinfo"] },
         },
       },

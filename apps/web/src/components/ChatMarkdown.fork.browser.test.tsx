@@ -6,7 +6,7 @@ import "../index.css";
 
 import { filesystemEnvironment } from "../state/filesystem";
 import { splitMarkdownDocument } from "../markdown-document";
-import { setMarkdownTaskChecked } from "./files/filePreviewMode";
+import { setMarkdownTaskChecked } from "@lathe/shared/markdownTaskList";
 
 const { workspaceSearch, filesystemMetadata, renderMermaid } = vi.hoisted(() => ({
   workspaceSearch: vi.fn(),

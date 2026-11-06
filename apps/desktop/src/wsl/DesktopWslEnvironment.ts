@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
+import * as HostProcess from "@lathe/shared/HostProcess";
 import { buildRemoteNodeEnvScript } from "@lathe/ssh/tunnel";
 import { FORK_HOME_SHELL } from "@lathe/shared/forkBaseDir";
 import { FORK_IDENTITY } from "@lathe/shared/forkIdentity";
@@ -1143,7 +1144,8 @@ export const layer = Layer.effect(
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fileSystem = yield* FileSystem.FileSystem;
-    const windir = process.env.WINDIR ?? "C:\\Windows";
+    // Not Config: Windows variable names are case-insensitive only on the live process.env.
+    const windir = (yield* HostProcess.Environment).WINDIR ?? "C:\\Windows";
 
     const provideSpawner = <A, E>(
       effect: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner>,

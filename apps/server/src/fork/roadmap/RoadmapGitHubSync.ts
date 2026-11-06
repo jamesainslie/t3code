@@ -25,7 +25,7 @@ import * as GitHubRequestPolicy from "@lathe/source-control-github/server/GitHub
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -115,7 +115,7 @@ const make = Effect.gen(function* () {
   const issueApi = yield* GitHubIssueApi.GitHubIssueApi;
   const accounts = yield* GitHubAccountSelector.GitHubAccountSelector;
   const settings = yield* ServerSettingsService;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
 
   const lastSyncedAt = new Map<RoadmapItemId, number>();
   const requested = new Set<RoadmapItemId>();
@@ -156,7 +156,7 @@ const make = Effect.gen(function* () {
     );
 
   const commandId = (kind: string, itemId: RoadmapItemId) =>
-    crypto.randomUUIDv4().pipe(
+    crypto.uuidV4().pipe(
       Effect.orDie,
       Effect.map((uuid) => CommandId.make(`github:${kind}:${itemId}:${uuid}`)),
     );
@@ -232,7 +232,7 @@ const make = Effect.gen(function* () {
           });
           continue;
         }
-        const itemId = RoadmapItemId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+        const itemId = RoadmapItemId.make(yield* crypto.uuidV4().pipe(Effect.orDie));
         const imported = yield* dispatch(
           (commandId) => ({
             type: "roadmap.source.import",

@@ -226,6 +226,15 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     path: /^scripts\/(?:lib\/forkRename(?:Rules|Codemod)(?:\.test)?\.ts|fork-rename-(?:report|codemod)\.ts)$|^docs\/internals\/fork-upstream-sync\.md$/,
   },
   {
+    id: "kept-hosted-link-thread-id-fixture",
+    class: "kept",
+    reason:
+      "A thread id fixture spelled t3 that the same test also writes inside a kept app.t3.codes link.",
+    test: (o) =>
+      o.path === "packages/shared/src/composerContextReferences.test.ts" &&
+      /^["'`]t3["'`]/.test(o.line.slice(o.column - 1)),
+  },
+  {
     id: "kept-fork-legacy-compat",
     class: "kept",
     reason:
@@ -422,7 +431,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "wire-peer",
     reason: "Upstream's Connect hosts and Clerk instance, used as-is.",
     token:
-      /(?:^|[^a-z])(?:relay|clerk|app|nightly\.app|preview|ingest)\.t3\.codes|Y2xlcmsudDMuY29kZXMk/,
+      /(?:^|[^a-z])(?:relay|clerk|app|nightly\\?\.app|preview|ingest)\\?\.t3\\?\.codes|Y2xlcmsudDMuY29kZXMk/,
   },
   {
     id: "wire-client-protocol",
@@ -1151,7 +1160,8 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
       "Locals and prompt text in the MCP tool-use evals, and the Hyprland window event in the snap-shot helper's tests.",
     test: (o) =>
       (o.path === "evals/mcp-tool-use/run.ts" &&
-        /^(?:\.\.\.)?(?:base\.)?t3(?:\.map)?,?$/.test(o.token)) ||
+        /^(?:\.\.\.)?(?:base\.)?t3(?:\.map|\.filter)?,?$/.test(o.token)) ||
+      (o.path === "evals/mcp-tool-use/secret-grading.ts" && /^`?T3SECRET`?$/.test(o.token)) ||
       (o.path === "evals/mcp-tool-use/devices.ts" && /^T3\\`?$/.test(o.token)) ||
       (o.path.startsWith("native/hyprland-snap-shot/") && /openwindow>>/.test(o.line)),
   },
@@ -1207,7 +1217,7 @@ export const FORK_RENAME_RULES: ReadonlyArray<RenameRule> = [
     class: "identifier",
     reason:
       "Shell and script helper functions (t3_home, t3_runtime_ready) inside generated scripts.",
-    token: /^t3_(?:home|runtime_ready|fetch)$/,
+    token: /^\/?\$?t3_(?:home|runtime_ready|fetch|cwd)$/,
   },
   {
     id: "id-metric-names",

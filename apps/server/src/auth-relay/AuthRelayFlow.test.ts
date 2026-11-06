@@ -1,9 +1,11 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { ProviderInstanceId, ProviderSetupError, type ProviderAuthState } from "@lathe/contracts";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
@@ -27,9 +29,7 @@ const authorizationUrl =
   "https://auth.example.com/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A51234%2Fcallback&state=test-state";
 const callbackUrl = "http://127.0.0.1:51234/callback?state=test-state&code=test-code";
 
-class SignInFailure extends Error {
-  readonly _tag = "SignInFailure";
-}
+class SignInFailure extends Schema.TaggedError<SignInFailure>()("SignInFailure", {}) {}
 
 type DriverError = SignInFailure | AuthRelayError;
 const isSetupError = Schema.is(ProviderSetupError);
@@ -69,14 +69,17 @@ const makeHarness = Effect.fn("makeHarness")(function* (
     readonly deviceCode?: boolean;
     readonly urls?: ReadonlyArray<string>;
     readonly forward?: Effect.Effect<void, AuthRelayError>;
+    readonly noResponse?: AuthRelayCopy<DriverError>["noResponse"];
+    readonly beforeReady?: Effect.Effect<void>;
   } = {},
 ) {
   const authenticated = yield* Deferred.make<void, SignInFailure>();
+  const readied = yield* Deferred.make<void>();
   const events: string[] = [];
   let forwarded = 0;
   const flow = yield* makeAuthRelayFlow<DriverError>({
     instanceId,
-    copy,
+    copy: options.noResponse ? { ...copy, noResponse: options.noResponse } : copy,
     parseAuthorizationUrl: (url) =>
       Effect.gen(function* () {
         const parsed = new URL(url);
@@ -96,6 +99,9 @@ const makeHarness = Effect.fn("makeHarness")(function* (
       Effect.gen(function* () {
         events.push("sign-in");
         yield* Effect.addFinalizer(() => Effect.sync(() => void events.push("sign-in-close")));
+        yield* options.beforeReady ?? Effect.void;
+        yield* handle.ready;
+        yield* Deferred.succeed(readied, undefined);
         if (options.deviceCode) {
           yield* handle.receiveDeviceCode({
             userCode: "ABCD-EFGH",
@@ -117,10 +123,10 @@ const makeHarness = Effect.fn("makeHarness")(function* (
         forwarded += 1;
       }),
   });
-  return { flow, authenticated, events, forwarded: () => forwarded };
+  return { flow, authenticated, readied, events, forwarded: () => forwarded };
 });
 
-it.layer(NodeServices.layer)("AuthRelayFlow", (it) => {
+it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer))("AuthRelayFlow", (it) => {
   it.effect("relays the owned callback and succeeds only when the driver confirms", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
@@ -295,6 +301,41 @@ it.layer(NodeServices.layer)("AuthRelayFlow", (it) => {
         .pipe(Effect.exit);
       assert.isTrue(Exit.isFailure(late));
       assert.equal(harness.forwarded(), 0);
+    }),
+  );
+
+  it.effect("times the no-response hint from ready when the driver asks for it", () =>
+    Effect.gen(function* () {
+      const starting = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const harness = yield* makeHarness({
+        urls: [],
+        noResponse: { afterMs: 30_000, message: "No response.", fromReady: true },
+        beforeReady: Deferred.succeed(starting, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+        ),
+      });
+      const hint = harness.flow.controller.subscribe(owner).pipe(
+        Stream.runHead,
+        Effect.map((state) => Option.getOrThrow(state).message),
+      );
+      yield* harness.flow.controller.start(owner);
+      yield* Deferred.await(starting);
+
+      yield* TestClock.adjust("60 seconds");
+      assert.equal(yield* hint, "Starting sign-in.");
+
+      yield* Deferred.succeed(release, undefined);
+      yield* Deferred.await(harness.readied);
+      yield* TestClock.adjust("29 seconds");
+      assert.equal(yield* hint, "Starting sign-in.");
+      yield* TestClock.adjust("1 second");
+      const stalled = yield* harness.flow.controller.subscribe(owner).pipe(
+        Stream.filter((state) => state.message === "No response."),
+        Stream.runHead,
+        Effect.map(Option.getOrThrow),
+      );
+      assert.equal(stalled.phase, "starting");
     }),
   );
 

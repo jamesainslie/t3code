@@ -1,9 +1,9 @@
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@lathe/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "../../providerInstances";
+import { hasDismissedResumeCompaction } from "@lathe/client-runtime/state/context-window";
 import {
   hasAvailableCompactionProvider,
-  hasDismissedResumeCompaction,
   resolveContextWindowModelDisplayName,
   shouldReserveContextWindowMeter,
 } from "./ContextWindowMeter.logic";

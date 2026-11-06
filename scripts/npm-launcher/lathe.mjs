@@ -19,6 +19,13 @@ const SUPPORTED = ["darwin-arm64", "linux-arm64", "linux-x64"];
 
 // Fork: the executable and archive names, Lathe first (forkCliArtifacts.ts).
 const CLI_NAMES = ["lathe", "t3"];
+const executableName = (name) => (process.platform === "win32" ? `${name}.exe` : name);
+
+// Fork: `<dir>/lathe`, or `<dir>/t3` in a runtime unpacked before the rename.
+const runtimeExecutable = (dir) =>
+  CLI_NAMES.map((name) => path.join(dir, executableName(name))).find((file) =>
+    fs.existsSync(file),
+  ) ?? path.join(dir, executableName(CLI_NAMES[0]));
 
 /** Fork: `.lathe`, or a pre-rename `.t3f` while it is the one in use (forkBaseDir.ts). */
 function defaultHome() {
@@ -108,6 +115,27 @@ async function install(dir, key) {
     });
     if (extract.status !== 0) throw new Error(`could not extract ${archive}`);
     fs.rmSync(file);
+    const probe = (file, args) =>
+      spawnSync(file, [...args, "--version"], {
+        stdio: ["ignore", "ignore", "pipe"],
+        encoding: "utf8",
+        timeout: 30_000,
+        killSignal: "SIGKILL",
+      });
+    let validate = probe(runtimeExecutable(staging), []);
+    // Fork: where the executable cannot load (NixOS, musl), check the bundle main() falls back to.
+    const bundle = path.join(staging, "bin.mjs");
+    if (["ENOENT", "EACCES"].includes(validate.error?.code) && fs.existsSync(bundle)) {
+      validate = probe(process.execPath, [bundle]);
+    }
+    if (validate.status !== 0) {
+      throw executableError(
+        key,
+        validate.error?.message ||
+          validate.stderr?.trim() ||
+          `--version exited with ${validate.signal || validate.status}`,
+      );
+    }
     fs.writeFileSync(path.join(staging, ".install-complete"), `${version}\n`);
     publish(staging, dir);
   } finally {
@@ -195,20 +223,13 @@ async function main() {
         start(process.execPath, [bundle, ...args]);
         return;
       }
-      fail(error);
+      fail(executableError(key, error.message));
     });
     child.on("exit", (code, signal) =>
       process.exit(code ?? 128 + (os.constants.signals[signal] || 1)),
     );
   };
-  const executableName = (name) => (process.platform === "win32" ? `${name}.exe` : name);
-  // Fork: `<dir>/lathe`, or `<dir>/t3` in a runtime unpacked before the rename.
-  start(
-    CLI_NAMES.map((name) => path.join(dir, executableName(name))).find((file) =>
-      fs.existsSync(file),
-    ) ?? path.join(dir, executableName(CLI_NAMES[0])),
-    args,
-  );
+  start(runtimeExecutable(dir), args);
   if (ipc) {
     process.on("message", (message) => child.connected && child.send(message));
     process.on("disconnect", () => child.connected && child.disconnect());
@@ -216,6 +237,15 @@ async function main() {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => (ipc || signal !== "SIGINT") && child.kill(signal));
   }
+}
+
+function executableError(key, detail) {
+  return new Error(
+    `could not run Lathe ${version} for ${key}: ${detail}` +
+      (process.platform === "linux"
+        ? "\nThe Linux release requires glibc; musl-based systems such as Alpine are not supported. Use a glibc-based Linux environment."
+        : ""),
+  );
 }
 
 function fail(error) {

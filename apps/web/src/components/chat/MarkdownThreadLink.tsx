@@ -1,6 +1,8 @@
 import { scopeThreadRef } from "@lathe/client-runtime/environment";
 import type { EnvironmentId } from "@lathe/contracts";
+import { LATHE_COPIES_HOSTED_THREAD_LINKS } from "@lathe/shared/forkThreadLinks";
 import {
+  formatHostedThreadLink,
   formatThreadLink,
   guessThreadLinkRef,
   percentDecodedThreadLinkId,
@@ -8,6 +10,7 @@ import {
   unknownThreadLinkLabel,
 } from "@lathe/shared/threadLinks";
 
+import { configuredHostedAppUrl } from "../../hostedPairing";
 import { useThreadRefs, useThreadShell } from "../../state/entities";
 import { UnresolvedChip } from "../contextChipParts";
 import { ThreadContextChip } from "../ThreadContextChip";
@@ -36,6 +39,13 @@ export function MarkdownThreadLink(props: {
   const ref = { environmentId: thread.environmentId, threadId: thread.id };
   const title = thread.title.trim() || props.label || "Untitled thread";
   return (
-    <ThreadContextChip record={{ ...ref, title }} copyMarkdown={formatThreadLink(ref, title)} />
+    <ThreadContextChip
+      record={{ ...ref, title }}
+      copyMarkdown={
+        LATHE_COPIES_HOSTED_THREAD_LINKS
+          ? formatHostedThreadLink(ref, title, configuredHostedAppUrl())
+          : formatThreadLink(ref, title)
+      }
+    />
   );
 }
