@@ -9,12 +9,15 @@ import {
   ForwardCompatibleArray,
   ProviderDriverKind,
   TrimmedNonEmptyString,
+  type ServerProviderResetCredits,
   type ServerProviderUsageWindow,
   type UsageLimitSourceAccount,
   type UsageLimitSourceProxyAccountState,
   type UsageLimitSourceProxyStatus,
 } from "@lathe/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -28,6 +31,18 @@ import {
 const Runway = Schema.Struct({
   kind: Schema.Literals(["at", "idle", "beyondHorizon", "resetsFirst", "unknown", "disabled"]),
   at: Schema.optional(Schema.String),
+});
+const ResetCredit = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  expiresAt: Schema.optional(Schema.String),
+});
+/** The gateway's banked limit resets for one subscription account. */
+const ResetCredits = Schema.Struct({
+  weekly: Schema.Number,
+  usableNow: Schema.Number,
+  fable: Schema.optional(Schema.Number),
+  nextWeekly: Schema.optional(ResetCredit),
+  nextFable: Schema.optional(ResetCredit),
 });
 const Account = Schema.Struct({
   name: Schema.String,
@@ -51,6 +66,8 @@ const Account = Schema.Struct({
   coolingUntil: Schema.optional(Schema.String),
   circuits: Schema.optional(Schema.Array(Schema.Struct({ state: Schema.String }))),
   health: Schema.optional(Schema.Struct({ state: Schema.String })),
+  // Absent from gateways that predate reset credits, and until a probe reads them.
+  resetCredits: Schema.optional(ResetCredits),
 });
 /** `model` routes rename a request; `fallback` routes spill a spent model elsewhere. */
 const Route = Schema.Struct({
@@ -161,6 +178,40 @@ function windows(account: ModelproxyAccount, nowMs: number): ServerProviderUsage
   return out;
 }
 
+const count = (value: number | undefined) => Math.max(0, Math.round(value ?? 0));
+
+/** A timestamp the contract accepts, or nothing. */
+function isoOrNone(value: string | undefined): { nextExpiresAt?: string } {
+  const at = value ? DateTime.make(value) : Option.none();
+  return Option.isSome(at) ? { nextExpiresAt: DateTime.formatIso(at.value) } : {};
+}
+
+/**
+ * The gateway resolves the real grant, so the credit id Lathe holds names
+ * only the kind: "weekly" or "fable".
+ */
+function resetCredits(account: ModelproxyAccount): ServerProviderResetCredits | undefined {
+  const credits = account.resetCredits;
+  if (!credits) return undefined;
+  const weekly = count(credits.weekly);
+  const fable = count(credits.fable);
+  return {
+    availableCount: weekly,
+    usableNowCount: Math.min(weekly, count(credits.usableNow)),
+    ...(weekly > 0 ? { nextCreditId: "weekly" } : {}),
+    ...(weekly > 0 ? isoOrNone(credits.nextWeekly?.expiresAt) : {}),
+    ...(fable > 0
+      ? {
+          fable: {
+            availableCount: fable,
+            nextCreditId: "fable",
+            ...isoOrNone(credits.nextFable?.expiresAt),
+          },
+        }
+      : {}),
+  };
+}
+
 function accountState(
   account: ModelproxyAccount,
   nowMs: number,
@@ -200,17 +251,19 @@ export function mapModelproxyStatus(
     const driver = driverFor(account.provider);
     if (driver === null) continue;
     const observed = windows(account, input.nowMs);
+    const credits = resetCredits(account);
+    const limits =
+      observed.length > 0
+        ? makeUsageLimits({ checkedAt: input.checkedAt, windows: observed })
+        : makeUnavailableUsageLimits({
+            checkedAt: input.checkedAt,
+            reason: "probeFailed",
+            message: "The gateway has not observed this account's windows yet.",
+          });
     accounts.push({
       id: account.name,
       driver,
-      usageLimits:
-        observed.length > 0
-          ? makeUsageLimits({ checkedAt: input.checkedAt, windows: observed })
-          : makeUnavailableUsageLimits({
-              checkedAt: input.checkedAt,
-              reason: "probeFailed",
-              message: "The gateway has not observed this account's windows yet.",
-            }),
+      usageLimits: credits ? { ...limits, resetCredits: credits } : limits,
       proxy: {
         state: accountState(account, input.nowMs),
         ...(account.coolingUntil && !elapsed(account.coolingUntil, input.nowMs)

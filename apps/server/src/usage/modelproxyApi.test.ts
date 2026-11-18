@@ -158,6 +158,7 @@ const raw = {
   generatedAt: iso(0),
 };
 const decodeStatus = Schema.decodeUnknownSync(ModelproxyStatus);
+const decodeTypedStatus = Schema.decodeSync(ModelproxyStatus);
 const status = decodeStatus(raw);
 
 describe("mapModelproxyStatus", () => {
@@ -233,6 +234,69 @@ describe("mapModelproxyStatus", () => {
     expect(mapModelproxyStatus(decoded, { checkedAt: iso(0), nowMs: now }).proxy.routes).toBe(
       undefined,
     );
+  });
+});
+
+describe("mapModelproxyStatus reset credits", () => {
+  const base = {
+    current: "",
+    threshold: 0.9,
+    inflightTotal: 0,
+    queueDepth: 0,
+    forecast: { fleet: { kind: "idle" as const } },
+  };
+  const subscription = (name: string, provider: string, extra: Record<string, unknown>) => ({
+    name,
+    type: "oauth",
+    provider,
+    current: false,
+    disabled: false,
+    util5h: 0.1,
+    has5h: true,
+    util7d: 0.2,
+    has7d: true,
+    spendUsd: 0,
+    inflight: 0,
+    ...extra,
+  });
+
+  it("maps weekly, usable-now and Fable counts, keyed by kind", () => {
+    const status = decodeTypedStatus({
+      ...base,
+      accounts: [
+        subscription("claude-1", "anthropic", {
+          resetCredits: {
+            weekly: 1,
+            usableNow: 1,
+            fable: 2,
+            nextWeekly: { id: "full-reset-2611", expiresAt: "2026-12-10T22:00:00Z" },
+            nextFable: { id: "launch-2610-fable", expiresAt: "2027-03-09T07:59:00Z" },
+          },
+        }),
+        subscription("codex-james", "openai", { resetCredits: { weekly: 3, usableNow: 0 } }),
+        subscription("old", "anthropic", {}),
+      ],
+    });
+    const { accounts } = mapModelproxyStatus(status, { checkedAt: iso(0), nowMs: now });
+    const byId = new Map(accounts.map((account) => [account.id, account]));
+
+    expect(byId.get("claude-1")?.usageLimits.resetCredits).toEqual({
+      availableCount: 1,
+      usableNowCount: 1,
+      nextCreditId: "weekly",
+      nextExpiresAt: "2026-12-10T22:00:00.000Z",
+      fable: {
+        availableCount: 2,
+        nextCreditId: "fable",
+        nextExpiresAt: "2027-03-09T07:59:00.000Z",
+      },
+    });
+    expect(byId.get("codex-james")?.usageLimits.resetCredits).toEqual({
+      availableCount: 3,
+      usableNowCount: 0,
+      nextCreditId: "weekly",
+    });
+    expect(byId.get("old")?.usageLimits.resetCredits).toBeUndefined();
   });
 });
 
