@@ -4,6 +4,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   SecretProviderId,
   ServerConfigStreamEvent,
+  TrimmedNonEmptyString,
   UsageLimitSourceId,
   type UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
@@ -611,5 +612,98 @@ describe("UsageLimitSources", () => {
       ]),
       Effect.scoped,
     );
+  });
+
+  /** A gateway that answers status reads and records redeem requests. */
+  const redeemGateway = (outcomes: Array<string | Response>) => {
+    const redeems: Array<{ path: string; body: { kind: string; requestId: string } }> = [];
+    const reply = (request: HttpClientRequest.HttpClientRequest) => {
+      const path = new URL(request.url).pathname;
+      if (!path.endsWith("/reset-credits/redeem")) return statusReply();
+      const raw =
+        request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "{}";
+      redeems.push({ path, body: JSON.parse(raw) });
+      const next = outcomes.shift() ?? "reset";
+      return typeof next === "string" ? Response.json({ outcome: next }) : next;
+    };
+    return { redeems, reply };
+  };
+  const credit = (accountId: string, creditId: string) => ({
+    sourceId,
+    accountId: TrimmedNonEmptyString.make(accountId),
+    creditId: TrimmedNonEmptyString.make(creditId),
+  });
+
+  it.effect("redeems a gateway account's weekly reset by kind", () => {
+    const gateway = redeemGateway(["reset"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const result = yield* sources.consumeResetCredit(credit("claude-1@ainslies.us", "weekly"));
+      expect(result).toEqual({ outcome: "reset" });
+      expect(gateway.redeems).toHaveLength(1);
+      expect(gateway.redeems[0]?.path).toBe(
+        "/api/accounts/claude-1%40ainslies.us/reset-credits/redeem",
+      );
+      expect(gateway.redeems[0]?.body.kind).toBe("weekly");
+      expect(gateway.redeems[0]?.body.requestId).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("keeps the request id until the gateway gives a settled answer", () => {
+    const gateway = redeemGateway([
+      "unconfirmed",
+      "rateLimited",
+      new Response(JSON.stringify({ error: "upstream" }), { status: 502 }),
+      "reset",
+      "reset",
+    ]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "fable");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const failed = yield* sources.consumeResetCredit(input).pipe(Effect.exit);
+        expect(Exit.isFailure(failed)).toBe(true);
+      }
+      yield* sources.consumeResetCredit(input);
+      yield* sources.consumeResetCredit(input);
+      const ids = gateway.redeems.map((redeem) => redeem.body.requestId);
+      // Unconfirmed, a refusal and a 502 all retry under the first id.
+      expect(new Set(ids.slice(0, 4)).size).toBe(1);
+      // Only after "reset" does the next redemption get a fresh id.
+      expect(ids[4]).not.toBe(ids[3]);
+      expect(gateway.redeems[0]?.body.kind).toBe("fable");
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("uses a separate request id per kind on the same account", () => {
+    const gateway = redeemGateway(["unconfirmed", "reset"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* sources.consumeResetCredit(credit("claude-1", "weekly")).pipe(Effect.exit);
+      yield* sources.consumeResetCredit(credit("claude-1", "fable"));
+      const [weekly, fable] = gateway.redeems.map((redeem) => redeem.body.requestId);
+      // The gateway refuses an id reused for a different kind.
+      expect(fable).not.toBe(weekly);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("explains a refusal and rejects an unknown credit", () => {
+    const gateway = redeemGateway(["coolingDown"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const refused = yield* sources
+        .consumeResetCredit(credit("claude-1", "weekly"))
+        .pipe(Effect.flip);
+      expect(refused.detail).toContain("cooling down");
+      const unknown = yield* sources
+        .consumeResetCredit(credit("claude-1", "full-reset-2611"))
+        .pipe(Effect.flip);
+      expect(unknown.detail).toContain("weekly or Fable");
+      expect(gateway.redeems).toHaveLength(1);
+    }).pipe(Effect.provide(layer));
   });
 });
