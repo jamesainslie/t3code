@@ -850,6 +850,9 @@ export function ProxyUsagePill({
       {cardOpen && placement && snapshot ? (
         <ProxyStatusCard placement={placement} onClose={closeCard}>
           <Ledger
+            // Redeem status and open rows are kept per account name, which two
+            // gateways can share; a new environment or source starts fresh.
+            key={`${environmentId}:${snapshot.id}`}
             environmentId={environmentId}
             snapshot={snapshot}
             threshold={threshold}
