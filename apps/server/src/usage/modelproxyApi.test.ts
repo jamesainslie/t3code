@@ -298,6 +298,22 @@ describe("mapModelproxyStatus reset credits", () => {
     });
     expect(byId.get("old")?.usageLimits.resetCredits).toBeUndefined();
   });
+
+  it("drops reset credits it cannot read without losing the status", () => {
+    const status = decodeTypedStatus({
+      ...base,
+      accounts: [
+        subscription("drifted", "anthropic", { resetCredits: { weekly: "one" } }),
+        subscription("nulled", "anthropic", { resetCredits: null }),
+      ],
+    });
+    const { accounts } = mapModelproxyStatus(status, { checkedAt: iso(0), nowMs: now });
+    expect(accounts.map((account) => account.id)).toEqual(["drifted", "nulled"]);
+    for (const account of accounts) {
+      expect(account.usageLimits.resetCredits).toBeUndefined();
+      expect(account.usageLimits.windows.length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("makeModelproxyApi", () => {

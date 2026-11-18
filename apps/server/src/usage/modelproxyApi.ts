@@ -7,6 +7,7 @@
  */
 import {
   ForwardCompatibleArray,
+  ForwardCompatibleOptional,
   ProviderDriverKind,
   TrimmedNonEmptyString,
   type ServerProviderResetCredits,
@@ -67,7 +68,8 @@ const Account = Schema.Struct({
   circuits: Schema.optional(Schema.Array(Schema.Struct({ state: Schema.String }))),
   health: Schema.optional(Schema.Struct({ state: Schema.String })),
   // Absent from gateways that predate reset credits, and until a probe reads them.
-  resetCredits: Schema.optional(ResetCredits),
+  // One the build cannot read is dropped rather than costing the whole status.
+  resetCredits: ForwardCompatibleOptional(ResetCredits),
 });
 /** `model` routes rename a request; `fallback` routes spill a spent model elsewhere. */
 const Route = Schema.Struct({
