@@ -13,6 +13,8 @@ import type {
 } from "@lathe/contracts";
 import { formatDuration } from "@lathe/shared/usageLimits";
 
+import type { ResetCreditRedeemState } from "../usage/UsageLimits";
+
 export type ProxyTone = "ok" | "warn" | "crit" | "muted";
 export type ProxyWindowGlyph = "feather";
 
@@ -83,6 +85,17 @@ export interface ProxyResetCreditsView {
   readonly weekly: ServerProviderResetCredits | null;
   /** Fable resets to redeem, credit id "fable"; null when none. */
   readonly fable: ServerProviderResetCredits | null;
+}
+
+/** The bucket a gateway credit id names; the gateway resolves the real grant. */
+export type ProxyResetCreditKind = "weekly" | "fable";
+
+/** One bucket a card row offers to redeem, with the redemption it holds, if any. */
+export interface ProxyResetCreditSlot {
+  readonly kind: ProxyResetCreditKind;
+  /** The bucket, or an empty one once the last credit is spent. */
+  readonly credits: ServerProviderResetCredits;
+  readonly redeem: ResetCreditRedeemState | null;
 }
 
 export interface ProxyAccountGroup {
@@ -236,6 +249,29 @@ export function resetCreditsView(
     weekly: weekly > 0 ? weeklyBucket : null,
     fable: credits.fable && fable > 0 ? { ...credits.fable } : null,
   };
+}
+
+/** Where the card keeps one account's redemption of one kind. */
+export const resetRedeemKey = (accountId: string, kind: ProxyResetCreditKind) =>
+  `${accountId}:${kind}`;
+
+/**
+ * The buckets a card row shows: each one with resets banked, and each one
+ * whose redemption is in flight or answered. A reset can spend the last
+ * credit and move the account to another group in one update, so the answer
+ * outlives both the count and the row it was started from.
+ */
+export function resetCreditSlots(
+  account: Pick<ProxyAccountView, "id" | "resetCredits">,
+  redeems: ReadonlyMap<string, ResetCreditRedeemState>,
+): ProxyResetCreditSlot[] {
+  return (["weekly", "fable"] as const).flatMap((kind) => {
+    const bucket = account.resetCredits?.[kind] ?? null;
+    const held = redeems.get(resetRedeemKey(account.id, kind)) ?? null;
+    const redeem = held && (held.busy || held.status !== null) ? held : null;
+    if (bucket === null && redeem === null) return [];
+    return [{ kind, credits: bucket ?? { availableCount: 0 }, redeem }];
+  });
 }
 
 function spent(window: ServerProviderUsageWindow, threshold: number, now: number): boolean {

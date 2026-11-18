@@ -5,7 +5,9 @@ import {
   deriveProxyPill,
   formatCountdownSeconds,
   looksLikeEmailCode,
+  resetCreditSlots,
   resetCreditsView,
+  resetRedeemKey,
   selectProxySource,
 } from "./ProxyUsagePill.logic";
 
@@ -540,5 +542,53 @@ describe("deriveProxyPill reset credits", () => {
     expect(row?.resetCredits?.tooltip).toContain("None usable until a limit is reached");
     expect(row?.resetCredits?.weekly?.nextCreditId).toBe("weekly");
     expect(pill.accounts.find((account) => account.id === "zeus-pro")?.resetCredits).toBeNull();
+  });
+});
+
+describe("resetCreditSlots", () => {
+  const row = (credits: Parameters<typeof resetCreditsView>[0]) => ({
+    id: "claude-1",
+    resetCredits: resetCreditsView(credits, now),
+  });
+  const weeklyOnly = { availableCount: 1, usableNowCount: 1, nextCreditId: "weekly" as never };
+
+  it("offers each bucket with resets banked", () => {
+    const slots = resetCreditSlots(
+      row({ ...weeklyOnly, fable: { availableCount: 2, nextCreditId: "fable" as never } }),
+      new Map(),
+    );
+    expect(slots.map((slot) => [slot.kind, slot.credits.availableCount, slot.redeem])).toEqual([
+      ["weekly", 1, null],
+      ["fable", 2, null],
+    ]);
+  });
+
+  it("keeps a bucket whose count dropped to zero while it holds an answer", () => {
+    const answered = new Map([
+      [resetRedeemKey("claude-1", "weekly"), { busy: false, status: "Reset applied." }],
+    ]);
+    const slots = resetCreditSlots(row({ availableCount: 0, usableNowCount: 0 }), answered);
+    expect(slots).toEqual([
+      {
+        kind: "weekly",
+        credits: { availableCount: 0 },
+        redeem: { busy: false, status: "Reset applied." },
+      },
+    ]);
+  });
+
+  it("keeps a bucket while its redemption is still in flight", () => {
+    const busy = new Map([[resetRedeemKey("claude-1", "fable"), { busy: true, status: null }]]);
+    expect(resetCreditSlots(row(undefined), busy).map((slot) => slot.kind)).toEqual(["fable"]);
+  });
+
+  it("offers nothing when no bucket is banked and nothing is held", () => {
+    const idle = new Map([[resetRedeemKey("claude-1", "weekly"), { busy: false, status: null }]]);
+    expect(resetCreditSlots(row(undefined), idle)).toEqual([]);
+    // Another account's answer stays with that account.
+    const elsewhere = new Map([
+      [resetRedeemKey("claude-2", "weekly"), { busy: false, status: "Reset applied." }],
+    ]);
+    expect(resetCreditSlots(row(undefined), elsewhere)).toEqual([]);
   });
 });

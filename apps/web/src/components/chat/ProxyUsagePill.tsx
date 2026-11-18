@@ -5,7 +5,7 @@ import {
   UsageLimitSourceId,
   type UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { useNowMinute } from "~/hooks/useNowMinute";
@@ -20,7 +20,7 @@ import { ChevronRightIcon, FeatherIcon, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ResetCredits } from "../usage/UsageLimits";
+import { ResetCredits, type ResetCreditRedeemState } from "../usage/UsageLimits";
 import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
 import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
@@ -28,6 +28,8 @@ import { ProxyStatusCard } from "./ProxyStatusCard";
 import { measureThreadSideCard, useThreadSideCardPlacement } from "./useThreadSideCardPlacement";
 import {
   deriveProxyPill,
+  resetCreditSlots,
+  resetRedeemKey,
   selectProxySource,
   type ProxyAccountView,
   type ProxyPillView,
@@ -297,8 +299,12 @@ function LedgerRow({
     readonly environmentId: EnvironmentId;
     readonly sourceId: string;
     readonly now: number;
+    /** Redemptions by `resetRedeemKey`, kept by the ledger so a remounted row still shows them. */
+    readonly states: ReadonlyMap<string, ResetCreditRedeemState>;
+    readonly onState: (key: string, next: ResetCreditRedeemState) => void;
   };
 }) {
+  const slots = redeem ? resetCreditSlots(account, redeem.states) : [];
   const runway = onLogin ? (
     <Button
       size="micro"
@@ -376,7 +382,7 @@ function LedgerRow({
           <ChevronRightIcon className={cn(expanded && "rotate-90")} />
         </Button>
       </div>
-      {expanded && (account.windows.length > 0 || (redeem && account.resetCredits)) ? (
+      {expanded && (account.windows.length > 0 || slots.length > 0) ? (
         <div className="flex flex-col gap-1 pt-1 pl-5.5">
           {account.windows.map((window) => (
             <div
@@ -389,35 +395,35 @@ function LedgerRow({
               <span className="text-right tabular-nums">{window.resetText}</span>
             </div>
           ))}
-          {redeem && account.resetCredits ? (
+          {redeem && slots.length > 0 ? (
             <div className="flex flex-col gap-1 border-t border-border/60 pt-1.5">
-              {account.resetCredits.weekly ? (
-                <ResetCredits
-                  environmentId={redeem.environmentId}
-                  input={{
-                    sourceId: UsageLimitSourceId.make(redeem.sourceId),
-                    accountId: account.id,
-                    creditId: "weekly",
-                  }}
-                  credits={account.resetCredits.weekly}
-                  now={redeem.now}
-                />
-              ) : null}
-              {account.resetCredits.fable ? (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xs text-muted-foreground">Fable</span>
+              {slots.map((slot) => {
+                const key = resetRedeemKey(account.id, slot.kind);
+                const credits = (
                   <ResetCredits
                     environmentId={redeem.environmentId}
                     input={{
                       sourceId: UsageLimitSourceId.make(redeem.sourceId),
                       accountId: account.id,
-                      creditId: "fable",
+                      creditId: slot.kind,
                     }}
-                    credits={account.resetCredits.fable}
+                    credits={slot.credits}
                     now={redeem.now}
+                    store={{
+                      state: slot.redeem,
+                      onChange: (next) => redeem.onState(key, next),
+                    }}
                   />
-                </div>
-              ) : null}
+                );
+                return slot.kind === "fable" ? (
+                  <div key={key} className="flex items-baseline gap-2">
+                    <span className="text-3xs text-muted-foreground">Fable</span>
+                    {credits}
+                  </div>
+                ) : (
+                  <Fragment key={key}>{credits}</Fragment>
+                );
+              })}
             </div>
           ) : null}
         </div>
@@ -508,7 +514,7 @@ function SignIn({
   );
 }
 
-function Ledger({
+export function Ledger({
   environmentId,
   snapshot,
   threshold,
@@ -547,6 +553,13 @@ function Ledger({
       if (!next.delete(id)) next.add(id);
       return next;
     });
+  // Redemptions live here, not in the row: a reset can move the account to
+  // the other group and spend its last credit, which remounts the row.
+  const [redeems, setRedeems] = useState<ReadonlyMap<string, ResetCreditRedeemState>>(
+    () => new Map(),
+  );
+  const setRedeem = (key: string, next: ResetCreditRedeemState) =>
+    setRedeems((previous) => new Map(previous).set(key, next));
   if (!pill) return null;
   const narrow = variant === "card";
   const row = (account: ProxyAccountView) => (
@@ -562,7 +575,17 @@ function Ledger({
               onLogin: () => onLoginFor(narrow && loginFor === account.id ? null : account.id),
             }
           : {})}
-        {...(narrow ? { redeem: { environmentId, sourceId: pill.sourceId, now } } : {})}
+        {...(narrow
+          ? {
+              redeem: {
+                environmentId,
+                sourceId: pill.sourceId,
+                now,
+                states: redeems,
+                onState: setRedeem,
+              },
+            }
+          : {})}
       />
       {narrow && loginFor === account.id ? (
         <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
