@@ -5,6 +5,7 @@ import {
   deriveProxyPill,
   formatCountdownSeconds,
   looksLikeEmailCode,
+  resetCreditsView,
   selectProxySource,
 } from "./ProxyUsagePill.logic";
 
@@ -116,6 +117,7 @@ describe("deriveProxyPill", () => {
     expect(pill.runwayText).toBe("4h 20m");
     expect(pill.fallbackText).toBeNull();
     expect(pill.footer).toBe("threshold 90% · model 85% · 2 in flight");
+    expect(pill.accounts.every((account) => account.resetCredits === null)).toBe(true);
   });
 
   it("lets a spent shared window govern the account's runway", () => {
@@ -407,5 +409,39 @@ describe("model windows", () => {
     const [fable, other] = pill.accounts[0]!.windows;
     expect(fable).toMatchObject({ glyph: "feather", title: "Weekly · Fable" });
     expect(other).toMatchObject({ glyph: null, label: "other", title: "Weekly · Other" });
+  });
+});
+
+describe("resetCreditsView", () => {
+  it("shows weekly and Fable resets apart", () => {
+    const view = resetCreditsView(
+      {
+        availableCount: 1,
+        usableNowCount: 1,
+        nextCreditId: "weekly" as never,
+        nextExpiresAt: at(48) as never,
+        fable: { availableCount: 3, nextCreditId: "fable" as never },
+      },
+      now,
+    );
+    expect(view?.text).toBe("↻1 · F3");
+    expect(view?.muted).toBe(false);
+    expect(view?.tooltip).toContain("1 weekly reset");
+    expect(view?.tooltip).toContain("3 Fable resets");
+    expect(view?.weekly?.nextCreditId).toBe("weekly");
+    expect(view?.fable?.availableCount).toBe(3);
+  });
+
+  it("mutes resets that cannot act yet", () => {
+    const view = resetCreditsView({ availableCount: 3, usableNowCount: 0 }, now);
+    expect(view?.text).toBe("↻3");
+    expect(view?.muted).toBe(true);
+    expect(view?.tooltip).toContain("None usable until a limit is reached");
+    expect(view?.fable).toBeNull();
+  });
+
+  it("shows nothing when nothing is banked or known", () => {
+    expect(resetCreditsView(undefined, now)).toBeNull();
+    expect(resetCreditsView({ availableCount: 0 }, now)).toBeNull();
   });
 });
