@@ -445,3 +445,100 @@ describe("resetCreditsView", () => {
     expect(resetCreditsView({ availableCount: 0 }, now)).toBeNull();
   });
 });
+
+describe("resetCreditsView expiry and Fable", () => {
+  const weekly = (nextExpiresAt?: string) =>
+    resetCreditsView(
+      {
+        availableCount: 2,
+        usableNowCount: 1,
+        nextCreditId: "weekly" as never,
+        ...(nextExpiresAt ? { nextExpiresAt: nextExpiresAt as never } : {}),
+      },
+      now,
+    );
+
+  it("counts down to a future expiry", () => {
+    expect(weekly(at(2))?.tooltip).toBe("2 weekly resets, next expires in 2h 0m");
+  });
+
+  it("says a passed expiry expires now", () => {
+    const tooltip = weekly(at(-1))?.tooltip;
+    expect(tooltip).toBe("2 weekly resets, next expires now");
+    expect(tooltip).not.toContain("in now");
+  });
+
+  it("leaves out an expiry it cannot read", () => {
+    expect(weekly("not a date")?.tooltip).toBe("2 weekly resets");
+  });
+
+  it("shows a Fable-only account with no weekly resets, not muted", () => {
+    const view = resetCreditsView(
+      {
+        availableCount: 0,
+        usableNowCount: 0,
+        fable: {
+          availableCount: 3,
+          nextCreditId: "fable" as never,
+          nextExpiresAt: at(-2) as never,
+        },
+      },
+      now,
+    );
+    expect(view?.text).toBe("↻0 · F3");
+    expect(view?.muted).toBe(false);
+    expect(view?.tooltip).toBe("3 Fable resets, next expires now");
+    expect(view?.weekly).toBeNull();
+    expect(view?.fable).toEqual({
+      availableCount: 3,
+      nextCreditId: "fable",
+      nextExpiresAt: at(-2),
+    });
+  });
+
+  it("keeps the Fable bucket out of the weekly one", () => {
+    const view = resetCreditsView(
+      {
+        availableCount: 1,
+        usableNowCount: 1,
+        nextCreditId: "weekly" as never,
+        fable: { availableCount: 2, nextCreditId: "fable" as never },
+      },
+      now,
+    );
+    expect(view?.weekly).not.toHaveProperty("fable");
+  });
+});
+
+describe("deriveProxyPill reset credits", () => {
+  it("carries an account's banked resets onto its row", () => {
+    const base = snapshot();
+    const [first, ...rest] = base.accounts;
+    const pill = deriveProxyPill(
+      {
+        ...base,
+        accounts: [
+          {
+            ...first!,
+            usageLimits: {
+              ...first!.usageLimits,
+              resetCredits: {
+                availableCount: 1,
+                usableNowCount: 0,
+                nextCreditId: "weekly" as never,
+              },
+            },
+          },
+          ...rest,
+        ],
+      },
+      now,
+    )!;
+    const row = pill.accounts.find((account) => account.id === "james-max");
+    expect(row?.resetCredits?.text).toBe("↻1");
+    expect(row?.resetCredits?.muted).toBe(true);
+    expect(row?.resetCredits?.tooltip).toContain("None usable until a limit is reached");
+    expect(row?.resetCredits?.weekly?.nextCreditId).toBe("weekly");
+    expect(pill.accounts.find((account) => account.id === "zeus-pro")?.resetCredits).toBeNull();
+  });
+});

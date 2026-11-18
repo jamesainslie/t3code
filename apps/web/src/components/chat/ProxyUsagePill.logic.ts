@@ -205,34 +205,35 @@ function countdown(at: string | undefined, now: number, seconds = false): string
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/** `, next expires in 2h 0m`, `, next expires now` once passed, or nothing when unreadable. */
+function expiry(at: string | undefined, now: number): string {
+  const left = countdown(at, now, false);
+  if (left === "") return "";
+  return left === "now" ? ", next expires now" : `, next expires in ${left}`;
+}
+
 export function resetCreditsView(
   credits: ServerProviderResetCredits | undefined,
   now: number,
 ): ProxyResetCreditsView | null {
   if (!credits) return null;
+  const { fable: _fable, ...weeklyBucket } = credits;
   const weekly = credits.availableCount;
   const fable = credits.fable?.availableCount ?? 0;
   if (weekly === 0 && fable === 0) return null;
   const muted = weekly > 0 && credits.usableNowCount === 0;
   const lines: string[] = [];
-  if (weekly > 0) {
-    const expires = credits.nextExpiresAt
-      ? `, next expires in ${countdown(credits.nextExpiresAt, now, false)}`
-      : "";
-    lines.push(`${plural(weekly, "weekly reset")}${expires}`);
-  }
+  if (weekly > 0)
+    lines.push(`${plural(weekly, "weekly reset")}${expiry(credits.nextExpiresAt, now)}`);
   if (fable > 0) {
-    const fableExpires = credits.fable?.nextExpiresAt
-      ? `, next expires in ${countdown(credits.fable.nextExpiresAt, now, false)}`
-      : "";
-    lines.push(`${plural(fable, "Fable reset")}${fableExpires}`);
+    lines.push(`${plural(fable, "Fable reset")}${expiry(credits.fable?.nextExpiresAt, now)}`);
   }
   if (muted) lines.push("None usable until a limit is reached");
   return {
     text: `↻${weekly}${fable > 0 ? ` · F${fable}` : ""}`,
     muted,
     tooltip: lines.join("\n"),
-    weekly: weekly > 0 ? { ...credits, fable: undefined } : null,
+    weekly: weekly > 0 ? weeklyBucket : null,
     fable: credits.fable && fable > 0 ? { ...credits.fable } : null,
   };
 }
