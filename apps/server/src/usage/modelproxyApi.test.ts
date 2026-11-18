@@ -1,9 +1,16 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
+import {
+  HttpClient,
+  HttpClientError,
+  type HttpClientRequest,
+  HttpClientResponse,
+} from "effect/http";
 
 import { makeModelproxyApi, mapModelproxyStatus, ModelproxyStatus } from "./modelproxyApi.ts";
 
@@ -452,6 +459,89 @@ describe("makeModelproxyApi.streamStatus", () => {
         ),
       );
       expect(page.unsupported).toBe(true);
+    }),
+  );
+});
+
+describe("makeModelproxyApi.redeemResetCredit", () => {
+  const redeemWith = (
+    respond: (
+      request: HttpClientRequest.HttpClientRequest,
+    ) => Effect.Effect<Response, HttpClientError.HttpClientError>,
+  ) =>
+    makeModelproxyApi.pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          respond(request).pipe(
+            Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+          ),
+        ),
+      ),
+    );
+  const input = { account: "claude-1", kind: "weekly" as const, requestId: "req-1" };
+  /** A 200 whose body never finishes arriving. */
+  const stalledBody = () => new Response(new ReadableStream({ start: () => {} }), { status: 200 });
+
+  it.effect("waits for a redeem that takes a minute", () =>
+    Effect.gen(function* () {
+      const api = yield* redeemWith(() =>
+        Effect.as(Effect.sleep("60 seconds"), Response.json({ outcome: "reset" })),
+      );
+      const fiber = yield* api
+        .redeemResetCredit("https://iris.test", "token", input)
+        .pipe(Effect.forkChild);
+      yield* TestClock.adjust("61 seconds");
+      expect(yield* Fiber.join(fiber)).toBe("reset");
+    }),
+  );
+
+  it.effect(
+    "bounds the request and its body by one timeout, and says the reset may have applied",
+    () =>
+      Effect.gen(function* () {
+        const api = yield* redeemWith(() => Effect.as(Effect.sleep("60 seconds"), stalledBody()));
+        const fiber = yield* api
+          .redeemResetCredit("https://iris.test", "token", input)
+          .pipe(Effect.flip, Effect.forkChild);
+        yield* TestClock.adjust("89 seconds");
+        expect(fiber.pollUnsafe()).toBeUndefined();
+        yield* TestClock.adjust("1 second");
+        const failure = yield* Fiber.join(fiber);
+        expect(failure.transient).toBe(true);
+        expect(failure.detail).toContain("may have applied");
+        expect(failure.detail).toContain("will not spend a second credit");
+      }),
+  );
+
+  it.effect("says the reset may have applied when the connection fails", () =>
+    Effect.gen(function* () {
+      const api = yield* redeemWith((request) =>
+        Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request, description: "reset by peer" }),
+          }),
+        ),
+      );
+      const failure = yield* api
+        .redeemResetCredit("https://iris.test", "token", input)
+        .pipe(Effect.flip);
+      expect(failure.transient).toBe(true);
+      expect(failure.detail).toContain("may have applied");
+      expect(failure.detail).toContain("will not spend a second credit");
+    }),
+  );
+
+  it.effect("carries the HTTP status of a refusal", () =>
+    Effect.gen(function* () {
+      const api = yield* redeemWith(() =>
+        Effect.succeed(new Response(JSON.stringify({ error: "bad kind" }), { status: 400 })),
+      );
+      const failure = yield* api
+        .redeemResetCredit("https://iris.test", "token", input)
+        .pipe(Effect.flip);
+      expect(failure.status).toBe(400);
+      expect(failure.detail).toContain("bad kind");
     }),
   );
 });

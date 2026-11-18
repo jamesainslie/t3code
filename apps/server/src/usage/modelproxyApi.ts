@@ -98,7 +98,13 @@ const decodeStatusJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Modelp
 
 /** The gateway's answer to a redemption; the outcome stays open so a newer gateway's word still reads. */
 const RedeemReply = Schema.Struct({ outcome: Schema.String });
-const decodeRedeemReply = Schema.decodeUnknownEffect(RedeemReply);
+const decodeRedeemReplyJson = Schema.decodeUnknownEffect(Schema.fromJsonString(RedeemReply));
+
+/** The gateway spends the credit and re-probes the account (bounded at 30s) before it answers. */
+const REDEEM_TIMEOUT = "90 seconds";
+const REDEEM_MAY_HAVE_APPLIED =
+  "The reset may have applied. Trying again will not spend a second credit.";
+const REDEEM_UNANSWERED = `The gateway did not answer. ${REDEEM_MAY_HAVE_APPLIED}`;
 
 const STREAM_IDLE_TIMEOUT = "45 seconds";
 
@@ -116,6 +122,8 @@ export class ModelproxyReadError extends Schema.TaggedError<ModelproxyReadError>
     transient: Schema.optional(Schema.Boolean),
     /** The gateway predates the status stream; only the polled read works there. */
     unsupported: Schema.optional(Schema.Boolean),
+    /** The HTTP status of a redeem the gateway answered with an error. */
+    status: Schema.optional(Schema.Number),
   },
 ) {
   override get message(): string {
@@ -473,47 +481,66 @@ export const makeModelproxyApi = Effect.gen(function* () {
         ).toString(),
       catch: () => new ModelproxyReadError({ detail: "The gateway URL is not valid." }),
     });
-    const response = yield* client
-      .execute(
-        HttpClientRequest.post(url).pipe(
-          HttpClientRequest.setHeader("Authorization", `Bearer ${accessToken}`),
-          HttpClientRequest.bodyJsonUnsafe({ kind: input.kind, requestId: input.requestId }),
-        ),
-      )
-      .pipe(
-        Effect.timeout("30 seconds"),
+    const exchange = Effect.gen(function* () {
+      const response = yield* client
+        .execute(
+          HttpClientRequest.post(url).pipe(
+            HttpClientRequest.setHeader("Authorization", `Bearer ${accessToken}`),
+            HttpClientRequest.bodyJsonUnsafe({ kind: input.kind, requestId: input.requestId }),
+          ),
+        )
+        .pipe(
+          Effect.mapError(
+            () => new ModelproxyReadError({ detail: REDEEM_UNANSWERED, transient: true }),
+          ),
+        );
+      if (response.status === 401 || response.status === 403) {
+        return yield* new ModelproxyReadError({
+          detail: `The gateway rejected the session (HTTP ${response.status}).`,
+          unauthorized: true,
+          status: response.status,
+        });
+      }
+      if (response.status < 200 || response.status >= 300) {
+        const reason = yield* response.json.pipe(
+          Effect.map((body) =>
+            typeof body === "object" && body !== null && "error" in body ? String(body.error) : "",
+          ),
+          Effect.orElseSucceed(() => ""),
+        );
+        return yield* new ModelproxyReadError({
+          detail:
+            response.status === 404
+              ? "The gateway cannot redeem resets for this account."
+              : `The gateway could not redeem the reset (HTTP ${response.status})${reason ? `: ${reason}` : "."}`,
+          status: response.status,
+          ...(response.status >= 500 ? { transient: true } : {}),
+        });
+      }
+      const text = yield* response.text.pipe(
         Effect.mapError(
-          () => new ModelproxyReadError({ detail: "The gateway did not answer.", transient: true }),
+          () => new ModelproxyReadError({ detail: REDEEM_UNANSWERED, transient: true }),
         ),
       );
-    if (response.status === 401 || response.status === 403) {
-      return yield* new ModelproxyReadError({
-        detail: `The gateway rejected the session (HTTP ${response.status}).`,
-        unauthorized: true,
-      });
-    }
-    if (response.status < 200 || response.status >= 300) {
-      const reason = yield* response.json.pipe(
-        Effect.map((body) =>
-          typeof body === "object" && body !== null && "error" in body ? String(body.error) : "",
+      const body = yield* decodeRedeemReplyJson(text).pipe(
+        Effect.mapError(
+          () =>
+            new ModelproxyReadError({
+              detail: `The gateway's answer was not understood. ${REDEEM_MAY_HAVE_APPLIED}`,
+            }),
         ),
-        Effect.orElseSucceed(() => ""),
       );
-      return yield* new ModelproxyReadError({
-        detail:
-          response.status === 404
-            ? "The gateway cannot redeem resets for this account."
-            : `The gateway could not redeem the reset (HTTP ${response.status})${reason ? `: ${reason}` : "."}`,
-        ...(response.status >= 500 ? { transient: true } : {}),
-      });
-    }
-    const body = yield* response.json.pipe(
-      Effect.flatMap(decodeRedeemReply),
-      Effect.mapError(
-        () => new ModelproxyReadError({ detail: "The gateway's answer was not understood." }),
-      ),
+      return body.outcome;
+    });
+    // The gateway spends the credit and then re-probes the account, which
+    // can take up to a minute. One bound covers the request and its body.
+    return yield* exchange.pipe(
+      Effect.timeoutOrElse({
+        duration: REDEEM_TIMEOUT,
+        orElse: () =>
+          Effect.fail(new ModelproxyReadError({ detail: REDEEM_UNANSWERED, transient: true })),
+      }),
     );
-    return body.outcome;
   });
 
   return { readStatus, streamStatus, redeemResetCredit };
