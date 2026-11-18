@@ -1,8 +1,9 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type {
-  EnvironmentId,
-  ProxyLedgerSummaryStyle,
-  UsageLimitSourceSnapshot,
+import {
+  type EnvironmentId,
+  type ProxyLedgerSummaryStyle,
+  UsageLimitSourceId,
+  type UsageLimitSourceSnapshot,
 } from "@lathe/contracts";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
@@ -19,6 +20,7 @@ import { ChevronRightIcon, FeatherIcon, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ResetCredits } from "../usage/UsageLimits";
 import { ProxyAccountIdentity } from "./ProxyAccountIdentity";
 import { ProxyLoginPanel } from "./ProxyLoginPanel";
 import { proxyLoginPanelAtom, proxyStatusCardOpenAtom } from "./proxyLoginRequest";
@@ -281,6 +283,7 @@ function LedgerRow({
   expanded,
   onToggle,
   onLogin,
+  redeem,
 }: {
   readonly account: ProxyAccountView;
   readonly threshold: number;
@@ -289,6 +292,12 @@ function LedgerRow({
   readonly onToggle: () => void;
   /** Present when the row offers a login: the account needs one or has one open. */
   readonly onLogin?: () => void;
+  /** The card offers redemption; the hover peek cannot host its confirm dialog. */
+  readonly redeem?: {
+    readonly environmentId: EnvironmentId;
+    readonly sourceId: string;
+    readonly now: number;
+  };
 }) {
   const runway = onLogin ? (
     <Button
@@ -319,6 +328,28 @@ function LedgerRow({
           <ProxyAccountIdentity id={account.id} driver={account.driver} />
           <div className={cn("truncate pl-5.5 text-2xs", TONE_TEXT[account.stateTone])}>
             {account.stateLabel}
+            {account.resetCredits ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className={cn(
+                        "ms-1.5 font-mono tabular-nums",
+                        account.resetCredits.muted
+                          ? "text-muted-foreground/60"
+                          : "text-muted-foreground",
+                      )}
+                      tabIndex={0}
+                    />
+                  }
+                >
+                  {account.resetCredits.text}
+                </TooltipTrigger>
+                <TooltipPopup side="top" className="whitespace-pre-line">
+                  {account.resetCredits.tooltip}
+                </TooltipPopup>
+              </Tooltip>
+            ) : null}
           </div>
         </div>
         {account.windows.length === 0 ? (
@@ -345,7 +376,7 @@ function LedgerRow({
           <ChevronRightIcon className={cn(expanded && "rotate-90")} />
         </Button>
       </div>
-      {expanded && account.windows.length > 0 ? (
+      {expanded && (account.windows.length > 0 || (redeem && account.resetCredits)) ? (
         <div className="flex flex-col gap-1 pt-1 pl-5.5">
           {account.windows.map((window) => (
             <div
@@ -358,6 +389,37 @@ function LedgerRow({
               <span className="text-right tabular-nums">{window.resetText}</span>
             </div>
           ))}
+          {redeem && account.resetCredits ? (
+            <div className="flex flex-col gap-1 border-t border-border/60 pt-1.5">
+              {account.resetCredits.weekly ? (
+                <ResetCredits
+                  environmentId={redeem.environmentId}
+                  input={{
+                    sourceId: UsageLimitSourceId.make(redeem.sourceId),
+                    accountId: account.id,
+                    creditId: "weekly",
+                  }}
+                  credits={account.resetCredits.weekly}
+                  now={redeem.now}
+                />
+              ) : null}
+              {account.resetCredits.fable ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xs text-muted-foreground">Fable</span>
+                  <ResetCredits
+                    environmentId={redeem.environmentId}
+                    input={{
+                      sourceId: UsageLimitSourceId.make(redeem.sourceId),
+                      accountId: account.id,
+                      creditId: "fable",
+                    }}
+                    credits={account.resetCredits.fable}
+                    now={redeem.now}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -500,6 +562,7 @@ function Ledger({
               onLogin: () => onLoginFor(narrow && loginFor === account.id ? null : account.id),
             }
           : {})}
+        {...(narrow ? { redeem: { environmentId, sourceId: pill.sourceId, now } } : {})}
       />
       {narrow && loginFor === account.id ? (
         <div className="mb-1.5 rounded-md border border-border/60 bg-muted/40 p-2">
