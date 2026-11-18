@@ -739,6 +739,50 @@ describe("UsageLimitSources", () => {
         })
       : Response.json({ access_token: "fresh", refresh_token: "refresh", expires_in: 300 });
 
+  it.effect("keeps the request id when the connection drops", () => {
+    const gateway = redeemGateway(["drop", "reset"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "weekly");
+      const dropped = yield* sources.consumeResetCredit(input).pipe(Effect.flip);
+      expect(dropped.detail).toContain("may have applied");
+      yield* sources.consumeResetCredit(input);
+      const [first, retry] = gateway.redeems.map((redeem) => redeem.body.requestId);
+      expect(retry).toBe(first);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("releases the request id on every settled answer", () => {
+    const gateway = redeemGateway(["alreadyRedeemed", "noCredit", "nothingToReset", "reset"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "weekly");
+      const outcomes = [];
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        outcomes.push((yield* sources.consumeResetCredit(input)).outcome);
+      }
+      expect(outcomes).toEqual(["alreadyRedeemed", "noCredit", "nothingToReset", "reset"]);
+      const ids = gateway.redeems.map((redeem) => redeem.body.requestId);
+      expect(new Set(ids).size).toBe(4);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("keeps the request id on an answer it does not know", () => {
+    const gateway = redeemGateway(["constructor", "reset"]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "weekly");
+      const unknown = yield* sources.consumeResetCredit(input).pipe(Effect.flip);
+      expect(unknown.detail).toContain('"constructor"');
+      yield* sources.consumeResetCredit(input);
+      const [first, retry] = gateway.redeems.map((redeem) => redeem.body.requestId);
+      expect(retry).toBe(first);
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect(
     "signs in again and redeems under the same id when the gateway rejects the token",
     () => {
