@@ -447,16 +447,44 @@ export const make = Effect.gen(function* () {
       const key = `${input.sourceId}\u0000${input.accountId}\u0000${kind}`;
       const requestId = (yield* Ref.get(pendingRedeems)).get(key) ?? (yield* random.uuidV4());
       yield* Ref.update(pendingRedeems, (pending) => new Map(pending).set(key, requestId));
-      const token = yield* modelproxyAuth
-        .accessToken(input.sourceId, config, { forceRefresh: false })
-        .pipe(Effect.mapError((error) => new UsageLimitSourceError({ detail: error.detail })));
+      const redeemWith = (forceRefresh: boolean) =>
+        modelproxyAuth.accessToken(input.sourceId, config, { forceRefresh }).pipe(
+          Effect.flatMap((token) =>
+            modelproxy.redeemResetCredit(config.url, token, {
+              account: input.accountId,
+              kind,
+              requestId,
+            }),
+          ),
+        );
       // Only a settled answer releases the id. Everything else (unconfirmed,
       // a refusal, a 502, a dropped connection) keeps it, because an earlier
       // attempt under the same id may have spent the credit, and the gateway
       // binds the id to that credit so a retry can never spend a second one.
-      const outcome = yield* modelproxy
-        .redeemResetCredit(config.url, token, { account: input.accountId, kind, requestId })
-        .pipe(Effect.mapError((error) => new UsageLimitSourceError({ detail: error.detail })));
+      let redeemed = yield* redeemWith(false).pipe(Effect.result);
+      // A token its expiry still vouches for can be rejected (a revoked
+      // session, a rotated signing key). The gateway refused the request
+      // before spending anything, so the same id goes out again with a fresh one.
+      if (
+        redeemed._tag === "Failure" &&
+        redeemed.failure._tag === "ModelproxyReadError" &&
+        redeemed.failure.unauthorized
+      ) {
+        redeemed = yield* redeemWith(true).pipe(Effect.result);
+      }
+      if (redeemed._tag === "Failure") {
+        const failure = redeemed.failure;
+        if (failure._tag === "ModelproxyReadError" && failure.status === 400) {
+          yield* Effect.logWarning("gateway refused a reset redemption as malformed", {
+            source: input.sourceId,
+            account: input.accountId,
+            kind,
+            detail: failure.detail,
+          });
+        }
+        return yield* new UsageLimitSourceError({ detail: failure.detail });
+      }
+      const outcome = redeemed.success;
       // Own keys only, so an outcome such as "constructor" never reads as settled.
       const known = Object.hasOwn(GATEWAY_REDEEM_OUTCOMES, outcome)
         ? GATEWAY_REDEEM_OUTCOMES[outcome]

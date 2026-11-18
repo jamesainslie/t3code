@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
@@ -727,6 +728,84 @@ describe("UsageLimitSources", () => {
       expect(unknown.detail).toContain("weekly or Fable");
       expect(gateway.redeems).toHaveLength(1);
     }).pipe(Effect.provide(layer));
+  });
+
+  /** An issuer that hands out the access token "fresh" on refresh. */
+  const freshIssuer = (request: HttpClientRequest.HttpClientRequest) =>
+    request.url.endsWith("/openid-configuration")
+      ? Response.json({
+          device_authorization_endpoint: "https://auth.test/device",
+          token_endpoint: "https://auth.test/token",
+        })
+      : Response.json({ access_token: "fresh", refresh_token: "refresh", expires_in: 300 });
+
+  it.effect(
+    "signs in again and redeems under the same id when the gateway rejects the token",
+    () => {
+      const rejected = () => new Response("invalid_token", { status: 401 });
+      const gateway = redeemGateway([rejected(), "reset"]);
+      const { layer } = harness({
+        gateway: gateway.reply,
+        refreshToken: "refresh",
+        issuer: freshIssuer,
+      });
+      return Effect.gen(function* () {
+        const sources = yield* UsageLimitSources.UsageLimitSources;
+        const result = yield* sources.consumeResetCredit(credit("claude-1", "weekly"));
+        expect(result).toEqual({ outcome: "reset" });
+        expect(gateway.redeems.map((redeem) => redeem.authorization)).toEqual([
+          "Bearer token",
+          "Bearer fresh",
+        ]);
+        const [first, retry] = gateway.redeems.map((redeem) => redeem.body.requestId);
+        expect(retry).toBe(first);
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect("reports a token the gateway still rejects and keeps the request id", () => {
+    const rejected = () => new Response("invalid_token", { status: 401 });
+    const gateway = redeemGateway([rejected(), rejected(), "reset"]);
+    const { layer } = harness({
+      gateway: gateway.reply,
+      refreshToken: "refresh",
+      issuer: freshIssuer,
+    });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "weekly");
+      const failure = yield* sources.consumeResetCredit(input).pipe(Effect.flip);
+      expect(failure.detail).toContain("rejected the session (HTTP 401)");
+      expect(gateway.redeems).toHaveLength(2);
+      yield* sources.consumeResetCredit(input);
+      expect(new Set(gateway.redeems.map((redeem) => redeem.body.requestId)).size).toBe(1);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("warns when the gateway refuses a redeem as malformed, and keeps the id", () => {
+    const logs: Array<{ level: string; message: string }> = [];
+    const logger = Logger.make(({ logLevel, message }) => {
+      logs.push({ level: logLevel, message: JSON.stringify(message) });
+    });
+    const gateway = redeemGateway([
+      new Response(JSON.stringify({ error: "bad kind" }), { status: 400 }),
+      "reset",
+    ]);
+    const { layer } = harness({ gateway: gateway.reply });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      const input = credit("claude-1", "fable");
+      const failure = yield* sources.consumeResetCredit(input).pipe(Effect.flip);
+      expect(failure.detail).toContain("bad kind");
+      const warning = logs.find((log) => log.level === "Warn");
+      expect(warning?.message).toContain(sourceId);
+      expect(warning?.message).toContain("claude-1");
+      expect(warning?.message).toContain("fable");
+      yield* sources.consumeResetCredit(input);
+      expect(new Set(gateway.redeems.map((redeem) => redeem.body.requestId)).size).toBe(1);
+    }).pipe(
+      Effect.provide(Layer.mergeAll(layer, Logger.layer([logger], { mergeWithExisting: false }))),
+    );
   });
 
   it.effect("keeps the gateway's accounts and routes when the read after a redeem fails", () => {
