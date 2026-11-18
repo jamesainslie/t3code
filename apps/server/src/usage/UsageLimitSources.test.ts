@@ -19,7 +19,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
@@ -56,7 +56,8 @@ const downReply = () => new Response("upstream down", { status: 503 });
  */
 function harness(
   options: {
-    readonly gateway?: (request: HttpClientRequest.HttpClientRequest) => Response;
+    /** A gateway answer, or `"drop"` for a connection that fails before any answer. */
+    readonly gateway?: (request: HttpClientRequest.HttpClientRequest) => Response | "drop";
     readonly issuer?: (request: HttpClientRequest.HttpClientRequest) => Response;
     readonly refreshToken?: string;
     readonly wake?: Queue.Queue<void>;
@@ -77,15 +78,24 @@ function harness(
     ],
   ]);
   const http = HttpClient.make((request) =>
-    Effect.sync(() => {
+    Effect.suspend(() => {
       if (request.url.startsWith("https://auth.test")) {
-        return HttpClientResponse.fromWeb(
-          request,
-          options.issuer?.(request) ?? new Response("no issuer", { status: 500 }),
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            options.issuer?.(request) ?? new Response("no issuer", { status: 500 }),
+          ),
         );
       }
       counts.statusReads += 1;
-      return HttpClientResponse.fromWeb(request, (options.gateway ?? statusReply)(request));
+      const reply = (options.gateway ?? statusReply)(request);
+      return reply === "drop"
+        ? Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request, description: "reset by peer" }),
+            }),
+          )
+        : Effect.succeed(HttpClientResponse.fromWeb(request, reply));
     }),
   );
   const layer = Layer.effect(UsageLimitSources.UsageLimitSources, UsageLimitSources.make).pipe(
@@ -615,15 +625,27 @@ describe("UsageLimitSources", () => {
   });
 
   /** A gateway that answers status reads and records redeem requests. */
-  const redeemGateway = (outcomes: Array<string | Response>) => {
-    const redeems: Array<{ path: string; body: { kind: string; requestId: string } }> = [];
+  const redeemGateway = (
+    outcomes: Array<string | Response | "drop">,
+    statusRead: () => Response = statusReply,
+  ) => {
+    const redeems: Array<{
+      path: string;
+      authorization: string | undefined;
+      body: { kind: string; requestId: string };
+    }> = [];
     const reply = (request: HttpClientRequest.HttpClientRequest) => {
       const path = new URL(request.url).pathname;
-      if (!path.endsWith("/reset-credits/redeem")) return statusReply();
+      if (!path.endsWith("/reset-credits/redeem")) return statusRead();
       const raw =
         request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "{}";
-      redeems.push({ path, body: JSON.parse(raw) });
+      redeems.push({
+        path,
+        authorization: request.headers["authorization"],
+        body: JSON.parse(raw),
+      });
       const next = outcomes.shift() ?? "reset";
+      if (next === "drop") return "drop" as const;
       return typeof next === "string" ? Response.json({ outcome: next }) : next;
     };
     return { redeems, reply };
@@ -704,6 +726,54 @@ describe("UsageLimitSources", () => {
         .pipe(Effect.flip);
       expect(unknown.detail).toContain("weekly or Fable");
       expect(gateway.redeems).toHaveLength(1);
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("keeps the gateway's accounts and routes when the read after a redeem fails", () => {
+    const pooled = {
+      ...status,
+      accounts: [
+        {
+          name: "claude-1",
+          type: "oauth",
+          provider: "anthropic",
+          current: false,
+          disabled: false,
+          util5h: 0.1,
+          has5h: true,
+          util7d: 0.2,
+          has7d: true,
+          spendUsd: 0,
+          inflight: 0,
+          resetCredits: { weekly: 1, usableNow: 1 },
+        },
+      ],
+    };
+    const state = { redeemed: false };
+    const gateway = redeemGateway(["reset"], () =>
+      state.redeemed ? downReply() : Response.json(pooled),
+    );
+    const { layer } = harness({
+      gateway: (request) => {
+        const reply = gateway.reply(request);
+        if (new URL(request.url).pathname.endsWith("/redeem")) state.redeemed = true;
+        return reply;
+      },
+    });
+    return Effect.gen(function* () {
+      const sources = yield* UsageLimitSources.UsageLimitSources;
+      yield* refreshThroughRetry(sources);
+      const [before] = yield* sources.current;
+      expect(before?.accounts.map((account) => account.id)).toEqual(["claude-1"]);
+
+      const fiber = yield* sources
+        .consumeResetCredit(credit("claude-1", "weekly"))
+        .pipe(Effect.forkChild);
+      yield* TestClock.adjust("10 seconds");
+      expect(yield* Fiber.join(fiber)).toEqual({ outcome: "reset" });
+      const [after] = yield* sources.current;
+      expect(after?.accounts.map((account) => account.id)).toEqual(["claude-1"]);
+      expect(after?.proxy?.routes).toEqual([kimi]);
     }).pipe(Effect.provide(layer));
   });
 });

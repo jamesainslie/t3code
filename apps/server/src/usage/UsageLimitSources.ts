@@ -410,6 +410,24 @@ export const make = Effect.gen(function* () {
     });
   });
 
+  /**
+   * Publishes one source's read the way `refresh` does, so a failed read
+   * after a redemption keeps the last good accounts and the gateway's routes.
+   * The caller holds the refresh lock.
+   */
+  const publishRead = Effect.fn("UsageLimitSources.publishRead")(function* (
+    id: UsageLimitSourceId,
+    read: SourceRead,
+  ) {
+    const settle = {
+      nowMs: DateTime.toEpochMillis(yield* DateTime.now),
+      intervalMs: yield* intervalMs,
+    };
+    yield* publishWith((previous) =>
+      previous.map((source) => (source.id === id ? settleRead(read, previous, settle) : source)),
+    );
+  });
+
   // Shares the refresh lock so a stale in-flight read cannot overwrite a redemption.
   const consumeResetCredit = Effect.fn("UsageLimitSources.consumeResetCredit")(function* (
     input: UsageLimitSourceConsumeResetCreditInput,
@@ -450,9 +468,7 @@ export const make = Effect.gen(function* () {
           return next;
         });
       }
-      const { snapshot } = yield* readSource(input.sourceId, config);
-      const previous = yield* Ref.get(stateRef);
-      yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
+      yield* publishRead(input.sourceId, yield* readSource(input.sourceId, config));
       if (known) return { outcome: known };
       return yield* new UsageLimitSourceError({
         detail: Object.hasOwn(GATEWAY_REDEEM_REFUSALS, outcome)
@@ -474,9 +490,7 @@ export const make = Effect.gen(function* () {
       input.accountId,
       input.creditId,
     );
-    const { snapshot } = yield* readSource(input.sourceId, config);
-    const previous = yield* Ref.get(stateRef);
-    yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
+    yield* publishRead(input.sourceId, yield* readSource(input.sourceId, config));
     return result;
   }, refreshLock.withPermits(1));
 
