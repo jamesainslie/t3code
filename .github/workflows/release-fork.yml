@@ -1,9 +1,9 @@
-# Fork-local release pipeline for jamesainslie/t3code on GitHub-hosted runners.
+# Fork-local release pipeline for latheworks/t3code on GitHub-hosted runners.
 # Upstream .github/workflows/release.yml is left untouched and disabled in repo
 # settings. Per-target desktop and CLI archive builds reuse upstream's
 # release-desktop.yml unchanged; only the job graph, runners, and identity
 # differ. npm publish uses OIDC trusted publishing configured on npmjs.com for
-# this workflow file (jamesainslie/t3code, release-fork.yml) on the launcher
+# this workflow file (latheworks/t3code, release-fork.yml) on the launcher
 # package @jamesainslie/lathe.
 name: Release (fork)
 
